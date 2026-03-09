@@ -45,6 +45,8 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/praetorian-inc/augustus v0.0.9-0.20260227174649-efba096939a0 h1:+fe1l8mtY9s1R+Ju+uI2TIMt8i8wkNv8U5MyrdMj9m4=
 github.com/praetorian-inc/augustus v0.0.9-0.20260227174649-efba096939a0/go.mod h1:vtptWvtoPr+BB55GKrgN7c54jvn+X9Ld6pUFeNIlJWI=
+github.com/praetorian-inc/capability-sdk v0.0.0-20260227175213-42afecd4ac77 h1:hj8v3Kh7m3YTr0U4d0TH1ILePEtmW5YvvUXot/b2fjE=
+github.com/praetorian-inc/capability-sdk v0.0.0-20260227175213-42afecd4ac77/go.mod h1:/qQhuKn0EqiccC5zOv2ExYa5amYrlDJP1PV5t1LsjM8=
 github.com/praetorian-inc/julius v1.2.0 h1:OjpiT5pEuuz40QTqdF/HLkD6oUv9SrDEC+2iTjcVQQg=
 github.com/praetorian-inc/julius v1.2.0/go.mod h1:i32kVmRcSzfnemCa0cIeyAt60MF/VMDHaPXg9FjMHhg=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
