@@ -7,7 +7,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/owenrumney/go-sarif/v3 v3.3.0
 	github.com/praetorian-inc/augustus v0.0.9-0.20260227174649-efba096939a0
-	github.com/praetorian-inc/capability-sdk v0.0.0-20260227175213-42afecd4ac77
+	github.com/praetorian-inc/capability-sdk v0.0.0-20260310200958-fa3fd1395d06
 	github.com/praetorian-inc/julius v1.2.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
