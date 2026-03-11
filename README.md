@@ -35,7 +35,91 @@ git clone https://github.com/praetorian-inc/trajan.git
 cd trajan && make build
 ```
 
-## Quick usage
+### Requirements
+
+- Go 1.24 or later
+- GitHub Personal Access Token with `repo` scope (for private repositories) or `public_repo` scope (for public repositories only)
+
+## Library SDK (`pkg/lib`)
+
+Trajan can be embedded as a Go library for programmatic CI/CD security scanning. The `pkg/lib` package provides a public SDK that wraps Trajan's internal platform registry, detection engine, and scanner into a single high-level API.
+
+### Quick Start (Library)
+
+```go
+import "github.com/praetorian-inc/trajan/pkg/lib"
+
+result, err := lib.Scan(ctx, lib.ScanConfig{
+    Platform:    "github",
+    Token:       os.Getenv("GH_TOKEN"),
+    Org:         "myorg",
+    Repo:        "myrepo",
+    Concurrency: 10,
+    Timeout:     5 * time.Minute,
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, f := range result.Findings {
+    fmt.Printf("[%s] %s in %s: %s\n", f.Severity, f.Type, f.WorkflowFile, f.Evidence)
+}
+```
+
+### SDK API
+
+| Function | Description |
+|----------|-------------|
+| `lib.Scan(ctx, cfg)` | Full scan: platform init → workflow discovery → detection execution |
+| `lib.GetPlatform(name)` | Get a platform adapter by name (`github`, `gitlab`, `azuredevops`, `bitbucket`, `jenkins`, `jfrog`) |
+| `lib.ListPlatforms()` | List all registered platform names |
+| `lib.GetDetections(platform)` | Get detection plugins for a specific platform |
+| `lib.GetDetectionsForPlatform(platform)` | Get platform-specific + cross-platform detections |
+| `lib.ListDetectionPlatforms()` | List platforms with registered detections |
+
+### ScanConfig
+
+```go
+type ScanConfig struct {
+    Platform    string        // CI/CD platform (required)
+    Token       string        // API authentication token
+    BaseURL     string        // Custom base URL for self-hosted instances
+    Org         string        // Organization/owner name
+    Repo        string        // Repository name (empty = scan all org repos)
+    Concurrency int           // Parallel detection workers (default: 10)
+    Timeout     time.Duration // Max scan duration (default: 5m)
+}
+```
+
+### ScanResult
+
+```go
+type ScanResult struct {
+    Findings  []detections.Finding   // Security vulnerabilities detected
+    Workflows []platforms.Workflow   // CI/CD workflow files discovered
+    Errors    []error                // Non-fatal errors during scanning
+}
+```
+
+### Integration Example (Chariot Platform)
+
+The SDK is used by the [Chariot](https://github.com/praetorian-inc/chariot) attack surface management platform to run CI/CD security scans as a capability:
+
+```go
+import trajanlib "github.com/praetorian-inc/trajan/pkg/lib"
+
+result, err := trajanlib.Scan(ctx, trajanlib.ScanConfig{
+    Platform: platformName,
+    Token:    token,
+    Org:      repo.Org,
+    Repo:     repo.Name,
+})
+// Convert result.Findings → capmodel.Risk emissions
+```
+
+## Browser Support (WebAssembly)
+
+Trajan is also available as a browser-based scanner:
 
 ```sh
 # Scan a GitHub repo
@@ -130,10 +214,107 @@ graph TD
 
 ## Roadmap
 
-Additional CI/CD platform support is in active development:
+Trajan is under active development. Here's our prioritized roadmap for future features:
 
-- Bitbucket Pipelines
-- CircleCI
+### High Priority (In Progress)
+
+#### Multi-Platform Support
+
+Currently GitHub Actions only. Expanding to other CI/CD platforms:
+
+| Platform | Config File | Status |
+|----------|-------------|--------|
+| GitHub Actions | `.github/workflows/*.yml` | ✅ Complete |
+| GitLab CI | `.gitlab-ci.yml` | 🔜 Planned |
+| Azure DevOps | `azure-pipelines.yml` | 🔜 Planned |
+| Bitbucket Pipelines | `bitbucket-pipelines.yml` | 📋 Roadmap |
+| Jenkins | `Jenkinsfile` | 📋 Roadmap |
+| CircleCI | `.circleci/config.yml` | 📋 Roadmap |
+
+Each platform requires:
+- API client with rate limiting
+- Pipeline/workflow YAML parser
+- Platform-specific plugin adaptations
+- Attack plugins for platform-specific vectors
+
+#### Attack Plugins for All Detectors
+
+Achieving attack parity with detection capabilities:
+
+| Detector | Attack Plugin | Status |
+|----------|---------------|--------|
+| `actions_injection` | `workflow-injection`, `secrets-dump` | ✅ Complete |
+| `pwn_request` | `pr-attack` | ✅ Complete |
+| `self_hosted_runner` | `runner-on-runner` | ✅ Complete |
+| `toctou` | `toctou-race` | 🔜 Planned |
+| `artifact_poisoning` | `artifact-poison` | 🔜 Planned |
+| `cache_poisoning` | `cache-poison` | 🔜 Planned |
+| `review_injection` | `review-inject` | 🔜 Planned |
+| `unpinned_action` | `action-hijack` | 🔜 Planned |
+| AI vulnerabilities (6) | `ai-prompt-inject` | 🔜 Planned |
+
+#### Additional Attack Chains
+
+Expanding predefined attack sequences:
+
+| Chain | Plugins | Purpose |
+|-------|---------|---------|
+| `ror` | c2-setup → runner-on-runner → interactive-shell | ✅ Complete |
+| `secrets` | secrets-dump | ✅ Complete |
+| `persistence` | c2-setup → persistence | ✅ Complete |
+| `full` | c2-setup → ror → shell → secrets → persistence | ✅ Complete |
+| `ai-takeover` | ai-prompt-inject → secrets-dump → persistence | 🔜 Planned |
+| `supply-chain` | artifact-poison → cache-poison → persistence | 🔜 Planned |
+| `toctou-exploit` | toctou-race → workflow-injection → secrets-dump | 🔜 Planned |
+| `stealth` | review-inject → persistence | 🔜 Planned |
+
+### Medium Priority (Next Quarter)
+
+#### Advanced Detection Features
+
+| Feature | Description |
+|---------|-------------|
+| Composite action analysis | Deep analysis of reusable action internals |
+| Reusable workflow analysis | Detect issues in `workflow_call` workflows |
+| Environment protection bypass | Detect circumvention of deployment protections |
+| Secret scope mapping | Map secret exposure across organization |
+| Cross-repository analysis | Detect vulnerabilities spanning multiple repos |
+
+#### Output & Reporting Enhancements
+
+| Feature | Status |
+|---------|--------|
+| JSON output | ✅ Complete |
+| SARIF output | ✅ Complete |
+| Console output | ✅ Complete |
+| HTML report generation | 🔜 Planned |
+| JIRA integration | 📋 Roadmap |
+| Linear integration | 📋 Roadmap |
+| Slack notifications | 📋 Roadmap |
+
+#### Chariot Platform Integration
+
+- ✅ SDK library (`pkg/lib`) for embedding Trajan as a library
+- ✅ Capability wrapper for Chariot job system
+- ✅ Finding → Risk translation layer
+- Unified dashboard integration
+
+### Lower Priority (Future)
+
+#### Performance & Scale
+
+| Feature | Benefit |
+|---------|---------|
+| GraphQL batch queries | 5x improvement for large organizations |
+| Result caching | Avoid re-parsing unchanged workflows |
+| Distributed scanning | Multi-node scanning for massive orgs |
+| Incremental scanning | Only scan changed workflows since last run |
+
+#### Additional Platforms
+
+- Travis CI (`.travis.yml`)
+- Drone CI (`.drone.yml`)
+- Tekton Pipelines
 - AWS CodePipeline
 - Google Cloud Build
 
