@@ -50,8 +50,15 @@ func (r *reusableWorkflowResolver) resolveCallee(ctx context.Context, callerRepo
 		return false, "", nil // fail-open at max depth
 	}
 
+	// Cache key must include the caller slug for local refs (./) because
+	// different repos can have the same local path pointing to different files.
+	cacheKey := usesRef
+	if strings.HasPrefix(usesRef, "./") {
+		cacheKey = callerRepoSlug + ":" + usesRef
+	}
+
 	r.mu.Lock()
-	if cached, ok := r.cache[usesRef]; ok {
+	if cached, ok := r.cache[cacheKey]; ok {
 		r.mu.Unlock()
 		return cached.isSelfHosted, cached.runsOn, cached.err
 	}
@@ -60,7 +67,7 @@ func (r *reusableWorkflowResolver) resolveCallee(ctx context.Context, callerRepo
 	isSelfHosted, runsOn, err = r.doResolve(ctx, callerRepoSlug, usesRef, depth)
 
 	r.mu.Lock()
-	r.cache[usesRef] = &calleeResult{isSelfHosted: isSelfHosted, runsOn: runsOn, err: err}
+	r.cache[cacheKey] = &calleeResult{isSelfHosted: isSelfHosted, runsOn: runsOn, err: err}
 	r.mu.Unlock()
 
 	return isSelfHosted, runsOn, err
@@ -102,6 +109,9 @@ func (r *reusableWorkflowResolver) resolveLocal(ctx context.Context, callerRepoS
 
 // resolveCrossRepo resolves a cross-repo reusable workflow reference.
 // Format: owner/repo/path@ref
+// Always fetches at the pinned ref via API rather than using all_workflows,
+// because all_workflows only contains the default branch and the caller may
+// pin a different tag/SHA.
 func (r *reusableWorkflowResolver) resolveCrossRepo(ctx context.Context, usesRef string, depth int) (bool, string, error) {
 	owner, repo, path, ref, err := parseCrossRepoRef(usesRef)
 	if err != nil {
@@ -110,18 +120,6 @@ func (r *reusableWorkflowResolver) resolveCrossRepo(ctx context.Context, usesRef
 
 	repoSlug := owner + "/" + repo
 
-	// Check all_workflows first (callee may already be in scope)
-	if r.allWorkflows != nil {
-		if repoWorkflows, ok := r.allWorkflows[repoSlug]; ok {
-			for _, wf := range repoWorkflows {
-				if wf.Path == path || strings.HasSuffix(wf.Path, "/"+path) {
-					return r.parseCalleeContent(ctx, repoSlug, wf.Content, depth)
-				}
-			}
-		}
-	}
-
-	// Fall back to API
 	if r.client == nil {
 		return false, "", fmt.Errorf("no github client available for cross-repo resolution")
 	}
