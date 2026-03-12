@@ -117,9 +117,7 @@ result, err := trajanlib.Scan(ctx, trajanlib.ScanConfig{
 // Convert result.Findings → capmodel.Risk emissions
 ```
 
-## Browser Support (WebAssembly)
-
-Trajan is also available as a browser-based scanner:
+## Quick usage
 
 ```sh
 # Scan a GitHub repo
@@ -214,107 +212,10 @@ graph TD
 
 ## Roadmap
 
-Trajan is under active development. Here's our prioritized roadmap for future features:
+Additional CI/CD platform support is in active development:
 
-### High Priority (In Progress)
-
-#### Multi-Platform Support
-
-Currently GitHub Actions only. Expanding to other CI/CD platforms:
-
-| Platform | Config File | Status |
-|----------|-------------|--------|
-| GitHub Actions | `.github/workflows/*.yml` | ✅ Complete |
-| GitLab CI | `.gitlab-ci.yml` | 🔜 Planned |
-| Azure DevOps | `azure-pipelines.yml` | 🔜 Planned |
-| Bitbucket Pipelines | `bitbucket-pipelines.yml` | 📋 Roadmap |
-| Jenkins | `Jenkinsfile` | 📋 Roadmap |
-| CircleCI | `.circleci/config.yml` | 📋 Roadmap |
-
-Each platform requires:
-- API client with rate limiting
-- Pipeline/workflow YAML parser
-- Platform-specific plugin adaptations
-- Attack plugins for platform-specific vectors
-
-#### Attack Plugins for All Detectors
-
-Achieving attack parity with detection capabilities:
-
-| Detector | Attack Plugin | Status |
-|----------|---------------|--------|
-| `actions_injection` | `workflow-injection`, `secrets-dump` | ✅ Complete |
-| `pwn_request` | `pr-attack` | ✅ Complete |
-| `self_hosted_runner` | `runner-on-runner` | ✅ Complete |
-| `toctou` | `toctou-race` | 🔜 Planned |
-| `artifact_poisoning` | `artifact-poison` | 🔜 Planned |
-| `cache_poisoning` | `cache-poison` | 🔜 Planned |
-| `review_injection` | `review-inject` | 🔜 Planned |
-| `unpinned_action` | `action-hijack` | 🔜 Planned |
-| AI vulnerabilities (6) | `ai-prompt-inject` | 🔜 Planned |
-
-#### Additional Attack Chains
-
-Expanding predefined attack sequences:
-
-| Chain | Plugins | Purpose |
-|-------|---------|---------|
-| `ror` | c2-setup → runner-on-runner → interactive-shell | ✅ Complete |
-| `secrets` | secrets-dump | ✅ Complete |
-| `persistence` | c2-setup → persistence | ✅ Complete |
-| `full` | c2-setup → ror → shell → secrets → persistence | ✅ Complete |
-| `ai-takeover` | ai-prompt-inject → secrets-dump → persistence | 🔜 Planned |
-| `supply-chain` | artifact-poison → cache-poison → persistence | 🔜 Planned |
-| `toctou-exploit` | toctou-race → workflow-injection → secrets-dump | 🔜 Planned |
-| `stealth` | review-inject → persistence | 🔜 Planned |
-
-### Medium Priority (Next Quarter)
-
-#### Advanced Detection Features
-
-| Feature | Description |
-|---------|-------------|
-| Composite action analysis | Deep analysis of reusable action internals |
-| Reusable workflow analysis | Detect issues in `workflow_call` workflows |
-| Environment protection bypass | Detect circumvention of deployment protections |
-| Secret scope mapping | Map secret exposure across organization |
-| Cross-repository analysis | Detect vulnerabilities spanning multiple repos |
-
-#### Output & Reporting Enhancements
-
-| Feature | Status |
-|---------|--------|
-| JSON output | ✅ Complete |
-| SARIF output | ✅ Complete |
-| Console output | ✅ Complete |
-| HTML report generation | 🔜 Planned |
-| JIRA integration | 📋 Roadmap |
-| Linear integration | 📋 Roadmap |
-| Slack notifications | 📋 Roadmap |
-
-#### Chariot Platform Integration
-
-- ✅ SDK library (`pkg/lib`) for embedding Trajan as a library
-- ✅ Capability wrapper for Chariot job system
-- ✅ Finding → Risk translation layer
-- Unified dashboard integration
-
-### Lower Priority (Future)
-
-#### Performance & Scale
-
-| Feature | Benefit |
-|---------|---------|
-| GraphQL batch queries | 5x improvement for large organizations |
-| Result caching | Avoid re-parsing unchanged workflows |
-| Distributed scanning | Multi-node scanning for massive orgs |
-| Incremental scanning | Only scan changed workflows since last run |
-
-#### Additional Platforms
-
-- Travis CI (`.travis.yml`)
-- Drone CI (`.drone.yml`)
-- Tekton Pipelines
+- Bitbucket Pipelines
+- CircleCI
 - AWS CodePipeline
 - Google Cloud Build
 
