@@ -27,7 +27,7 @@ type Detection struct {
 // New creates a new AI risk detection for Azure DevOps.
 func New() *Detection {
 	return &Detection{
-		BaseDetection: base.NewBaseDetection("ai-risk", platforms.PlatformAzureDevOps, detections.SeverityCritical),
+		BaseDetection: base.NewBaseDetection("ai-risk", platforms.PlatformAzureDevOps, detections.SeverityMedium),
 	}
 }
 
@@ -75,7 +75,7 @@ func checkTokenExfiltration(wf *graph.WorkflowNode, step *graph.StepNode) []dete
 		Type:        detections.VulnAITokenExfiltration,
 		Platform:    platforms.PlatformAzureDevOps,
 		Class:       detections.GetVulnerabilityClass(detections.VulnAITokenExfiltration),
-		Severity:    detections.SeverityCritical,
+		Severity:    detections.SeverityMedium,
 		Confidence:  detections.ConfidenceHigh,
 		Complexity:  detections.ComplexityLow,
 		Repository:  wf.RepoSlug,
@@ -108,7 +108,7 @@ func checkCodeInjection(wf *graph.WorkflowNode, step *graph.StepNode) []detectio
 		Type:        detections.VulnAICodeInjection,
 		Platform:    platforms.PlatformAzureDevOps,
 		Class:       detections.GetVulnerabilityClass(detections.VulnAICodeInjection),
-		Severity:    detections.SeverityHigh,
+		Severity:    detections.SeverityMedium,
 		Confidence:  detections.ConfidenceHigh,
 		Complexity:  detections.ComplexityLow,
 		Repository:  wf.RepoSlug,
@@ -144,16 +144,16 @@ func checkMCPAbuse(wf *graph.WorkflowNode, step *graph.StepNode) []detections.Fi
 		return nil
 	}
 
-	severity := detections.SeverityMedium
+	severity := detections.SeverityLow
 	confidence := detections.ConfidenceMedium
 	evidence := "AI task with MCP indicators"
 
 	if hasToken && hasUntrusted {
-		severity = detections.SeverityHigh
+		severity = detections.SeverityMedium
 		confidence = detections.ConfidenceHigh
 		evidence = "AI task with MCP enabled, token access, and untrusted input"
 	} else if hasToken {
-		severity = detections.SeverityHigh
+		severity = detections.SeverityLow
 		confidence = detections.ConfidenceHigh
 		evidence = "AI task with MCP enabled and token access"
 	}

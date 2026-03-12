@@ -241,6 +241,6 @@ func executeScanAndOutput(ctx context.Context, platform platforms.Platform, targ
 			outputpkg.RenderDetailed(os.Stdout, result, findings)
 			return nil
 		}
-		return cmdutil.OutputFindingsConsole(result, findings, true)
+		return cmdutil.OutputFindingsConsole(result, findings)
 	}
 }

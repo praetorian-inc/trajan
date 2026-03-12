@@ -30,7 +30,7 @@ jobs:
 
 	require.Len(t, findings, 1)
 	assert.Equal(t, detections.VulnUnpinnedAction, findings[0].Type)
-	assert.Equal(t, detections.SeverityHigh, findings[0].Severity)
+	assert.Equal(t, detections.SeverityLow, findings[0].Severity)
 	assert.Equal(t, detections.ConfidenceHigh, findings[0].Confidence)
 	assert.Equal(t, detections.ComplexityZeroClick, findings[0].Complexity)
 	assert.Equal(t, "actions/checkout@v4", findings[0].Evidence)

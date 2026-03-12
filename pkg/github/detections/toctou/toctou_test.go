@@ -33,7 +33,7 @@ jobs:
 
 	require.Len(t, findings, 1)
 	assert.Equal(t, detections.VulnTOCTOU, findings[0].Type)
-	assert.Equal(t, detections.SeverityHigh, findings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, findings[0].Severity)
 	assert.Contains(t, findings[0].Evidence, "refs/pull/")
 }
 
@@ -59,7 +59,7 @@ jobs:
 
 	require.Len(t, findings, 1)
 	assert.Equal(t, detections.VulnTOCTOU, findings[0].Type)
-	assert.Equal(t, detections.SeverityHigh, findings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, findings[0].Severity)
 	assert.Contains(t, findings[0].Evidence, "inputs.branch")
 }
 

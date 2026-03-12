@@ -184,7 +184,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 			outputpkg.RenderDetailed(os.Stdout, result, findings)
 			return nil
 		}
-		return cmdutil.OutputFindingsConsole(result, findings, true)
+		return cmdutil.OutputFindingsConsole(result, findings)
 	}
 }
 

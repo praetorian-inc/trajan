@@ -27,7 +27,7 @@ type Detection struct {
 // New creates a new AI risk detection for GitLab CI.
 func New() *Detection {
 	return &Detection{
-		BaseDetection: base.NewBaseDetection("ai-risk", "gitlab", detections.SeverityHigh),
+		BaseDetection: base.NewBaseDetection("ai-risk", "gitlab", detections.SeverityMedium),
 	}
 }
 
@@ -85,7 +85,7 @@ func checkTokenExfiltration(g *graph.Graph, step *graph.StepNode) []detections.F
 		Type:        detections.VulnAITokenExfiltration,
 		Platform:    "gitlab",
 		Class:       detections.GetVulnerabilityClass(detections.VulnAITokenExfiltration),
-		Severity:    detections.SeverityCritical,
+		Severity:    detections.SeverityMedium,
 		Confidence:  detections.ConfidenceHigh,
 		Complexity:  detections.ComplexityLow,
 		Repository:  wf.RepoSlug,
@@ -116,7 +116,7 @@ func checkCodeInjection(g *graph.Graph, step *graph.StepNode) []detections.Findi
 		Type:        detections.VulnAICodeInjection,
 		Platform:    "gitlab",
 		Class:       detections.GetVulnerabilityClass(detections.VulnAICodeInjection),
-		Severity:    detections.SeverityHigh,
+		Severity:    detections.SeverityMedium,
 		Confidence:  detections.ConfidenceHigh,
 		Complexity:  detections.ComplexityLow,
 		Repository:  wf.RepoSlug,
@@ -150,16 +150,16 @@ func checkMCPAbuse(g *graph.Graph, step *graph.StepNode) []detections.Finding {
 		return nil
 	}
 
-	severity := detections.SeverityMedium
+	severity := detections.SeverityLow
 	confidence := detections.ConfidenceMedium
 	evidence := "AI step with MCP indicators"
 
 	if hasToken && hasUntrusted {
-		severity = detections.SeverityHigh
+		severity = detections.SeverityMedium
 		confidence = detections.ConfidenceHigh
 		evidence = "AI step with MCP enabled, token access, and untrusted input"
 	} else if hasToken {
-		severity = detections.SeverityHigh
+		severity = detections.SeverityLow
 		confidence = detections.ConfidenceHigh
 		evidence = "AI step with MCP enabled and token access"
 	}

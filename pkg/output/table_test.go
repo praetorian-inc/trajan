@@ -55,7 +55,7 @@ func TestAggregateByRepo(t *testing.T) {
 		{Type: detections.VulnUnpinnedAction, Severity: detections.SeverityHigh, Repository: "owner/repo2"},
 	}
 
-	result := AggregateByRepo(findings)
+	result := AggregateByRepoWithAllTypes(findings)
 
 	// Check repo1 has 2 aggregated findings (both same severity)
 	assert.Len(t, result["owner/repo1"], 2)
@@ -81,7 +81,7 @@ func TestAggregateByRepo_DifferentSeveritiesSeparateRows(t *testing.T) {
 		{Type: detections.VulnExcessivePermissions, Severity: detections.SeverityHigh, Repository: "owner/repo1"},
 	}
 
-	result := AggregateByRepo(findings)
+	result := AggregateByRepoWithAllTypes(findings)
 
 	// Should have 2 rows for excessive_permissions: one High (count=2), one Medium (count=1)
 	assert.Len(t, result["owner/repo1"], 2, "Same type with different severities should produce separate rows")
@@ -153,48 +153,6 @@ func TestSeverityColor(t *testing.T) {
 			assert.Equal(t, tt.wantCode, got)
 		})
 	}
-}
-
-func TestAggregateByRepo_IncludesAllTypes(t *testing.T) {
-	// Given only 1 finding type
-	findings := []detections.Finding{
-		{Type: detections.VulnUnpinnedAction, Severity: detections.SeverityHigh, Repository: "owner/repo"},
-	}
-
-	// When aggregating with showAll=true
-	result := AggregateByRepoWithAllTypes(findings, false) // hideZero=false means show all
-
-	// Then all types should be present
-	allTypes := len(detections.AllVulnerabilityTypes)
-	assert.Len(t, result["owner/repo"], allTypes, "Should include all detection types")
-
-	// And the found type should have count=1
-	var foundUnpinned bool
-	var foundZeroCount int
-	for _, agg := range result["owner/repo"] {
-		if agg.Type == detections.VulnUnpinnedAction {
-			assert.Equal(t, 1, agg.Count)
-			foundUnpinned = true
-		} else {
-			assert.Equal(t, 0, agg.Count, "Type %s should have 0 count", agg.Type)
-			foundZeroCount++
-		}
-	}
-	assert.True(t, foundUnpinned, "Should find unpinned_action")
-	assert.Equal(t, len(detections.AllVulnerabilityTypes)-1, foundZeroCount, "Should have all-1 types with 0 count")
-}
-
-func TestAggregateByRepo_HideZero(t *testing.T) {
-	// Given only 1 finding type
-	findings := []detections.Finding{
-		{Type: detections.VulnUnpinnedAction, Severity: detections.SeverityHigh, Repository: "owner/repo"},
-	}
-
-	// When aggregating with hideZero=true
-	result := AggregateByRepoWithAllTypes(findings, true)
-
-	// Then only found type should be present
-	assert.Len(t, result["owner/repo"], 1, "Should only include types with findings")
 }
 
 func TestTypeDescriptionsComplete(t *testing.T) {

@@ -24,7 +24,7 @@ type Detection struct {
 // New creates a new unpinned include detection
 func New() *Detection {
 	return &Detection{
-		BaseDetection: base.NewBaseDetection("unpinned-include", "gitlab", detections.SeverityHigh),
+		BaseDetection: base.NewBaseDetection("unpinned-include", "gitlab", detections.SeverityLow),
 	}
 }
 
@@ -86,7 +86,7 @@ func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *det
 				Type:        detections.VulnUnpinnedAction,
 				Platform:    "gitlab",
 				Class:       detections.GetVulnerabilityClass(detections.VulnUnpinnedAction),
-				Severity:    detections.SeverityHigh,
+				Severity:    detections.SeverityLow,
 				Confidence:  detections.ConfidenceHigh,
 				Complexity:  detections.ComplexityZeroClick,
 				Repository:  wf.RepoSlug,
@@ -119,7 +119,7 @@ func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *det
 			Type:        detections.VulnUnpinnedAction,
 			Platform:    "gitlab",
 			Class:       detections.GetVulnerabilityClass(detections.VulnUnpinnedAction),
-			Severity:    detections.SeverityHigh,
+			Severity:    detections.SeverityLow,
 			Confidence:  detections.ConfidenceHigh,
 			Complexity:  detections.ComplexityZeroClick,
 			Repository:  wf.RepoSlug,

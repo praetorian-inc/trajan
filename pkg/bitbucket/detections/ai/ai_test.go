@@ -24,7 +24,7 @@ func TestAIRisk_Properties(t *testing.T) {
 	d := New()
 	assert.Equal(t, "ai-risk", d.Name())
 	assert.Equal(t, "bitbucket", d.Platform())
-	assert.Equal(t, detections.SeverityHigh, d.Severity())
+	assert.Equal(t, detections.SeverityMedium, d.Severity())
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ func TestTokenExfiltration_AIPipeWithToken(t *testing.T) {
 
 	tokenFindings := findingsByType(findings, detections.VulnAITokenExfiltration)
 	require.Len(t, tokenFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, tokenFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, tokenFindings[0].Severity)
 	assert.Equal(t, detections.ConfidenceHigh, tokenFindings[0].Confidence)
 	assert.Equal(t, "bitbucket", tokenFindings[0].Platform)
 }
@@ -117,7 +117,7 @@ func TestCodeInjection_AIPipeWithUntrustedInput(t *testing.T) {
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityHigh, codeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
 func TestCodeInjection_AIPipeNoUntrustedInput(t *testing.T) {
@@ -175,10 +175,10 @@ func TestMCPAbuse_AIPipeWithMCPAndToken(t *testing.T) {
 
 	mcpFindings := findingsByType(findings, detections.VulnAIMCPAbuse)
 	require.Len(t, mcpFindings, 1)
-	assert.Equal(t, detections.SeverityHigh, mcpFindings[0].Severity)
+	assert.Equal(t, detections.SeverityLow, mcpFindings[0].Severity)
 }
 
-// Finding 19: MCP + untrusted input only (no token) -> MEDIUM severity
+// Finding 19: MCP + untrusted input only (no token) -> LOW severity
 func TestMCPAbuse_AIPipeWithMCPAndUntrustedOnly(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -206,8 +206,8 @@ func TestMCPAbuse_AIPipeWithMCPAndUntrustedOnly(t *testing.T) {
 
 	mcpFindings := findingsByType(findings, detections.VulnAIMCPAbuse)
 	require.Len(t, mcpFindings, 1)
-	assert.Equal(t, detections.SeverityMedium, mcpFindings[0].Severity,
-		"MCP + untrusted input only (no token) should be MEDIUM severity")
+	assert.Equal(t, detections.SeverityLow, mcpFindings[0].Severity,
+		"MCP + untrusted input only (no token) should be LOW severity")
 	assert.Equal(t, detections.ConfidenceMedium, mcpFindings[0].Confidence)
 }
 
