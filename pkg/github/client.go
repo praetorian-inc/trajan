@@ -325,6 +325,23 @@ func (c *Client) GetWorkflowContent(ctx context.Context, owner, repo, path strin
 	return []byte(file.Content), nil
 }
 
+// GetWorkflowContentAtRef returns the content of a workflow file at a specific git ref
+func (c *Client) GetWorkflowContentAtRef(ctx context.Context, owner, repo, path, ref string) ([]byte, error) {
+	apiPath := fmt.Sprintf("/repos/%s/%s/contents/%s?ref=%s", owner, repo, path, ref)
+
+	var file WorkflowFile
+	if err := c.get(ctx, apiPath, &file); err != nil {
+		return nil, fmt.Errorf("getting workflow content at ref: %w", err)
+	}
+
+	// Decode base64 content
+	if file.Encoding == "base64" {
+		return decodeBase64(file.Content)
+	}
+
+	return []byte(file.Content), nil
+}
+
 // GetFileMetadata returns metadata (including SHA) for a file via the contents API
 func (c *Client) GetFileMetadata(ctx context.Context, owner, repo, path string) (*WorkflowFile, error) {
 	apiPath := fmt.Sprintf("/repos/%s/%s/contents/%s", owner, repo, path)

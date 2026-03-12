@@ -383,6 +383,12 @@ var GitHubHostedRunners = map[string]bool{
 // For matrix expressions like ${{ matrix.os }}, resolves the variable against
 // the strategy matrix. Unresolvable expressions are treated as self-hosted.
 func (j GitHubJob) IsSelfHostedRunner() bool {
+	// Reusable workflow callers delegate runs-on to the callee.
+	// They have no runner of their own, so an empty runs-on is not self-hosted.
+	if j.Uses != "" {
+		return false
+	}
+
 	runsOn := j.GetRunsOn()
 	if runsOn == "self-hosted" {
 		return true

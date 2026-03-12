@@ -200,3 +200,31 @@ jobs:
 	require.NoError(t, err)
 	assert.True(t, wf4.Jobs["test"].IsSelfHostedRunner(), "unresolvable expression should be flagged conservatively")
 }
+
+func TestJob_IsSelfHostedRunner_ReusableWorkflowCaller(t *testing.T) {
+	// Cross-repo reusable workflow caller — has uses but no runs-on
+	yaml1 := `
+name: CI
+on: push
+jobs:
+  call-build:
+    uses: org/shared-workflows/.github/workflows/build.yml@main
+`
+	wf1, err := ParseWorkflow([]byte(yaml1))
+	require.NoError(t, err)
+	assert.False(t, wf1.Jobs["call-build"].IsSelfHostedRunner(), "reusable workflow caller should not be flagged as self-hosted")
+}
+
+func TestJob_IsSelfHostedRunner_LocalReusableWorkflowCaller(t *testing.T) {
+	// Local reusable workflow caller — has uses with ./ prefix
+	yaml1 := `
+name: CI
+on: push
+jobs:
+  call-local:
+    uses: ./.github/workflows/reusable-build.yml
+`
+	wf1, err := ParseWorkflow([]byte(yaml1))
+	require.NoError(t, err)
+	assert.False(t, wf1.Jobs["call-local"].IsSelfHostedRunner(), "local reusable workflow caller should not be flagged as self-hosted")
+}

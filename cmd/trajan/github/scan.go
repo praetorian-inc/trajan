@@ -200,6 +200,7 @@ func executeScanAndOutput(ctx context.Context, platform platforms.Platform, targ
 
 	// Enumerate self-hosted runners for double-layer detection
 	if ghPlatform, ok := platform.(*github.Platform); ok {
+		executor.SetMetadata("github_client", ghPlatform.Client())
 		if runnerResult, err := ghPlatform.ScanRunners(ctx, target); err == nil {
 			executor.SetMetadata("runners", runnerResult)
 		}

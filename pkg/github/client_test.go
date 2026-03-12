@@ -439,6 +439,31 @@ func TestClient_InviteCollaborator(t *testing.T) {
 	}
 }
 
+func TestClient_GetWorkflowContentAtRef(t *testing.T) {
+	expectedContent := "name: Reusable\non: workflow_call\njobs:\n  build:\n    runs-on: self-hosted"
+	encodedContent := base64.StdEncoding.EncodeToString([]byte(expectedContent))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/repos/owner/repo/contents/.github/workflows/reusable.yml", r.URL.Path)
+		assert.Equal(t, "v1.0.0", r.URL.Query().Get("ref"))
+		w.Header().Set("X-RateLimit-Remaining", "4993")
+		w.Header().Set("X-RateLimit-Limit", "5000")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"name":"reusable.yml",
+			"path":".github/workflows/reusable.yml",
+			"content":"` + encodedContent + `",
+			"encoding":"base64"
+		}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	content, err := client.GetWorkflowContentAtRef(context.Background(), "owner", "repo", ".github/workflows/reusable.yml", "v1.0.0")
+	require.NoError(t, err)
+	assert.Equal(t, expectedContent, string(content))
+}
+
 func TestClient_RemoveCollaborator(t *testing.T) {
 	tests := []struct {
 		name          string

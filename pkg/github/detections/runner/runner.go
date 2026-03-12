@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/praetorian-inc/trajan/internal/registry"
 	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
@@ -11,6 +12,7 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/detections/base"
 	"github.com/praetorian-inc/trajan/pkg/github"
 	"github.com/praetorian-inc/trajan/pkg/github/detections/common"
+	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
 func init() {
@@ -22,6 +24,8 @@ func init() {
 // Detection detects self-hosted runner usage
 type Detection struct {
 	base.BaseDetection
+	resolver     *reusableWorkflowResolver
+	resolverOnce sync.Once
 }
 
 // New creates a new runner plugin
@@ -70,6 +74,50 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		// OR if we couldn't check runner existence
 		if runnersExist || !hasRunnerData {
 			findings = append(findings, createFinding(wf, job, hasRunnerData, runnersExist))
+		}
+	}
+
+	// Second pass: resolve reusable workflow callers (jobs with Uses set).
+	// The parser now skips tagging these, so we resolve the callee to check.
+	var ghClient *github.Client
+	if clientData, ok := g.GetMetadata("github_client"); ok {
+		ghClient, _ = clientData.(*github.Client)
+	}
+	var allWorkflows map[string][]platforms.Workflow
+	if wfData, ok := g.GetMetadata("all_workflows"); ok {
+		allWorkflows, _ = wfData.(map[string][]platforms.Workflow)
+	}
+
+	// Only proceed if we have at least some way to resolve callees
+	if ghClient != nil || allWorkflows != nil {
+		d.resolverOnce.Do(func() {
+			d.resolver = newResolver(ghClient, allWorkflows)
+		})
+
+		for _, node := range g.GetNodesByType(graph.NodeTypeJob) {
+			job := node.(*graph.JobNode)
+			if job.Uses == "" {
+				continue
+			}
+
+			wfNode, ok := g.GetNode(job.Parent())
+			if !ok {
+				continue
+			}
+			wf := wfNode.(*graph.WorkflowNode)
+
+			isSelfHosted, resolvedRunsOn, err := d.resolver.resolveCallee(ctx, wf.RepoSlug, job.Uses, 0)
+			if err != nil || !isSelfHosted {
+				continue
+			}
+
+			// Tag the job and update the graph index so downstream queries find it
+			g.UpdateNodeTag(job.ID(), graph.TagSelfHostedRunner)
+			job.RunsOn = resolvedRunsOn
+
+			if runnersExist || !hasRunnerData {
+				findings = append(findings, createFinding(wf, job, hasRunnerData, runnersExist))
+			}
 		}
 	}
 
