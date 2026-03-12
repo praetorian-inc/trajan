@@ -31,7 +31,7 @@ type Detection struct {
 // New creates a new consolidated AI risk detection.
 func New() *Detection {
 	return &Detection{
-		BaseDetection: base.NewBaseDetection("ai-risk", "github", detections.SeverityHigh),
+		BaseDetection: base.NewBaseDetection("ai-risk", "github", detections.SeverityMedium),
 	}
 }
 
@@ -94,7 +94,7 @@ func checkTokenExfiltration(wf *graph.WorkflowNode, job *graph.JobNode, step *gr
 		Type:        detections.VulnAITokenExfiltration,
 		Platform:    "github",
 		Class:       detections.GetVulnerabilityClass(detections.VulnAITokenExfiltration),
-		Severity:    detections.SeverityCritical,
+		Severity:    detections.SeverityMedium,
 		Confidence:  detections.ConfidenceHigh,
 		Complexity:  detections.ComplexityLow,
 		Repository:  wf.RepoSlug,
@@ -171,7 +171,7 @@ func checkSupplyChainPoisoning(wf *graph.WorkflowNode, job *graph.JobNode, step 
 		Type:        detections.VulnAISupplyChainPoisoning,
 		Platform:    "github",
 		Class:       detections.GetVulnerabilityClass(detections.VulnAISupplyChainPoisoning),
-		Severity:    detections.SeverityCritical,
+		Severity:    detections.SeverityMedium,
 		Confidence:  detections.ConfidenceHigh,
 		Complexity:  detections.ComplexityZeroClick,
 		Repository:  wf.RepoSlug,
@@ -233,7 +233,7 @@ func checkPrivilegeEscalation(wf *graph.WorkflowNode, job *graph.JobNode, step *
 				Type:        detections.VulnAIPrivilegeEscalation,
 				Platform:    "github",
 				Class:       detections.GetVulnerabilityClass(detections.VulnAIPrivilegeEscalation),
-				Severity:    detections.SeverityHigh,
+				Severity:    detections.SeverityMedium,
 				Confidence:  detections.ConfidenceHigh,
 				Complexity:  detections.ComplexityLow,
 				Repository:  wf.RepoSlug,
@@ -272,12 +272,12 @@ func checkWorkflowSabotage(wf *graph.WorkflowNode, job *graph.JobNode, step *gra
 
 	// Determine severity by trigger
 	trigger := aipatterns.GetTriggerString(wf)
-	severity := detections.SeverityMedium
+	severity := detections.SeverityLow
 	remediation := "Restrict AI action permissions or use more restrictive trigger"
 
 	for _, t := range wf.Triggers {
 		if t == "issue_comment" {
-			severity = detections.SeverityHigh
+			severity = detections.SeverityMedium
 			remediation = "Set permissions to read-only: 'permissions: { actions: read }' or use external approval mechanism"
 			break
 		}
@@ -322,7 +322,7 @@ func checkUnsafeUserAccess(wf *graph.WorkflowNode, job *graph.JobNode, step *gra
 					Type:        detections.VulnAIWorkflowSabotage,
 					Platform:    "github",
 					Class:       detections.GetVulnerabilityClass(detections.VulnAIWorkflowSabotage),
-					Severity:    detections.SeverityCritical,
+					Severity:    detections.SeverityMedium,
 					Confidence:  detections.ConfidenceHigh,
 					Complexity:  detections.ComplexityZeroClick,
 					Repository:  wf.RepoSlug,
@@ -357,16 +357,16 @@ func checkMCPAbuse(wf *graph.WorkflowNode, step *graph.StepNode) []detections.Fi
 		return nil
 	}
 
-	severity := detections.SeverityMedium
+	severity := detections.SeverityLow
 	confidence := detections.ConfidenceMedium
 	evidence := "AI action with MCP indicators"
 
 	if hasGitHubToken && hasUntrusted {
-		severity = detections.SeverityHigh
+		severity = detections.SeverityMedium
 		confidence = detections.ConfidenceHigh
 		evidence = "AI action with MCP enabled, GITHUB_TOKEN, and untrusted input"
 	} else if hasGitHubToken {
-		severity = detections.SeverityHigh
+		severity = detections.SeverityLow
 		confidence = detections.ConfidenceHigh
 		evidence = "AI action with MCP enabled and GITHUB_TOKEN"
 	}
@@ -454,7 +454,7 @@ func hasUntrustedInput(step *graph.StepNode) bool {
 // Nil permissions = CRITICAL (GitHub defaults to read+write).
 func getWritePermissionSeverity(job *graph.JobNode) detections.Severity {
 	if job.Permissions == nil {
-		return detections.SeverityCritical
+		return detections.SeverityMedium
 	}
 	var hasContentsWrite, hasPullRequestsWrite bool
 	for perm, level := range job.Permissions {
@@ -468,10 +468,10 @@ func getWritePermissionSeverity(job *graph.JobNode) detections.Severity {
 		}
 	}
 	if hasContentsWrite {
-		return detections.SeverityCritical
+		return detections.SeverityMedium
 	}
 	if hasPullRequestsWrite {
-		return detections.SeverityHigh
+		return detections.SeverityMedium
 	}
 	return ""
 }

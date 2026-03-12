@@ -31,7 +31,7 @@ func TestAIRisk_Properties(t *testing.T) {
 	p := New()
 	assert.Equal(t, "ai-risk", p.Name())
 	assert.Equal(t, "github", p.Platform())
-	assert.Equal(t, detections.SeverityHigh, p.Severity())
+	assert.Equal(t, detections.SeverityMedium, p.Severity())
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ jobs:
 
 	tokenFindings := findingsByType(findings, detections.VulnAITokenExfiltration)
 	require.Len(t, tokenFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, tokenFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, tokenFindings[0].Severity)
 	assert.Equal(t, detections.ConfidenceHigh, tokenFindings[0].Confidence)
 }
 
@@ -96,7 +96,7 @@ jobs:
 
 	tokenFindings := findingsByType(findings, detections.VulnAITokenExfiltration)
 	require.Len(t, tokenFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, tokenFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, tokenFindings[0].Severity)
 }
 
 // Test 3: AI action + no secrets -> no token exfiltration finding
@@ -182,7 +182,7 @@ jobs:
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, codeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
 // Test 6: AI + pull-requests:write + untrusted input -> HIGH
@@ -210,7 +210,7 @@ jobs:
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityHigh, codeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
 // Test 7: AI + contents:read -> no code injection
@@ -263,7 +263,7 @@ jobs:
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, codeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +294,7 @@ jobs:
 
 	supplyFindings := findingsByType(findings, detections.VulnAISupplyChainPoisoning)
 	require.Len(t, supplyFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, supplyFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, supplyFindings[0].Severity)
 }
 
 // Test 10: BUG FIX - nil permissions + untrusted input -> CRITICAL
@@ -319,7 +319,7 @@ jobs:
 
 	supplyFindings := findingsByType(findings, detections.VulnAISupplyChainPoisoning)
 	require.Len(t, supplyFindings, 1, "BUG FIX: nil permissions should be treated as dangerous (GitHub defaults to read+write)")
-	assert.Equal(t, detections.SeverityCritical, supplyFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, supplyFindings[0].Severity)
 }
 
 // Test 11: read-only permissions -> no supply chain finding
@@ -375,7 +375,7 @@ jobs:
 
 	privFindings := findingsByType(findings, detections.VulnAIPrivilegeEscalation)
 	require.Len(t, privFindings, 1)
-	assert.Equal(t, detections.SeverityHigh, privFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, privFindings[0].Severity)
 }
 
 // Test 13: safe trigger (push) -> no priv esc
@@ -430,7 +430,7 @@ jobs:
 
 	sabotageFindings := findingsByType(findings, detections.VulnAIWorkflowSabotage)
 	require.Len(t, sabotageFindings, 1)
-	assert.Equal(t, detections.SeverityHigh, sabotageFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, sabotageFindings[0].Severity)
 }
 
 // Test 15: actions:write on pull_request_target -> MEDIUM
@@ -455,7 +455,7 @@ jobs:
 
 	sabotageFindings := findingsByType(findings, detections.VulnAIWorkflowSabotage)
 	require.Len(t, sabotageFindings, 1)
-	assert.Equal(t, detections.SeverityMedium, sabotageFindings[0].Severity)
+	assert.Equal(t, detections.SeverityLow, sabotageFindings[0].Severity)
 }
 
 // Test 16: nil permissions on AI trigger -> finding (nil = actions:write defaults)
@@ -536,7 +536,7 @@ jobs:
 
 	mcpFindings := findingsByType(findings, detections.VulnAIMCPAbuse)
 	require.Len(t, mcpFindings, 1)
-	assert.Equal(t, detections.SeverityHigh, mcpFindings[0].Severity)
+	assert.Equal(t, detections.SeverityLow, mcpFindings[0].Severity)
 }
 
 // Test 19: MCP + untrusted input only -> MEDIUM
@@ -562,7 +562,7 @@ jobs:
 
 	mcpFindings := findingsByType(findings, detections.VulnAIMCPAbuse)
 	require.Len(t, mcpFindings, 1)
-	assert.Equal(t, detections.SeverityMedium, mcpFindings[0].Severity)
+	assert.Equal(t, detections.SeverityLow, mcpFindings[0].Severity)
 }
 
 // Test 20: No MCP indicators -> no MCP finding
@@ -617,15 +617,15 @@ jobs:
 	require.NoError(t, err)
 
 	sabotageFindings := findingsByType(findings, detections.VulnAIWorkflowSabotage)
-	// Find the specific unsafe user access finding (CRITICAL severity with wildcard evidence)
+	// Find the specific unsafe user access finding (wildcard evidence)
 	var unsafeFindings []detections.Finding
 	for _, f := range sabotageFindings {
-		if f.Severity == detections.SeverityCritical && strings.Contains(f.Evidence, "allowing any user") {
+		if f.Severity == detections.SeverityMedium && strings.Contains(f.Evidence, "allowing any user") {
 			unsafeFindings = append(unsafeFindings, f)
 		}
 	}
 	require.Len(t, unsafeFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, unsafeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, unsafeFindings[0].Severity)
 	assert.Equal(t, detections.ConfidenceHigh, unsafeFindings[0].Confidence)
 	assert.Equal(t, detections.ComplexityZeroClick, unsafeFindings[0].Complexity)
 	assert.Contains(t, unsafeFindings[0].Evidence, "allowed_non_write_users")
@@ -654,7 +654,7 @@ jobs:
 	sabotageFindings := findingsByType(findings, detections.VulnAIWorkflowSabotage)
 	// Verify no CRITICAL sabotage finding with wildcard evidence
 	for _, f := range sabotageFindings {
-		if f.Severity == detections.SeverityCritical && strings.Contains(f.Evidence, "allowing any user") {
+		if f.Severity == detections.SeverityMedium && strings.Contains(f.Evidence, "allowing any user") {
 			t.Error("Should not produce an unsafe user access finding when no wildcard is configured")
 		}
 	}
@@ -714,7 +714,7 @@ jobs:
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, codeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
 // Test: AI + both contents:write AND pull-requests:write -> CRITICAL (contents takes precedence)
@@ -743,7 +743,7 @@ jobs:
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, codeFindings[0].Severity,
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity,
 		"contents:write should produce CRITICAL even when pull-requests:write is also present")
 }
 
@@ -773,7 +773,7 @@ jobs:
 	tokenFindings := findingsByType(findings, detections.VulnAITokenExfiltration)
 	require.Len(t, tokenFindings, 1,
 		"secret in 'with' block should be detected by hasSecretAccess")
-	assert.Equal(t, detections.SeverityCritical, tokenFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, tokenFindings[0].Severity)
 }
 
 // Test: Detection on empty graph -> 0 findings, no error
