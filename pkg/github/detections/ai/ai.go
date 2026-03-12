@@ -451,7 +451,7 @@ func hasUntrustedInput(step *graph.StepNode) bool {
 
 // getWritePermissionSeverity returns severity based on write permissions.
 // Returns empty Severity if no dangerous write permissions found.
-// Nil permissions = CRITICAL (GitHub defaults to read+write).
+// Nil permissions = MEDIUM (GitHub defaults to read+write).
 func getWritePermissionSeverity(job *graph.JobNode) detections.Severity {
 	if job.Permissions == nil {
 		return detections.SeverityMedium

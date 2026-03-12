@@ -38,7 +38,7 @@ func TestAIRisk_Properties(t *testing.T) {
 // Check 1: Token Exfiltration
 // ---------------------------------------------------------------------------
 
-// Test 1: AI action + GITHUB_TOKEN + untrusted input on issue_comment -> CRITICAL
+// Test 1: AI action + GITHUB_TOKEN + untrusted input on issue_comment -> MEDIUM
 func TestTokenExfiltration_AIActionWithGitHubToken(t *testing.T) {
 	yaml := `
 name: AI Token Exfiltration Test
@@ -69,7 +69,7 @@ jobs:
 	assert.Equal(t, detections.ConfidenceHigh, tokenFindings[0].Confidence)
 }
 
-// Test 2: AI action + custom secret + untrusted input -> CRITICAL
+// Test 2: AI action + custom secret + untrusted input -> MEDIUM
 func TestTokenExfiltration_AIActionWithCustomSecret(t *testing.T) {
 	yaml := `
 name: AI with Secret
@@ -157,7 +157,7 @@ jobs:
 // Check 2: Code Injection
 // ---------------------------------------------------------------------------
 
-// Test 5: AI + contents:write + untrusted input -> CRITICAL
+// Test 5: AI + contents:write + untrusted input -> MEDIUM
 func TestCodeInjection_ContentsWriteWithUntrustedInput(t *testing.T) {
 	yaml := `
 name: AI Code Review
@@ -185,7 +185,7 @@ jobs:
 	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
-// Test 6: AI + pull-requests:write + untrusted input -> HIGH
+// Test 6: AI + pull-requests:write + untrusted input -> MEDIUM
 func TestCodeInjection_PullRequestsWriteWithUntrustedInput(t *testing.T) {
 	yaml := `
 name: AI Review
@@ -240,7 +240,7 @@ jobs:
 	assert.Len(t, codeFindings, 0)
 }
 
-// Test 8: Missing permissions block -> CRITICAL (nil = write defaults)
+// Test 8: Missing permissions block -> MEDIUM (nil = write defaults)
 func TestCodeInjection_MissingPermissionsBlock(t *testing.T) {
 	yaml := `
 name: AI Handler
@@ -270,7 +270,7 @@ jobs:
 // Check 3: Supply Chain Poisoning
 // ---------------------------------------------------------------------------
 
-// Test 9: packages:write + untrusted input -> CRITICAL
+// Test 9: packages:write + untrusted input -> MEDIUM
 func TestSupplyChainPoisoning_PackagesWriteWithUntrustedInput(t *testing.T) {
 	yaml := `
 name: AI Supply Chain
@@ -297,7 +297,7 @@ jobs:
 	assert.Equal(t, detections.SeverityMedium, supplyFindings[0].Severity)
 }
 
-// Test 10: BUG FIX - nil permissions + untrusted input -> CRITICAL
+// Test 10: BUG FIX - nil permissions + untrusted input -> MEDIUM
 func TestSupplyChainPoisoning_NilPermissionsWithUntrustedInput(t *testing.T) {
 	yaml := `
 name: AI No Perms
@@ -353,7 +353,7 @@ jobs:
 // Check 4: Privilege Escalation
 // ---------------------------------------------------------------------------
 
-// Test 12: members:write on AI trigger -> HIGH
+// Test 12: members:write on AI trigger -> MEDIUM
 func TestPrivilegeEscalation_MembersWriteOnAITrigger(t *testing.T) {
 	yaml := `
 name: AI Priv Esc
@@ -406,7 +406,7 @@ jobs:
 // Check 5: Workflow Sabotage
 // ---------------------------------------------------------------------------
 
-// Test 14: actions:write on issue_comment -> HIGH
+// Test 14: actions:write on issue_comment -> MEDIUM
 func TestWorkflowSabotage_ActionsWriteOnIssueComment(t *testing.T) {
 	yaml := `
 name: AI Workflow Sabotage
@@ -433,7 +433,7 @@ jobs:
 	assert.Equal(t, detections.SeverityMedium, sabotageFindings[0].Severity)
 }
 
-// Test 15: actions:write on pull_request_target -> MEDIUM
+// Test 15: actions:write on pull_request_target -> LOW
 func TestWorkflowSabotage_ActionsWriteOnPullRequestTarget(t *testing.T) {
 	yaml := `
 name: AI Workflow
@@ -512,7 +512,7 @@ jobs:
 // Check 6: MCP Abuse
 // ---------------------------------------------------------------------------
 
-// Test 18: MCP + GITHUB_TOKEN -> HIGH
+// Test 18: MCP + GITHUB_TOKEN -> LOW
 func TestMCPAbuse_MCPWithGitHubToken(t *testing.T) {
 	yaml := `
 name: AI MCP Abuse
@@ -539,7 +539,7 @@ jobs:
 	assert.Equal(t, detections.SeverityLow, mcpFindings[0].Severity)
 }
 
-// Test 19: MCP + untrusted input only -> MEDIUM
+// Test 19: MCP + untrusted input only -> LOW
 func TestMCPAbuse_MCPWithUntrustedInputOnly(t *testing.T) {
 	yaml := `
 name: AI MCP Untrusted
@@ -595,7 +595,7 @@ jobs:
 // Check 6: Unsafe User Access (Clinejection-style)
 // ---------------------------------------------------------------------------
 
-// Test: AI action with allowed_non_write_users: "*" -> CRITICAL sabotage
+// Test: AI action with allowed_non_write_users: "*" -> MEDIUM sabotage
 func TestUnsafeUserAccess_WildcardAllowedUsers(t *testing.T) {
 	yaml := `
 name: AI Unsafe Access
@@ -652,7 +652,7 @@ jobs:
 	require.NoError(t, err)
 
 	sabotageFindings := findingsByType(findings, detections.VulnAIWorkflowSabotage)
-	// Verify no CRITICAL sabotage finding with wildcard evidence
+	// Verify no unsafe user access sabotage finding with wildcard evidence
 	for _, f := range sabotageFindings {
 		if f.Severity == detections.SeverityMedium && strings.Contains(f.Evidence, "allowing any user") {
 			t.Error("Should not produce an unsafe user access finding when no wildcard is configured")
@@ -690,7 +690,7 @@ jobs:
 	assert.Len(t, findings, 0)
 }
 
-// Test: AI + contents:write + untrusted input via step.Run -> CRITICAL
+// Test: AI + contents:write + untrusted input via step.Run -> MEDIUM
 func TestCodeInjection_ViaStepRun(t *testing.T) {
 	yaml := `
 name: AI Run Injection
@@ -717,7 +717,7 @@ jobs:
 	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
-// Test: AI + both contents:write AND pull-requests:write -> CRITICAL (contents takes precedence)
+// Test: AI + both contents:write AND pull-requests:write -> MEDIUM (contents takes precedence)
 func TestCodeInjection_ContentsAndPullRequestsWrite(t *testing.T) {
 	yaml := `
 name: AI Dual Perms
@@ -744,7 +744,7 @@ jobs:
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
 	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity,
-		"contents:write should produce CRITICAL even when pull-requests:write is also present")
+		"contents:write should produce MEDIUM even when pull-requests:write is also present")
 }
 
 // Test: hasSecretAccess via `with` block (existing tests use `env`)
