@@ -113,25 +113,11 @@ func buildPlatformConfig(token string) platforms.Config {
 func listActiveDetections() error {
 	allPlugins := registry.GetDetections("github")
 
-	// Separate AI from core detections
-	var corePlugins []detections.Detection
-	var aiPlugins []detections.Detection
-
-	for _, plugin := range allPlugins {
-		if strings.HasPrefix(plugin.Name(), "ai-") {
-			aiPlugins = append(aiPlugins, plugin)
-		} else {
-			corePlugins = append(corePlugins, plugin)
-		}
-	}
-
 	fmt.Printf("Active GitHub Detection Capabilities (%d total):\n\n", len(allPlugins))
 
-	// Display core detections by severity
-	fmt.Println("=== Core Security Detections ===")
-
+	// Display detections by severity
 	bySeverity := make(map[detections.Severity][]detections.Detection)
-	for _, plugin := range corePlugins {
+	for _, plugin := range allPlugins {
 		bySeverity[plugin.Severity()] = append(bySeverity[plugin.Severity()], plugin)
 	}
 
@@ -152,16 +138,6 @@ func listActiveDetections() error {
 		fmt.Printf("[%s] (%d detections)\n", strings.ToUpper(string(sev)), len(plugins))
 		for _, p := range plugins {
 			fmt.Printf("  • %s\n", p.Name())
-		}
-		fmt.Println()
-	}
-
-	// Display AI detections separately
-	if len(aiPlugins) > 0 {
-		fmt.Println("=== AI Security Detections ===")
-		fmt.Printf("(%d detections)\n", len(aiPlugins))
-		for _, p := range aiPlugins {
-			fmt.Printf("  • %s (%s)\n", p.Name(), p.Severity())
 		}
 		fmt.Println()
 	}
