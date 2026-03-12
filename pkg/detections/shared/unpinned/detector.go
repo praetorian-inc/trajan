@@ -66,7 +66,7 @@ func (d *Detector) Detect(step *graph.StepNode, ctx *shared.DetectionContext) *d
 		Type:        detections.VulnUnpinnedAction,
 		Platform:    ctx.Platform,
 		Class:       detections.GetVulnerabilityClass(detections.VulnUnpinnedAction),
-		Severity:    detections.SeverityHigh,
+		Severity:    detections.SeverityLow,
 		Confidence:  detections.ConfidenceHigh,
 		Complexity:  detections.ComplexityZeroClick,
 		Repository:  ctx.Repository,
