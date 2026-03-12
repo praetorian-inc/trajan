@@ -24,7 +24,6 @@ var (
 	scanRepo        string
 	scanOrg         string
 	scanConcurrency int
-	hideZero        bool
 	jenkinsURL      string
 )
 
@@ -45,7 +44,6 @@ func init() {
 	scanCmd.Flags().StringVar(&scanRepo, "repo", "", "Jenkins job to scan")
 	scanCmd.Flags().StringVar(&scanOrg, "org", "", "Jenkins folder/organization to scan")
 	scanCmd.Flags().IntVar(&scanConcurrency, "concurrency", 10, "number of concurrent workers")
-	scanCmd.Flags().BoolVar(&hideZero, "hide-zero", true, "hide detection types with 0 findings")
 	scanCmd.Flags().StringVar(&jenkinsURL, "url", "", "Jenkins instance URL (e.g., https://jenkins.example.com)")
 }
 
@@ -146,6 +144,6 @@ func executeScanAndOutput(ctx context.Context, platform platforms.Platform, targ
 	case "html":
 		return cmdutil.OutputFindingsHTML(result, execResult.Findings)
 	default:
-		return cmdutil.OutputFindingsConsole(result, execResult.Findings, hideZero)
+		return cmdutil.OutputFindingsConsole(result, execResult.Findings)
 	}
 }

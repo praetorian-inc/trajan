@@ -40,7 +40,7 @@ func TestOutputFindingsConsole_TableFormat(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := cmdutil.OutputFindingsConsole(result, findings, false)
+	err := cmdutil.OutputFindingsConsole(result, findings)
 	assert.NoError(t, err)
 
 	w.Close()
@@ -55,6 +55,6 @@ func TestOutputFindingsConsole_TableFormat(t *testing.T) {
 	assert.Contains(t, output, "owner/repo")
 	assert.Contains(t, output, "SEVERITY")
 	assert.Contains(t, output, "unpinned_action")
-	// With new behavior, shows all 15 types (not just 2 aggregated findings)
+	// Only types with actual findings are shown
 	assert.Contains(t, output, "2") // Count for unpinned_action
 }

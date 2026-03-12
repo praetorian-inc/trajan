@@ -146,75 +146,35 @@ type typeSeverityKey struct {
 	Severity detections.Severity
 }
 
-// AggregateByRepoWithAllTypes groups findings by repository, including all detection types.
+// AggregateByRepoWithAllTypes groups findings by repository.
 // Findings of the same type but different severities are listed as separate rows.
-// If hideZero is false, all platform-relevant types are shown with their counts (0 for unfound).
-// If hideZero is true, only types with findings are shown (backwards compatible).
-func AggregateByRepoWithAllTypes(findings []detections.Finding, hideZero bool) map[string][]AggregatedFinding {
-	// Step 1: Group by repo -> (type, severity)
+// Only types with actual findings are included.
+func AggregateByRepoWithAllTypes(findings []detections.Finding) map[string][]AggregatedFinding {
 	byRepo := make(map[string]map[typeSeverityKey][]detections.Finding)
-	// Also track which types exist per repo (for zero-count handling)
-	repoTypes := make(map[string]map[detections.VulnerabilityType]bool)
 	repos := make(map[string]bool)
 
 	for _, f := range findings {
 		repos[f.Repository] = true
 		if byRepo[f.Repository] == nil {
 			byRepo[f.Repository] = make(map[typeSeverityKey][]detections.Finding)
-			repoTypes[f.Repository] = make(map[detections.VulnerabilityType]bool)
 		}
 		key := typeSeverityKey{Type: f.Type, Severity: f.Severity}
 		byRepo[f.Repository][key] = append(byRepo[f.Repository][key], f)
-		repoTypes[f.Repository][f.Type] = true
 	}
 
-	// Step 2: Build result with all types
 	result := make(map[string][]AggregatedFinding)
-
-	// Determine platform from findings to filter relevant types
-	platform := ""
-	for _, f := range findings {
-		if f.Platform != "" {
-			platform = f.Platform
-			break
-		}
-	}
-	vulnTypes := detections.VulnerabilityTypesForPlatform(platform)
 
 	for repo := range repos {
 		tsMap := byRepo[repo]
-		existingTypes := repoTypes[repo]
 
-		// Iterate over platform-relevant vulnerability types
-		for _, vulnType := range vulnTypes {
-			if existingTypes[vulnType] {
-				// This type has findings: emit one row per distinct severity
-				for key, fs := range tsMap {
-					if key.Type != vulnType {
-						continue
-					}
-					result[repo] = append(result[repo], AggregatedFinding{
-						Type:        vulnType,
-						Severity:    key.Severity,
-						Title:       string(vulnType),
-						Description: getDescription(vulnType),
-						Count:       len(fs),
-					})
-				}
-			} else {
-				// No findings for this type
-				if hideZero {
-					continue
-				}
-				// Show zero-count row with default severity
-				result[repo] = append(result[repo], AggregatedFinding{
-					Type:        vulnType,
-					Severity:    detections.GetDefaultSeverity(vulnType),
-					Title:       string(vulnType),
-					Description: getDescription(vulnType),
-					Count:       0,
-				})
-			}
+		for key, fs := range tsMap {
+			result[repo] = append(result[repo], AggregatedFinding{
+				Type:        key.Type,
+				Severity:    key.Severity,
+				Title:       string(key.Type),
+				Description: getDescription(key.Type),
+				Count:       len(fs),
+			})
 		}
 
 		// Sort by severity (critical first) then by type name
@@ -227,34 +187,6 @@ func AggregateByRepoWithAllTypes(findings []detections.Finding, hideZero bool) m
 		})
 	}
 
-	return result
-}
-
-// AggregateByRepo is kept for backwards compatibility, wraps AggregateByRepoWithAllTypes
-func AggregateByRepo(findings []detections.Finding) map[string][]AggregatedFinding {
-	return AggregateByRepoWithAllTypes(findings, true) // hideZero=true for backwards compatibility
-}
-
-// BuildAllZeroAggregation creates an aggregation with all types at count 0
-func BuildAllZeroAggregation() []AggregatedFinding {
-	result := make([]AggregatedFinding, 0, len(detections.AllVulnerabilityTypes))
-	for _, vt := range detections.AllVulnerabilityTypes {
-		result = append(result, AggregatedFinding{
-			Type:        vt,
-			Severity:    detections.GetDefaultSeverity(vt),
-			Title:       string(vt),
-			Description: getDescription(vt),
-			Count:       0,
-		})
-	}
-	// Sort by severity then name
-	sort.Slice(result, func(i, j int) bool {
-		ri, rj := severityRank(result[i].Severity), severityRank(result[j].Severity)
-		if ri != rj {
-			return ri < rj
-		}
-		return result[i].Title < result[j].Title
-	})
 	return result
 }
 
