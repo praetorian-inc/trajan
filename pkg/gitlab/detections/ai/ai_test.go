@@ -197,7 +197,7 @@ func TestMCPAbuse_AIScriptWithMCPAndUntrusted(t *testing.T) {
 	assert.Equal(t, detections.SeverityLow, mcpFindings[0].Severity)
 }
 
-// Finding 19: MCP + untrusted input only (no token) -> MEDIUM severity
+// Finding 19: MCP + untrusted input only (no token) -> LOW severity
 func TestMCPAbuse_AIScriptWithMCPAndUntrustedOnly(t *testing.T) {
 	g := graph.NewGraph()
 
