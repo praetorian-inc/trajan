@@ -3,6 +3,8 @@ package runnerexec
 import (
 	"fmt"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // GeneratePipelineYAML generates .gitlab-ci.yml for command execution
@@ -26,15 +28,19 @@ func GeneratePipelineYAML(runnerTags []string, command string) (string, error) {
 		}
 	}
 
-	// Build tags list
-	var tagsYAML strings.Builder
-	for _, tag := range runnerTags {
-		tagsYAML.WriteString(fmt.Sprintf("    - %s\n", tag))
+	// Use yaml.Marshal for safe serialization of tags (prevents YAML injection
+	// via metacharacters like ':', '#', '{', etc.)
+	pipeline := map[string]interface{}{
+		"runner-exec-job": map[string]interface{}{
+			"tags":   runnerTags,
+			"script": []string{fmt.Sprintf("(%s) 2>&1 | base64 || true", command)},
+		},
 	}
 
-	return fmt.Sprintf(`runner-exec-job:
-  tags:
-%s  script:
-    - (%s) 2>&1 | base64 || true
-`, tagsYAML.String(), command), nil
+	yamlBytes, err := yaml.Marshal(pipeline)
+	if err != nil {
+		return "", fmt.Errorf("marshaling pipeline YAML: %w", err)
+	}
+
+	return string(yamlBytes), nil
 }

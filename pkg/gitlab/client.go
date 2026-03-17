@@ -142,7 +142,7 @@ func (c *Client) ListGroupProjects(ctx context.Context, groupName string) ([]Pro
 
 // ListUserProjects lists all projects for a user
 func (c *Client) ListUserProjects(ctx context.Context, username string) ([]Project, error) {
-	path := fmt.Sprintf("/users/%s/projects", username)
+	path := fmt.Sprintf("/users/%s/projects", url.PathEscape(username))
 
 	var projects []Project
 	if err := c.getPaginatedJSON(ctx, path, 20, &projects); err != nil {

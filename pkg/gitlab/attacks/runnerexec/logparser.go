@@ -102,8 +102,10 @@ func isBase64(s string) bool {
 	return true
 }
 
+// ansiRegex matches ANSI escape codes for stripping from log output
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[mGKH]`)
+
 // stripANSICodes removes ANSI escape codes from a string
 func stripANSICodes(s string) string {
-	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*[mGKH]`)
 	return ansiRegex.ReplaceAllString(s, "")
 }
