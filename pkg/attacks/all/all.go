@@ -21,4 +21,6 @@ import (
 	_ "github.com/praetorian-inc/trajan/pkg/github/attacks/secretsdump"
 	_ "github.com/praetorian-inc/trajan/pkg/github/attacks/workflowinjection"
 	_ "github.com/praetorian-inc/trajan/pkg/gitlab/attacks/aiprobe"
+	_ "github.com/praetorian-inc/trajan/pkg/gitlab/attacks/runnerexec"
+	_ "github.com/praetorian-inc/trajan/pkg/gitlab/attacks/secretsdump"
 )
