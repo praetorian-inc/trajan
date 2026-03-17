@@ -317,7 +317,7 @@ func (d *Detection) createFinding(g *graph.Graph, job *graph.JobNode, step *grap
 		Confidence:  detections.ConfidenceHigh,
 		Complexity:  detections.ComplexityZeroClick,
 		Platform:    "gitlab",
-		Class:       detections.GetVulnerabilityClass(detections.VulnExcessivePermissions),
+		Class:       detections.GetVulnerabilityClass(detections.VulnMergeRequestSecretsExposure),
 		Repository:  wf.RepoSlug,
 		Workflow:    wf.Path,
 		Job:         job.Name,
