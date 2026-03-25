@@ -14,6 +14,7 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/attacks"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 
+	_ "github.com/praetorian-inc/trajan/pkg/gitlab/attacks/ror"
 	_ "github.com/praetorian-inc/trajan/pkg/gitlab/attacks/runnerexec"
 	_ "github.com/praetorian-inc/trajan/pkg/gitlab/attacks/secretsdump"
 )
@@ -38,7 +39,8 @@ Always use --dry-run first to preview changes.
 
 Available Plugins:
   secrets-dump        Exfiltrate CI/CD secrets via PPE (Poisoned Pipeline Execution)
-  runner-exec         Execute commands on self-hosted runners`,
+  runner-exec         Execute commands on self-hosted runners
+  ror                 Deploy a rogue runner via snippet payload (Runner-on-Runner)`,
 	RunE: runAttack,
 }
 
@@ -61,9 +63,18 @@ func init() {
 	attackCmd.Flags().StringVar(&attackOutputFile, "output-file", "", "save command output to file")
 
 	// runner-exec plugin flags
-	attackCmd.Flags().String("runner-tags", "", "comma-separated runner tags for runner-exec")
+	attackCmd.Flags().String("runner-tags", "", "comma-separated runner tags for targeting specific runners")
 	attackCmd.Flags().String("command", "", "command to execute for runner-exec")
 	attackCmd.Flags().Bool("no-cleanup", false, "preserve artifacts after attack (branch, pipeline, logs)")
+
+	// ror plugin flags
+	attackCmd.Flags().String("snippet-url", "", "URL to GitLab snippet containing base64-encoded RoR payload")
+	attackCmd.Flags().Bool("stealth", false, "use benign-looking job/stage/branch names")
+	attackCmd.Flags().String("job-name", "", "custom job name for the injected CI job")
+	attackCmd.Flags().String("stage-name", "", "custom stage name for the injected CI job")
+	attackCmd.Flags().String("commit-message", "Update CI configuration", "commit message for the injected .gitlab-ci.yml")
+	attackCmd.Flags().String("branch", "", "branch name for the attack (default: auto-generated)")
+	attackCmd.Flags().Int("persist", 0, "keep the job alive for N minutes after payload execution")
 }
 
 func runAttack(cmd *cobra.Command, args []string) error {
@@ -151,6 +162,26 @@ func runAttack(cmd *cobra.Command, args []string) error {
 		extraOpts["cleanup"] = "false"
 	}
 
+	// RoR plugin flags
+	if snippetURL, _ := cmd.Flags().GetString("snippet-url"); snippetURL != "" {
+		extraOpts["snippet-url"] = snippetURL
+	}
+	if stealthFlag, _ := cmd.Flags().GetBool("stealth"); stealthFlag {
+		extraOpts["stealth"] = "true"
+	}
+	if jn, _ := cmd.Flags().GetString("job-name"); jn != "" {
+		extraOpts["job-name"] = jn
+	}
+	if sn, _ := cmd.Flags().GetString("stage-name"); sn != "" {
+		extraOpts["stage-name"] = sn
+	}
+	if cm, _ := cmd.Flags().GetString("commit-message"); cm != "" {
+		extraOpts["commit-message"] = cm
+	}
+	if persist, _ := cmd.Flags().GetInt("persist"); persist > 0 {
+		extraOpts["persist"] = fmt.Sprintf("%d", persist)
+	}
+
 	// Execute plugins and collect results
 	var results []*attacks.AttackResult
 	for _, pluginName := range attackPlugins {
@@ -159,12 +190,14 @@ func runAttack(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("unknown plugin: %s", pluginName)
 		}
 
+		attackBranch, _ := cmd.Flags().GetString("branch")
 		opts := attacks.AttackOptions{
 			Platform:  platform,
 			Target:    target,
 			SessionID: sessionID,
 			DryRun:    attackDryRun,
 			Timeout:   attackTimeout,
+			Branch:    attackBranch,
 			ExtraOpts: extraOpts,
 		}
 
