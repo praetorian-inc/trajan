@@ -48,7 +48,7 @@ func (p *Platform) AnalyzeProjectLogs(ctx context.Context, projectID int, pipeli
 				trace, err := p.client.GetJobTrace(ctx, projectID, job.ID)
 				if err != nil {
 					// 410 Gone means logs expired, stop analyzing older pipelines
-					if strings.Contains(err.Error(), "410") {
+					if IsGoneError(err) {
 						break
 					}
 					// Other errors (403, etc.) - skip this job, but keep metadata if we have it

@@ -376,7 +376,7 @@ func (p *Platform) EnumerateSecrets(ctx context.Context, target platforms.Target
 	instanceVars, err := p.client.ListInstanceVariables(ctx)
 	if err != nil {
 		// 403 is expected for non-admin users - don't show as error
-		if !strings.Contains(err.Error(), "403") {
+		if !IsPermissionError(err) {
 			result.PermissionErrors = append(result.PermissionErrors,
 				fmt.Sprintf("GET /admin/ci/variables: %s", err.Error()))
 		}

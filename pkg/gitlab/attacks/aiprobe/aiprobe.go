@@ -3,7 +3,6 @@ package aiprobe
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/praetorian-inc/trajan/internal/registry"
@@ -95,7 +94,7 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 	content, err := client.GetWorkflowFile(ctx, projectID, ".gitlab-ci.yml", defaultBranch)
 	if err != nil {
 		// 404 is not an error - just means no CI file exists
-		if strings.Contains(err.Error(), "404") {
+		if gitlab.IsNotFoundError(err) {
 			result.Success = true
 			result.Message = "[DRY RUN] Discovered 0 AI service endpoint(s) across 0 CI file(s)"
 			result.Data = &sharedaiprobe.ScanResults{

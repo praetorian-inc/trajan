@@ -74,7 +74,7 @@ func (p *Platform) EnumerateRunners(ctx context.Context, projectPath string, inc
 	if includeInstance {
 		instanceRunners, err := p.client.ListInstanceRunners(ctx)
 		if err != nil {
-			if isPermissionError(err) {
+			if IsPermissionError(err) {
 				result.Errors = append(result.Errors, "listing instance runners: admin access required (403)")
 			} else {
 				result.Errors = append(result.Errors, "listing instance runners: "+err.Error())

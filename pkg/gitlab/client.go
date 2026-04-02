@@ -379,7 +379,7 @@ func (c *Client) ListGroupVariables(ctx context.Context, groupID int) ([]Variabl
 	if err := c.getPaginatedJSON(ctx, path, 20, &variables); err != nil {
 		// 403 Forbidden is expected for non-maintainer users - return empty list
 		// Other errors (network, 500s, JSON decode) should be propagated
-		if isPermissionError(err) {
+		if IsPermissionError(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("listing group variables: %w", err)
@@ -395,21 +395,12 @@ func (c *Client) ListInstanceVariables(ctx context.Context) ([]Variable, error) 
 	if err := c.getJSON(ctx, "/admin/ci/variables", &variables); err != nil {
 		// 403 Forbidden is expected for non-admin users - return empty list
 		// Other errors (network, 500s, JSON decode) should be propagated
-		if isPermissionError(err) {
+		if IsPermissionError(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("listing instance variables: %w", err)
 	}
 	return variables, nil
-}
-
-// isPermissionError checks if an error is a 403 Forbidden permission error.
-func isPermissionError(err error) bool {
-	if err == nil {
-		return false
-	}
-	errStr := err.Error()
-	return strings.Contains(errStr, "403") || strings.Contains(errStr, "Forbidden")
 }
 
 // ListProtectedBranches lists protected branches for a project

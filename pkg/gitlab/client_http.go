@@ -99,7 +99,7 @@ func (c *Client) doRequestWithBody(ctx context.Context, method, path string, bod
 			c.semaphore.Release(1)
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
-			return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+			return nil, &APIError{StatusCode: resp.StatusCode, Body: string(body)}
 		}
 
 		// Success
@@ -190,7 +190,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string) (*http.Resp
 			c.semaphore.Release(1)
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
-			return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+			return nil, &APIError{StatusCode: resp.StatusCode, Body: string(body)}
 		}
 
 		// Success - release semaphore and return
