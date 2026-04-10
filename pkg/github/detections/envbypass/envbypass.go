@@ -85,11 +85,12 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 							Class:      detections.GetVulnerabilityClass(detections.VulnEnvironmentBypass),
 							Severity:   detections.SeverityLow,
 							Confidence: detections.ConfidenceMedium,
-							Repository: wf.RepoSlug,
-							Workflow:   wf.Path, // Use path for matching
-							Job:        job.Name,
-							Line:       job.Line,
-							Evidence:   fmt.Sprintf("Deployment job '%s' lacks environment protection. This allows deployments without required approvals.", getJobDisplayName(job)),
+						Repository:   wf.RepoSlug,
+						Workflow:     wf.Path, // Use path for matching
+						WorkflowFile: wf.Path,
+						Job:          job.Name,
+						Line:         job.Line,
+						Evidence:     fmt.Sprintf("Deployment job '%s' lacks environment protection. This allows deployments without required approvals.", getJobDisplayName(job)),
 							Details: &detections.FindingDetails{
 								LineRanges: lineRanges,
 							},
@@ -123,11 +124,12 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 							Class:      detections.GetVulnerabilityClass(detections.VulnEnvironmentBypass),
 							Severity:   detections.SeverityMedium,
 							Confidence: detections.ConfidenceMedium,
-							Repository: wf.RepoSlug,
-							Workflow:   wf.Path, // Use path for matching
-							Job:        job.Name,
-							Line:       job.Line,
-							Trigger:    trigger,
+						Repository:   wf.RepoSlug,
+						Workflow:     wf.Path, // Use path for matching
+						WorkflowFile: wf.Path,
+						Job:          job.Name,
+						Line:         job.Line,
+						Trigger:      trigger,
 							Evidence:   fmt.Sprintf("Deployment job '%s' uses %s trigger which bypasses PR review. Environment protection may not prevent unauthorized deployments.", getJobDisplayName(job), trigger),
 							Details: &detections.FindingDetails{
 								LineRanges: lineRanges,

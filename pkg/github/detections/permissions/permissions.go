@@ -91,12 +91,13 @@ func checkPermissions(wf *graph.WorkflowNode, job *graph.JobNode, trigger string
 			Severity:   defaultSeverity,
 			Confidence: detections.ConfidenceHigh,
 			Complexity: detections.ComplexityLow,
-			Repository: wf.RepoSlug,
-			Workflow:   wf.Path, // Use path
-			Job:        job.Name,
-			Line:       job.Line,
-			Trigger:    trigger,
-			Evidence:   fmt.Sprintf("Job on %s trigger missing permissions block. Defaults to write access, allowing privilege escalation.", trigger),
+		Repository:   wf.RepoSlug,
+		Workflow:     wf.Path, // Use path
+		WorkflowFile: wf.Path,
+		Job:          job.Name,
+		Line:         job.Line,
+		Trigger:      trigger,
+		Evidence:     fmt.Sprintf("Job on %s trigger missing permissions block. Defaults to write access, allowing privilege escalation.", trigger),
 			Details: &detections.FindingDetails{
 				LineRanges: lineRanges,
 			},
@@ -168,12 +169,13 @@ func checkPermissions(wf *graph.WorkflowNode, job *graph.JobNode, trigger string
 				Severity:   severity,
 				Confidence: detections.ConfidenceHigh,
 				Complexity: detections.ComplexityLow,
-				Repository: wf.RepoSlug,
-				Workflow:   wf.Path, // Use path
-				Job:        job.Name,
-				Line:       job.Line,
-				Trigger:    trigger,
-				Evidence:   fmt.Sprintf("Job on %s trigger has dangerous write permissions: %s", trigger, perm),
+			Repository:   wf.RepoSlug,
+			Workflow:     wf.Path, // Use path
+			WorkflowFile: wf.Path,
+			Job:          job.Name,
+			Line:         job.Line,
+			Trigger:      trigger,
+			Evidence:     fmt.Sprintf("Job on %s trigger has dangerous write permissions: %s", trigger, perm),
 				Details: &detections.FindingDetails{
 					LineRanges:  lineRanges,
 					Permissions: permsList,

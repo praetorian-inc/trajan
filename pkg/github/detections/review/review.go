@@ -148,9 +148,10 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, step *graph.StepN
 		Severity:   detections.SeverityHigh,
 		Confidence: detections.ConfidenceHigh,
 		Complexity: detections.ComplexityZeroClick,
-		Repository: wf.RepoSlug,
-		Workflow:   wf.Path, // Use path for matching
-		Job:        jobName,
+		Repository:   wf.RepoSlug,
+		Workflow:     wf.Path, // Use path for matching
+		WorkflowFile: wf.Path,
+		Job:          jobName,
 		Step:       step.Name,
 		Line:       step.Line,
 		Trigger:    strings.Join(wf.Triggers, ", "),

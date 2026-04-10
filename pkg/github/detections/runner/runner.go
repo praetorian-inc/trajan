@@ -177,9 +177,10 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, hasRunnerData, ru
 		Class:      detections.GetVulnerabilityClass(detections.VulnSelfHostedRunner),
 		Severity:   severity,
 		Confidence: detections.ConfidenceHigh,
-		Repository: wf.RepoSlug,
-		Workflow:   wf.Path, // Use path
-		Job:        job.Name,
+		Repository:   wf.RepoSlug,
+		Workflow:     wf.Path, // Use path
+		WorkflowFile: wf.Path,
+		Job:          job.Name,
 		Line:       job.Line,
 		Trigger:    strings.Join(wf.Triggers, ", "),
 		Evidence:   evidence,
