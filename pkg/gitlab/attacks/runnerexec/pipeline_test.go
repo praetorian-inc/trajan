@@ -122,6 +122,33 @@ func TestGeneratePipelineYAML_MultipleTagsOneWithNewline(t *testing.T) {
 	assert.Contains(t, err.Error(), "runner tags cannot contain line breaks")
 }
 
+func TestGeneratePipelineYAML_TagsWithYAMLMetachars(t *testing.T) {
+	tests := []struct {
+		name string
+		tag  string
+	}{
+		{"colon", "tag: injected"},
+		{"hash comment", "tag #comment"},
+		{"curly braces", "tag{key: val}"},
+		{"square brackets", "tag[0]"},
+		{"ampersand anchor", "&anchor"},
+		{"asterisk alias", "*alias"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			yamlOut, err := GeneratePipelineYAML([]string{tc.tag}, "whoami")
+			assert.NoError(t, err)
+
+			// The tag must appear quoted or escaped so YAML metacharacters
+			// cannot alter the document structure.
+			assert.Contains(t, yamlOut, tc.tag)
+			assert.Contains(t, yamlOut, "runner-exec-job:")
+			assert.Contains(t, yamlOut, "script:")
+		})
+	}
+}
+
 func TestGeneratePipelineYAML_CommandWithQuotes(t *testing.T) {
 	// Commands with quotes should work - they're preserved as-is
 	tags := []string{"docker"}

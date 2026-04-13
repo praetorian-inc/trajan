@@ -108,7 +108,7 @@ func (d *Detection) createFinding(g *graph.Graph, step *graph.StepNode, token st
 	return detections.Finding{
 		Type:        detections.VulnTokenExposure,
 		Platform:    "gitlab",
-		Class:       detections.GetVulnerabilityClass(detections.VulnExcessivePermissions),
+		Class:       detections.GetVulnerabilityClass(detections.VulnTokenExposure),
 		Severity:    detections.SeverityHigh,
 		Confidence:  detections.ConfidenceHigh,
 		Complexity:  detections.ComplexityZeroClick,

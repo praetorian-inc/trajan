@@ -31,17 +31,10 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 	p.config = config
 
 	baseURL := config.BaseURL
-	if baseURL == "" {
-		baseURL = DefaultBaseURL
-	} else {
+	if baseURL != "" {
 		// Validate URL scheme for security (prevent file://, javascript:, etc.)
 		if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
 			return fmt.Errorf("invalid URL scheme: must be http:// or https://, got: %s", baseURL)
-		}
-
-		// Ensure baseURL ends with /api/v4 for self-hosted instances
-		if !strings.HasSuffix(baseURL, "/api/v4") {
-			baseURL = strings.TrimRight(baseURL, "/") + "/api/v4"
 		}
 	}
 
