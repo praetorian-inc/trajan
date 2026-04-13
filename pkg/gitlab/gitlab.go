@@ -160,7 +160,7 @@ func (p *Platform) getWorkflow(ctx context.Context, projectID int, pathWithNames
 	content, err := p.client.GetWorkflowFile(ctx, projectID, ciFile, ref)
 	if err != nil {
 		// If file doesn't exist, return nil (not all projects have CI)
-		if strings.Contains(err.Error(), "404") {
+		if IsNotFoundError(err) {
 			return nil, nil
 		}
 		return nil, err

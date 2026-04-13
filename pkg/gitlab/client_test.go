@@ -3,6 +3,7 @@ package gitlab
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -774,4 +775,56 @@ func BenchmarkGetTemplate_WithCaching(b *testing.B) {
 			b.Fatalf("GetTemplate failed: %v", err)
 		}
 	}
+}
+
+// TestClient_APIErrorTyped verifies that doRequest returns a typed *APIError
+// on non-2xx responses, enabling callers to use errors.As for structured inspection.
+func TestClient_APIErrorTyped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"message":"404 Project Not Found"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	_, err := client.GetProject(context.Background(), "owner/missing")
+	require.Error(t, err)
+
+	// Error must be inspectable as *APIError through the wrapping chain
+	var apiErr *APIError
+	require.True(t, errors.As(err, &apiErr), "expected *APIError in chain, got: %T — %v", err, err)
+	assert.Equal(t, 404, apiErr.StatusCode)
+	assert.Contains(t, apiErr.Body, "404 Project Not Found")
+
+	// Helper must work
+	assert.True(t, IsNotFoundError(err))
+	assert.False(t, IsPermissionError(err))
+}
+
+// TestClient_APIErrorTyped_WriteMethod verifies that doRequestWithBody (POST/PUT/DELETE) returns
+// a typed *APIError on non-2xx responses, enabling callers to use errors.As for structured inspection.
+// This tests the POST path (CreateCommit -> postJSON -> doRequestWithBody).
+func TestClient_APIErrorTyped_WriteMethod(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"message":"404 Project Not Found"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	actions := []CommitAction{
+		{
+			Action:   "create",
+			FilePath: ".gitlab-ci.yml",
+			Content:  "test: content",
+		},
+	}
+	_, err := client.CreateCommit(context.Background(), 123, "test-branch", actions, "Test commit")
+	require.Error(t, err)
+
+	// Error must be inspectable as *APIError through the wrapping chain
+	var apiErr *APIError
+	require.True(t, errors.As(err, &apiErr), "expected *APIError in chain, got: %T — %v", err, err)
+	assert.Equal(t, 404, apiErr.StatusCode)
+	assert.Contains(t, apiErr.Body, "404 Project Not Found")
 }

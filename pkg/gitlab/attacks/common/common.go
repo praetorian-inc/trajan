@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"strings"
 	"time"
 
 	"github.com/praetorian-inc/trajan/pkg/attacks"
@@ -233,7 +232,7 @@ func CleanupSessionArtifacts(ctx context.Context, client *gitlab.Client, session
 			switch action.Type {
 			case attacks.ArtifactBranch:
 				if err := client.DeleteBranch(ctx, projectID, action.Identifier); err != nil {
-					if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "Not Found") {
+					if gitlab.IsNotFoundError(err) {
 						fmt.Printf("Branch %s already deleted or doesn't exist\n", action.Identifier)
 						continue
 					}
@@ -250,7 +249,7 @@ func CleanupSessionArtifacts(ctx context.Context, client *gitlab.Client, session
 				}
 
 				if err := client.DeletePipeline(ctx, projectID, pipelineID); err != nil {
-					if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "Not Found") {
+					if gitlab.IsNotFoundError(err) {
 						fmt.Printf("Pipeline %d already deleted or doesn't exist\n", pipelineID)
 						continue
 					}
