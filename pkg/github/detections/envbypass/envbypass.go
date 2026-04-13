@@ -23,7 +23,7 @@ type Detection struct {
 
 func New() *Detection {
 	return &Detection{
-		BaseDetection: base.NewBaseDetection("environment-bypass", "github", detections.SeverityHigh),
+		BaseDetection: base.NewBaseDetection("environment-bypass", "github", detections.SeverityLow),
 	}
 }
 
@@ -83,7 +83,7 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 							Type:       detections.VulnEnvironmentBypass,
 							Platform:   "github",
 							Class:      detections.GetVulnerabilityClass(detections.VulnEnvironmentBypass),
-							Severity:   detections.SeverityHigh,
+							Severity:   detections.SeverityLow,
 							Confidence: detections.ConfidenceMedium,
 							Repository: wf.RepoSlug,
 							Workflow:   wf.Path, // Use path for matching

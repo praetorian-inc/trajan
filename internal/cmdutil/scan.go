@@ -60,7 +60,7 @@ func OutputFindingsHTML(result *platforms.ScanResult, findings []detections.Find
 }
 
 // OutputFindingsConsole outputs scan results with findings in table format.
-func OutputFindingsConsole(result *platforms.ScanResult, findings []detections.Finding, hideZero bool) error {
+func OutputFindingsConsole(result *platforms.ScanResult, findings []detections.Finding) error {
 	fmt.Printf("=== trajan Scan Results ===\n")
 	fmt.Printf("Repositories scanned: %d\n", len(result.Repositories))
 
@@ -75,19 +75,12 @@ func OutputFindingsConsole(result *platforms.ScanResult, findings []detections.F
 		fmt.Printf("Errors: %d\n", len(result.Errors))
 	}
 
-	if len(findings) == 0 && hideZero {
+	if len(findings) == 0 {
 		fmt.Println("\nNo vulnerabilities found.")
 		return nil
 	}
 
-	if len(findings) == 0 {
-		fmt.Println("\nNo vulnerabilities found. Checks performed:")
-		allZeroAgg := outputpkg.BuildAllZeroAggregation()
-		outputpkg.RenderTable(os.Stdout, allZeroAgg)
-		return nil
-	}
-
-	aggregated := outputpkg.AggregateByRepoWithAllTypes(findings, hideZero)
+	aggregated := outputpkg.AggregateByRepoWithAllTypes(findings)
 
 	repos := make([]string, 0, len(aggregated))
 	for repo := range aggregated {

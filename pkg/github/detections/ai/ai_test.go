@@ -31,14 +31,14 @@ func TestAIRisk_Properties(t *testing.T) {
 	p := New()
 	assert.Equal(t, "ai-risk", p.Name())
 	assert.Equal(t, "github", p.Platform())
-	assert.Equal(t, detections.SeverityHigh, p.Severity())
+	assert.Equal(t, detections.SeverityMedium, p.Severity())
 }
 
 // ---------------------------------------------------------------------------
 // Check 1: Token Exfiltration
 // ---------------------------------------------------------------------------
 
-// Test 1: AI action + GITHUB_TOKEN + untrusted input on issue_comment -> CRITICAL
+// Test 1: AI action + GITHUB_TOKEN + untrusted input on issue_comment -> MEDIUM
 func TestTokenExfiltration_AIActionWithGitHubToken(t *testing.T) {
 	yaml := `
 name: AI Token Exfiltration Test
@@ -65,11 +65,11 @@ jobs:
 
 	tokenFindings := findingsByType(findings, detections.VulnAITokenExfiltration)
 	require.Len(t, tokenFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, tokenFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, tokenFindings[0].Severity)
 	assert.Equal(t, detections.ConfidenceHigh, tokenFindings[0].Confidence)
 }
 
-// Test 2: AI action + custom secret + untrusted input -> CRITICAL
+// Test 2: AI action + custom secret + untrusted input -> MEDIUM
 func TestTokenExfiltration_AIActionWithCustomSecret(t *testing.T) {
 	yaml := `
 name: AI with Secret
@@ -96,7 +96,7 @@ jobs:
 
 	tokenFindings := findingsByType(findings, detections.VulnAITokenExfiltration)
 	require.Len(t, tokenFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, tokenFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, tokenFindings[0].Severity)
 }
 
 // Test 3: AI action + no secrets -> no token exfiltration finding
@@ -157,7 +157,7 @@ jobs:
 // Check 2: Code Injection
 // ---------------------------------------------------------------------------
 
-// Test 5: AI + contents:write + untrusted input -> CRITICAL
+// Test 5: AI + contents:write + untrusted input -> MEDIUM
 func TestCodeInjection_ContentsWriteWithUntrustedInput(t *testing.T) {
 	yaml := `
 name: AI Code Review
@@ -182,10 +182,10 @@ jobs:
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, codeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
-// Test 6: AI + pull-requests:write + untrusted input -> HIGH
+// Test 6: AI + pull-requests:write + untrusted input -> MEDIUM
 func TestCodeInjection_PullRequestsWriteWithUntrustedInput(t *testing.T) {
 	yaml := `
 name: AI Review
@@ -210,7 +210,7 @@ jobs:
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityHigh, codeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
 // Test 7: AI + contents:read -> no code injection
@@ -240,7 +240,7 @@ jobs:
 	assert.Len(t, codeFindings, 0)
 }
 
-// Test 8: Missing permissions block -> CRITICAL (nil = write defaults)
+// Test 8: Missing permissions block -> MEDIUM (nil = write defaults)
 func TestCodeInjection_MissingPermissionsBlock(t *testing.T) {
 	yaml := `
 name: AI Handler
@@ -263,14 +263,14 @@ jobs:
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, codeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
 // ---------------------------------------------------------------------------
 // Check 3: Supply Chain Poisoning
 // ---------------------------------------------------------------------------
 
-// Test 9: packages:write + untrusted input -> CRITICAL
+// Test 9: packages:write + untrusted input -> MEDIUM
 func TestSupplyChainPoisoning_PackagesWriteWithUntrustedInput(t *testing.T) {
 	yaml := `
 name: AI Supply Chain
@@ -294,10 +294,10 @@ jobs:
 
 	supplyFindings := findingsByType(findings, detections.VulnAISupplyChainPoisoning)
 	require.Len(t, supplyFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, supplyFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, supplyFindings[0].Severity)
 }
 
-// Test 10: BUG FIX - nil permissions + untrusted input -> CRITICAL
+// Test 10: BUG FIX - nil permissions + untrusted input -> MEDIUM
 func TestSupplyChainPoisoning_NilPermissionsWithUntrustedInput(t *testing.T) {
 	yaml := `
 name: AI No Perms
@@ -319,7 +319,7 @@ jobs:
 
 	supplyFindings := findingsByType(findings, detections.VulnAISupplyChainPoisoning)
 	require.Len(t, supplyFindings, 1, "BUG FIX: nil permissions should be treated as dangerous (GitHub defaults to read+write)")
-	assert.Equal(t, detections.SeverityCritical, supplyFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, supplyFindings[0].Severity)
 }
 
 // Test 11: read-only permissions -> no supply chain finding
@@ -353,7 +353,7 @@ jobs:
 // Check 4: Privilege Escalation
 // ---------------------------------------------------------------------------
 
-// Test 12: members:write on AI trigger -> HIGH
+// Test 12: members:write on AI trigger -> MEDIUM
 func TestPrivilegeEscalation_MembersWriteOnAITrigger(t *testing.T) {
 	yaml := `
 name: AI Priv Esc
@@ -375,7 +375,7 @@ jobs:
 
 	privFindings := findingsByType(findings, detections.VulnAIPrivilegeEscalation)
 	require.Len(t, privFindings, 1)
-	assert.Equal(t, detections.SeverityHigh, privFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, privFindings[0].Severity)
 }
 
 // Test 13: safe trigger (push) -> no priv esc
@@ -406,7 +406,7 @@ jobs:
 // Check 5: Workflow Sabotage
 // ---------------------------------------------------------------------------
 
-// Test 14: actions:write on issue_comment -> HIGH
+// Test 14: actions:write on issue_comment -> MEDIUM
 func TestWorkflowSabotage_ActionsWriteOnIssueComment(t *testing.T) {
 	yaml := `
 name: AI Workflow Sabotage
@@ -430,10 +430,10 @@ jobs:
 
 	sabotageFindings := findingsByType(findings, detections.VulnAIWorkflowSabotage)
 	require.Len(t, sabotageFindings, 1)
-	assert.Equal(t, detections.SeverityHigh, sabotageFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, sabotageFindings[0].Severity)
 }
 
-// Test 15: actions:write on pull_request_target -> MEDIUM
+// Test 15: actions:write on pull_request_target -> LOW
 func TestWorkflowSabotage_ActionsWriteOnPullRequestTarget(t *testing.T) {
 	yaml := `
 name: AI Workflow
@@ -455,7 +455,7 @@ jobs:
 
 	sabotageFindings := findingsByType(findings, detections.VulnAIWorkflowSabotage)
 	require.Len(t, sabotageFindings, 1)
-	assert.Equal(t, detections.SeverityMedium, sabotageFindings[0].Severity)
+	assert.Equal(t, detections.SeverityLow, sabotageFindings[0].Severity)
 }
 
 // Test 16: nil permissions on AI trigger -> finding (nil = actions:write defaults)
@@ -512,7 +512,7 @@ jobs:
 // Check 6: MCP Abuse
 // ---------------------------------------------------------------------------
 
-// Test 18: MCP + GITHUB_TOKEN -> HIGH
+// Test 18: MCP + GITHUB_TOKEN -> LOW
 func TestMCPAbuse_MCPWithGitHubToken(t *testing.T) {
 	yaml := `
 name: AI MCP Abuse
@@ -536,10 +536,10 @@ jobs:
 
 	mcpFindings := findingsByType(findings, detections.VulnAIMCPAbuse)
 	require.Len(t, mcpFindings, 1)
-	assert.Equal(t, detections.SeverityHigh, mcpFindings[0].Severity)
+	assert.Equal(t, detections.SeverityLow, mcpFindings[0].Severity)
 }
 
-// Test 19: MCP + untrusted input only -> MEDIUM
+// Test 19: MCP + untrusted input only -> LOW
 func TestMCPAbuse_MCPWithUntrustedInputOnly(t *testing.T) {
 	yaml := `
 name: AI MCP Untrusted
@@ -562,7 +562,7 @@ jobs:
 
 	mcpFindings := findingsByType(findings, detections.VulnAIMCPAbuse)
 	require.Len(t, mcpFindings, 1)
-	assert.Equal(t, detections.SeverityMedium, mcpFindings[0].Severity)
+	assert.Equal(t, detections.SeverityLow, mcpFindings[0].Severity)
 }
 
 // Test 20: No MCP indicators -> no MCP finding
@@ -595,7 +595,7 @@ jobs:
 // Check 6: Unsafe User Access (Clinejection-style)
 // ---------------------------------------------------------------------------
 
-// Test: AI action with allowed_non_write_users: "*" -> CRITICAL sabotage
+// Test: AI action with allowed_non_write_users: "*" -> MEDIUM sabotage
 func TestUnsafeUserAccess_WildcardAllowedUsers(t *testing.T) {
 	yaml := `
 name: AI Unsafe Access
@@ -617,15 +617,15 @@ jobs:
 	require.NoError(t, err)
 
 	sabotageFindings := findingsByType(findings, detections.VulnAIWorkflowSabotage)
-	// Find the specific unsafe user access finding (CRITICAL severity with wildcard evidence)
+	// Find the specific unsafe user access finding (wildcard evidence)
 	var unsafeFindings []detections.Finding
 	for _, f := range sabotageFindings {
-		if f.Severity == detections.SeverityCritical && strings.Contains(f.Evidence, "allowing any user") {
+		if f.Severity == detections.SeverityMedium && strings.Contains(f.Evidence, "allowing any user") {
 			unsafeFindings = append(unsafeFindings, f)
 		}
 	}
 	require.Len(t, unsafeFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, unsafeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, unsafeFindings[0].Severity)
 	assert.Equal(t, detections.ConfidenceHigh, unsafeFindings[0].Confidence)
 	assert.Equal(t, detections.ComplexityZeroClick, unsafeFindings[0].Complexity)
 	assert.Contains(t, unsafeFindings[0].Evidence, "allowed_non_write_users")
@@ -652,9 +652,9 @@ jobs:
 	require.NoError(t, err)
 
 	sabotageFindings := findingsByType(findings, detections.VulnAIWorkflowSabotage)
-	// Verify no CRITICAL sabotage finding with wildcard evidence
+	// Verify no unsafe user access sabotage finding with wildcard evidence
 	for _, f := range sabotageFindings {
-		if f.Severity == detections.SeverityCritical && strings.Contains(f.Evidence, "allowing any user") {
+		if f.Severity == detections.SeverityMedium && strings.Contains(f.Evidence, "allowing any user") {
 			t.Error("Should not produce an unsafe user access finding when no wildcard is configured")
 		}
 	}
@@ -690,7 +690,7 @@ jobs:
 	assert.Len(t, findings, 0)
 }
 
-// Test: AI + contents:write + untrusted input via step.Run -> CRITICAL
+// Test: AI + contents:write + untrusted input via step.Run -> MEDIUM
 func TestCodeInjection_ViaStepRun(t *testing.T) {
 	yaml := `
 name: AI Run Injection
@@ -714,10 +714,10 @@ jobs:
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, codeFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity)
 }
 
-// Test: AI + both contents:write AND pull-requests:write -> CRITICAL (contents takes precedence)
+// Test: AI + both contents:write AND pull-requests:write -> MEDIUM (contents takes precedence)
 func TestCodeInjection_ContentsAndPullRequestsWrite(t *testing.T) {
 	yaml := `
 name: AI Dual Perms
@@ -743,8 +743,8 @@ jobs:
 
 	codeFindings := findingsByType(findings, detections.VulnAICodeInjection)
 	require.Len(t, codeFindings, 1)
-	assert.Equal(t, detections.SeverityCritical, codeFindings[0].Severity,
-		"contents:write should produce CRITICAL even when pull-requests:write is also present")
+	assert.Equal(t, detections.SeverityMedium, codeFindings[0].Severity,
+		"contents:write should produce MEDIUM even when pull-requests:write is also present")
 }
 
 // Test: hasSecretAccess via `with` block (existing tests use `env`)
@@ -773,7 +773,7 @@ jobs:
 	tokenFindings := findingsByType(findings, detections.VulnAITokenExfiltration)
 	require.Len(t, tokenFindings, 1,
 		"secret in 'with' block should be detected by hasSecretAccess")
-	assert.Equal(t, detections.SeverityCritical, tokenFindings[0].Severity)
+	assert.Equal(t, detections.SeverityMedium, tokenFindings[0].Severity)
 }
 
 // Test: Detection on empty graph -> 0 findings, no error

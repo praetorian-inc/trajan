@@ -46,7 +46,7 @@ type Detection struct {
 
 func New() *Detection {
 	return &Detection{
-		BaseDetection: base.NewBaseDetection("dispatch-toctou", "github", detections.SeverityHigh),
+		BaseDetection: base.NewBaseDetection("dispatch-toctou", "github", detections.SeverityMedium),
 	}
 }
 
@@ -166,7 +166,7 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, checkoutStep, exe
 		Type:       detections.VulnTOCTOU,
 		Platform:   "github",
 		Class:      detections.GetVulnerabilityClass(detections.VulnTOCTOU),
-		Severity:   detections.SeverityHigh,
+		Severity:   detections.SeverityMedium,
 		Confidence: detections.ConfidenceHigh,
 		Complexity: detections.ComplexityMedium,
 		Repository: wf.RepoSlug,

@@ -470,7 +470,7 @@ func checkForkBuildSettings(wf *graph.WorkflowNode, g *graph.Graph) []detections
 	if hasSecretsExposure {
 		findings = append(findings, detections.Finding{
 			Type:        detections.VulnPullRequestSecretsExposure,
-			Severity:    detections.SeverityMedium,
+			Severity:    detections.SeverityHigh,
 			Confidence:  detections.ConfidenceHigh,
 			Complexity:  detections.ComplexityLow,
 			Platform:    platforms.PlatformAzureDevOps,

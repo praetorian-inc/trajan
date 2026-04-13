@@ -26,7 +26,7 @@ func TestDetection_Platform(t *testing.T) {
 
 func TestDetection_Severity(t *testing.T) {
 	d := New()
-	assert.Equal(t, detections.SeverityHigh, d.Severity())
+	assert.Equal(t, detections.SeverityLow, d.Severity())
 }
 
 func TestDetect_UnpinnedProjectInclude(t *testing.T) {
@@ -52,7 +52,7 @@ func TestDetect_UnpinnedProjectInclude(t *testing.T) {
 
 	assert.Equal(t, detections.VulnUnpinnedAction, findings[0].Type)
 	assert.Equal(t, "gitlab", findings[0].Platform)
-	assert.Equal(t, detections.SeverityHigh, findings[0].Severity)
+	assert.Equal(t, detections.SeverityLow, findings[0].Severity)
 	assert.Contains(t, findings[0].Evidence, "group/project")
 }
 

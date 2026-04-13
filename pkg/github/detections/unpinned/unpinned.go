@@ -29,7 +29,7 @@ func New() *Detection {
 	validator := shared.NewGitHubPinValidator()
 
 	return &Detection{
-		BaseDetection: base.NewBaseDetection("unpinned-action", "github", detections.SeverityHigh),
+		BaseDetection: base.NewBaseDetection("unpinned-action", "github", detections.SeverityLow),
 		detector:      sharedUnpinned.New(resolver, validator),
 	}
 }
