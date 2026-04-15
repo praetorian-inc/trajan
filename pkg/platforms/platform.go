@@ -14,6 +14,7 @@ const (
 	PlatformAzureDevOps = "azuredevops"
 	PlatformJFrog       = "jfrog"
 	PlatformJenkins     = "jenkins"
+	PlatformBitbucket   = "bitbucket"
 )
 
 // TargetType represents what kind of target to scan
@@ -66,6 +67,12 @@ type JenkinsAuth struct {
 	Token    string `json:"token,omitempty"`
 }
 
+// BitbucketAuth contains Bitbucket-specific authentication
+type BitbucketAuth struct {
+	Token string `json:"token,omitempty"` // ATCTT3x (access) or ATATT3x (API)
+	Email string `json:"email,omitempty"` // Required for ATATT3x tokens
+}
+
 // Config holds platform configuration
 type Config struct {
 	// Existing fields (keep these)
@@ -80,6 +87,7 @@ type Config struct {
 	AzureDevOps *AzureDevOpsAuth `json:"azuredevops,omitempty"`
 	JFrog       *JFrogAuth       `json:"jfrog,omitempty"`
 	Jenkins     *JenkinsAuth     `json:"jenkins,omitempty"`
+	Bitbucket   *BitbucketAuth   `json:"bitbucket,omitempty"`
 
 	// HTTPTransport sets a custom HTTP transport. Used in browser (WASM) context
 	// to proxy requests through localhost, bypassing CORS restrictions.

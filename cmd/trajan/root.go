@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	ado "github.com/praetorian-inc/trajan/cmd/trajan/ado"
+	bbcmd "github.com/praetorian-inc/trajan/cmd/trajan/bitbucket"
 	ghcmd "github.com/praetorian-inc/trajan/cmd/trajan/github"
 	gitlab "github.com/praetorian-inc/trajan/cmd/trajan/gitlab"
 	jenkins "github.com/praetorian-inc/trajan/cmd/trajan/jenkins"
@@ -61,12 +62,14 @@ func init() {
 	ghcmd.GitHubCmd.GroupID = "platforms"
 	gitlab.GitLabCmd.GroupID = "platforms"
 	ado.AdoCmd.GroupID = "platforms"
+	bbcmd.BitbucketCmd.GroupID = "platforms"
 	jenkins.JenkinsCmd.GroupID = "platforms"
 	jfrog.JFrogCmd.GroupID = "platforms"
 
 	rootCmd.AddCommand(ghcmd.GitHubCmd)
 	rootCmd.AddCommand(gitlab.GitLabCmd)
 	rootCmd.AddCommand(ado.AdoCmd)
+	rootCmd.AddCommand(bbcmd.BitbucketCmd)
 	rootCmd.AddCommand(jenkins.JenkinsCmd)
 	rootCmd.AddCommand(jfrog.JFrogCmd)
 
