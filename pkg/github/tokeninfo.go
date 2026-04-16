@@ -116,6 +116,10 @@ func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, error) {
 		return nil, fmt.Errorf("token validation failed (%d): %s", resp.StatusCode, body)
 	}
 
+	if ct := resp.Header.Get("Content-Type"); strings.Contains(ct, "text/html") {
+		return nil, fmt.Errorf("server returned HTML instead of JSON (Content-Type: %s) — GitHub Enterprise Server may be in maintenance/replication mode, or the --url may be incorrect", ct)
+	}
+
 	var user User
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
 		return nil, fmt.Errorf("decoding user response: %w", err)

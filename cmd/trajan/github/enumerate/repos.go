@@ -72,6 +72,9 @@ func runReposEnumerate(cmd *cobra.Command, args []string) error {
 	config := platforms.Config{
 		Token: token,
 	}
+	if url := getURL(cmd); url != "" {
+		config.BaseURL = url
+	}
 	cmdutil.ApplyProxyFlags(cmd, &config)
 
 	if err := platform.Init(ctx, config); err != nil {

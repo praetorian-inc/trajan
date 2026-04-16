@@ -91,6 +91,9 @@ func runRetrieve(cmd *cobra.Command, args []string) error {
 		Token:       t,
 		Concurrency: 10,
 	}
+	if url := getURL(cmd); url != "" {
+		initConfig.BaseURL = url
+	}
 	cmdutil.ApplyProxyFlags(cmd, &initConfig)
 	if err := platform.Init(context.Background(), initConfig); err != nil {
 		return fmt.Errorf("initializing GitHub platform: %w", err)

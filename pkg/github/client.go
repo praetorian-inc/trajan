@@ -202,6 +202,10 @@ func (c *Client) get(ctx context.Context, path string, v interface{}) error {
 		return fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
+	if ct := resp.Header.Get("Content-Type"); strings.Contains(ct, "text/html") {
+		return fmt.Errorf("server returned HTML instead of JSON (Content-Type: %s) — GitHub Enterprise Server may be in maintenance/replication mode, or the --url may be incorrect", ct)
+	}
+
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 

@@ -92,6 +92,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	config := buildPlatformConfig(t)
+	if url := getURL(cmd); url != "" {
+		config.BaseURL = url
+	}
 	cmdutil.ApplyProxyFlags(cmd, &config)
 
 	if err := platform.Init(ctx, config); err != nil {
