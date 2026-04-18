@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: praetorian-inc/public-workflows/.github/workflows/go-ci.yml@f89bda45e8073b1b6ac20198164de2b71ebf0c69  # v1.0.2
+    permissions:
+      contents: read
+    with:
+      build-cmd-path: ./cmd/trajan
+      build-binary-name: trajan
+    secrets: inherit
