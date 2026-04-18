@@ -72,6 +72,11 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 		Errors:   make([]error, 0),
 	}
 
+	// Collect workflows discovered via include directives into a separate map.
+	// This prevents goroutines from writing to the same map that the range loop
+	// below is iterating, which would be a data race.
+	discoveredWorkflows := make(map[string][]platforms.Workflow)
+
 	for repoSlug, wfs := range workflows {
 		repoSlug := repoSlug // Capture loop variable
 		wfs := wfs
@@ -109,7 +114,7 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 					}
 				}
 
-				findings, errs := e.executeOnWorkflow(gCtx, repoSlug, wf, workflows)
+				findings, errs := e.executeOnWorkflow(gCtx, repoSlug, wf, discoveredWorkflows)
 
 				// Store in cache
 				if e.cache != nil {
@@ -135,6 +140,14 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 		return result, err
 	}
 
+	// Merge included workflows discovered during scanning into the caller's
+	// workflows map. Done after g.Wait() so there are no concurrent readers
+	// or writers — the earlier range loop at the top of Execute was iterating
+	// this same map, which is why goroutines must not touch it directly.
+	for slug, wfs := range discoveredWorkflows {
+		workflows[slug] = append(workflows[slug], wfs...)
+	}
+
 	// Run instance-level detections (e.g., Jenkins live detections that only
 	// need platform metadata, not parsed workflow content).
 	if len(e.instanceMetadata) > 0 {
@@ -155,9 +168,11 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 	return result, nil
 }
 
-// executeOnWorkflow returns findings and any errors encountered
-// Also extracts included workflows from graph and adds them to workflows map
-func (e *DetectionExecutor) executeOnWorkflow(ctx context.Context, repoSlug string, wf platforms.Workflow, workflows map[string][]platforms.Workflow) ([]detections.Finding, []error) {
+// executeOnWorkflow returns findings and any errors encountered.
+// Included workflows discovered via include directives are written into
+// discoveredWorkflows (under e.mu) rather than the caller's map, so the
+// range loop in Execute never races with these goroutine writes.
+func (e *DetectionExecutor) executeOnWorkflow(ctx context.Context, repoSlug string, wf platforms.Workflow, discoveredWorkflows map[string][]platforms.Workflow) ([]detections.Finding, []error) {
 	var findings []detections.Finding
 	var errs []error
 
@@ -178,20 +193,14 @@ func (e *DetectionExecutor) executeOnWorkflow(ctx context.Context, repoSlug stri
 		return nil, []error{fmt.Errorf("building graph for %s/%s: %w", repoSlug, wf.Path, err)}
 	}
 
-	// Extract included workflows from graph and add to workflows map
-	// This populates the map with workflows from external repositories
+	// Record any workflows pulled in by include directives. Written into a
+	// shared discovery map under e.mu; the caller merges these into the
+	// user-visible workflows map after all goroutines complete.
 	includedWorkflows := graph.GetIncludedWorkflows(repoSlug)
 	if len(includedWorkflows) > 0 {
-		// Group workflows by repo slug
-		workflowsByRepo := make(map[string][]platforms.Workflow)
-		for _, incWf := range includedWorkflows {
-			workflowsByRepo[incWf.RepoSlug] = append(workflowsByRepo[incWf.RepoSlug], incWf)
-		}
-
-		// Thread-safe append to workflows map
 		e.mu.Lock()
-		for slug, wfs := range workflowsByRepo {
-			workflows[slug] = append(workflows[slug], wfs...)
+		for _, incWf := range includedWorkflows {
+			discoveredWorkflows[incWf.RepoSlug] = append(discoveredWorkflows[incWf.RepoSlug], incWf)
 		}
 		e.mu.Unlock()
 	}

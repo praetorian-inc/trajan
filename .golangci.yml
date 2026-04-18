@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
@@ -5,53 +7,55 @@ run:
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
-    - gofmt
-    - goimports
     - misspell
     - unconvert
     - gocritic
+  settings:
+    errcheck:
+      check-type-assertions: true
+    misspell:
+      locale: US
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - unnamedResult
+        - paramTypeCombine
+        - hugeParam
+        - appendCombine
+        - commentedOutCode
+        - ifElseChain
+        - stringXbytes
+        - assignOp
+        - emptyStringTest
+        - unslice
+        - httpNoBody
+        - whyNoLint
+        - indexAlloc
+        - preferStringWriter
+        - appendAssign
+        - typeDefFirst
+        - regexpSimplify
+        - dupImport
+        - nestingReduce
+        - tooManyResultsChecker
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-  goimports:
-    local-prefixes: github.com/praetorian-inc/trajan
-  misspell:
-    locale: US
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - unnamedResult
-      - paramTypeCombine
-      - hugeParam
-      - appendCombine
-      - commentedOutCode
-      - ifElseChain
-      - stringXbytes
-      - assignOp
-      - emptyStringTest
-      - unslice
-      - httpNoBody
-      - whyNoLint
-      - indexAlloc
-      - preferStringWriter
-      - appendAssign
-      - typeDefFirst
-      - regexpSimplify
-      - dupImport
-      - nestingReduce
-      - tooManyResultsChecker
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/praetorian-inc/trajan
