@@ -175,7 +175,7 @@ func TestContextCancellation(t *testing.T) {
 	// In non-WASM builds, they will fail due to missing IndexedDB
 	err := storage.Initialize(ctx)
 	if err == nil {
-		t.Error("expected error when context is cancelled")
+		t.Error("expected error when context is canceled")
 	}
 }
 

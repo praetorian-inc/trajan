@@ -3,8 +3,9 @@ package cmdutil
 import (
 	"os"
 
-	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/spf13/cobra"
+
+	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
 // GetToken reads the token from root persistent flags.

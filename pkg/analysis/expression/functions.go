@@ -20,7 +20,7 @@ func callFunction(name string, args []Value) (Value, error) {
 		return fnFailure(args)
 	case "always":
 		return fnAlways(args)
-	case "cancelled":
+	case "canceled":
 		return fnCancelled(args)
 	case "fromJson", "fromJSON":
 		return fnFromJson(args)

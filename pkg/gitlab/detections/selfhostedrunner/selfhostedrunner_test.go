@@ -4,10 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
-	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
+	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
 // TestDetect_SelfHostedOnMR tests detection of self-hosted runner on MR trigger

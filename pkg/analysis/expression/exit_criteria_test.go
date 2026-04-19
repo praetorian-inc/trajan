@@ -50,11 +50,11 @@ func TestExitCriteria(t *testing.T) {
 		assert.Equal(t, ConfidenceHigh, confidence)
 	})
 
-	// Additional verification: cancelled() should NOT be reachable
-	t.Run("reachability for cancelled()", func(t *testing.T) {
-		reachable, confidence, err := evaluator.EvaluateCondition("cancelled()")
+	// Additional verification: canceled() should NOT be reachable
+	t.Run("reachability for canceled()", func(t *testing.T) {
+		reachable, confidence, err := evaluator.EvaluateCondition("canceled()")
 		require.NoError(t, err)
-		assert.False(t, reachable, "cancelled() should NOT be reachable")
+		assert.False(t, reachable, "canceled() should NOT be reachable")
 		assert.Equal(t, ConfidenceHigh, confidence)
 	})
 }

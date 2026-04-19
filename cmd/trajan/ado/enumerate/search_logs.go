@@ -66,7 +66,6 @@ func runSearchLogsAzDO() error {
 	var searchProject string
 
 	if enumProject != "" {
-		searchProject = enumProject
 		b, err := client.ListBuilds(ctx, enumProject)
 		if err != nil {
 			return err

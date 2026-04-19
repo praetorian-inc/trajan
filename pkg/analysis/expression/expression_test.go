@@ -400,8 +400,8 @@ func TestEvaluateCondition(t *testing.T) {
 			wantConf: ConfidenceHigh,
 		},
 		{
-			name:     "cancelled not reachable",
-			cond:     "cancelled()",
+			name:     "canceled not reachable",
+			cond:     "canceled()",
 			want:     false,
 			wantConf: ConfidenceHigh,
 		},
