@@ -890,7 +890,6 @@ func TestClient_RateLimitBackoff(t *testing.T) {
 
 	// First request will fail with 429, second request should succeed after backoff
 	_, err := client.CreatePullRequest(ctx, "owner", "repo", input)
-	elapsed := time.Since(start)
 
 	// First request should fail (429)
 	require.Error(t, err)
@@ -899,7 +898,7 @@ func TestClient_RateLimitBackoff(t *testing.T) {
 
 	// Second request should succeed after waiting for Retry-After
 	_, err = client.CreatePullRequest(ctx, "owner", "repo", input)
-	elapsed = time.Since(start)
+	elapsed := time.Since(start)
 
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, elapsed, 1*time.Second) // Should have waited
