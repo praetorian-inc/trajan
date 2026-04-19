@@ -1,4 +1,4 @@
-<img width="2880" height="1472" alt="trajan" src="https://github.com/user-attachments/assets/70407fe4-daa7-4697-a394-32eb43f15141" />
+<img width="1200" height="628" alt="trajan" src="https://github.com/user-attachments/assets/edfc7ab4-ee3a-43d5-8626-710298377ec2" />
 
 # Trajan: CI/CD Security Scanner
 
