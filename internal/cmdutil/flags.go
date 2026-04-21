@@ -29,6 +29,7 @@ func GetTokenForPlatform(cmd *cobra.Command, platform string) string {
 		"azuredevops": {"AZURE_DEVOPS_PAT", "AZDO_PAT"},
 		"jfrog":       {"JFROG_TOKEN"},
 		"jenkins":     {"JENKINS_TOKEN", "JENKINS_PASSWORD"},
+		"bitbucket":   {"BITBUCKET_TOKEN", "BB_TOKEN"},
 	}
 
 	if vars, ok := envVars[platform]; ok {
@@ -80,6 +81,28 @@ func GetUsernameForPlatform(cmd *cobra.Command, platform string) string {
 		for _, env := range vars {
 			if u := os.Getenv(env); u != "" {
 				return u
+			}
+		}
+	}
+
+	return ""
+}
+
+// GetEmailForPlatform retrieves email for the specified platform.
+// Checks the --email flag first, then platform-specific environment variables.
+func GetEmailForPlatform(cmd *cobra.Command, platform string) string {
+	if e, err := cmd.Flags().GetString("email"); err == nil && e != "" {
+		return e
+	}
+
+	envVars := map[string][]string{
+		"bitbucket": {"BITBUCKET_EMAIL", "BB_EMAIL"},
+	}
+
+	if vars, ok := envVars[platform]; ok {
+		for _, env := range vars {
+			if e := os.Getenv(env); e != "" {
+				return e
 			}
 		}
 	}
