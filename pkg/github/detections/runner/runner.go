@@ -183,7 +183,8 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, hasRunnerData, ru
 		Job:          job.Name,
 		Line:       job.Line,
 		Trigger:    strings.Join(wf.Triggers, ", "),
-		Evidence:   evidence,
+		Evidence:    evidence,
+		Remediation: "Use ephemeral (just-in-time) self-hosted runners that are destroyed after each job to prevent code persistence attacks. Restrict self-hosted runners to private repositories or use runner groups with controlled access. Avoid using self-hosted runners on public repositories with zero-click triggers (pull_request_target, issue_comment).",
 		Details: &detections.FindingDetails{
 			LineRanges: lineRanges,
 		},

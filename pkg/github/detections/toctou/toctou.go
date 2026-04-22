@@ -176,7 +176,8 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, checkoutStep, exe
 		Step:       checkoutStep.Name,
 		Line:       checkoutStep.Line,
 		Trigger:    "workflow_dispatch",
-		Evidence:   evidence,
+		Evidence:    evidence,
+		Remediation: "Use an immutable commit SHA instead of a mutable branch or PR ref for checkout. Pass the SHA as a workflow_dispatch input (e.g., inputs.sha) and use it directly in the checkout ref, or resolve the ref to a SHA at the start of the workflow and use that for all subsequent steps.",
 		Details: &detections.FindingDetails{
 			LineRanges:  lineRanges,
 			AttackChain: attackChain,

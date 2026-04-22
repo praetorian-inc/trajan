@@ -91,13 +91,14 @@ func checkPermissions(wf *graph.WorkflowNode, job *graph.JobNode, trigger string
 			Severity:   defaultSeverity,
 			Confidence: detections.ConfidenceHigh,
 			Complexity: detections.ComplexityLow,
-		Repository:   wf.RepoSlug,
-		Workflow:     wf.Path, // Use path
-		WorkflowFile: wf.Path,
-		Job:          job.Name,
-		Line:         job.Line,
-		Trigger:      trigger,
-		Evidence:     fmt.Sprintf("Job on %s trigger missing permissions block. Defaults to write access, allowing privilege escalation.", trigger),
+			Repository:   wf.RepoSlug,
+			Workflow:     wf.Path, // Use path
+			WorkflowFile: wf.Path,
+			Job:          job.Name,
+			Line:         job.Line,
+			Trigger:      trigger,
+			Evidence:     fmt.Sprintf("Job on %s trigger missing permissions block. Defaults to write access, allowing privilege escalation.", trigger),
+			Remediation:  fmt.Sprintf("Add an explicit permissions block to job '%s'. Use 'permissions: {}' for read-only or declare only the minimum permissions required (e.g., 'contents: read').", job.Name),
 			Details: &detections.FindingDetails{
 				LineRanges: lineRanges,
 			},
@@ -169,13 +170,14 @@ func checkPermissions(wf *graph.WorkflowNode, job *graph.JobNode, trigger string
 				Severity:   severity,
 				Confidence: detections.ConfidenceHigh,
 				Complexity: detections.ComplexityLow,
-			Repository:   wf.RepoSlug,
-			Workflow:     wf.Path, // Use path
-			WorkflowFile: wf.Path,
-			Job:          job.Name,
-			Line:         job.Line,
-			Trigger:      trigger,
-			Evidence:     fmt.Sprintf("Job on %s trigger has dangerous write permissions: %s", trigger, perm),
+				Repository:   wf.RepoSlug,
+				Workflow:     wf.Path, // Use path
+				WorkflowFile: wf.Path,
+				Job:          job.Name,
+				Line:         job.Line,
+				Trigger:      trigger,
+				Evidence:     fmt.Sprintf("Job on %s trigger has dangerous write permissions: %s", trigger, perm),
+				Remediation: fmt.Sprintf("Remove or downgrade write permissions on the %s trigger. Set '%s: read' or remove it entirely. If write access is required, move the logic to a separate workflow_run triggered workflow.", trigger, perm),
 				Details: &detections.FindingDetails{
 					LineRanges:  lineRanges,
 					Permissions: permsList,

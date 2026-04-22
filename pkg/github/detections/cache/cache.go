@@ -147,7 +147,8 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, cacheStep, execSt
 		Step:       execStep.Name,
 		Line:       execStep.Line,
 		Trigger:    trigger,
-		Evidence:   evidence,
+		Evidence:    evidence,
+		Remediation: "Avoid restoring caches in privileged workflow contexts (workflow_run, pull_request_target). If caching is necessary, use scope-restricted cache keys that prevent cross-branch poisoning, and never execute binaries or scripts directly from restored cache contents.",
 		Details: &detections.FindingDetails{
 			LineRanges:  lineRanges,
 			AttackChain: attackChain,

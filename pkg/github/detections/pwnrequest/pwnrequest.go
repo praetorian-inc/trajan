@@ -410,6 +410,7 @@ func checkReusableWorkflowCallWithPath(wf *graph.WorkflowNode, job *graph.JobNod
 		Line:         job.Line,
 		Trigger:      triggerName,
 		Evidence:     evidence,
+		Remediation:  "Pin the reusable workflow call to a full commit SHA from a trusted branch (e.g., org/repo/.github/workflows/build.yml@<sha>). Avoid calling reusable workflows that check out PR code in privileged trigger contexts, or move the unsafe checkout logic into a separate workflow_run step with artifact passing.",
 		Details: &detections.FindingDetails{
 			LineRanges:  lineRanges,
 			AttackChain: attackChain,

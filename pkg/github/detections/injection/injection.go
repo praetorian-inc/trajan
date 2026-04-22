@@ -249,10 +249,11 @@ func (d *Detection) createFindingWithGates(wf *graph.WorkflowNode, job *graph.Jo
 		Line:         step.Line,
 		Trigger:      strings.Join(wf.Triggers, ", "),
 		Evidence:     evidence,
+		Remediation:  "Avoid using user-controllable GitHub contexts directly in run commands. Instead, pass them through environment variables (env:) or action inputs which are not subject to shell interpretation. For example, use 'env: TITLE: ${{ github.event.issue.title }}' and reference '$TITLE' in the script.",
 		Details: &detections.FindingDetails{
 			LineRanges:         lineRanges,
 			AttackChain:        attackChain,
-			InjectableContexts: injectableContexts, // All contexts from this step
+			InjectableContexts: injectableContexts,
 			Metadata:           metadata,
 		},
 	}

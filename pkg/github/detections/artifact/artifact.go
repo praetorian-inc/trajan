@@ -131,7 +131,8 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, downloadStep, exe
 		Step:       execStep.Name,
 		Line:       execStep.Line,
 		Trigger:    "workflow_run",
-		Evidence:   evidence,
+		Evidence:    evidence,
+		Remediation: "Avoid executing code directly from downloaded artifacts. Validate artifact integrity (e.g., using checksums or signatures) before execution. Consider using workflow_run with explicit artifact verification steps, or restrict workflow_run triggers to trusted workflows only.",
 		Details: &detections.FindingDetails{
 			LineRanges:  lineRanges,
 			AttackChain: attackChain,
