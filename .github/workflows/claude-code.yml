@@ -2,7 +2,7 @@ name: Claude PR Assistant
 
 on:
   pull_request:
-    types: [synchronize, opened]
+    types: [synchronize, opened, ready_for_review]
   pull_request_review_comment:
     types: [created]
 
