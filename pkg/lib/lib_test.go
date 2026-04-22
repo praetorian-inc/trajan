@@ -2,6 +2,8 @@ package lib
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -102,4 +104,40 @@ func TestGetDetections_GitHub(t *testing.T) {
 	allDets := GetDetectionsForPlatform("github")
 	assert.GreaterOrEqual(t, len(allDets), len(dets),
 		"GetDetectionsForPlatform should include cross-platform detections")
+}
+
+// TestScan_LocalPath verifies the public SDK path for local filesystem scanning.
+// It exercises the auto-platform branch (lib.go:120-121), TargetLocal construction
+// (lib.go:146-147), and the detectionsForScan("local") aggregator (lib.go:102-108).
+func TestScan_LocalPath(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Create a known-vulnerable GitHub Actions workflow (pull_request_target + unsafe
+	// ref checkout) so that the pwn_request detection fires.
+	wfDir := filepath.Join(tmp, ".github", "workflows")
+	require.NoError(t, os.MkdirAll(wfDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wfDir, "ci.yml"), []byte(`name: PR Target
+on: pull_request_target
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm install && npm test
+`), 0o644))
+
+	result, err := Scan(context.Background(), ScanConfig{LocalPath: tmp})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.NotEmpty(t, result.Workflows, "expected at least one workflow from local scan")
+
+	// The first workflow's path must reference the file we created.
+	assert.Contains(t, result.Workflows[0].Path, "ci.yml")
+
+	assert.NotEmpty(t, result.Findings, "expected detections to fire against the vulnerable workflow")
+
+	assert.Empty(t, result.Errors)
 }

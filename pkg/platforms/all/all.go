@@ -9,4 +9,5 @@ import (
 	_ "github.com/praetorian-inc/trajan/pkg/gitlab"
 	_ "github.com/praetorian-inc/trajan/pkg/jenkins"
 	_ "github.com/praetorian-inc/trajan/pkg/jfrog"
+	_ "github.com/praetorian-inc/trajan/pkg/local"
 )

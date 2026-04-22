@@ -14,15 +14,17 @@ const (
 	PlatformAzureDevOps = "azuredevops"
 	PlatformJFrog       = "jfrog"
 	PlatformJenkins     = "jenkins"
+	PlatformLocal       = "local"
 )
 
 // TargetType represents what kind of target to scan
 type TargetType string
 
 const (
-	TargetRepo TargetType = "repo"
-	TargetOrg  TargetType = "org"
-	TargetUser TargetType = "user"
+	TargetRepo  TargetType = "repo"
+	TargetOrg   TargetType = "org"
+	TargetUser  TargetType = "user"
+	TargetLocal TargetType = "local"
 )
 
 // Target specifies what to scan

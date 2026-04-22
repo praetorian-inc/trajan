@@ -12,6 +12,7 @@ import (
 	gitlab "github.com/praetorian-inc/trajan/cmd/trajan/gitlab"
 	jenkins "github.com/praetorian-inc/trajan/cmd/trajan/jenkins"
 	jfrog "github.com/praetorian-inc/trajan/cmd/trajan/jfrog"
+	local "github.com/praetorian-inc/trajan/cmd/trajan/local"
 )
 
 var (
@@ -63,12 +64,14 @@ func init() {
 	ado.AdoCmd.GroupID = "platforms"
 	jenkins.JenkinsCmd.GroupID = "platforms"
 	jfrog.JFrogCmd.GroupID = "platforms"
+	local.LocalCmd.GroupID = "platforms"
 
 	rootCmd.AddCommand(ghcmd.GitHubCmd)
 	rootCmd.AddCommand(gitlab.GitLabCmd)
 	rootCmd.AddCommand(ado.AdoCmd)
 	rootCmd.AddCommand(jenkins.JenkinsCmd)
 	rootCmd.AddCommand(jfrog.JFrogCmd)
+	rootCmd.AddCommand(local.LocalCmd)
 
 	// Utility commands
 	searchCmd.Hidden = true

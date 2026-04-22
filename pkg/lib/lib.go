@@ -64,6 +64,11 @@ type ScanConfig struct {
 
 	// Timeout is the maximum duration for the scan (default: 5 minutes).
 	Timeout time.Duration
+
+	// LocalPath, when set, scans the local filesystem path using the local
+	// platform. Platform is auto-set to "local" and Token/Org/Repo are not
+	// required.
+	LocalPath string
 }
 
 // ScanResult contains the complete results of a Trajan scan.
@@ -89,10 +94,32 @@ func applyDefaults(cfg ScanConfig) ScanConfig {
 	return cfg
 }
 
+// detectionsForScan returns the appropriate detections for a scan.
+// For local scans, it aggregates detections from all registered platforms so
+// that any discovered workflow file gets the right plugins regardless of CI
+// platform.
+func detectionsForScan(platform string) []detections.Detection {
+	if platform != platforms.PlatformLocal {
+		return registry.GetDetectionsForPlatform(platform)
+	}
+
+	// Local scan: aggregate detections from every registered detection platform.
+	var all []detections.Detection
+	for _, p := range registry.ListDetectionPlatforms() {
+		all = append(all, registry.GetDetections(p)...)
+	}
+	return all
+}
+
 // Scan performs a complete CI/CD security scan: platform initialization,
 // workflow discovery, and detection execution.
 func Scan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 	cfg = applyDefaults(cfg)
+
+	// Auto-configure platform for local path scans.
+	if cfg.LocalPath != "" && cfg.Platform == "" {
+		cfg.Platform = platforms.PlatformLocal
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
@@ -115,13 +142,18 @@ func Scan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 	}
 
 	// Build target
-	target := platforms.Target{
-		Type:  platforms.TargetRepo,
-		Value: cfg.Org + "/" + cfg.Repo,
-	}
-	if cfg.Repo == "" {
-		target.Type = platforms.TargetOrg
-		target.Value = cfg.Org
+	var target platforms.Target
+	if cfg.Platform == platforms.PlatformLocal {
+		target = platforms.Target{Type: platforms.TargetLocal, Value: cfg.LocalPath}
+	} else {
+		target = platforms.Target{
+			Type:  platforms.TargetRepo,
+			Value: cfg.Org + "/" + cfg.Repo,
+		}
+		if cfg.Repo == "" {
+			target.Type = platforms.TargetOrg
+			target.Value = cfg.Org
+		}
 	}
 
 	// Scan for workflows
@@ -131,7 +163,7 @@ func Scan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 	}
 
 	// Execute detections against the workflow map
-	dets := registry.GetDetectionsForPlatform(cfg.Platform)
+	dets := detectionsForScan(cfg.Platform)
 	executor := scanner.NewDetectionExecutor(dets, cfg.Concurrency)
 	execResult, err := executor.Execute(ctx, scanResult.Workflows)
 	if err != nil {
