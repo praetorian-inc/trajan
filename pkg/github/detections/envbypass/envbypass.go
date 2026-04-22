@@ -132,7 +132,7 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 							Line:         job.Line,
 							Trigger:      trigger,
 							Evidence:     fmt.Sprintf("Deployment job '%s' uses %s trigger which bypasses PR review. Environment protection may not prevent unauthorized deployments.", getJobDisplayName(job), trigger),
-							Remediation:  fmt.Sprintf("Restrict who can trigger %s workflows via branch protection rules or CODEOWNERS. Add an environment with required reviewers to ensure human approval before deployment.", trigger),
+							Remediation:  remediationForDeploymentTrigger(trigger),
 							Details: &detections.FindingDetails{
 								LineRanges: lineRanges,
 							},
@@ -145,6 +145,17 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	}
 
 	return findings, nil
+}
+
+func remediationForDeploymentTrigger(trigger string) string {
+	switch trigger {
+	case "workflow_dispatch":
+		return "Limit repository write access to trusted users and add a protected environment with required reviewers so that manual dispatches still require human approval before deployment."
+	case "schedule":
+		return "Protect the default branch and restrict who can modify workflow files via branch protection rules or CODEOWNERS. Add a protected environment with required reviewers to prevent unauthorized scheduled deployments."
+	default:
+		return "Review the workflow trigger configuration and add a protected environment with required reviewers to ensure human approval before deployment."
+	}
 }
 
 func containsKeyword(text string, keywords []string) bool {
