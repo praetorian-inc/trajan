@@ -48,3 +48,11 @@ browser/trajan-browser-*.zip
 test-output.txt
 .worktrees/
 .env
+
+# Claude Code session artifacts
+.claude/.output/
+.claude/hooks/
+.claude/settings.local.json
+.claude/.serena/
+.claude/.serena-warmup-status.json
+.claude/agent-memory/
