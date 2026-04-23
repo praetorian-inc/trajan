@@ -241,6 +241,9 @@ func runAttack(cmd *cobra.Command, args []string) error {
 		Token:       t,
 		Concurrency: 10,
 	}
+	if url := getURL(cmd); url != "" {
+		initConfig.BaseURL = url
+	}
 	cmdutil.ApplyProxyFlags(cmd, &initConfig)
 
 	if err := platform.Init(ctx, initConfig); err != nil {
@@ -515,6 +518,9 @@ func runAttackCleanup(cmd *cobra.Command, args []string) error {
 	initConfig := platforms.Config{
 		Token:       t,
 		Concurrency: 10,
+	}
+	if url := getURL(cmd); url != "" {
+		initConfig.BaseURL = url
 	}
 	cmdutil.ApplyProxyFlags(cmd, &initConfig)
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // === Pull Request Operations ===
@@ -613,6 +614,11 @@ func (c *Client) doWrite(ctx context.Context, method, path string, body io.Reade
 
 	// Update rate limiter from response
 	c.rateLimiter.Update(resp.Header)
+
+	if ct := resp.Header.Get("Content-Type"); strings.Contains(ct, "text/html") {
+		resp.Body.Close()
+		return nil, fmt.Errorf("server returned HTML instead of JSON (Content-Type: %s) — GitHub Enterprise Server may be in maintenance/replication mode, or the --url may be incorrect", ct)
+	}
 
 	return resp, nil
 }
