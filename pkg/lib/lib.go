@@ -24,11 +24,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/praetorian-inc/trajan/internal/registry"
 	"github.com/praetorian-inc/trajan/pkg/attacks"
 	"github.com/praetorian-inc/trajan/pkg/detections"
+	"github.com/praetorian-inc/trajan/pkg/localwalk"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/praetorian-inc/trajan/pkg/scanner"
 
@@ -64,6 +68,11 @@ type ScanConfig struct {
 
 	// Timeout is the maximum duration for the scan (default: 5 minutes).
 	Timeout time.Duration
+
+	// LocalPath, if set, scans this local filesystem path for the configured
+	// Platform's workflow files instead of contacting the platform API.
+	// Org/Repo/Token/BaseURL are ignored in this mode.
+	LocalPath string
 }
 
 // ScanResult contains the complete results of a Trajan scan.
@@ -91,11 +100,20 @@ func applyDefaults(cfg ScanConfig) ScanConfig {
 
 // Scan performs a complete CI/CD security scan: platform initialization,
 // workflow discovery, and detection execution.
+//
+// When cfg.LocalPath is set, the scan reads workflow files from the local
+// filesystem instead of contacting the platform API.  In that mode
+// Org/Repo/Token/BaseURL are ignored and API-only detections are skipped.
 func Scan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 	cfg = applyDefaults(cfg)
 
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
+
+	// Local-path mode: skip platform Init/Scan entirely.
+	if cfg.LocalPath != "" {
+		return scanLocal(ctx, cfg)
+	}
 
 	// Get the platform adapter
 	p, err := registry.GetPlatform(cfg.Platform)
@@ -151,6 +169,56 @@ func Scan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 	}
 	// Merge non-fatal detection errors
 	result.Errors = append(result.Errors, execResult.Errors...)
+
+	return result, nil
+}
+
+// scanLocal executes a local-path scan: walks the filesystem for workflow files,
+// partitions detections by API requirement, and runs only the local-safe subset.
+func scanLocal(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
+	if cfg.Platform == "" {
+		return nil, fmt.Errorf("local scan requires Platform to be set")
+	}
+	if !localwalk.IsSupported(cfg.Platform) {
+		supported := localwalk.SupportedPlatforms()
+		return nil, fmt.Errorf("local scanning not supported for platform %q (supported: %s)",
+			cfg.Platform, strings.Join(supported, ", "))
+	}
+
+	repoSlug := "local:" + filepath.Base(cfg.LocalPath)
+	workflows, err := localwalk.Walk(cfg.Platform, cfg.LocalPath, repoSlug)
+	if err != nil {
+		return nil, fmt.Errorf("walking local path: %w", err)
+	}
+
+	allPlugins := registry.GetDetectionsForPlatform(cfg.Platform)
+	localRunnable, apiOnly := detections.PartitionByAPIRequirement(allPlugins)
+
+	if len(apiOnly) > 0 {
+		fmt.Fprintf(os.Stderr, "local mode: skipped %d API-only detection(s): %s\n",
+			len(apiOnly), detections.APIOnlyNames(apiOnly))
+	}
+
+	workflowsMap := map[string][]platforms.Workflow{repoSlug: workflows}
+
+	executor := scanner.NewDetectionExecutor(localRunnable, cfg.Concurrency)
+	executor.SetMetadata("all_workflows", workflowsMap)
+	execResult, err := executor.Execute(ctx, workflowsMap)
+	if err != nil {
+		return nil, fmt.Errorf("executing detections: %w", err)
+	}
+
+	result := &ScanResult{
+		Findings:  execResult.Findings,
+		Workflows: workflows,
+	}
+	result.Errors = append(result.Errors, execResult.Errors...)
+
+	slog.Debug("trajan: local scan complete",
+		"platform", cfg.Platform,
+		"path", cfg.LocalPath,
+		"workflows", len(workflows),
+		"findings", len(result.Findings))
 
 	return result, nil
 }

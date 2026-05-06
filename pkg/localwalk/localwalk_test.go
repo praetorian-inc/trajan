@@ -1,0 +1,220 @@
+package localwalk
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/pkg/platforms"
+)
+
+// createFile creates a file at the given path, creating all parent directories.
+func createFile(t *testing.T, path string, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
+func TestSupportedPlatforms_ReturnsSorted(t *testing.T) {
+	got := SupportedPlatforms()
+	want := []string{
+		platforms.PlatformAzureDevOps,
+		platforms.PlatformGitHub,
+		platforms.PlatformGitLab,
+		platforms.PlatformJenkins,
+	}
+	assert.Equal(t, want, got)
+}
+
+func TestIsSupported(t *testing.T) {
+	tests := []struct {
+		platform string
+		want     bool
+	}{
+		{platforms.PlatformGitHub, true},
+		{platforms.PlatformGitLab, true},
+		{platforms.PlatformAzureDevOps, true},
+		{platforms.PlatformJenkins, true},
+		{"bitbucket", false},
+		{"jfrog", false},
+		{"", false},
+		{"unknown", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.platform, func(t *testing.T) {
+			assert.Equal(t, tc.want, IsSupported(tc.platform))
+		})
+	}
+}
+
+func TestWalk_UnsupportedPlatform(t *testing.T) {
+	tmp := t.TempDir()
+	_, err := Walk("bitbucket", tmp, "slug")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `local scanning not supported for platform "bitbucket"`)
+}
+
+func TestWalk_NonexistentPath(t *testing.T) {
+	_, err := Walk(platforms.PlatformGitHub, "/nonexistent/path/definitely/not/here", "slug")
+	require.Error(t, err)
+}
+
+func TestWalk_SingleFile_TrustsCallerPlatform(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "random-name.txt")
+	content := "name: ci\non: [push]\n"
+	createFile(t, file, content)
+
+	workflows, err := Walk(platforms.PlatformGitHub, file, "slug")
+	require.NoError(t, err)
+	require.Len(t, workflows, 1)
+
+	wf := workflows[0]
+	assert.Equal(t, "random-name.txt", wf.Name)
+	assert.Equal(t, "random-name.txt", wf.Path)
+	assert.Equal(t, "slug", wf.RepoSlug)
+}
+
+func TestWalk_Directory_GitHub_MatchesAndSkipsDirs(t *testing.T) {
+	root := t.TempDir()
+
+	// Should be included
+	createFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), "")
+	createFile(t, filepath.Join(root, ".github", "workflows", "sub", "x.yaml"), "")
+
+	// Should be excluded (not under workflows/)
+	createFile(t, filepath.Join(root, ".github", "other.yml"), "")
+
+	// Should be excluded (wrong extension)
+	createFile(t, filepath.Join(root, "README.md"), "")
+
+	// Should be skipped (skip dir .git)
+	createFile(t, filepath.Join(root, ".git", "HEAD"), "ref: refs/heads/main")
+
+	// Should be skipped (skip dir node_modules)
+	createFile(t, filepath.Join(root, "node_modules", ".github", "workflows", "sneaky.yml"), "")
+
+	// Should be skipped (skip dir vendor)
+	createFile(t, filepath.Join(root, "vendor", "x", ".github", "workflows", "v.yml"), "")
+
+	workflows, err := Walk(platforms.PlatformGitHub, root, "my-slug")
+	require.NoError(t, err)
+	require.Len(t, workflows, 2)
+
+	assert.Equal(t, ".github/workflows/ci.yml", workflows[0].Path)
+	assert.Equal(t, ".github/workflows/sub/x.yaml", workflows[1].Path)
+	assert.Equal(t, "my-slug", workflows[0].RepoSlug)
+	assert.Equal(t, "my-slug", workflows[1].RepoSlug)
+}
+
+func TestWalk_Directory_GitLab(t *testing.T) {
+	root := t.TempDir()
+
+	// Should be included
+	createFile(t, filepath.Join(root, ".gitlab-ci.yml"), "")
+	createFile(t, filepath.Join(root, "sub", ".gitlab-ci.yaml"), "")
+
+	// Should be excluded
+	createFile(t, filepath.Join(root, "pipeline.yml"), "")
+	createFile(t, filepath.Join(root, "sub", "other-ci.yml"), "")
+
+	workflows, err := Walk(platforms.PlatformGitLab, root, "gl-slug")
+	require.NoError(t, err)
+	require.Len(t, workflows, 2)
+
+	paths := []string{workflows[0].Path, workflows[1].Path}
+	assert.Contains(t, paths, ".gitlab-ci.yml")
+	assert.Contains(t, paths, "sub/.gitlab-ci.yaml")
+}
+
+func TestWalk_Directory_AzureDevOps(t *testing.T) {
+	root := t.TempDir()
+
+	// Should be included
+	createFile(t, filepath.Join(root, "azure-pipelines.yml"), "")
+	createFile(t, filepath.Join(root, "services", "api.azure-pipelines.yaml"), "")
+	createFile(t, filepath.Join(root, ".azure-pipelines", "build.yml"), "")
+	createFile(t, filepath.Join(root, ".azure-pipelines", "sub", "deploy.yaml"), "")
+
+	// Should be excluded
+	createFile(t, filepath.Join(root, "azure-other.yml"), "")
+
+	workflows, err := Walk(platforms.PlatformAzureDevOps, root, "az-slug")
+	require.NoError(t, err)
+	require.Len(t, workflows, 4)
+
+	paths := make([]string, len(workflows))
+	for i, wf := range workflows {
+		paths[i] = wf.Path
+	}
+	assert.Contains(t, paths, "azure-pipelines.yml")
+	assert.Contains(t, paths, "services/api.azure-pipelines.yaml")
+	assert.Contains(t, paths, ".azure-pipelines/build.yml")
+	assert.Contains(t, paths, ".azure-pipelines/sub/deploy.yaml")
+	assert.NotContains(t, paths, "azure-other.yml")
+}
+
+func TestWalk_Directory_Jenkins(t *testing.T) {
+	root := t.TempDir()
+
+	// Should be included
+	createFile(t, filepath.Join(root, "Jenkinsfile"), "")
+	createFile(t, filepath.Join(root, "services", "Jenkinsfile.prod"), "")
+	// Use separate directories to avoid case-insensitive filesystem collision
+	// on macOS (build.jenkinsfile vs BUILD.JENKINSFILE would resolve to same inode).
+	createFile(t, filepath.Join(root, "legacy", "build.jenkinsfile"), "")
+	createFile(t, filepath.Join(root, "LEGACY_UPPER", "BUILD.JENKINSFILE"), "")
+	createFile(t, filepath.Join(root, "Jenkinsfile.bak"), "")
+
+	// Should be excluded (underscore separator, not dot-prefix)
+	createFile(t, filepath.Join(root, "Jenkinsfile_old"), "")
+
+	workflows, err := Walk(platforms.PlatformJenkins, root, "jen-slug")
+	require.NoError(t, err)
+	require.Len(t, workflows, 5)
+
+	paths := make([]string, len(workflows))
+	for i, wf := range workflows {
+		paths[i] = wf.Path
+	}
+	assert.Contains(t, paths, "Jenkinsfile")
+	assert.Contains(t, paths, "services/Jenkinsfile.prod")
+	assert.Contains(t, paths, "legacy/build.jenkinsfile")
+	assert.Contains(t, paths, "LEGACY_UPPER/BUILD.JENKINSFILE")
+	assert.Contains(t, paths, "Jenkinsfile.bak")
+	assert.NotContains(t, paths, "Jenkinsfile_old")
+}
+
+func TestWalk_Directory_StableSortByPath(t *testing.T) {
+	root := t.TempDir()
+
+	createFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), "")
+	createFile(t, filepath.Join(root, ".github", "workflows", "sub", "x.yaml"), "")
+
+	first, err := Walk(platforms.PlatformGitHub, root, "slug")
+	require.NoError(t, err)
+
+	second, err := Walk(platforms.PlatformGitHub, root, "slug")
+	require.NoError(t, err)
+
+	require.Equal(t, len(first), len(second))
+	for i := range first {
+		assert.Equal(t, first[i].Path, second[i].Path)
+		assert.Equal(t, first[i].Name, second[i].Name)
+	}
+}
+
+func TestWalk_ContentReadCorrectly(t *testing.T) {
+	root := t.TempDir()
+	content := "name: ci\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
+	createFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), content)
+
+	workflows, err := Walk(platforms.PlatformGitHub, root, "slug")
+	require.NoError(t, err)
+	require.Len(t, workflows, 1)
+
+	assert.Equal(t, []byte(content), workflows[0].Content)
+}

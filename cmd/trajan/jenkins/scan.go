@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/praetorian-inc/trajan/internal/cmdutil"
 	"github.com/praetorian-inc/trajan/internal/registry"
+	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/praetorian-inc/trajan/pkg/jenkins"
+	"github.com/praetorian-inc/trajan/pkg/localwalk"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/praetorian-inc/trajan/pkg/scanner"
 
@@ -25,6 +28,8 @@ var (
 	scanOrg         string
 	scanConcurrency int
 	jenkinsURL      string
+	scanLocal       bool
+	scanPath        string
 )
 
 var scanCmd = &cobra.Command{
@@ -35,7 +40,11 @@ var scanCmd = &cobra.Command{
 Scan Jenkins pipeline definitions for security vulnerabilities.
 Checks for script injection, hardcoded credentials, excessive permissions,
 insecure agent configurations, and CSRF/anonymous access issues.
-Scans a single job (--repo) or all jobs in an instance (default).`,
+Scans a single job (--repo) or all jobs in an instance (default).
+
+Use --local --path to scan local workflow files (no API access required).
+Note: live instance checks (anonymous access, CSRF, script console) are
+skipped in local mode as they require a running Jenkins instance.`,
 	RunE: runScan,
 }
 
@@ -45,9 +54,18 @@ func init() {
 	scanCmd.Flags().StringVar(&scanOrg, "org", "", "Jenkins folder/organization to scan")
 	scanCmd.Flags().IntVar(&scanConcurrency, "concurrency", 10, "number of concurrent workers")
 	scanCmd.Flags().StringVar(&jenkinsURL, "url", "", "Jenkins instance URL (e.g., https://jenkins.example.com)")
+	scanCmd.Flags().BoolVar(&scanLocal, "local", false, "scan local workflow files instead of fetching from the platform API")
+	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan when --local is set")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
+	if scanLocal {
+		if scanPath == "" {
+			return fmt.Errorf("--path is required when --local is set")
+		}
+		return runLocalScan(cmd, scanPath)
+	}
+
 	t := getToken(cmd)
 	username := getUsername(cmd)
 
@@ -93,6 +111,70 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	return executeScanAndOutput(ctx, platform, target, verbose, output)
+}
+
+// runLocalScan scans local Jenkinsfile-style pipeline definitions without
+// contacting a Jenkins instance.  API-only detections (anonymous access, CSRF,
+// script console) are automatically skipped and a notice is printed.
+func runLocalScan(cmd *cobra.Command, path string) error {
+	verbose := cmdutil.GetVerbose(cmd)
+	output := cmdutil.GetOutput(cmd)
+
+	repoSlug := "local:" + filepath.Base(path)
+	workflows, err := localwalk.Walk(platforms.PlatformJenkins, path, repoSlug)
+	if err != nil {
+		return fmt.Errorf("walking local path: %w", err)
+	}
+
+	if verbose {
+		fmt.Fprintf(os.Stderr, "Found %d local Jenkins pipeline(s) in %s\n", len(workflows), path)
+	}
+
+	allPlugins := registry.GetDetectionsForPlatform(platforms.PlatformJenkins)
+	localRunnable, apiOnly := detections.PartitionByAPIRequirement(allPlugins)
+
+	if len(apiOnly) > 0 {
+		fmt.Fprintf(os.Stderr, "local mode: skipped %d API-only detection(s): %s\n",
+			len(apiOnly), detections.APIOnlyNames(apiOnly))
+	}
+
+	workflowsMap := map[string][]platforms.Workflow{repoSlug: workflows}
+
+	fmt.Fprintf(os.Stderr, "Running %d detectors...\n", len(localRunnable))
+
+	executor := scanner.NewDetectionExecutor(localRunnable, scanConcurrency)
+	executor.SetMetadata("all_workflows", workflowsMap)
+	// NOTE: Do NOT call SetInstanceMetadata("jenkins_client", ...) in local mode.
+
+	ctx := context.Background()
+	execResult, err := executor.Execute(ctx, workflowsMap)
+	if err != nil {
+		return fmt.Errorf("executing plugins: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Analysis complete: %d findings\n", len(execResult.Findings))
+
+	if len(execResult.Errors) > 0 && verbose {
+		fmt.Fprintf(os.Stderr, "Warning: %d errors occurred during plugin execution\n", len(execResult.Errors))
+		for _, execErr := range execResult.Errors {
+			fmt.Fprintf(os.Stderr, "  - %v\n", execErr)
+		}
+	}
+
+	result := &platforms.ScanResult{
+		Workflows: workflowsMap,
+	}
+
+	switch output {
+	case "json":
+		return cmdutil.OutputFindingsJSON(result, execResult.Findings)
+	case "sarif":
+		return cmdutil.OutputFindingsSARIF(result, execResult.Findings)
+	case "html":
+		return cmdutil.OutputFindingsHTML(result, execResult.Findings)
+	default:
+		return cmdutil.OutputFindingsConsole(result, execResult.Findings)
+	}
 }
 
 // executeScanAndOutput performs vulnerability scan and outputs results.

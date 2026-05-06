@@ -9,7 +9,12 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/praetorian-inc/trajan/pkg/jenkins"
+	"github.com/stretchr/testify/require"
 )
+
+func TestRequiresAPI(t *testing.T) {
+	require.True(t, New().RequiresAPI(), "this detection must declare RequiresAPI=true; without it, --local mode will run it and it will return nil")
+}
 
 func TestNew(t *testing.T) {
 	d := New()

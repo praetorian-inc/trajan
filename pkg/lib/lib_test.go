@@ -2,6 +2,7 @@ package lib
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -102,4 +103,111 @@ func TestGetDetections_GitHub(t *testing.T) {
 	allDets := GetDetectionsForPlatform("github")
 	assert.GreaterOrEqual(t, len(allDets), len(dets),
 		"GetDetectionsForPlatform should include cross-platform detections")
+}
+
+// minimalGitHubWorkflow is a valid minimal GitHub Actions workflow YAML.
+const minimalGitHubWorkflow = `name: ci
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello
+`
+
+func TestScan_LocalPath_GitHub(t *testing.T) {
+	tmp := t.TempDir()
+	workflowDir := tmp + "/.github/workflows"
+	require.NoError(t, os.MkdirAll(workflowDir, 0o755))
+	require.NoError(t, os.WriteFile(workflowDir+"/test.yml", []byte(minimalGitHubWorkflow), 0o644))
+
+	result, err := Scan(context.Background(), ScanConfig{
+		Platform:  "github",
+		LocalPath: tmp,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.Len(t, result.Workflows, 1)
+	assert.Equal(t, ".github/workflows/test.yml", result.Workflows[0].Path)
+	assert.Equal(t, "test.yml", result.Workflows[0].Name)
+	assert.True(t, len(result.Workflows[0].RepoSlug) > 0)
+	assert.Contains(t, result.Workflows[0].RepoSlug, "local:")
+}
+
+func TestScan_LocalPath_NoTokenRequired(t *testing.T) {
+	tmp := t.TempDir()
+	workflowDir := tmp + "/.github/workflows"
+	require.NoError(t, os.MkdirAll(workflowDir, 0o755))
+	require.NoError(t, os.WriteFile(workflowDir+"/test.yml", []byte(minimalGitHubWorkflow), 0o644))
+
+	// Token is explicitly empty — local mode must not require it.
+	result, err := Scan(context.Background(), ScanConfig{
+		Platform:  "github",
+		Token:     "",
+		LocalPath: tmp,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}
+
+func TestScan_LocalPath_RequiresPlatform(t *testing.T) {
+	tmp := t.TempDir()
+
+	_, err := Scan(context.Background(), ScanConfig{
+		LocalPath: tmp,
+		// Platform intentionally empty
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "local scan requires Platform to be set")
+}
+
+func TestScan_LocalPath_UnsupportedPlatform(t *testing.T) {
+	tmp := t.TempDir()
+
+	_, err := Scan(context.Background(), ScanConfig{
+		Platform:  "bitbucket",
+		LocalPath: tmp,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `local scanning not supported for platform "bitbucket"`)
+}
+
+func TestScan_LocalPath_NonexistentPath(t *testing.T) {
+	_, err := Scan(context.Background(), ScanConfig{
+		Platform:  "github",
+		LocalPath: "/nonexistent/definitely/not/here",
+	})
+	require.Error(t, err)
+}
+
+// vulnGitHubWorkflow contains a known-vulnerable GitHub Actions pattern:
+// it interpolates github.event.issue.title into a run: step, which triggers
+// script-injection detections.
+const vulnGitHubWorkflow = `name: vuln
+on:
+  issues:
+    types: [opened]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "${{ github.event.issue.title }}"
+`
+
+func TestScan_LocalPath_GitHub_ProducesFindings(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowDir := tmpDir + "/.github/workflows"
+	require.NoError(t, os.MkdirAll(workflowDir, 0o755))
+	require.NoError(t, os.WriteFile(workflowDir+"/inject.yml", []byte(vulnGitHubWorkflow), 0o644))
+
+	result, err := Scan(context.Background(), ScanConfig{
+		Platform:  "github",
+		LocalPath: tmpDir,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.Len(t, result.Workflows, 1)
+	assert.GreaterOrEqual(t, len(result.Findings), 1, "expected at least one finding from the vulnerable workflow; pipeline may be silently dropping detections")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -12,6 +13,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/registry"
 	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/praetorian-inc/trajan/pkg/github"
+	"github.com/praetorian-inc/trajan/pkg/localwalk"
 	outputpkg "github.com/praetorian-inc/trajan/pkg/output"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/praetorian-inc/trajan/pkg/scanner"
@@ -32,6 +34,8 @@ var (
 	detailed        bool
 	listDetections  bool
 	capabilities    string
+	scanLocal       bool
+	scanPath        string
 )
 
 var scanCmd = &cobra.Command{
@@ -41,7 +45,9 @@ var scanCmd = &cobra.Command{
 
 Scan GitHub Actions CI/CD configurations for security vulnerabilities.
 Analyzes workflow files across a repository, organization, or user for attack
-patterns including pwn requests, artifact poisoning, and secrets exfiltration.`,
+patterns including pwn requests, artifact poisoning, and secrets exfiltration.
+
+Use --local --path to scan local workflow files (no API access required).`,
 	RunE: runScan,
 }
 
@@ -55,12 +61,21 @@ func init() {
 	scanCmd.Flags().StringVar(&capabilities, "capabilities", "", "comma-separated detection types to run (e.g., pwn_request,artifact_poisoning)")
 	scanCmd.Flags().BoolVar(&detailed, "detailed", false, "show detailed evidence for each finding")
 	scanCmd.Flags().BoolVar(&listDetections, "list", false, "list active detection capabilities and exit")
+	scanCmd.Flags().BoolVar(&scanLocal, "local", false, "scan local workflow files instead of fetching from the platform API")
+	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan when --local is set")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
 	// Handle --list flag (list detections and exit)
 	if listDetections {
 		return listActiveDetections()
+	}
+
+	if scanLocal {
+		if scanPath == "" {
+			return fmt.Errorf("--path is required when --local is set")
+		}
+		return runLocalScan(cmd, scanPath)
 	}
 
 	t := getToken(cmd)
@@ -102,6 +117,90 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	return executeScanAndOutput(ctx, platform, target, verbose, output, scanConcurrency)
+}
+
+// runLocalScan scans local workflow files without contacting the GitHub API.
+func runLocalScan(cmd *cobra.Command, path string) error {
+	verbose := cmdutil.GetVerbose(cmd)
+	output := cmdutil.GetOutput(cmd)
+
+	repoSlug := "local:" + filepath.Base(path)
+	workflows, err := localwalk.Walk(platforms.PlatformGitHub, path, repoSlug)
+	if err != nil {
+		return fmt.Errorf("walking local path: %w", err)
+	}
+
+	if verbose {
+		fmt.Fprintf(os.Stderr, "Found %d local GitHub workflow(s) in %s\n", len(workflows), path)
+	}
+
+	allPlugins := registry.GetDetectionsForPlatform(platforms.PlatformGitHub)
+	localRunnable, apiOnly := detections.PartitionByAPIRequirement(allPlugins)
+
+	if len(apiOnly) > 0 {
+		fmt.Fprintf(os.Stderr, "local mode: skipped %d API-only detection(s): %s\n",
+			len(apiOnly), detections.APIOnlyNames(apiOnly))
+	}
+
+	workflowsMap := map[string][]platforms.Workflow{repoSlug: workflows}
+
+	fmt.Fprintf(os.Stderr, "Running %d detectors...\n", len(localRunnable))
+
+	executor := scanner.NewDetectionExecutor(localRunnable, scanConcurrency)
+	executor.SetMetadata("all_workflows", workflowsMap)
+
+	ctx := context.Background()
+	execResult, err := executor.Execute(ctx, workflowsMap)
+	if err != nil {
+		return fmt.Errorf("executing plugins: %w", err)
+	}
+
+	// Filter findings by capabilities if specified
+	findings := execResult.Findings
+	if capabilities != "" {
+		filteredFindings, err := cmdutil.FilterFindingsByCapabilities(findings, capabilities)
+		if err != nil {
+			return fmt.Errorf("filtering by capabilities: %w", err)
+		}
+		findings = filteredFindings
+	}
+
+	// Filter findings by severity if specified
+	if severity != "" {
+		filteredFindings, err := cmdutil.FilterFindingsBySeverity(findings, severity)
+		if err != nil {
+			return fmt.Errorf("filtering by severity: %w", err)
+		}
+		findings = filteredFindings
+	}
+
+	fmt.Fprintf(os.Stderr, "Analysis complete: %d findings\n", len(findings))
+
+	if len(execResult.Errors) > 0 && verbose {
+		fmt.Fprintf(os.Stderr, "Warning: %d errors occurred during plugin execution\n", len(execResult.Errors))
+		for _, execErr := range execResult.Errors {
+			fmt.Fprintf(os.Stderr, "  - %v\n", execErr)
+		}
+	}
+
+	result := &platforms.ScanResult{
+		Workflows: workflowsMap,
+	}
+
+	switch output {
+	case "json":
+		return cmdutil.OutputFindingsJSON(result, findings)
+	case "sarif":
+		return cmdutil.OutputFindingsSARIF(result, findings)
+	case "html":
+		return cmdutil.OutputFindingsHTML(result, findings)
+	default:
+		if detailed {
+			outputpkg.RenderDetailed(os.Stdout, result, findings)
+			return nil
+		}
+		return cmdutil.OutputFindingsConsole(result, findings)
+	}
 }
 
 // buildPlatformConfig constructs GitHub platform configuration.
