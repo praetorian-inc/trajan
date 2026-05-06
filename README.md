@@ -86,6 +86,7 @@ type ScanConfig struct {
     BaseURL     string        // Custom base URL for self-hosted instances
     Org         string        // Organization/owner name
     Repo        string        // Repository name (empty = scan all org repos)
+    LocalPath   string        // Local filesystem path (file or dir) for offline scan
     Concurrency int           // Parallel detection workers (default: 10)
     Timeout     time.Duration // Max scan duration (default: 5m)
 }
@@ -134,6 +135,10 @@ trajan gitlab scan --group mygroup
 # Scan Azure DevOps
 export AZURE_DEVOPS_PAT=your_pat
 trajan ado scan --org myorg --repo myproject/myrepo
+
+# Offline scan: scan local workflow files without API access
+trajan github scan --local --path ./my-repo
+trajan github scan --local --path ./.github/workflows/ci.yml
 
 # JSON output
 trajan github scan --repo owner/repo -o json > results.json

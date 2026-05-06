@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/praetorian-inc/trajan/internal/cmdutil"
 	"github.com/praetorian-inc/trajan/internal/registry"
 	"github.com/praetorian-inc/trajan/pkg/detections"
-	"github.com/praetorian-inc/trajan/pkg/localwalk"
 	outputpkg "github.com/praetorian-inc/trajan/pkg/output"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/praetorian-inc/trajan/pkg/scanner"
@@ -25,6 +24,7 @@ var (
 	scanRepo        string
 	scanOrg         string
 	scanConcurrency int
+	scanTimeout     time.Duration
 	severity        string
 	detailed        bool
 	listDetections  bool
@@ -63,6 +63,7 @@ func init() {
 	scanCmd.Flags().BoolVar(&listDetections, "list", false, "list active detection capabilities and exit")
 	scanCmd.Flags().BoolVar(&scanLocal, "local", false, "scan local workflow files instead of fetching from the platform API")
 	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan when --local is set")
+	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration when --local is set (e.g. 5m); 0 = no timeout")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -74,7 +75,20 @@ func runScan(cmd *cobra.Command, args []string) error {
 		if scanPath == "" {
 			return fmt.Errorf("--path is required when --local is set")
 		}
-		return runLocalScan(cmd, scanPath)
+		return cmdutil.RunLocalScan(cmdutil.LocalScanConfig{
+			Platform:         platforms.PlatformAzureDevOps,
+			Path:             scanPath,
+			Concurrency:      scanConcurrency,
+			Timeout:          scanTimeout,
+			Capabilities:     capabilities,
+			Severity:         severity,
+			Detailed:         detailed,
+			Verbose:          cmdutil.GetVerbose(cmd),
+			Output:           cmdutil.GetOutput(cmd),
+			PlatformLabel:    "azuredevops",
+			CapabilityFilter: cmdutil.FilterFindingsByADOCapabilities,
+			WorkflowLabel:    "Azure DevOps workflow",
+		})
 	}
 
 	t := getToken(cmd)
@@ -187,92 +201,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	output := cmdutil.GetOutput(cmd)
-	switch output {
-	case "json":
-		return cmdutil.OutputFindingsJSON(result, findings)
-	case "sarif":
-		return cmdutil.OutputFindingsSARIF(result, findings)
-	case "html":
-		return cmdutil.OutputFindingsHTML(result, findings)
-	default:
-		if detailed {
-			outputpkg.RenderDetailed(os.Stdout, result, findings)
-			return nil
-		}
-		return cmdutil.OutputFindingsConsole(result, findings)
-	}
-}
-
-// runLocalScan scans local workflow files without contacting the Azure DevOps API.
-func runLocalScan(cmd *cobra.Command, path string) error {
-	verbose := cmdutil.GetVerbose(cmd)
-	output := cmdutil.GetOutput(cmd)
-
-	repoSlug := "local:" + filepath.Base(path)
-	workflows, err := localwalk.Walk(platforms.PlatformAzureDevOps, path, repoSlug)
-	if err != nil {
-		return fmt.Errorf("walking local path: %w", err)
-	}
-
-	if verbose {
-		fmt.Fprintf(os.Stderr, "Found %d local Azure DevOps workflow(s) in %s\n", len(workflows), path)
-	}
-
-	allPlugins := registry.GetDetectionsForPlatform(platforms.PlatformAzureDevOps)
-	localRunnable, apiOnly := detections.PartitionByAPIRequirement(allPlugins)
-
-	if len(apiOnly) > 0 {
-		fmt.Fprintf(os.Stderr, "local mode: skipped %d API-only detection(s): %s\n",
-			len(apiOnly), detections.APIOnlyNames(apiOnly))
-	}
-
-	workflowsMap := map[string][]platforms.Workflow{repoSlug: workflows}
-
-	fmt.Fprintf(os.Stderr, "Running %d detectors...\n", len(localRunnable))
-
-	executor := scanner.NewDetectionExecutor(localRunnable, scanConcurrency)
-	executor.SetMetadata("platform", "azuredevops")
-	executor.SetMetadata("all_workflows", workflowsMap)
-
-	ctx := context.Background()
-	execResult, err := executor.Execute(ctx, workflowsMap)
-	if err != nil {
-		return fmt.Errorf("executing plugins: %w", err)
-	}
-
-	findings := execResult.Findings
-
-	// Filter findings by capabilities if specified
-	if capabilities != "" {
-		filteredFindings, err := cmdutil.FilterFindingsByADOCapabilities(findings, capabilities)
-		if err != nil {
-			return fmt.Errorf("filtering by capabilities: %w", err)
-		}
-		findings = filteredFindings
-	}
-
-	// Filter findings by severity if specified
-	if severity != "" {
-		filteredFindings, err := cmdutil.FilterFindingsBySeverity(findings, severity)
-		if err != nil {
-			return fmt.Errorf("filtering by severity: %w", err)
-		}
-		findings = filteredFindings
-	}
-
-	fmt.Fprintf(os.Stderr, "Analysis complete: %d findings\n", len(findings))
-
-	if len(execResult.Errors) > 0 && verbose {
-		fmt.Fprintf(os.Stderr, "Warning: %d errors during plugin execution\n", len(execResult.Errors))
-		for _, execErr := range execResult.Errors {
-			fmt.Fprintf(os.Stderr, "  - %v\n", execErr)
-		}
-	}
-
-	result := &platforms.ScanResult{
-		Workflows: workflowsMap,
-	}
-
 	switch output {
 	case "json":
 		return cmdutil.OutputFindingsJSON(result, findings)

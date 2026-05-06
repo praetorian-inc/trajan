@@ -22,8 +22,8 @@ type matcher func(relPath string) bool
 // platformMatchers maps each supported platform constant to its file matcher.
 var platformMatchers = map[string]matcher{
 	platforms.PlatformGitHub: func(relPath string) bool {
-		// Must be inside .github/workflows/ and end with .yml or .yaml
-		return strings.Contains(relPath, ".github/workflows/") &&
+		// Must be at the repo root: .github/workflows/*.yml|.yaml
+		return strings.HasPrefix(relPath, ".github/workflows/") &&
 			(strings.HasSuffix(relPath, ".yml") || strings.HasSuffix(relPath, ".yaml"))
 	},
 
@@ -128,10 +128,7 @@ func Walk(platform, path, repoSlug string) ([]platforms.Workflow, error) {
 func loadSingleFile(path, repoSlug string) ([]platforms.Workflow, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		// Treat unreadable single file as empty rather than erroring; the caller
-		// already chose this exact path, so a missing-permissions case is not a
-		// programming bug worth surfacing.
-		return nil, nil //nolint:nilerr
+		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 	return []platforms.Workflow{{
 		Name:     filepath.Base(path),

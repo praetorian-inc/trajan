@@ -3,6 +3,7 @@ package localwalk
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -217,4 +218,38 @@ func TestWalk_ContentReadCorrectly(t *testing.T) {
 	require.Len(t, workflows, 1)
 
 	assert.Equal(t, []byte(content), workflows[0].Content)
+}
+
+func TestWalk_Directory_EmptyDir_ReturnsNoWorkflows(t *testing.T) {
+	workflows, err := Walk(platforms.PlatformGitHub, t.TempDir(), "slug")
+	require.NoError(t, err)
+	assert.Empty(t, workflows)
+}
+
+func TestWalk_Directory_OnlyNonMatchingFiles_ReturnsNoWorkflows(t *testing.T) {
+	root := t.TempDir()
+	createFile(t, filepath.Join(root, "README.md"), "# not a workflow")
+	createFile(t, filepath.Join(root, "Makefile"), "all:\n\techo hi")
+	workflows, err := Walk(platforms.PlatformGitHub, root, "slug")
+	require.NoError(t, err)
+	assert.Empty(t, workflows)
+}
+
+func TestWalk_SingleFile_UnreadableFile_ReturnsError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod 0o000 not meaningful on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses permission bits")
+	}
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "ci.yml")
+	require.NoError(t, os.WriteFile(file, []byte("name: ci\n"), 0o644))
+	require.NoError(t, os.Chmod(file, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(file, 0o644) }) // restore so t.TempDir cleanup works
+
+	workflows, err := Walk(platforms.PlatformGitHub, file, "slug")
+	require.Error(t, err)
+	assert.Nil(t, workflows)
+	assert.Contains(t, err.Error(), "reading")
 }

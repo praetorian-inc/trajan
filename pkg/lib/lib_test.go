@@ -179,6 +179,7 @@ func TestScan_LocalPath_NonexistentPath(t *testing.T) {
 		LocalPath: "/nonexistent/definitely/not/here",
 	})
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "walking local path")
 }
 
 // vulnGitHubWorkflow contains a known-vulnerable GitHub Actions pattern:
