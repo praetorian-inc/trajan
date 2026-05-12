@@ -40,6 +40,15 @@ cd trajan && make build
 - Go 1.24 or later
 - GitHub Personal Access Token with `repo` scope (for private repositories) or `public_repo` scope (for public repositories only)
 
+### Token handling
+
+Use dedicated assessment tokens instead of personal day-to-day credentials.
+
+- Scope tokens to the repositories, organizations, and CI/CD platforms being assessed.
+- Store tokens in a secret manager or short-lived shell session; do not commit them or keep them in reusable shell history.
+- Rotate tokens after high-sensitivity assessments, demonstrations, or shared lab work.
+- Confirm the token is approved for the target environment before running scan, attack, or enumeration commands; do not reuse credentials across unrelated engagements.
+
 ## Library SDK (`pkg/lib`)
 
 Trajan can be embedded as a Go library for programmatic CI/CD security scanning. The `pkg/lib` package provides a public SDK that wraps Trajan's internal platform registry, detection engine, and scanner into a single high-level API.
