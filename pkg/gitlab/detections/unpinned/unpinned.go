@@ -89,16 +89,17 @@ func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *det
 				Severity:    detections.SeverityLow,
 				Confidence:  detections.ConfidenceHigh,
 				Complexity:  detections.ComplexityZeroClick,
-				Repository:  wf.RepoSlug,
-				Workflow:    wf.Path,
-				Line:        1, // Includes typically at line 1
-				Evidence:    evidence,
-				Remediation: "Pin project includes to a full commit SHA to prevent supply chain attacks. Visit " + inc.Project + " to find the commit SHA for the current version.",
-				Details: &detections.FindingDetails{
-					LineRanges: lineRanges,
-					Metadata:   metadata,
-				},
-			}
+				Repository:   wf.RepoSlug,
+				Workflow:     wf.Name,
+				WorkflowFile: wf.Path,
+				Line:         1, // Includes typically at line 1
+					Evidence:    evidence,
+					Remediation: "Pin project includes to a full commit SHA to prevent supply chain attacks. Visit " + inc.Project + " to find the commit SHA for the current version.",
+					Details: &detections.FindingDetails{
+						LineRanges: lineRanges,
+						Metadata:   metadata,
+					},
+				}
 		}
 
 	case "remote":
@@ -122,11 +123,12 @@ func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *det
 			Severity:    detections.SeverityLow,
 			Confidence:  detections.ConfidenceHigh,
 			Complexity:  detections.ComplexityZeroClick,
-			Repository:  wf.RepoSlug,
-			Workflow:    wf.Path,
-			Line:        1,
-			Evidence:    "Remote include from untrusted source: " + inc.Remote,
-			Remediation: "Avoid remote includes. Use project or local includes instead. Remote includes cannot be pinned and are vulnerable to supply chain attacks.",
+			Repository:   wf.RepoSlug,
+			Workflow:     wf.Name,
+			WorkflowFile: wf.Path,
+			Line:         1,
+			Evidence:     "Remote include from untrusted source: " + inc.Remote,
+			Remediation:  "Avoid remote includes. Use project or local includes instead. Remote includes cannot be pinned and are vulnerable to supply chain attacks.",
 			Details: &detections.FindingDetails{
 				LineRanges: lineRanges,
 				Metadata:   metadata,

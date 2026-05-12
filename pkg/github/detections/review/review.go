@@ -148,13 +148,15 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, step *graph.StepN
 		Severity:   detections.SeverityHigh,
 		Confidence: detections.ConfidenceHigh,
 		Complexity: detections.ComplexityZeroClick,
-		Repository: wf.RepoSlug,
-		Workflow:   wf.Path, // Use path for matching
-		Job:        jobName,
+		Repository:   wf.RepoSlug,
+		Workflow:     wf.Path, // Use path for matching
+		WorkflowFile: wf.Path,
+		Job:          jobName,
 		Step:       step.Name,
 		Line:       step.Line,
 		Trigger:    strings.Join(wf.Triggers, ", "),
-		Evidence:   evidence,
+		Evidence:    evidence,
+		Remediation: "Do not interpolate review comment bodies directly in run commands. Pass them through environment variables (env:) which are not subject to shell injection. For example, use 'env: COMMENT: ${{ github.event.review.body }}' and reference '$COMMENT' in the script.",
 		Details: &detections.FindingDetails{
 			LineRanges:         lineRanges,
 			AttackChain:        attackChain,
