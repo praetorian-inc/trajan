@@ -76,14 +76,17 @@ func TestRunLocalScan_SeverityFilter(t *testing.T) {
 			Path:          root,
 			Concurrency:   4,
 			Severity:      "info",
+			Output:        "json",
 			WorkflowLabel: "GitHub workflow",
 		})
 		require.NoError(t, err)
 	})
 
-	// Console output with zero findings is expected to be very short / empty.
-	// We don't assert on exact content, just that it doesn't panic or error.
-	_ = out
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &parsed))
+	summary, ok := parsed["summary"].(map[string]any)
+	require.True(t, ok, "json must have summary object")
+	assert.Equal(t, float64(0), summary["findings"], "filter should narrow findings to zero")
 }
 
 // TestRunLocalScan_CapabilitiesFilter verifies that an unknown capabilities
@@ -100,12 +103,17 @@ func TestRunLocalScan_CapabilitiesFilter(t *testing.T) {
 			Concurrency:      4,
 			Capabilities:     "nonexistent_capability_xyz",
 			CapabilityFilter: FilterFindingsByCapabilities,
+			Output:           "json",
 			WorkflowLabel:    "GitHub workflow",
 		})
 		require.NoError(t, err)
 	})
 
-	_ = out
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &parsed))
+	summary, ok := parsed["summary"].(map[string]any)
+	require.True(t, ok, "json must have summary object")
+	assert.Equal(t, float64(0), summary["findings"], "filter should narrow findings to zero")
 }
 
 // TestRunLocalScan_OutputJSON verifies that --output json produces parseable
@@ -150,7 +158,7 @@ func TestRunLocalScan_UnsupportedPlatform(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "walking local path")
+	assert.Contains(t, err.Error(), "bitbucket")
 }
 
 // silenceStderr redirects os.Stderr to /dev/null for the duration of the test

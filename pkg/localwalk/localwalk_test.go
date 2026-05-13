@@ -82,8 +82,10 @@ func TestWalk_SingleFile_TrustsCallerPlatform(t *testing.T) {
 func TestWalk_Directory_GitHub_MatchesAndSkipsDirs(t *testing.T) {
 	root := t.TempDir()
 
-	// Should be included
+	// Should be included (direct child of .github/workflows/)
 	createFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), "")
+
+	// Should be excluded (nested: GitHub Actions does not run nested workflow files)
 	createFile(t, filepath.Join(root, ".github", "workflows", "sub", "x.yaml"), "")
 
 	// Should be excluded (not under workflows/)
@@ -103,12 +105,30 @@ func TestWalk_Directory_GitHub_MatchesAndSkipsDirs(t *testing.T) {
 
 	workflows, err := Walk(platforms.PlatformGitHub, root, "my-slug")
 	require.NoError(t, err)
-	require.Len(t, workflows, 2)
+	require.Len(t, workflows, 1)
 
 	assert.Equal(t, ".github/workflows/ci.yml", workflows[0].Path)
-	assert.Equal(t, ".github/workflows/sub/x.yaml", workflows[1].Path)
 	assert.Equal(t, "my-slug", workflows[0].RepoSlug)
-	assert.Equal(t, "my-slug", workflows[1].RepoSlug)
+}
+
+func TestWalk_Directory_GitHub_ExcludesNestedWorkflows(t *testing.T) {
+	root := t.TempDir()
+
+	// Direct child — must be included.
+	createFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), "")
+
+	// Nested — must be excluded (GitHub Actions ignores nested files).
+	createFile(t, filepath.Join(root, ".github", "workflows", "sub", "nested.yml"), "")
+
+	workflows, err := Walk(platforms.PlatformGitHub, root, "slug")
+	require.NoError(t, err)
+
+	paths := make([]string, len(workflows))
+	for i, wf := range workflows {
+		paths[i] = wf.Path
+	}
+	assert.Contains(t, paths, ".github/workflows/ci.yml")
+	assert.NotContains(t, paths, ".github/workflows/sub/nested.yml")
 }
 
 func TestWalk_Directory_GitLab(t *testing.T) {
@@ -195,20 +215,18 @@ func TestWalk_Directory_Jenkins(t *testing.T) {
 func TestWalk_Directory_StableSortByPath(t *testing.T) {
 	root := t.TempDir()
 
-	createFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), "")
-	createFile(t, filepath.Join(root, ".github", "workflows", "sub", "x.yaml"), "")
+	// Create files in non-sorted on-disk order so sort.Slice is exercised.
+	createFile(t, filepath.Join(root, "z-service", "Jenkinsfile"), "")
+	createFile(t, filepath.Join(root, "a-service", "Jenkinsfile"), "")
 
-	first, err := Walk(platforms.PlatformGitHub, root, "slug")
+	workflows, err := Walk(platforms.PlatformJenkins, root, "slug")
 	require.NoError(t, err)
 
-	second, err := Walk(platforms.PlatformGitHub, root, "slug")
-	require.NoError(t, err)
-
-	require.Equal(t, len(first), len(second))
-	for i := range first {
-		assert.Equal(t, first[i].Path, second[i].Path)
-		assert.Equal(t, first[i].Name, second[i].Name)
+	paths := make([]string, len(workflows))
+	for i, wf := range workflows {
+		paths[i] = wf.Path
 	}
+	require.Equal(t, []string{"a-service/Jenkinsfile", "z-service/Jenkinsfile"}, paths)
 }
 
 func TestWalk_ContentReadCorrectly(t *testing.T) {

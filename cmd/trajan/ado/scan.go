@@ -70,6 +70,15 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	if scanPath != "" {
+		var conflicting []string
+		for _, name := range []string{"repo", "org", "user", "url"} {
+			if f := cmd.Flags().Lookup(name); f != nil && cmd.Flags().Changed(name) {
+				conflicting = append(conflicting, "--"+name)
+			}
+		}
+		if len(conflicting) > 0 {
+			return fmt.Errorf("--path is incompatible with %s; specify one mode at a time", strings.Join(conflicting, "/"))
+		}
 		return cmdutil.RunLocalScan(cmdutil.LocalScanConfig{
 			Platform:         platforms.PlatformAzureDevOps,
 			Path:             scanPath,

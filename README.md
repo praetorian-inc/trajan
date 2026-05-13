@@ -86,9 +86,9 @@ type ScanConfig struct {
     BaseURL     string        // Custom base URL for self-hosted instances
     Org         string        // Organization/owner name
     Repo        string        // Repository name (empty = scan all org repos)
-    LocalPath   string        // Local filesystem path (file or dir) for offline scan
     Concurrency int           // Parallel detection workers (default: 10)
     Timeout     time.Duration // Max scan duration (default: 5m)
+    LocalPath   string        // Local filesystem path (file or dir) for offline scan
 }
 ```
 

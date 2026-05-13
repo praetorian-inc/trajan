@@ -3,6 +3,7 @@ package lib
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -117,9 +118,9 @@ jobs:
 
 func TestScan_LocalPath_GitHub(t *testing.T) {
 	tmp := t.TempDir()
-	workflowDir := tmp + "/.github/workflows"
+	workflowDir := filepath.Join(tmp, ".github", "workflows")
 	require.NoError(t, os.MkdirAll(workflowDir, 0o755))
-	require.NoError(t, os.WriteFile(workflowDir+"/test.yml", []byte(minimalGitHubWorkflow), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workflowDir, "test.yml"), []byte(minimalGitHubWorkflow), 0o644))
 
 	result, err := Scan(context.Background(), ScanConfig{
 		Platform:  "github",
@@ -131,15 +132,15 @@ func TestScan_LocalPath_GitHub(t *testing.T) {
 	require.Len(t, result.Workflows, 1)
 	assert.Equal(t, ".github/workflows/test.yml", result.Workflows[0].Path)
 	assert.Equal(t, "test.yml", result.Workflows[0].Name)
-	assert.True(t, len(result.Workflows[0].RepoSlug) > 0)
+	assert.NotEmpty(t, result.Workflows[0].RepoSlug)
 	assert.Contains(t, result.Workflows[0].RepoSlug, "local:")
 }
 
 func TestScan_LocalPath_NoTokenRequired(t *testing.T) {
 	tmp := t.TempDir()
-	workflowDir := tmp + "/.github/workflows"
+	workflowDir := filepath.Join(tmp, ".github", "workflows")
 	require.NoError(t, os.MkdirAll(workflowDir, 0o755))
-	require.NoError(t, os.WriteFile(workflowDir+"/test.yml", []byte(minimalGitHubWorkflow), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workflowDir, "test.yml"), []byte(minimalGitHubWorkflow), 0o644))
 
 	// Token is explicitly empty — local mode must not require it.
 	result, err := Scan(context.Background(), ScanConfig{
@@ -198,9 +199,9 @@ jobs:
 
 func TestScan_LocalPath_GitHub_ProducesFindings(t *testing.T) {
 	tmpDir := t.TempDir()
-	workflowDir := tmpDir + "/.github/workflows"
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
 	require.NoError(t, os.MkdirAll(workflowDir, 0o755))
-	require.NoError(t, os.WriteFile(workflowDir+"/inject.yml", []byte(vulnGitHubWorkflow), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workflowDir, "inject.yml"), []byte(vulnGitHubWorkflow), 0o644))
 
 	result, err := Scan(context.Background(), ScanConfig{
 		Platform:  "github",

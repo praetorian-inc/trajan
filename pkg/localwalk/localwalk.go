@@ -22,9 +22,15 @@ type matcher func(relPath string) bool
 // platformMatchers maps each supported platform constant to its file matcher.
 var platformMatchers = map[string]matcher{
 	platforms.PlatformGitHub: func(relPath string) bool {
-		// Must be at the repo root: .github/workflows/*.yml|.yaml
-		return strings.HasPrefix(relPath, ".github/workflows/") &&
-			(strings.HasSuffix(relPath, ".yml") || strings.HasSuffix(relPath, ".yaml"))
+		const prefix = ".github/workflows/"
+		if !strings.HasPrefix(relPath, prefix) {
+			return false
+		}
+		rest := relPath[len(prefix):]
+		if strings.Contains(rest, "/") {
+			return false
+		}
+		return strings.HasSuffix(rest, ".yml") || strings.HasSuffix(rest, ".yaml")
 	},
 
 	platforms.PlatformGitLab: func(relPath string) bool {
