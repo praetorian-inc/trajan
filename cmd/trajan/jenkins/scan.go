@@ -57,7 +57,7 @@ func init() {
 	scanCmd.Flags().IntVar(&scanConcurrency, "concurrency", 10, "number of concurrent workers")
 	scanCmd.Flags().StringVar(&jenkinsURL, "url", "", "Jenkins instance URL (e.g., https://jenkins.example.com)")
 	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan offline; if set, skips platform API and reads from local files")
-	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration in offline mode (when --path is set, e.g. 5m); 0 = no timeout")
+	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration in offline mode (when --path is set, e.g. 5m); 0 = 5m default")
 	scanCmd.Flags().BoolVar(&detailed, "detailed", false, "show detailed evidence for each finding")
 }
 
@@ -82,7 +82,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 			Detailed:         detailed,
 			Verbose:          cmdutil.GetVerbose(cmd),
 			Output:           cmdutil.GetOutput(cmd),
-			PlatformLabel:    "",
 			CapabilityFilter: nil,
 			WorkflowLabel:    "Jenkins pipeline",
 		})

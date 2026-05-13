@@ -201,6 +201,7 @@ func scanLocal(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 	workflowsMap := map[string][]platforms.Workflow{repoSlug: workflows}
 
 	executor := scanner.NewDetectionExecutor(localRunnable, cfg.Concurrency)
+	executor.SetMetadata("platform", cfg.Platform)
 	executor.SetMetadata("all_workflows", workflowsMap)
 	execResult, err := executor.Execute(ctx, workflowsMap)
 	if err != nil {

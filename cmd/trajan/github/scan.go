@@ -61,7 +61,7 @@ func init() {
 	scanCmd.Flags().BoolVar(&detailed, "detailed", false, "show detailed evidence for each finding")
 	scanCmd.Flags().BoolVar(&listDetections, "list", false, "list active detection capabilities and exit")
 	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan offline; if set, skips platform API and reads from local files")
-	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration in offline mode (when --path is set, e.g. 5m); 0 = no timeout")
+	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration in offline mode (when --path is set, e.g. 5m); 0 = 5m default")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -90,7 +90,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 			Detailed:         detailed,
 			Verbose:          cmdutil.GetVerbose(cmd),
 			Output:           cmdutil.GetOutput(cmd),
-			PlatformLabel:    "",
 			CapabilityFilter: cmdutil.FilterFindingsByCapabilities,
 			WorkflowLabel:    "GitHub workflow",
 		})
