@@ -89,6 +89,36 @@ jobs:
 	assert.Len(t, findings, 0, "pull_request (not target) should be safe")
 }
 
+func TestCachePoisoningPlugin_DetectsPullRequestTargetWithCacheAndPnpmInstall(t *testing.T) {
+	// Regression for the empirical harness S3 scenario: pull_request_target +
+	// actions/cache + pnpm install (no checkout). Before PR 1 added pnpm to
+	// IsExecutionSink this fired silently — a TanStack-class blind spot.
+	yaml := `
+name: Pull Request Target Cache + Pnpm
+on: pull_request_target
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm install
+`
+	g, err := analysis.BuildGraph("owner/repo", "pr-target-pnpm.yml", []byte(yaml))
+	require.NoError(t, err)
+
+	plugin := New()
+	findings, err := plugin.Detect(context.Background(), g)
+	require.NoError(t, err)
+
+	require.Len(t, findings, 1)
+	assert.Equal(t, detections.VulnCachePoisoning, findings[0].Type)
+	assert.Equal(t, detections.SeverityHigh, findings[0].Severity)
+	assert.Equal(t, "pull_request_target", findings[0].Trigger)
+}
+
 func TestCachePoisoningPlugin_SafeCacheWithoutExecution(t *testing.T) {
 	yaml := `
 name: Workflow Run Cache Without Execution
