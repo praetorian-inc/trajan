@@ -169,13 +169,15 @@ func TestWalk_Directory_Jenkins(t *testing.T) {
 	createFile(t, filepath.Join(root, "legacy", "build.jenkinsfile"), "")
 	createFile(t, filepath.Join(root, "LEGACY_UPPER", "BUILD.JENKINSFILE"), "")
 	createFile(t, filepath.Join(root, "Jenkinsfile.bak"), "")
+	// Bare lowercase jenkinsfile in a separate directory to avoid macOS collision.
+	createFile(t, filepath.Join(root, "lowercase_bare", "jenkinsfile"), "")
 
 	// Should be excluded (underscore separator, not dot-prefix)
 	createFile(t, filepath.Join(root, "Jenkinsfile_old"), "")
 
 	workflows, err := Walk(platforms.PlatformJenkins, root, "jen-slug")
 	require.NoError(t, err)
-	require.Len(t, workflows, 5)
+	require.Len(t, workflows, 6)
 
 	paths := make([]string, len(workflows))
 	for i, wf := range workflows {
@@ -186,6 +188,7 @@ func TestWalk_Directory_Jenkins(t *testing.T) {
 	assert.Contains(t, paths, "legacy/build.jenkinsfile")
 	assert.Contains(t, paths, "LEGACY_UPPER/BUILD.JENKINSFILE")
 	assert.Contains(t, paths, "Jenkinsfile.bak")
+	assert.Contains(t, paths, "lowercase_bare/jenkinsfile")
 	assert.NotContains(t, paths, "Jenkinsfile_old")
 }
 
@@ -252,4 +255,67 @@ func TestWalk_SingleFile_UnreadableFile_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, workflows)
 	assert.Contains(t, err.Error(), "reading")
+}
+
+func TestWalk_Directory_SkipsOversizedFiles(t *testing.T) {
+	root := t.TempDir()
+
+	// Normal workflow file — should be included.
+	createFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), "name: ci\n")
+
+	// Oversized file — should be skipped.
+	oversized := filepath.Join(root, ".github", "workflows", "big.yml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(oversized), 0o755))
+	f, err := os.Create(oversized)
+	require.NoError(t, err)
+	// Write 11 MB to exceed MaxFileSize (10 MB).
+	chunk := make([]byte, 1024*1024)
+	for i := 0; i < 11; i++ {
+		_, err = f.Write(chunk)
+		require.NoError(t, err)
+	}
+	require.NoError(t, f.Close())
+
+	workflows, err := Walk(platforms.PlatformGitHub, root, "slug")
+	require.NoError(t, err)
+	require.Len(t, workflows, 1)
+	assert.Equal(t, ".github/workflows/ci.yml", workflows[0].Path)
+}
+
+func TestWalk_SingleFile_RejectsOversized(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "ci.yml")
+	f, err := os.Create(file)
+	require.NoError(t, err)
+	// Write 11 MB to exceed MaxFileSize (10 MB).
+	chunk := make([]byte, 1024*1024)
+	for i := 0; i < 11; i++ {
+		_, err = f.Write(chunk)
+		require.NoError(t, err)
+	}
+	require.NoError(t, f.Close())
+
+	_, err = Walk(platforms.PlatformGitHub, file, "slug")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "limit")
+}
+
+func TestWalk_PathSemantics(t *testing.T) {
+	root := t.TempDir()
+	createFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), "name: ci\n")
+	file := filepath.Join(root, ".github", "workflows", "ci.yml")
+
+	// Directory mode: Path is relative from root.
+	dirWorkflows, err := Walk(platforms.PlatformGitHub, root, "slug")
+	require.NoError(t, err)
+	require.Len(t, dirWorkflows, 1)
+	assert.Equal(t, ".github/workflows/ci.yml", dirWorkflows[0].Path)
+	assert.Equal(t, "ci.yml", dirWorkflows[0].Name)
+
+	// Single-file mode: Path is the basename only.
+	fileWorkflows, err := Walk(platforms.PlatformGitHub, file, "slug")
+	require.NoError(t, err)
+	require.Len(t, fileWorkflows, 1)
+	assert.Equal(t, "ci.yml", fileWorkflows[0].Path)
+	assert.Equal(t, "ci.yml", fileWorkflows[0].Name)
 }

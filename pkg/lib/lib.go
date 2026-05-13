@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -85,6 +84,11 @@ type ScanResult struct {
 
 	// Errors are non-fatal errors encountered during scanning.
 	Errors []error
+
+	// SkippedDetections lists detection names that were not executed because
+	// they require platform API access and the scan ran in LocalPath mode.
+	// Always empty in API-mode scans.
+	SkippedDetections []string
 }
 
 // applyDefaults fills in zero-value fields of cfg with their defaults.
@@ -194,11 +198,6 @@ func scanLocal(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 	allPlugins := registry.GetDetectionsForPlatform(cfg.Platform)
 	localRunnable, apiOnly := detections.PartitionByAPIRequirement(allPlugins)
 
-	if len(apiOnly) > 0 {
-		fmt.Fprintf(os.Stderr, "local mode: skipped %d API-only detection(s): %s\n",
-			len(apiOnly), detections.APIOnlyNames(apiOnly))
-	}
-
 	workflowsMap := map[string][]platforms.Workflow{repoSlug: workflows}
 
 	executor := scanner.NewDetectionExecutor(localRunnable, cfg.Concurrency)
@@ -208,9 +207,15 @@ func scanLocal(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 		return nil, fmt.Errorf("executing detections: %w", err)
 	}
 
+	skippedNames := make([]string, len(apiOnly))
+	for i, d := range apiOnly {
+		skippedNames[i] = d.Name()
+	}
+
 	result := &ScanResult{
-		Findings:  execResult.Findings,
-		Workflows: workflows,
+		Findings:          execResult.Findings,
+		Workflows:         workflows,
+		SkippedDetections: skippedNames,
 	}
 	result.Errors = append(result.Errors, execResult.Errors...)
 

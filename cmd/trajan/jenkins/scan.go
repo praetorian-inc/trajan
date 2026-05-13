@@ -11,6 +11,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/cmdutil"
 	"github.com/praetorian-inc/trajan/internal/registry"
 	"github.com/praetorian-inc/trajan/pkg/jenkins"
+	outputpkg "github.com/praetorian-inc/trajan/pkg/output"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/praetorian-inc/trajan/pkg/scanner"
 
@@ -177,6 +178,10 @@ func executeScanAndOutput(ctx context.Context, platform platforms.Platform, targ
 	case "html":
 		return cmdutil.OutputFindingsHTML(result, execResult.Findings)
 	default:
+		if detailed {
+			outputpkg.RenderDetailed(os.Stdout, result, execResult.Findings)
+			return nil
+		}
 		return cmdutil.OutputFindingsConsole(result, execResult.Findings)
 	}
 }

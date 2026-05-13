@@ -51,17 +51,16 @@ var platformMatchers = map[string]matcher{
 	},
 
 	platforms.PlatformJenkins: func(relPath string) bool {
-		base := filepath.Base(relPath)
-		lower := strings.ToLower(base)
-		// Bare Jenkinsfile (exact, case-sensitive)
-		if base == "Jenkinsfile" {
+		lower := strings.ToLower(filepath.Base(relPath))
+		// Bare Jenkinsfile (case-insensitive)
+		if lower == "jenkinsfile" {
 			return true
 		}
 		// Jenkinsfile.* (e.g. Jenkinsfile.prod)
-		if strings.HasPrefix(base, "Jenkinsfile.") {
+		if strings.HasPrefix(lower, "jenkinsfile.") {
 			return true
 		}
-		// *.jenkinsfile (case-insensitive suffix)
+		// *.jenkinsfile suffix
 		if strings.HasSuffix(lower, ".jenkinsfile") {
 			return true
 		}
@@ -92,6 +91,11 @@ var skipDirs = map[string]bool{
 	"vendor":       true,
 }
 
+// MaxFileSize caps how many bytes Walk will read from a single workflow file.
+// Files exceeding this limit are skipped with a stderr warning. Workflow YAML /
+// Jenkinsfile sources are typically under 100 KB; 10 MB provides ample headroom.
+const MaxFileSize = 10 << 20 // 10 MB
+
 // Walk walks a local filesystem path (file or directory) and returns
 // platforms.Workflow entries matching the given platform's file patterns.
 //
@@ -102,9 +106,18 @@ var skipDirs = map[string]bool{
 // Unreadable files/directories are skipped silently.  A non-nil error is only
 // returned for os.Stat failures on the root path or for a WalkDir failure.
 //
-// Workflow.Path is the forward-slash relative path from the walk root (or the
-// basename in single-file mode).  Workflow.RepoSlug is set to the caller-supplied
-// slug.  Workflow.Name is the basename.  Results are stable-sorted by Path.
+// Path semantics:
+//   - Directory mode: Workflow.Path is the forward-slash relative path from
+//     the supplied root (e.g. ".github/workflows/ci.yml").
+//   - Single-file mode: Workflow.Path is the basename only (e.g. "ci.yml").
+//     Callers that need anchored paths should pass a directory root rather
+//     than a single file.
+//
+// Workflow.Name is always the basename. Workflow.RepoSlug is the caller-
+// supplied slug. Results are stable-sorted by Path.
+//
+// Each matched workflow is read fully into memory; files exceeding MaxFileSize
+// are skipped (directory mode) or rejected with an error (single-file mode).
 func Walk(platform, path, repoSlug string) ([]platforms.Workflow, error) {
 	if !IsSupported(platform) {
 		supported := strings.Join(SupportedPlatforms(), ", ")
@@ -126,14 +139,21 @@ func Walk(platform, path, repoSlug string) ([]platforms.Workflow, error) {
 
 // loadSingleFile reads one file and returns it as a single-element slice.
 func loadSingleFile(path, repoSlug string) ([]platforms.Workflow, error) {
-	content, err := os.ReadFile(path)
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > MaxFileSize {
+		return nil, fmt.Errorf("file %s exceeds %d-byte limit", path, MaxFileSize)
+	}
+	fileContent, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 	return []platforms.Workflow{{
 		Name:     filepath.Base(path),
 		Path:     filepath.Base(path),
-		Content:  content,
+		Content:  fileContent,
 		RepoSlug: repoSlug,
 	}}, nil
 }
@@ -169,7 +189,12 @@ func walkDir(platform, root, repoSlug string) ([]platforms.Workflow, error) {
 			return nil
 		}
 
-		content, err := os.ReadFile(absPath)
+		if info, err := d.Info(); err == nil && info.Size() > MaxFileSize {
+			fmt.Fprintf(os.Stderr, "warning: skipping %s: file exceeds %d-byte limit\n", relSlash, MaxFileSize)
+			return nil
+		}
+
+		fileContent, err := os.ReadFile(absPath)
 		if err != nil {
 			return nil // skip unreadable files silently
 		}
@@ -177,7 +202,7 @@ func walkDir(platform, root, repoSlug string) ([]platforms.Workflow, error) {
 		workflows = append(workflows, platforms.Workflow{
 			Name:     name,
 			Path:     relSlash,
-			Content:  content,
+			Content:  fileContent,
 			RepoSlug: repoSlug,
 		})
 		return nil

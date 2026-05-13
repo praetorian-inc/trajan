@@ -44,17 +44,7 @@ func writeVulnGitHubWorkflow(t *testing.T) string {
 func TestRunLocalScan_HappyPath_VulnWorkflow(t *testing.T) {
 	root := writeVulnGitHubWorkflow(t)
 
-	// Capture stderr so RunLocalScan progress lines don't clutter test output.
-	// stdout is where JSON/console output lands, so we swap stderr silently.
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-	t.Cleanup(func() {
-		os.Stderr = oldStderr
-		w.Close()
-		r.Close()
-	})
+	silenceStderr(t)
 
 	// Capture stdout (console output) to keep test output clean.
 	out := captureStdout(t, func() {
@@ -66,9 +56,6 @@ func TestRunLocalScan_HappyPath_VulnWorkflow(t *testing.T) {
 		})
 		require.NoError(t, err)
 	})
-
-	w.Close()
-	os.Stderr = oldStderr
 
 	// The vulnerable workflow must produce at least one finding visible in output.
 	assert.NotEmpty(t, out, "expected console output with findings")

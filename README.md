@@ -96,9 +96,10 @@ type ScanConfig struct {
 
 ```go
 type ScanResult struct {
-    Findings  []detections.Finding   // Security vulnerabilities detected
-    Workflows []platforms.Workflow   // CI/CD workflow files discovered
-    Errors    []error                // Non-fatal errors during scanning
+    Findings          []detections.Finding   // Security vulnerabilities detected
+    Workflows         []platforms.Workflow   // CI/CD workflow files discovered
+    Errors            []error                // Non-fatal errors during scanning
+    SkippedDetections []string               // Detection names skipped in LocalPath mode (API-only); always empty in API-mode scans
 }
 ```
 

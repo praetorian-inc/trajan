@@ -114,7 +114,10 @@ func RunLocalScan(cfg LocalScanConfig) error {
 		}
 	}
 
-	result := &platforms.ScanResult{Workflows: workflowsMap}
+	result := &platforms.ScanResult{
+		Workflows: workflowsMap,
+		Errors:    execResult.Errors,
+	}
 
 	switch cfg.Output {
 	case "json":
