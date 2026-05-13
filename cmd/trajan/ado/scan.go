@@ -29,7 +29,6 @@ var (
 	detailed        bool
 	listDetections  bool
 	capabilities    string
-	scanLocal       bool
 	scanPath        string
 )
 
@@ -48,7 +47,7 @@ Targets:
   --org     Azure DevOps organization name or URL
   --repo    Specific repository (project/repo)
 
-Use --local --path to scan local workflow files (no API access required).`,
+Use --path to scan local workflow files offline (no API access required).`,
 	RunE: runScan,
 }
 
@@ -61,9 +60,8 @@ func init() {
 	scanCmd.Flags().StringVar(&capabilities, "capabilities", "", "comma-separated detection types to run (e.g., pipeline-injection,secrets-exposure)")
 	scanCmd.Flags().BoolVar(&detailed, "detailed", false, "show detailed evidence for each finding")
 	scanCmd.Flags().BoolVar(&listDetections, "list", false, "list active detection capabilities and exit")
-	scanCmd.Flags().BoolVar(&scanLocal, "local", false, "scan local workflow files instead of fetching from the platform API")
-	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan when --local is set")
-	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration when --local is set (e.g. 5m); 0 = no timeout")
+	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan offline; if set, skips platform API and reads from local files")
+	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration in offline mode (when --path is set, e.g. 5m); 0 = no timeout")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -71,10 +69,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return listActiveDetections()
 	}
 
-	if scanLocal {
-		if scanPath == "" {
-			return fmt.Errorf("--path is required when --local is set")
-		}
+	if scanPath != "" {
 		return cmdutil.RunLocalScan(cmdutil.LocalScanConfig{
 			Platform:         platforms.PlatformAzureDevOps,
 			Path:             scanPath,

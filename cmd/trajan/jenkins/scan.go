@@ -29,7 +29,6 @@ var (
 	scanTimeout     time.Duration
 	detailed        bool
 	jenkinsURL      string
-	scanLocal       bool
 	scanPath        string
 )
 
@@ -43,9 +42,9 @@ Checks for script injection, hardcoded credentials, excessive permissions,
 insecure agent configurations, and CSRF/anonymous access issues.
 Scans a single job (--repo) or all jobs in an instance (default).
 
-Use --local --path to scan local workflow files (no API access required).
+Use --path to scan local workflow files offline (no API access required).
 Note: live instance checks (anonymous access, CSRF, script console) are
-skipped in local mode as they require a running Jenkins instance.`,
+skipped in offline mode as they require a running Jenkins instance.`,
 	RunE: runScan,
 }
 
@@ -55,17 +54,13 @@ func init() {
 	scanCmd.Flags().StringVar(&scanOrg, "org", "", "Jenkins folder/organization to scan")
 	scanCmd.Flags().IntVar(&scanConcurrency, "concurrency", 10, "number of concurrent workers")
 	scanCmd.Flags().StringVar(&jenkinsURL, "url", "", "Jenkins instance URL (e.g., https://jenkins.example.com)")
-	scanCmd.Flags().BoolVar(&scanLocal, "local", false, "scan local workflow files instead of fetching from the platform API")
-	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan when --local is set")
-	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration when --local is set (e.g. 5m); 0 = no timeout")
+	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan offline; if set, skips platform API and reads from local files")
+	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration in offline mode (when --path is set, e.g. 5m); 0 = no timeout")
 	scanCmd.Flags().BoolVar(&detailed, "detailed", false, "show detailed evidence for each finding")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
-	if scanLocal {
-		if scanPath == "" {
-			return fmt.Errorf("--path is required when --local is set")
-		}
+	if scanPath != "" {
 		return cmdutil.RunLocalScan(cmdutil.LocalScanConfig{
 			Platform:         platforms.PlatformJenkins,
 			Path:             scanPath,

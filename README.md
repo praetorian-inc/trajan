@@ -138,8 +138,8 @@ export AZURE_DEVOPS_PAT=your_pat
 trajan ado scan --org myorg --repo myproject/myrepo
 
 # Offline scan: scan local workflow files without API access
-trajan github scan --local --path ./my-repo
-trajan github scan --local --path ./.github/workflows/ci.yml
+trajan github scan --path ./my-repo
+trajan github scan --path ./.github/workflows/ci.yml
 
 # JSON output
 trajan github scan --repo owner/repo -o json > results.json
