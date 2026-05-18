@@ -417,3 +417,216 @@ func TestIsRootWorkflow(t *testing.T) {
 		})
 	}
 }
+
+func TestGetJobParentWorkflow(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupGraph  func() (*graph.Graph, *graph.JobNode)
+		expectedID  string
+		expectedNil bool
+	}{
+		{
+			name: "valid job with parent workflow",
+			setupGraph: func() (*graph.Graph, *graph.JobNode) {
+				g := graph.NewGraph()
+				wf := graph.NewWorkflowNode("wf1", "main", ".gitlab-ci.yml", "test/repo", []string{"push"})
+				job := graph.NewJobNode("job1", "build", "docker")
+				g.AddNode(wf)
+				g.AddNode(job)
+				g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
+				return g, job
+			},
+			expectedID:  "wf1",
+			expectedNil: false,
+		},
+		{
+			name: "nil job returns nil",
+			setupGraph: func() (*graph.Graph, *graph.JobNode) {
+				g := graph.NewGraph()
+				return g, nil
+			},
+			expectedNil: true,
+		},
+		{
+			name: "orphan job returns nil",
+			setupGraph: func() (*graph.Graph, *graph.JobNode) {
+				g := graph.NewGraph()
+				job := graph.NewJobNode("job1", "build", "docker")
+				g.AddNode(job)
+				return g, job
+			},
+			expectedNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g, job := tt.setupGraph()
+			result := GetJobParentWorkflow(g, job)
+			if tt.expectedNil {
+				assert.Nil(t, result)
+			} else {
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.expectedID, result.ID())
+			}
+		})
+	}
+}
+
+func TestHasMergeRequestTrigger(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() (*graph.Graph, *graph.WorkflowNode)
+		expected bool
+	}{
+		{
+			name: "workflow with MR tag",
+			setup: func() (*graph.Graph, *graph.WorkflowNode) {
+				g := graph.NewGraph()
+				wf := graph.NewWorkflowNode("wf1", "main", ".gitlab-ci.yml", "test/repo", []string{})
+				wf.AddTag(graph.TagMergeRequest)
+				g.AddNode(wf)
+				return g, wf
+			},
+			expected: true,
+		},
+		{
+			name: "workflow with MR trigger string",
+			setup: func() (*graph.Graph, *graph.WorkflowNode) {
+				g := graph.NewGraph()
+				wf := graph.NewWorkflowNode("wf1", "main", ".gitlab-ci.yml", "test/repo", []string{"merge_request_event"})
+				g.AddNode(wf)
+				return g, wf
+			},
+			expected: true,
+		},
+		{
+			name: "workflow with no MR trigger",
+			setup: func() (*graph.Graph, *graph.WorkflowNode) {
+				g := graph.NewGraph()
+				wf := graph.NewWorkflowNode("wf1", "main", ".gitlab-ci.yml", "test/repo", []string{"push"})
+				g.AddNode(wf)
+				return g, wf
+			},
+			expected: false,
+		},
+		{
+			name: "workflow with job-level MR condition via DFS",
+			setup: func() (*graph.Graph, *graph.WorkflowNode) {
+				g := graph.NewGraph()
+				wf := graph.NewWorkflowNode("wf1", "main", ".gitlab-ci.yml", "test/repo", []string{"push"})
+				g.AddNode(wf)
+				job := graph.NewJobNode("job1", "test", "docker")
+				job.If = "$CI_PIPELINE_SOURCE == \"merge_request_event\""
+				job.SetParent(wf.ID())
+				g.AddNode(job)
+				g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
+				return g, wf
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g, wf := tt.setup()
+			result := HasMergeRequestTrigger(wf, g)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestJobRunsOnMRExplicit(t *testing.T) {
+	tests := []struct {
+		name     string
+		ifCond   string
+		expected bool
+	}{
+		{"empty If", "", false},
+		{"MR condition", "$CI_PIPELINE_SOURCE == \"merge_request_event\"", true},
+		{"external PR", "$CI_PIPELINE_SOURCE == \"external_pull_request_event\"", true},
+		{"branch condition", "$CI_COMMIT_BRANCH == \"main\"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			job := graph.NewJobNode("job1", "test", "docker")
+			job.If = tt.ifCond
+			assert.Equal(t, tt.expected, JobRunsOnMRExplicit(job))
+		})
+	}
+}
+
+func TestJobRunsOnMR(t *testing.T) {
+	tests := []struct {
+		name     string
+		ifCond   string
+		wfTags   []graph.Tag
+		expected bool
+	}{
+		{
+			name:     "explicit MR condition",
+			ifCond:   "$CI_PIPELINE_SOURCE == \"merge_request_event\"",
+			expected: true,
+		},
+		{
+			name:     "non-MR If condition with MR workflow",
+			ifCond:   "$CI_COMMIT_BRANCH == \"feature\"",
+			wfTags:   []graph.Tag{graph.TagMergeRequest},
+			expected: false,
+		},
+		{
+			name:     "no If condition with MR workflow",
+			ifCond:   "",
+			wfTags:   []graph.Tag{graph.TagMergeRequest},
+			expected: true,
+		},
+		{
+			name:     "no If condition without MR workflow",
+			ifCond:   "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := graph.NewGraph()
+			wf := graph.NewWorkflowNode("wf1", "main", ".gitlab-ci.yml", "test/repo", []string{})
+			for _, tag := range tt.wfTags {
+				wf.AddTag(tag)
+			}
+			g.AddNode(wf)
+
+			job := graph.NewJobNode("job1", "test", "docker")
+			job.If = tt.ifCond
+			job.SetParent(wf.ID())
+			g.AddNode(job)
+			g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
+
+			assert.Equal(t, tt.expected, JobRunsOnMR(job, wf, g))
+		})
+	}
+}
+
+func TestIsProtectedBranchOnly(t *testing.T) {
+	tests := []struct {
+		name     string
+		ifCond   string
+		expected bool
+	}{
+		{"empty If", "", false},
+		{"main branch", "$CI_COMMIT_BRANCH == \"main\"", true},
+		{"master branch", "$CI_COMMIT_BRANCH == \"master\"", true},
+		{"feature branch", "$CI_COMMIT_BRANCH == \"feature\"", false},
+		{"MR with main branch", "$CI_PIPELINE_SOURCE == \"merge_request_event\" && $CI_COMMIT_BRANCH == \"main\"", false},
+		{"main regex", "$CI_COMMIT_REF_NAME =~ /^main$/", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			job := graph.NewJobNode("job1", "test", "docker")
+			job.If = tt.ifCond
+			assert.Equal(t, tt.expected, IsProtectedBranchOnly(job))
+		})
+	}
+}

@@ -344,7 +344,7 @@ func TestDetect_ProtectedBranchPatterns(t *testing.T) {
 		{
 			name:      "feature branch",
 			ifCond:    "$CI_COMMIT_BRANCH == \"feature-123\"",
-			shouldTag: true,
+			shouldTag: false,
 		},
 		{
 			name:      "MR with branch condition",

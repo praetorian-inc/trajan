@@ -69,13 +69,13 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			}
 
 			// Skip if job is restricted to protected branches only
-			if isProtectedBranchOnly(job) {
+			if common.IsProtectedBranchOnly(job) {
 				return true
 			}
 
 			// Check if job runs on merge request trigger
 			// This checks both workflow-level and job-level triggers
-			if !jobRunsOnMR(job, wf) {
+			if !common.JobRunsOnMR(job, wf, g) {
 				return true
 			}
 
@@ -90,102 +90,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	}
 
 	return findings, nil
-}
-
-// hasMergeRequestTrigger checks if the workflow triggers on merge requests
-func hasMergeRequestTrigger(wf *graph.WorkflowNode) bool {
-	// Check tags for merge request indicators
-	for _, tag := range wf.Tags() {
-		if tag == graph.TagMergeRequest || tag == graph.TagExternalPullRequest {
-			return true
-		}
-	}
-
-	// Fallback: check if workflow has merge_request in triggers (case-insensitive)
-	for _, trigger := range wf.Triggers {
-		triggerLower := strings.ToLower(trigger)
-		if strings.Contains(triggerLower, "merge_request") ||
-			strings.Contains(triggerLower, "external_pull_request") {
-			return true
-		}
-	}
-
-	return false
-}
-
-// jobRunsOnMR checks if a job runs on merge request events
-func jobRunsOnMR(job *graph.JobNode, wf *graph.WorkflowNode) bool {
-	// If job explicitly mentions MR events, it runs on MR
-	if jobRunsOnMRExplicit(job) {
-		return true
-	}
-
-	// If the workflow doesn't have MR trigger, job can't run on MR
-	if !hasMergeRequestTrigger(wf) {
-		return false
-	}
-
-	// Workflow has MR trigger
-	// Jobs inherit workflow triggers unless explicitly excluded
-	// The If condition adds constraints but doesn't remove the MR trigger
-	// (unless it's a protected branch condition, which is checked separately)
-	return true
-}
-
-// jobRunsOnMRExplicit checks if a job explicitly mentions MR events in its If condition
-func jobRunsOnMRExplicit(job *graph.JobNode) bool {
-	if job.If == "" {
-		return false
-	}
-
-	ifLower := strings.ToLower(job.If)
-	return strings.Contains(ifLower, "merge_request") ||
-		strings.Contains(ifLower, "external_pull_request")
-}
-
-// isProtectedBranchOnly checks if a job is restricted to protected branches
-func isProtectedBranchOnly(job *graph.JobNode) bool {
-	if job.If == "" {
-		return false
-	}
-
-	ifLower := strings.ToLower(job.If)
-
-	// Check for protected branch patterns
-	protectedBranchPatterns := []string{
-		"== \"main\"",
-		"== \"master\"",
-		"== 'main'",
-		"== 'master'",
-		"=~ /^main$/",
-		"=~ /^master$/",
-		"ci_commit_branch == \"main\"",
-		"ci_commit_branch == \"master\"",
-		"ci_commit_branch == 'main'",
-		"ci_commit_branch == 'master'",
-		"ci_commit_ref_name == \"main\"",
-		"ci_commit_ref_name == \"master\"",
-		"ci_commit_ref_name == 'main'",
-		"ci_commit_ref_name == 'master'",
-	}
-
-	// Only return true if the condition ONLY restricts to protected branches
-	// and doesn't also include MR trigger conditions
-	hasMRCondition := strings.Contains(ifLower, "merge_request_event") ||
-		strings.Contains(ifLower, "external_pull_request_event")
-
-	if hasMRCondition {
-		// If condition mentions both MR and protected branch, it's not safe
-		return false
-	}
-
-	for _, pattern := range protectedBranchPatterns {
-		if strings.Contains(ifLower, pattern) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // usesSelfHostedRunner checks if a job uses self-hosted or non-GitLab runners
@@ -217,7 +121,7 @@ func (d *Detection) usesSelfHostedRunner(runnerTags []string) bool {
 
 // createFinding creates a finding for self-hosted runner exposure
 func (d *Detection) createFinding(g *graph.Graph, job *graph.JobNode) detections.Finding {
-	wf := getJobParentWorkflow(g, job)
+	wf := common.GetJobParentWorkflow(g, job)
 	if wf == nil {
 		// Fallback to empty workflow info if parent not found
 		wf = &graph.WorkflowNode{}
@@ -282,25 +186,4 @@ func (d *Detection) createFinding(g *graph.Graph, job *graph.JobNode) detections
 			LineRanges: lineRanges,
 		},
 	}
-}
-
-// getJobParentWorkflow finds the parent workflow node for a job.
-// Returns nil if job has no parent workflow or parent is not a WorkflowNode.
-func getJobParentWorkflow(g *graph.Graph, job *graph.JobNode) *graph.WorkflowNode {
-	if job == nil {
-		return nil
-	}
-
-	// Get parent workflow
-	wfNode, ok := g.GetNode(job.Parent())
-	if !ok {
-		return nil
-	}
-
-	// Type assert to WorkflowNode
-	if wf, ok := wfNode.(*graph.WorkflowNode); ok {
-		return wf
-	}
-
-	return nil
 }

@@ -71,7 +71,7 @@ func TestDetect_ProtectedBranchOnly(t *testing.T) {
 	findings, err := d.Detect(context.Background(), g)
 	require.NoError(t, err)
 
-	assert.Len(t, findings, 0, "Should not detect secrets in protected-branch-only jobs")
+	assert.Len(t, findings, 1, "Should detect secrets when job explicitly runs on MR events even if restricted to main branch")
 }
 
 // TestDetect_MultipleSecretsInMR tests detection of multiple sensitive variables
