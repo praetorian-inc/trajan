@@ -6,10 +6,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/praetorian-inc/trajan/pkg/jenkins"
-	"github.com/stretchr/testify/require"
 )
 
 func TestRequiresAPI(t *testing.T) {
