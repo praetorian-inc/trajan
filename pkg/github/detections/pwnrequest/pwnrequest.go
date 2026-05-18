@@ -277,24 +277,24 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, checkoutStep *gra
 		line = checkoutStep.Line
 	}
 
-	// Build sink description
-	sinkDescription := ""
-	if sinkStep != nil {
-		sinkDescription = fmt.Sprintf("Step: %s (line %d) - may execute untrusted code, review to confirm", sinkStep.Name, sinkStep.Line)
-		if sinkStep.Run != "" {
-			// Show first line of run command
-			firstLine := strings.Split(sinkStep.Run, "\n")[0]
-			if len(firstLine) > 60 {
-				firstLine = firstLine[:60] + "..."
-			}
-			sinkDescription += fmt.Sprintf("\n  Command: %s", firstLine)
+	// Name the execution sink. Operators triaging at scale need the specific
+	// command, not "may execute untrusted code, review to confirm." Gato-X
+	// style: surface "Sink: <command>" in Evidence and the bare command in
+	// Metadata[sink] for programmatic consumers.
+	sinkCommand := ""
+	if sinkStep != nil && sinkStep.Run != "" {
+		sinkCommand = strings.Split(sinkStep.Run, "\n")[0]
+		if len(sinkCommand) > 60 {
+			sinkCommand = sinkCommand[:60] + "..."
 		}
 	}
+	if sinkCommand != "" {
+		evidence += " Sink: " + sinkCommand
+	}
 
-	// Add sink to metadata if available
 	metadata := make(map[string]interface{})
-	if sinkDescription != "" {
-		metadata["sink"] = sinkDescription
+	if sinkCommand != "" {
+		metadata["sink"] = sinkCommand
 	}
 
 	return detections.Finding{

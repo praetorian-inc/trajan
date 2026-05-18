@@ -70,26 +70,49 @@ func IsExecutionSink(runCmd string) bool {
 
 	cmdLower := strings.ToLower(runCmd)
 
-	// Execution patterns (actual code execution from artifact/cache)
+	// Execution patterns (actual code execution from artifact/cache).
+	// Tools added beyond bash/sh/python/node mirror the Gato-X SINKS list —
+	// each executes attacker-controlled code from a checked-out repo or
+	// restored cache (lifecycle scripts, build hooks, conftest.py, etc.).
 	executionPatterns := []string{
-		"./",        // Execute local script
-		" bash ",    // Bash execution (with spaces to avoid matching "subash")
-		"\nbash ",   // Bash at line start
-		" sh ",      // Shell execution (with spaces to avoid matching "sha256sum")
-		"\nsh ",     // Shell at line start
-		"/bin/",     // Binary execution
-		" python ",  // Python execution
-		"\npython ", // Python at line start
-		" node ",    // Node execution
-		"\nnode ",   // Node at line start
-		" npm ",     // npm commands
-		"\nnpm ",    // npm at line start
-		" yarn ",    // yarn commands
-		"\nyarn ",   // yarn at line start
-		" source ",  // Source script
-		"\nsource ", // Source at line start
-		" eval ",    // Eval command
-		" exec ",    // Exec command
+		"./",             // Execute local script
+		" bash ",         // Bash execution (with spaces to avoid matching "subash")
+		"\nbash ",        // Bash at line start
+		" sh ",           // Shell execution (with spaces to avoid matching "sha256sum")
+		"\nsh ",          // Shell at line start
+		"/bin/",          // Binary execution
+		" python ",       // Python execution
+		"\npython ",      // Python at line start
+		" node ",         // Node execution
+		"\nnode ",        // Node at line start
+		" npm ",          // npm commands
+		"\nnpm ",         // npm at line start
+		" pnpm ",         // pnpm commands (TanStack-class supply-chain vector)
+		"\npnpm ",        // pnpm at line start
+		" yarn ",         // yarn commands
+		"\nyarn ",        // yarn at line start
+		" bun ",          // bun (lifecycle scripts like npm)
+		"\nbun ",         // bun at line start
+		" poetry ",       // poetry (runs setup.py / build hooks)
+		"\npoetry ",      // poetry at line start
+		" cargo ",        // cargo (build.rs executes)
+		"\ncargo ",       // cargo at line start
+		" go run ",       // go run main.go etc.
+		"\ngo run ",      // go run at line start
+		" go generate ",  // go generate triggers //go:generate directives
+		"\ngo generate ", // go generate at line start
+		" make ",         // make (Makefile targets execute commands)
+		"\nmake ",        // make at line start
+		" mvn ",          // maven (pom.xml plugins execute)
+		"\nmvn ",         // mvn at line start
+		" gradle ",       // gradle (build.gradle Groovy/Kotlin executes)
+		"\ngradle ",      // gradle at line start
+		" pytest ",       // pytest (conftest.py executes on collection)
+		"\npytest ",      // pytest at line start
+		" source ",       // Source script
+		"\nsource ",      // Source at line start
+		" eval ",         // Eval command
+		" exec ",         // Exec command
 	}
 
 	for _, pattern := range executionPatterns {
@@ -102,7 +125,11 @@ func IsExecutionSink(runCmd string) bool {
 	// The patterns above require a leading space/newline, but run: values
 	// like "npm run build" start directly with the command.
 	commandPrefixes := []string{
-		"bash ", "sh ", "python ", "node ", "npm ", "yarn ",
+		"bash ", "sh ", "python ", "node ",
+		"npm ", "pnpm ", "yarn ", "bun ",
+		"poetry ", "cargo ",
+		"go run ", "go generate ",
+		"make ", "mvn ", "gradle ", "pytest ",
 		"source ", "eval ", "exec ",
 	}
 	for _, prefix := range commandPrefixes {
