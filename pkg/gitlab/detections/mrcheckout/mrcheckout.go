@@ -60,7 +60,7 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		}
 
 		// Check if workflow triggers on merge requests
-		if !hasMergeRequestTrigger(wf, g) {
+		if !common.HasMergeRequestTrigger(wf, g) {
 			continue
 		}
 
@@ -114,42 +114,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-func hasMergeRequestTrigger(wf *graph.WorkflowNode, g *graph.Graph) bool {
-	// Check tags for merge request indicators
-	for _, tag := range wf.Tags() {
-		if tag == graph.TagMergeRequest || tag == graph.TagExternalPullRequest {
-			return true
-		}
-	}
-
-	// Fallback: check if workflow has merge_request in triggers (case-insensitive)
-	for _, trigger := range wf.Triggers {
-		triggerLower := strings.ToLower(trigger)
-		if strings.Contains(triggerLower, "merge_request") ||
-			strings.Contains(triggerLower, "external_pull_request") {
-			return true
-		}
-	}
-
-	// Also check job-level If conditions for merge request references
-	foundMR := false
-	graph.DFS(g, wf.ID(), func(node graph.Node) bool {
-		if job, ok := node.(*graph.JobNode); ok {
-			if job.If != "" {
-				ifLower := strings.ToLower(job.If)
-				if strings.Contains(ifLower, "merge_request") ||
-					strings.Contains(ifLower, "external_pull_request") {
-					foundMR = true
-					return false // Stop DFS, we found it
-				}
-			}
-		}
-		return true
-	})
-
-	return foundMR
-}
-
 func hasUnsafeCheckout(script string) bool {
 	script = strings.ToLower(script)
 
@@ -182,7 +146,7 @@ func containsExecutionSink(script string) bool {
 
 func (d *Detection) createFinding(g *graph.Graph, checkoutStep *graph.StepNode, sinkStep *graph.StepNode, job *graph.JobNode, pathNodes []graph.Node) detections.Finding {
 	// Get the parent workflow for this step
-	wf := getJobParentWorkflow(g, job)
+	wf := common.GetJobParentWorkflow(g, job)
 	if wf == nil {
 		// Fallback to empty workflow info if parent not found
 		wf = &graph.WorkflowNode{}
@@ -309,25 +273,4 @@ func findCommandLineOffset(script string, pattern string) int {
 		}
 	}
 	return -1
-}
-
-// getJobParentWorkflow finds the parent workflow node for a job.
-// Returns nil if job has no parent workflow or parent is not a WorkflowNode.
-func getJobParentWorkflow(g *graph.Graph, job *graph.JobNode) *graph.WorkflowNode {
-	if job == nil {
-		return nil
-	}
-
-	// Get parent workflow
-	wfNode, ok := g.GetNode(job.Parent())
-	if !ok {
-		return nil
-	}
-
-	// Type assert to WorkflowNode
-	if wf, ok := wfNode.(*graph.WorkflowNode); ok {
-		return wf
-	}
-
-	return nil
 }

@@ -479,44 +479,68 @@ func (p *GitLabParser) parseIncludes(raw interface{}) []GitLabInclude {
 				})
 			case map[string]interface{}:
 				// Array of objects: include: [{local: ...}, {remote: ...}]
-				includes = append(includes, p.parseIncludeMap(inc))
+				includes = append(includes, p.parseIncludeMap(inc)...)
 			}
 		}
 	case map[string]interface{}:
 		// Single object format: include: {local: '/path.yml'}
-		includes = append(includes, p.parseIncludeMap(v))
+		includes = append(includes, p.parseIncludeMap(v)...)
 	}
 
 	return includes
 }
 
-// parseIncludeMap parses a single include map into a typed GitLabInclude
-func (p *GitLabParser) parseIncludeMap(m map[string]interface{}) GitLabInclude {
-	inc := GitLabInclude{}
-
-	// Determine include type based on which key is present
+// parseIncludeMap parses a single include map into typed GitLabInclude entries.
+// Returns a slice because project includes with a file list expand into multiple entries.
+func (p *GitLabParser) parseIncludeMap(m map[string]interface{}) []GitLabInclude {
 	if local, ok := m["local"].(string); ok {
-		inc.Type = IncludeTypeLocal
-		inc.Path = local
-	} else if remote, ok := m["remote"].(string); ok {
-		inc.Type = IncludeTypeRemote
-		inc.Remote = remote
-	} else if project, ok := m["project"].(string); ok {
-		inc.Type = IncludeTypeProject
-		inc.Project = project
-		// Extract optional file and ref fields
-		if file, ok := m["file"].(string); ok {
-			inc.Path = file
-		}
-		if ref, ok := m["ref"].(string); ok {
-			inc.Ref = ref
-		}
-	} else if template, ok := m["template"].(string); ok {
-		inc.Type = IncludeTypeTemplate
-		inc.Template = template
+		return []GitLabInclude{{Type: IncludeTypeLocal, Path: local}}
 	}
 
-	return inc
+	if remote, ok := m["remote"].(string); ok {
+		return []GitLabInclude{{Type: IncludeTypeRemote, Remote: remote}}
+	}
+
+	if project, ok := m["project"].(string); ok {
+		ref, _ := m["ref"].(string)
+
+		// file can be a string or a list of strings
+		switch file := m["file"].(type) {
+		case string:
+			return []GitLabInclude{{
+				Type:    IncludeTypeProject,
+				Project: project,
+				Path:    file,
+				Ref:     ref,
+			}}
+		case []interface{}:
+			var includes []GitLabInclude
+			for _, f := range file {
+				if path, ok := f.(string); ok {
+					includes = append(includes, GitLabInclude{
+						Type:    IncludeTypeProject,
+						Project: project,
+						Path:    path,
+						Ref:     ref,
+					})
+				}
+			}
+			return includes
+		default:
+			// No file specified
+			return []GitLabInclude{{
+				Type:    IncludeTypeProject,
+				Project: project,
+				Ref:     ref,
+			}}
+		}
+	}
+
+	if template, ok := m["template"].(string); ok {
+		return []GitLabInclude{{Type: IncludeTypeTemplate, Template: template}}
+	}
+
+	return nil
 }
 
 // convert transforms a GitLabCI to generic NormalizedWorkflow
