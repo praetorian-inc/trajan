@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -28,10 +29,12 @@ var (
 	scanOrg         string
 	scanUser        string
 	scanConcurrency int
+	scanTimeout     time.Duration
 	severity        string
 	detailed        bool
 	listDetections  bool
 	capabilities    string
+	scanPath        string
 )
 
 var scanCmd = &cobra.Command{
@@ -41,7 +44,9 @@ var scanCmd = &cobra.Command{
 
 Scan GitHub Actions CI/CD configurations for security vulnerabilities.
 Analyzes workflow files across a repository, organization, or user for attack
-patterns including pwn requests, artifact poisoning, and secrets exfiltration.`,
+patterns including pwn requests, artifact poisoning, and secrets exfiltration.
+
+Use --path to scan local workflow files offline (no API access required).`,
 	RunE: runScan,
 }
 
@@ -55,12 +60,39 @@ func init() {
 	scanCmd.Flags().StringVar(&capabilities, "capabilities", "", "comma-separated detection types to run (e.g., pwn_request,artifact_poisoning)")
 	scanCmd.Flags().BoolVar(&detailed, "detailed", false, "show detailed evidence for each finding")
 	scanCmd.Flags().BoolVar(&listDetections, "list", false, "list active detection capabilities and exit")
+	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan offline; if set, skips platform API and reads from local files")
+	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration in offline mode (when --path is set, e.g. 5m); 0 = 5m default")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
 	// Handle --list flag (list detections and exit)
 	if listDetections {
 		return listActiveDetections()
+	}
+
+	if scanPath != "" {
+		var conflicting []string
+		for _, name := range []string{"repo", "org", "user", "url"} {
+			if f := cmd.Flags().Lookup(name); f != nil && cmd.Flags().Changed(name) {
+				conflicting = append(conflicting, "--"+name)
+			}
+		}
+		if len(conflicting) > 0 {
+			return fmt.Errorf("--path is incompatible with %s; specify one mode at a time", strings.Join(conflicting, "/"))
+		}
+		return cmdutil.RunLocalScan(cmdutil.LocalScanConfig{
+			Platform:         platforms.PlatformGitHub,
+			Path:             scanPath,
+			Concurrency:      scanConcurrency,
+			Timeout:          scanTimeout,
+			Capabilities:     capabilities,
+			Severity:         severity,
+			Detailed:         detailed,
+			Verbose:          cmdutil.GetVerbose(cmd),
+			Output:           cmdutil.GetOutput(cmd),
+			CapabilityFilter: cmdutil.FilterFindingsByCapabilities,
+			WorkflowLabel:    "GitHub workflow",
+		})
 	}
 
 	t := getToken(cmd)
