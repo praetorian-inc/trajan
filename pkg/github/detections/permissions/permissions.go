@@ -115,27 +115,52 @@ func checkPermissions(wf *graph.WorkflowNode, job *graph.JobNode, trigger string
 		}
 
 		var severity detections.Severity
+		var evidence string
 
-		// Determine severity based on trigger + permission combination
-		switch trigger {
-		case "pull_request_target":
-			// Any write permission on pull_request_target is dangerous
-			if perm == "contents" {
+		// id-token: write enables GitHub Actions OIDC federation, which can
+		// mint cloud / npm / PyPI publish tokens. This was the actual
+		// escalation vector in the TanStack / Mini Shai-Hulud supply-chain
+		// compromise: attacker code in a PR-target run minted a valid npm
+		// publish token via OIDC and self-propagated as a worm. Treat it
+		// distinctly from generic write permissions.
+		if perm == "id-token" {
+			switch trigger {
+			case "pull_request_target":
 				severity = detections.SeverityCritical
-			} else {
+			case "workflow_run", "issue_comment":
 				severity = detections.SeverityHigh
 			}
-
-		case "issue_comment":
-			// issue_comment + contents or pull-requests write is dangerous
-			if perm == "contents" || perm == "pull-requests" {
-				severity = detections.SeverityHigh
+			if severity != "" {
+				evidence = fmt.Sprintf(
+					"Job on %s trigger has id-token: write. OIDC token can be exfiltrated by attacker-controlled code in this privileged context.",
+					trigger,
+				)
 			}
+		} else {
+			// Determine severity based on trigger + permission combination
+			switch trigger {
+			case "pull_request_target":
+				// Any write permission on pull_request_target is dangerous
+				if perm == "contents" {
+					severity = detections.SeverityCritical
+				} else {
+					severity = detections.SeverityHigh
+				}
 
-		case "workflow_run":
-			// workflow_run with write permissions is risky
-			if perm == "contents" || perm == "pull-requests" {
-				severity = detections.SeverityMedium
+			case "issue_comment":
+				// issue_comment + contents or pull-requests write is dangerous
+				if perm == "contents" || perm == "pull-requests" {
+					severity = detections.SeverityHigh
+				}
+
+			case "workflow_run":
+				// workflow_run with write permissions is risky
+				if perm == "contents" || perm == "pull-requests" {
+					severity = detections.SeverityMedium
+				}
+			}
+			if severity != "" {
+				evidence = fmt.Sprintf("Job on %s trigger has dangerous write permissions: %s", trigger, perm)
 			}
 		}
 
@@ -173,7 +198,7 @@ func checkPermissions(wf *graph.WorkflowNode, job *graph.JobNode, trigger string
 				Job:        job.Name,
 				Line:       job.Line,
 				Trigger:    trigger,
-				Evidence:   fmt.Sprintf("Job on %s trigger has dangerous write permissions: %s", trigger, perm),
+				Evidence:   evidence,
 				Details: &detections.FindingDetails{
 					LineRanges:  lineRanges,
 					Permissions: permsList,
