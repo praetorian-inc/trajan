@@ -88,6 +88,7 @@ type ScanConfig struct {
     Repo        string        // Repository name (empty = scan all org repos)
     Concurrency int           // Parallel detection workers (default: 10)
     Timeout     time.Duration // Max scan duration (default: 5m)
+    LocalPath   string        // Local filesystem path (file or dir) for offline scan
 }
 ```
 
@@ -95,9 +96,10 @@ type ScanConfig struct {
 
 ```go
 type ScanResult struct {
-    Findings  []detections.Finding   // Security vulnerabilities detected
-    Workflows []platforms.Workflow   // CI/CD workflow files discovered
-    Errors    []error                // Non-fatal errors during scanning
+    Findings          []detections.Finding   // Security vulnerabilities detected
+    Workflows         []platforms.Workflow   // CI/CD workflow files discovered
+    Errors            []error                // Non-fatal errors during scanning
+    SkippedDetections []string               // Detection names skipped in LocalPath mode (API-only); always empty in API-mode scans
 }
 ```
 
@@ -134,6 +136,10 @@ trajan gitlab scan --group mygroup
 # Scan Azure DevOps
 export AZURE_DEVOPS_PAT=your_pat
 trajan ado scan --org myorg --repo myproject/myrepo
+
+# Offline scan: scan local workflow files without API access
+trajan github scan --path ./my-repo
+trajan github scan --path ./.github/workflows/ci.yml
 
 # JSON output
 trajan github scan --repo owner/repo -o json > results.json

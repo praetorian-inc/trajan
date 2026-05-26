@@ -28,6 +28,10 @@ func New() *Detection {
 	}
 }
 
+// RequiresAPI reports that this detection cannot run in --local mode; it
+// requires a live Jenkins client to query the running instance.
+func (d *Detection) RequiresAPI() bool { return true }
+
 // Detect checks if Jenkins CSRF protection (crumb issuer) is disabled
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	clientData, ok := g.GetMetadata("jenkins_client")

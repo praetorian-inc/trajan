@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
+
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/praetorian-inc/trajan/internal/cmdutil"
 	"github.com/praetorian-inc/trajan/internal/registry"
 	"github.com/praetorian-inc/trajan/pkg/jenkins"
+	outputpkg "github.com/praetorian-inc/trajan/pkg/output"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/praetorian-inc/trajan/pkg/scanner"
 
@@ -24,7 +28,10 @@ var (
 	scanRepo        string
 	scanOrg         string
 	scanConcurrency int
+	scanTimeout     time.Duration
+	detailed        bool
 	jenkinsURL      string
+	scanPath        string
 )
 
 var scanCmd = &cobra.Command{
@@ -35,7 +42,11 @@ var scanCmd = &cobra.Command{
 Scan Jenkins pipeline definitions for security vulnerabilities.
 Checks for script injection, hardcoded credentials, excessive permissions,
 insecure agent configurations, and CSRF/anonymous access issues.
-Scans a single job (--repo) or all jobs in an instance (default).`,
+Scans a single job (--repo) or all jobs in an instance (default).
+
+Use --path to scan local workflow files offline (no API access required).
+Note: live instance checks (anonymous access, CSRF, script console) are
+skipped in offline mode as they require a running Jenkins instance.`,
 	RunE: runScan,
 }
 
@@ -45,9 +56,37 @@ func init() {
 	scanCmd.Flags().StringVar(&scanOrg, "org", "", "Jenkins folder/organization to scan")
 	scanCmd.Flags().IntVar(&scanConcurrency, "concurrency", 10, "number of concurrent workers")
 	scanCmd.Flags().StringVar(&jenkinsURL, "url", "", "Jenkins instance URL (e.g., https://jenkins.example.com)")
+	scanCmd.Flags().StringVar(&scanPath, "path", "", "filesystem path (file or directory) to scan offline; if set, skips platform API and reads from local files")
+	scanCmd.Flags().DurationVar(&scanTimeout, "timeout", 0, "max scan duration in offline mode (when --path is set, e.g. 5m); 0 = 5m default")
+	scanCmd.Flags().BoolVar(&detailed, "detailed", false, "show detailed evidence for each finding")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
+	if scanPath != "" {
+		var conflicting []string
+		for _, name := range []string{"repo", "org", "user", "url"} {
+			if f := cmd.Flags().Lookup(name); f != nil && cmd.Flags().Changed(name) {
+				conflicting = append(conflicting, "--"+name)
+			}
+		}
+		if len(conflicting) > 0 {
+			return fmt.Errorf("--path is incompatible with %s; specify one mode at a time", strings.Join(conflicting, "/"))
+		}
+		return cmdutil.RunLocalScan(cmdutil.LocalScanConfig{
+			Platform:         platforms.PlatformJenkins,
+			Path:             scanPath,
+			Concurrency:      scanConcurrency,
+			Timeout:          scanTimeout,
+			Capabilities:     "",
+			Severity:         "",
+			Detailed:         detailed,
+			Verbose:          cmdutil.GetVerbose(cmd),
+			Output:           cmdutil.GetOutput(cmd),
+			CapabilityFilter: nil,
+			WorkflowLabel:    "Jenkins pipeline",
+		})
+	}
+
 	t := getToken(cmd)
 	username := getUsername(cmd)
 
@@ -144,6 +183,10 @@ func executeScanAndOutput(ctx context.Context, platform platforms.Platform, targ
 	case "html":
 		return cmdutil.OutputFindingsHTML(result, execResult.Findings)
 	default:
+		if detailed {
+			outputpkg.RenderDetailed(os.Stdout, result, execResult.Findings)
+			return nil
+		}
 		return cmdutil.OutputFindingsConsole(result, execResult.Findings)
 	}
 }
