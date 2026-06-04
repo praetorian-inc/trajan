@@ -254,8 +254,9 @@ func (b *graphBuilder) buildStep(jobID string, index int, step *parser.Step) err
 		stepNode.AddTag(graph.TagArtifactUpload)
 	}
 
-	// Tag cache actions
-	if strings.Contains(step.Uses, "actions/cache") {
+	// Tag cache actions (explicit actions/cache plus cache-side-effects of
+	// common setup-language actions). See isCacheRestoreStep.
+	if isCacheRestoreStep(step.Uses, step.With) {
 		stepNode.AddTag(graph.TagCacheRestore)
 	}
 
@@ -268,6 +269,38 @@ func (b *graphBuilder) buildStep(jobID string, index int, step *parser.Step) err
 	b.graph.AddEdge(jobID, stepID, graph.EdgeContains)
 
 	return nil
+}
+
+// isCacheRestoreStep reports whether a step seeds or restores a build cache.
+// Covers the explicit actions/cache action plus the cache: side-effects of
+// common setup-language actions (setup-node, setup-go, setup-python,
+// setup-java with cache:*; ruby/setup-ruby with bundler-cache: true) and
+// pnpm/action-setup, which always seeds the pnpm store. Both buildStep
+// implementations in this file use this so they stay in sync.
+func isCacheRestoreStep(uses string, with map[string]string) bool {
+	if strings.Contains(uses, "actions/cache") {
+		return true
+	}
+	if strings.Contains(uses, "pnpm/action-setup") {
+		return true
+	}
+	if with["cache"] != "" {
+		for _, setup := range []string{
+			"actions/setup-node",
+			"actions/setup-go",
+			"actions/setup-python",
+			"actions/setup-java",
+		} {
+			if strings.Contains(uses, setup) {
+				return true
+			}
+		}
+	}
+	if strings.EqualFold(with["bundler-cache"], "true") &&
+		strings.Contains(uses, "ruby/setup-ruby") {
+		return true
+	}
+	return false
 }
 
 // containsInjectableContext checks if a string contains potentially injectable contexts
@@ -465,8 +498,9 @@ func (b *normalizedGraphBuilder) buildStep(jobID string, index int, step *parser
 		stepNode.AddTag(graph.TagArtifactUpload)
 	}
 
-	// Tag cache actions
-	if strings.Contains(step.Uses, "actions/cache") {
+	// Tag cache actions (explicit actions/cache plus cache-side-effects of
+	// common setup-language actions). See isCacheRestoreStep.
+	if isCacheRestoreStep(step.Uses, step.With) {
 		stepNode.AddTag(graph.TagCacheRestore)
 	}
 

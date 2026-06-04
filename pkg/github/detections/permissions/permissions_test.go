@@ -317,6 +317,96 @@ jobs:
 	assert.Len(t, findings, 0)
 }
 
+// id-token: write OIDC tests. Per the TanStack / Mini Shai-Hulud post-mortem,
+// OIDC token theft via id-token: write on pull_request_target was the actual
+// escalation vector — attacker code in the PR minted a valid npm publish token
+// via OIDC federation. PR 3 surfaces this explicitly rather than letting it
+// blend into generic "dangerous write permissions" findings.
+
+func TestExcessivePermissions_CriticalIdTokenOnPullRequestTarget(t *testing.T) {
+	yaml := `
+name: PR Target with OIDC
+on: pull_request_target
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm publish
+`
+	g, err := analysis.BuildGraph("owner/repo", "prt-oidc.yml", []byte(yaml))
+	require.NoError(t, err)
+
+	plugin := New()
+	findings, err := plugin.Detect(context.Background(), g)
+	require.NoError(t, err)
+
+	require.Len(t, findings, 1)
+	assert.Equal(t, detections.VulnExcessivePermissions, findings[0].Type)
+	assert.Equal(t, detections.SeverityCritical, findings[0].Severity)
+	assert.Equal(t, "pull_request_target", findings[0].Trigger)
+	assert.Contains(t, findings[0].Evidence, "id-token")
+	assert.Contains(t, findings[0].Evidence, "OIDC")
+}
+
+func TestExcessivePermissions_HighIdTokenOnWorkflowRun(t *testing.T) {
+	yaml := `
+name: Workflow Run with OIDC
+on: workflow_run
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm publish
+`
+	g, err := analysis.BuildGraph("owner/repo", "wfr-oidc.yml", []byte(yaml))
+	require.NoError(t, err)
+
+	plugin := New()
+	findings, err := plugin.Detect(context.Background(), g)
+	require.NoError(t, err)
+
+	require.Len(t, findings, 1)
+	assert.Equal(t, detections.VulnExcessivePermissions, findings[0].Type)
+	assert.Equal(t, detections.SeverityHigh, findings[0].Severity)
+	assert.Equal(t, "workflow_run", findings[0].Trigger)
+	assert.Contains(t, findings[0].Evidence, "id-token")
+	assert.Contains(t, findings[0].Evidence, "OIDC")
+}
+
+func TestExcessivePermissions_HighIdTokenOnIssueComment(t *testing.T) {
+	yaml := `
+name: Issue Comment with OIDC
+on: issue_comment
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm publish
+`
+	g, err := analysis.BuildGraph("owner/repo", "ic-oidc.yml", []byte(yaml))
+	require.NoError(t, err)
+
+	plugin := New()
+	findings, err := plugin.Detect(context.Background(), g)
+	require.NoError(t, err)
+
+	require.Len(t, findings, 1)
+	assert.Equal(t, detections.VulnExcessivePermissions, findings[0].Type)
+	assert.Equal(t, detections.SeverityHigh, findings[0].Severity)
+	assert.Equal(t, "issue_comment", findings[0].Trigger)
+	assert.Contains(t, findings[0].Evidence, "id-token")
+	assert.Contains(t, findings[0].Evidence, "OIDC")
+}
+
 func TestExcessivePermissions_Properties(t *testing.T) {
 	p := New()
 	assert.Equal(t, "excessive-permissions", p.Name())
