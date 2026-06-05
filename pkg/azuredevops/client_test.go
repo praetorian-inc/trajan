@@ -1,6 +1,10 @@
 package azuredevops
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -104,4 +108,140 @@ func TestClient_PrepareRequest_JSONAcceptHeader(t *testing.T) {
 		"JSON requests should use application/json Accept header")
 	assert.Contains(t, req.Header.Get("Authorization"), "Basic",
 		"Authorization header should use Basic auth")
+}
+
+func TestCreateBranch_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+		assert.Contains(t, r.URL.Path, "/_apis/git/repositories/")
+
+		var updates []GitRefUpdate
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&updates))
+		assert.Len(t, updates, 1)
+		assert.Equal(t, "refs/heads/feature-branch", updates[0].Name)
+
+		resp := GitRefList{
+			Value: []GitRef{{
+				Name:         "refs/heads/feature-branch",
+				ObjectID:     "abc123",
+				Success:      true,
+				UpdateStatus: "succeeded",
+			}},
+			Count: 1,
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-pat",
+		WithHTTPClient(server.Client()))
+
+	err := client.CreateBranch(context.Background(), "project", "repo", "feature-branch", "abc123")
+	require.NoError(t, err)
+}
+
+func TestCreateBranch_Rejected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := GitRefList{
+			Value: []GitRef{{
+				Name:         "refs/heads/protected-branch",
+				ObjectID:     "",
+				Success:      false,
+				UpdateStatus: "rejectedByPolicy",
+			}},
+			Count: 1,
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-pat",
+		WithHTTPClient(server.Client()))
+
+	err := client.CreateBranch(context.Background(), "project", "repo", "protected-branch", "abc123")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "protected-branch")
+	assert.Contains(t, err.Error(), "rejectedByPolicy")
+}
+
+func TestDeleteBranch_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+
+		var updates []GitRefUpdate
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&updates))
+		assert.Len(t, updates, 1)
+		assert.Equal(t, "0000000000000000000000000000000000000000", updates[0].NewObjectID)
+
+		resp := GitRefList{
+			Value: []GitRef{{
+				Name:         "refs/heads/stale-branch",
+				ObjectID:     "0000000000000000000000000000000000000000",
+				Success:      true,
+				UpdateStatus: "succeeded",
+			}},
+			Count: 1,
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-pat",
+		WithHTTPClient(server.Client()))
+
+	err := client.DeleteBranch(context.Background(), "project", "repo", "stale-branch", "abc123")
+	require.NoError(t, err)
+}
+
+func TestDeleteBranch_Rejected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := GitRefList{
+			Value: []GitRef{{
+				Name:         "refs/heads/main",
+				ObjectID:     "abc123",
+				Success:      false,
+				UpdateStatus: "rejectedByPolicy",
+			}},
+			Count: 1,
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-pat",
+		WithHTTPClient(server.Client()))
+
+	err := client.DeleteBranch(context.Background(), "project", "repo", "main", "abc123")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "main")
+	assert.Contains(t, err.Error(), "rejectedByPolicy")
+}
+
+func TestDeleteBranch_LockConflict(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := GitRefList{
+			Value: []GitRef{{
+				Name:         "refs/heads/locked-branch",
+				ObjectID:     "abc123",
+				Success:      false,
+				UpdateStatus: "lock",
+			}},
+			Count: 1,
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-pat",
+		WithHTTPClient(server.Client()))
+
+	err := client.DeleteBranch(context.Background(), "project", "repo", "locked-branch", "abc123")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "locked-branch")
+	assert.Contains(t, err.Error(), "lock")
 }
