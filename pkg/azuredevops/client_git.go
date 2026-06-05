@@ -51,7 +51,10 @@ func (c *Client) CreateBranch(ctx context.Context, projectNameOrID, repoNameOrID
 	if err := c.postJSON(ctx, path, updates, &result); err != nil {
 		return fmt.Errorf("creating branch: %w", err)
 	}
-	if len(result.Value) > 0 && !result.Value[0].Success {
+	if len(result.Value) == 0 {
+		return fmt.Errorf("creating branch %q: API returned empty response", branchName)
+	}
+	if !result.Value[0].Success {
 		return fmt.Errorf("creating branch %q: %s", branchName, result.Value[0].UpdateStatus)
 	}
 	return nil
@@ -74,7 +77,10 @@ func (c *Client) DeleteBranch(ctx context.Context, projectNameOrID, repoNameOrID
 	if err := c.postJSON(ctx, path, updates, &result); err != nil {
 		return fmt.Errorf("deleting branch: %w", err)
 	}
-	if len(result.Value) > 0 && !result.Value[0].Success {
+	if len(result.Value) == 0 {
+		return fmt.Errorf("deleting branch %q: API returned empty response", branchName)
+	}
+	if !result.Value[0].Success {
 		return fmt.Errorf("deleting branch %q: %s", branchName, result.Value[0].UpdateStatus)
 	}
 	return nil

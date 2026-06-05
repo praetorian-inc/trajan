@@ -141,6 +141,38 @@ func TestCreateBranch_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCreateBranch_EmptyResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := GitRefList{Value: []GitRef{}, Count: 0}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-pat",
+		WithHTTPClient(server.Client()))
+
+	err := client.CreateBranch(context.Background(), "project", "repo", "test-branch", "abc123")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty response")
+}
+
+func TestDeleteBranch_EmptyResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := GitRefList{Value: []GitRef{}, Count: 0}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-pat",
+		WithHTTPClient(server.Client()))
+
+	err := client.DeleteBranch(context.Background(), "project", "repo", "test-branch", "abc123")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty response")
+}
+
 func TestCreateBranch_Rejected(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := GitRefList{

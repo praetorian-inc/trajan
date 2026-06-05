@@ -285,8 +285,10 @@ func TestCleanup(t *testing.T) {
 		if r.Method == "POST" && strings.Contains(r.URL.Path, "/refs") {
 			deletedBranches = append(deletedBranches, r.URL.Path)
 			json.NewEncoder(w).Encode(map[string]interface{}{
-				"value": []interface{}{},
-				"count": 0,
+				"value": []map[string]interface{}{
+					{"name": "refs/heads/deleted", "objectId": "0000000000000000000000000000000000000000", "success": true, "updateStatus": "succeeded"},
+				},
+				"count": 1,
 			})
 			return
 		}
