@@ -23,16 +23,36 @@ func (p *Platform) EnumerateToken(ctx context.Context) (*TokenEnumerateResult, e
 	}
 	result.TokenInfo = tokenInfo
 
-	// Get organizations (reuses existing method)
-	orgs, err := p.client.ListAuthenticatedUserOrgs(ctx)
-	if err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("listing organizations: %w", err))
+	if tokenInfo.Type == TokenTypeGitHubApp {
+		repos, selection, err := p.client.ListInstallationRepos(ctx)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("listing installation repos: %w", err))
+		} else {
+			result.AccessibleRepos = len(repos)
+			result.RepositorySelection = selection
+			// An installation lives on ONE account. Surface it as an org only when
+			// owner.type == "Organization" (it may be a personal user account).
+			seen := make(map[string]bool)
+			for i := range repos {
+				owner := repos[i].Owner
+				if owner.Type == "Organization" && !seen[owner.Login] {
+					seen[owner.Login] = true
+					result.Organizations = append(result.Organizations, OrganizationInfo{Name: owner.Login})
+				}
+			}
+		}
 	} else {
-		result.Organizations = make([]OrganizationInfo, len(orgs))
-		for i, org := range orgs {
-			result.Organizations[i] = OrganizationInfo{
-				Name: org.Login,
-				// URL and Role can be enhanced later with additional API calls
+		// Get organizations (reuses existing method)
+		orgs, err := p.client.ListAuthenticatedUserOrgs(ctx)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("listing organizations: %w", err))
+		} else {
+			result.Organizations = make([]OrganizationInfo, len(orgs))
+			for i, org := range orgs {
+				result.Organizations[i] = OrganizationInfo{
+					Name: org.Login,
+					// URL and Role can be enhanced later with additional API calls
+				}
 			}
 		}
 	}
@@ -184,6 +204,16 @@ func parseRepoSlug(slug string) []string {
 // enumerateAllAccessibleRepos gets all repos accessible to authenticated user
 // by combining direct repos + repos from all organizations
 func (p *Platform) enumerateAllAccessibleRepos(ctx context.Context) ([]Repository, error) {
+	// GitHub App installation tokens have no user/orgs; the installation's repo set
+	// IS the full accessible scope.
+	if p.client.IsGitHubAppToken() {
+		repos, _, err := p.client.ListInstallationRepos(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("listing installation repos: %w", err)
+		}
+		return repos, nil
+	}
+
 	// Get organizations user belongs to FIRST
 	orgs, err := p.client.ListAuthenticatedUserOrgs(ctx)
 	if err != nil {

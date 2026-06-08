@@ -8,11 +8,13 @@ import (
 
 // TokenEnumerateResult contains token validation and enumeration results
 type TokenEnumerateResult struct {
-	TokenInfo     *TokenInfo         `json:"token_info,omitempty"`
-	Permissions   map[string]string  `json:"permissions,omitempty"`   // Fine-grained permissions
-	Organizations []OrganizationInfo `json:"organizations,omitempty"` // Accessible organizations
-	RateLimit     *RateLimitInfo     `json:"rate_limit,omitempty"`
-	Errors        []error            `json:"-"`
+	TokenInfo           *TokenInfo         `json:"token_info,omitempty"`
+	Permissions         map[string]string  `json:"permissions,omitempty"`   // Fine-grained permissions
+	Organizations       []OrganizationInfo `json:"organizations,omitempty"` // Accessible organizations
+	RateLimit           *RateLimitInfo     `json:"rate_limit,omitempty"`
+	AccessibleRepos     int                `json:"accessible_repos,omitempty"`
+	RepositorySelection string             `json:"repository_selection,omitempty"`
+	Errors              []error            `json:"-"`
 }
 
 // OrganizationInfo contains organization membership information

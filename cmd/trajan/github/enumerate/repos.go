@@ -161,15 +161,18 @@ func outputReposConsole(result *github.ReposEnumerateResult) error {
 		fmt.Printf("Archived: %d repositories\n", result.Summary.Archived)
 	}
 
-	// Separate repos by permission level (Admin > Write > Read)
-	var adminRepos, writeRepos, readRepos []github.RepositoryWithPermissions
+	// Separate repos by permission level (Admin > Write > Read > unknown)
+	var adminRepos, writeRepos, readRepos, otherRepos []github.RepositoryWithPermissions
 	for _, repo := range result.Repositories {
-		if repo.Permissions.Admin {
+		switch {
+		case repo.Permissions.Admin:
 			adminRepos = append(adminRepos, repo)
-		} else if repo.Permissions.Push {
+		case repo.Permissions.Push:
 			writeRepos = append(writeRepos, repo)
-		} else if repo.Permissions.Pull {
+		case repo.Permissions.Pull:
 			readRepos = append(readRepos, repo)
+		default:
+			otherRepos = append(otherRepos, repo)
 		}
 	}
 
@@ -208,6 +211,20 @@ func outputReposConsole(result *github.ReposEnumerateResult) error {
 				visibility = "private"
 			}
 			fmt.Printf("  • %s/%s [%s, %s]\n",
+				repo.Repository.Owner, repo.Repository.Name, visibility, repo.Repository.DefaultBranch)
+		}
+	}
+
+	// Repos with no reported permission bits — common for GitHub App installation
+	// tokens, whose list endpoint does not return reliable push/pull metadata.
+	if len(otherRepos) > 0 {
+		fmt.Printf("\nAccessible Repositories (%d) [permissions not reported]:\n", len(otherRepos))
+		for _, repo := range otherRepos {
+			visibility := "public"
+			if repo.Repository.Private {
+				visibility = "private"
+			}
+			fmt.Printf("  \u2022 %s/%s [%s, %s]\n",
 				repo.Repository.Owner, repo.Repository.Name, visibility, repo.Repository.DefaultBranch)
 		}
 	}

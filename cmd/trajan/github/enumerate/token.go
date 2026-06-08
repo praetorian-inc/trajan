@@ -146,14 +146,24 @@ func outputTokenConsole(result *github.TokenEnumerateResult) error {
 	info := result.TokenInfo
 
 	// User information
-	fmt.Printf("User: %s", info.User)
-	if info.Name != "" {
-		fmt.Printf(" (%s)", info.Name)
+	if info.User != "" {
+		fmt.Printf("User: %s", info.User)
+		if info.Name != "" {
+			fmt.Printf(" (%s)", info.Name)
+		}
+		fmt.Println()
 	}
-	fmt.Println()
 
 	// Token type
 	fmt.Printf("Type: %s\n", formatTokenType(info.Type))
+
+	// GitHub App installation tokens have no user identity; show installation scope.
+	if info.Type == github.TokenTypeGitHubApp {
+		if result.RepositorySelection != "" {
+			fmt.Printf("Repository selection: %s\n", result.RepositorySelection)
+		}
+		fmt.Printf("Accessible repositories: %d\n", result.AccessibleRepos)
+	}
 
 	// Scopes (for classic PATs)
 	if len(info.Scopes) > 0 {
@@ -208,6 +218,8 @@ func formatTokenType(tokenType github.TokenType) string {
 		return "classic personal access token"
 	case github.TokenTypeFineGrained:
 		return "fine-grained personal access token"
+	case github.TokenTypeGitHubApp:
+		return "GitHub App installation token"
 	default:
 		return "unknown"
 	}
