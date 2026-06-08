@@ -4,15 +4,17 @@ package github
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/internal/registry"
-	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/internal/registry"
+	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
 func TestGitHubPlatform_Name(t *testing.T) {
@@ -394,5 +396,34 @@ func TestPlatform_ScanTokenInfo(t *testing.T) {
 	}
 	if result.TokenInfo.User != "testuser" {
 		t.Errorf("ScanTokenInfo().TokenInfo.User = %q, want %q", result.TokenInfo.User, "testuser")
+	}
+}
+
+func TestPlatform_Scan_GitHubAppAllAccessible(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/installation/repositories":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"total_count":1,"repository_selection":"all","repositories":[
+				{"name":"a","full_name":"acme/a","owner":{"login":"acme","type":"Organization"}}]}`)
+		case "/repos/acme/a/contents/.github/workflows":
+			w.WriteHeader(http.StatusNotFound) // no workflows
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	p := NewPlatform()
+	if err := p.Init(context.Background(), platforms.Config{BaseURL: server.URL, Token: "ghs_test"}); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	result, err := p.Scan(context.Background(), platforms.Target{Type: platforms.TargetUser, Value: ""})
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if len(result.Repositories) != 1 || result.Repositories[0].Name != "a" {
+		t.Errorf("Repositories = %+v, want [a]", result.Repositories)
 	}
 }

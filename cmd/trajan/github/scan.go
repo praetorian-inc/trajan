@@ -104,16 +104,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 	output := cmdutil.GetOutput(cmd)
 
 	// Determine target
-	var target platforms.Target
-	switch {
-	case scanRepo != "":
-		target = platforms.Target{Type: platforms.TargetRepo, Value: scanRepo}
-	case scanOrg != "":
-		target = platforms.Target{Type: platforms.TargetOrg, Value: scanOrg}
-	case scanUser != "":
-		target = platforms.Target{Type: platforms.TargetUser, Value: scanUser}
-	default:
-		return fmt.Errorf("must specify --repo, --org, or --user")
+	target, err := resolveScanTarget(scanRepo, scanOrg, scanUser, t)
+	if err != nil {
+		return err
 	}
 
 	ctx := context.Background()
@@ -134,6 +127,24 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	return executeScanAndOutput(ctx, platform, target, verbose, output, scanConcurrency)
+}
+
+// resolveScanTarget picks the scan target from flags. With no flag, GitHub App
+// installation tokens default to "all accessible" (installation repos); other tokens
+// must specify a target.
+func resolveScanTarget(repo, org, user, token string) (platforms.Target, error) {
+	switch {
+	case repo != "":
+		return platforms.Target{Type: platforms.TargetRepo, Value: repo}, nil
+	case org != "":
+		return platforms.Target{Type: platforms.TargetOrg, Value: org}, nil
+	case user != "":
+		return platforms.Target{Type: platforms.TargetUser, Value: user}, nil
+	case github.IsAppToken(token):
+		return platforms.Target{Type: platforms.TargetUser, Value: ""}, nil
+	default:
+		return platforms.Target{}, fmt.Errorf("must specify --repo, --org, or --user")
+	}
 }
 
 // buildPlatformConfig constructs GitHub platform configuration.
