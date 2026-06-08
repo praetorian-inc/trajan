@@ -699,6 +699,40 @@ func TestRemoveCollaborator_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "404")
 }
 
+func TestClient_CreateOrgRepository(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/orgs/acme/repos" || r.Method != http.MethodPost {
+			t.Errorf("got %s %s, want POST /orgs/acme/repos", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"name":"c2","full_name":"acme/c2","owner":{"login":"acme","type":"Organization"}}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "ghs_test")
+	repo, err := client.CreateOrgRepository(context.Background(), "acme", CreateRepositoryInput{Name: "c2", Private: true})
+	if err != nil {
+		t.Fatalf("CreateOrgRepository() error = %v", err)
+	}
+	if repo.FullName != "acme/c2" {
+		t.Errorf("FullName = %q, want acme/c2", repo.FullName)
+	}
+}
+
+func TestClient_CreateOrgRepository_PermissionDenied(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"Resource not accessible by integration"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "ghs_test")
+	_, err := client.CreateOrgRepository(context.Background(), "acme", CreateRepositoryInput{Name: "c2"})
+	if err == nil || !IsPermissionDenied(err) {
+		t.Errorf("err = %v, want IsPermissionDenied", err)
+	}
+}
+
 func TestCreateRepository_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-RateLimit-Remaining", "4999")
