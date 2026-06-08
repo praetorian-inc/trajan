@@ -232,6 +232,8 @@ type GitRef struct {
 		DisplayName string `json:"displayName"`
 		UniqueName  string `json:"uniqueName"` // email
 	} `json:"creator"`
+	Success      bool   `json:"success"`
+	UpdateStatus string `json:"updateStatus"`
 }
 
 // GitRefList represents the response from listing refs
