@@ -101,10 +101,20 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 		fmt.Fprintf(os.Stderr, "Found %d repositories\n", len(repos))
 
 	case platforms.TargetUser:
-		fmt.Fprintf(os.Stderr, "Enumerating repositories for user %s...\n", target.Value)
-		repos, err = p.client.ListUserRepos(ctx, target.Value)
-		if err != nil {
-			return nil, fmt.Errorf("listing user repos: %w", err)
+		if target.Value == "" {
+			// Empty user = all accessible repos (app token => installation repos;
+			// user token => owned + org + collaborator repos).
+			fmt.Fprintf(os.Stderr, "Enumerating all accessible repositories...\n")
+			repos, err = p.enumerateAllAccessibleRepos(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("enumerating accessible repos: %w", err)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "Enumerating repositories for user %s...\n", target.Value)
+			repos, err = p.client.ListUserRepos(ctx, target.Value)
+			if err != nil {
+				return nil, fmt.Errorf("listing user repos: %w", err)
+			}
 		}
 		fmt.Fprintf(os.Stderr, "Found %d repositories\n", len(repos))
 

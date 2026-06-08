@@ -72,16 +72,22 @@ func TestOutputTokenConsole(t *testing.T) {
 
 func TestFormatTokenType(t *testing.T) {
 	tests := []struct {
+		name      string
 		tokenType github.TokenType
 		want      string
 	}{
-		{github.TokenTypeClassic, "classic personal access token"},
-		{github.TokenTypeFineGrained, "fine-grained personal access token"},
-		{github.TokenTypeUnknown, "unknown"},
+		{"classic", github.TokenTypeClassic, "classic personal access token"},
+		{"fine-grained", github.TokenTypeFineGrained, "fine-grained personal access token"},
+		{"unknown", github.TokenTypeUnknown, "unknown"},
+		{
+			name:      "github app",
+			tokenType: github.TokenTypeGitHubApp,
+			want:      "GitHub App installation token",
+		},
 	}
 
 	for _, tt := range tests {
-		t.Run(string(tt.tokenType), func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			got := formatTokenType(tt.tokenType)
 			if got != tt.want {
 				t.Errorf("formatTokenType() = %v, want %v", got, tt.want)

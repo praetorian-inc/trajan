@@ -106,11 +106,11 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 	client := ghPlatform.Client()
 
 	// Step 4: Create C2 repository
-	repo, err := client.CreateRepository(ctx, github.CreateRepositoryInput{
+	repo, err := createC2Repo(ctx, client, opts, github.CreateRepositoryInput{
 		Name:        repoName,
 		Description: "C2 repository for Trajan attack framework",
 		Private:     true,
-		AutoInit:    true, // Initialize with README to have default branch
+		AutoInit:    true,
 	})
 	if err != nil {
 		result.Success = false
@@ -271,4 +271,18 @@ func (p *Plugin) Provides() []attacks.ContextKey {
 // Requires implements ChainableAttackPlugin
 func (p *Plugin) Requires() []attacks.ContextKey {
 	return nil // No requirements
+}
+
+// createC2Repo creates the C2 repository in the right namespace for the token type.
+// User tokens => personal namespace (/user/repos). App installation tokens have no user
+// namespace, so they require an explicit --c2-org and create via /orgs/{org}/repos.
+func createC2Repo(ctx context.Context, client *github.Client, opts attacks.AttackOptions, input github.CreateRepositoryInput) (*github.Repository, error) {
+	if client.IsGitHubAppToken() {
+		org := opts.ExtraOpts["c2_org"]
+		if org == "" {
+			return nil, fmt.Errorf("installation token has no user namespace; pass --c2-org <org> (requires Administration:write and the app installed there) or use a user PAT")
+		}
+		return client.CreateOrgRepository(ctx, org, input)
+	}
+	return client.CreateRepository(ctx, input)
 }

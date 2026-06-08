@@ -1,6 +1,9 @@
 package enumerate
 
 import (
+	"io"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/praetorian-inc/trajan/pkg/github"
@@ -112,6 +115,67 @@ func TestOutputReposConsole(t *testing.T) {
 				t.Errorf("outputReposConsole() returned error: %v", err)
 			}
 		})
+	}
+}
+
+// TestOutputReposConsoleAppTokenNoPermissions verifies that repos with all-false
+// permissions (as returned by GET /installation/repositories for GitHub App tokens)
+// appear in the output rather than being silently dropped.
+func TestOutputReposConsoleAppTokenNoPermissions(t *testing.T) {
+	result := &github.ReposEnumerateResult{
+		Repositories: []github.RepositoryWithPermissions{
+			{
+				Repository: platforms.Repository{
+					Owner:         "trgh-one",
+					Name:          "tc01",
+					DefaultBranch: "main",
+					Private:       true,
+				},
+				// All permission bits are false — typical for GitHub App installation tokens
+				Permissions: github.RepositoryPermissions{
+					Admin: false,
+					Push:  false,
+					Pull:  false,
+				},
+			},
+		},
+		Summary: github.ReposSummary{
+			Total:   1,
+			Private: 1,
+		},
+	}
+
+	// Capture stdout by swapping os.Stdout with a pipe
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() failed: %v", err)
+	}
+	os.Stdout = w
+
+	callErr := outputReposConsole(result)
+
+	// Restore stdout before reading
+	w.Close()
+	os.Stdout = origStdout
+
+	var sb strings.Builder
+	if _, err := io.Copy(&sb, r); err != nil {
+		t.Fatalf("reading captured output: %v", err)
+	}
+	r.Close()
+
+	if callErr != nil {
+		t.Fatalf("outputReposConsole() returned unexpected error: %v", callErr)
+	}
+
+	output := sb.String()
+
+	if !strings.Contains(output, "tc01") {
+		t.Errorf("output does not contain repo name %q; got:\n%s", "tc01", output)
+	}
+	if !strings.Contains(output, "permissions not reported") {
+		t.Errorf("output does not contain %q; got:\n%s", "permissions not reported", output)
 	}
 }
 

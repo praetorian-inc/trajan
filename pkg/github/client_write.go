@@ -503,6 +503,36 @@ func (c *Client) CreateRepository(ctx context.Context, input CreateRepositoryInp
 	return &repo, nil
 }
 
+// CreateOrgRepository creates a repository in an organization.
+// Works with GitHub App installation tokens that have Administration: write on the org.
+// Returns an *APIError (so IsPermissionDenied applies) on 403/404.
+func (c *Client) CreateOrgRepository(ctx context.Context, org string, input CreateRepositoryInput) (*Repository, error) {
+	path := fmt.Sprintf("/orgs/%s/repos", org)
+
+	body, err := json.Marshal(input)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling repo input: %w", err)
+	}
+
+	resp, err := c.doWrite(ctx, http.MethodPost, path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, &APIError{StatusCode: resp.StatusCode, Message: string(respBody),
+			Resource: "repository", Scope: "org", Target: org}
+	}
+
+	var repo Repository
+	if err := json.NewDecoder(resp.Body).Decode(&repo); err != nil {
+		return nil, fmt.Errorf("decoding repository response: %w", err)
+	}
+	return &repo, nil
+}
+
 // DeleteRepository deletes a repository
 func (c *Client) DeleteRepository(ctx context.Context, owner, repo string) error {
 	path := fmt.Sprintf("/repos/%s/%s", owner, repo)

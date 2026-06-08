@@ -2,12 +2,14 @@ package c2setup
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/praetorian-inc/trajan/pkg/attacks"
 	"github.com/praetorian-inc/trajan/pkg/detections"
+	"github.com/praetorian-inc/trajan/pkg/github"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
@@ -121,4 +123,31 @@ func TestExecute_InvalidPlatform(t *testing.T) {
 	assert.Error(t, err)
 	assert.False(t, result.Success)
 	assert.Equal(t, "platform is not GitHub", result.Message)
+}
+
+func newC2AppPlatform(t *testing.T, url string) *github.Platform {
+	t.Helper()
+	p := github.NewPlatform()
+	if err := p.Init(context.Background(), platforms.Config{BaseURL: url, Token: "ghs_test"}); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	return p
+}
+
+func TestC2Setup_AppToken_RequiresC2Org(t *testing.T) {
+	p := newC2AppPlatform(t, "https://api.github.com")
+	res, err := New().Execute(context.Background(), attacks.AttackOptions{
+		Platform:  p,
+		Target:    platforms.Target{Type: platforms.TargetRepo, Value: "acme/x"},
+		ExtraOpts: map[string]string{}, // no c2_org
+	})
+	if err == nil {
+		t.Fatal("expected error when --c2-org missing for app token")
+	}
+	if res.Success {
+		t.Error("Success should be false")
+	}
+	if !strings.Contains(res.Message, "c2-org") {
+		t.Errorf("message %q should mention --c2-org", res.Message)
+	}
 }

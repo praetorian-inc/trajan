@@ -55,6 +55,7 @@ var (
 	attackChainPlugins []string // Custom chain (ordered plugin list)
 	attackChainList    bool     // List available chains
 	attackChainDeps    bool     // Show chain dependencies
+	attackC2Org        string   // C2 organization for GitHub App installation tokens
 )
 
 var attackCmd = &cobra.Command{
@@ -124,6 +125,7 @@ func init() {
 	attackCmd.Flags().StringVar(&attackPayload, "payload", "", "custom payload file or inline script")
 	attackCmd.Flags().StringVar(&attackBranch, "branch", "", "branch name for PR-based attacks")
 	attackCmd.Flags().StringVar(&attackC2Repo, "c2-repo", "", "C2 repository for runner-on-runner and interactive-shell (owner/repo)")
+	attackCmd.Flags().StringVar(&attackC2Org, "c2-org", "", "C2 organization for GitHub App installation tokens (creates C2 repo in this org)")
 	attackCmd.Flags().StringVar(&attackTargetOS, "target-os", "linux", "target OS for runner-on-runner (linux|win|macos)")
 	attackCmd.Flags().StringVar(&attackTargetArch, "target-arch", "x64", "target architecture for runner-on-runner (x64|arm64)")
 	attackCmd.Flags().StringVar(&attackRunnerLabels, "runner-labels", "self-hosted", "runner labels for runner-on-runner (comma-separated)")
@@ -290,6 +292,9 @@ func runAttack(cmd *cobra.Command, args []string) error {
 	extraOpts := make(map[string]string)
 	if attackC2Repo != "" {
 		extraOpts["c2_repo"] = attackC2Repo
+	}
+	if attackC2Org != "" {
+		extraOpts["c2_org"] = attackC2Org
 	}
 	if attackTargetOS != "" {
 		extraOpts["target_os"] = attackTargetOS
