@@ -85,11 +85,13 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 							Class:      detections.GetVulnerabilityClass(detections.VulnEnvironmentBypass),
 							Severity:   detections.SeverityLow,
 							Confidence: detections.ConfidenceMedium,
-							Repository: wf.RepoSlug,
-							Workflow:   wf.Path, // Use path for matching
-							Job:        job.Name,
-							Line:       job.Line,
-							Evidence:   fmt.Sprintf("Deployment job '%s' lacks environment protection. This allows deployments without required approvals.", getJobDisplayName(job)),
+							Repository:   wf.RepoSlug,
+							Workflow:     wf.Path, // Use path for matching
+							WorkflowFile: wf.Path,
+							Job:          job.Name,
+							Line:         job.Line,
+							Evidence:     fmt.Sprintf("Deployment job '%s' lacks environment protection. This allows deployments without required approvals.", getJobDisplayName(job)),
+							Remediation:  fmt.Sprintf("Add an environment declaration to job '%s' (e.g., 'environment: production') and configure required reviewers and deployment branch policies in the repository's environment settings.", getJobDisplayName(job)),
 							Details: &detections.FindingDetails{
 								LineRanges: lineRanges,
 							},
@@ -123,12 +125,14 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 							Class:      detections.GetVulnerabilityClass(detections.VulnEnvironmentBypass),
 							Severity:   detections.SeverityMedium,
 							Confidence: detections.ConfidenceMedium,
-							Repository: wf.RepoSlug,
-							Workflow:   wf.Path, // Use path for matching
-							Job:        job.Name,
-							Line:       job.Line,
-							Trigger:    trigger,
-							Evidence:   fmt.Sprintf("Deployment job '%s' uses %s trigger which bypasses PR review. Environment protection may not prevent unauthorized deployments.", getJobDisplayName(job), trigger),
+							Repository:   wf.RepoSlug,
+							Workflow:     wf.Path, // Use path for matching
+							WorkflowFile: wf.Path,
+							Job:          job.Name,
+							Line:         job.Line,
+							Trigger:      trigger,
+							Evidence:     fmt.Sprintf("Deployment job '%s' uses %s trigger which bypasses PR review. Environment protection may not prevent unauthorized deployments.", getJobDisplayName(job), trigger),
+							Remediation:  remediationForDeploymentTrigger(trigger),
 							Details: &detections.FindingDetails{
 								LineRanges: lineRanges,
 							},
@@ -141,6 +145,17 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	}
 
 	return findings, nil
+}
+
+func remediationForDeploymentTrigger(trigger string) string {
+	switch trigger {
+	case "workflow_dispatch":
+		return "Limit repository write access to trusted users and add a protected environment with required reviewers so that manual dispatches still require human approval before deployment."
+	case "schedule":
+		return "Protect the default branch and restrict who can modify workflow files via branch protection rules or CODEOWNERS. Add a protected environment with required reviewers to prevent unauthorized scheduled deployments."
+	default:
+		return "Review the workflow trigger configuration and add a protected environment with required reviewers to ensure human approval before deployment."
+	}
 }
 
 func containsKeyword(text string, keywords []string) bool {
