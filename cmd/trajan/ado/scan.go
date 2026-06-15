@@ -3,6 +3,7 @@ package ado
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/praetorian-inc/trajan/internal/cmdutil"
 	"github.com/praetorian-inc/trajan/internal/registry"
+	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 	"github.com/praetorian-inc/trajan/pkg/detections"
 	outputpkg "github.com/praetorian-inc/trajan/pkg/output"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
@@ -169,6 +171,16 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	executor := scanner.NewDetectionExecutor(allPlugins, scanConcurrency)
 	executor.SetMetadata("platform", "azuredevops")
+
+	if adoPlatform, ok := platform.(*azuredevops.Platform); ok {
+		pools, poolErr := adoPlatform.Client().ListAgentPools(ctx)
+		if poolErr != nil {
+			slog.Warn("could not fetch agent pools for detection enrichment", "error", poolErr)
+		} else {
+			executor.SetMetadata("ado_agent_pools", pools)
+		}
+	}
+
 	execResult, err := executor.Execute(ctx, result.Workflows)
 	if err != nil {
 		return fmt.Errorf("executing plugins: %w", err)
