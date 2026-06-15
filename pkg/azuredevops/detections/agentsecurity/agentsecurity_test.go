@@ -217,6 +217,30 @@ func TestAgentSecurityDetection_Detect_APIDataHostedPoolNotFlagged(t *testing.T)
 	assert.Empty(t, findings, "Pool marked IsHosted by API should not be flagged")
 }
 
+func TestAgentSecurityDetection_Detect_APIOverridesVMImageHeuristic(t *testing.T) {
+	d := New()
+	ctx := context.Background()
+
+	g := graph.NewGraph()
+	g.SetMetadata("ado_agent_pools", []azuredevops.AgentPool{
+		{ID: 1, Name: "Azure Pipelines", IsHosted: true},
+		{ID: 2, Name: "ubuntu-builders", IsHosted: false},
+	})
+
+	wf := graph.NewWorkflowNode("wf1", "pipeline.yml", "pipeline.yml", "owner/repo", nil)
+	g.AddNode(wf)
+
+	job := graph.NewJobNode("job1", "build", "ubuntu-builders")
+	job.SetParent(wf.ID())
+	g.AddNode(job)
+	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
+
+	findings, err := d.Detect(ctx, g)
+	require.NoError(t, err)
+	require.Len(t, findings, 1, "Self-hosted pool with ubuntu prefix must be detected when API says IsHosted=false")
+	assert.Contains(t, findings[0].Evidence, "ubuntu-builders")
+}
+
 func TestAgentSecurityDetection_Detect_AzurePipelinesPoolOffline(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -240,13 +264,15 @@ func TestIsSelfHostedPool(t *testing.T) {
 	apiPools := map[string]bool{
 		"azure pipelines":    true,
 		"hosted ubuntu 1604": true,
+		"ubuntu-builders":    false,
+		"shire-self-hosted":  false,
 	}
 
 	tests := []struct {
-		name        string
-		runsOn      string
-		hostedPools map[string]bool
-		want        bool
+		name    string
+		runsOn  string
+		poolMap map[string]bool
+		want    bool
 	}{
 		{"empty runsOn", "", nil, false},
 		{"vmImage ubuntu-latest", "ubuntu-latest", nil, false},
@@ -256,13 +282,16 @@ func TestIsSelfHostedPool(t *testing.T) {
 		{"offline: Azure Pipelines pool", "Azure Pipelines", nil, false},
 		{"offline: unknown pool is self-hosted", "my-pool", nil, true},
 		{"API: hosted pool not flagged", "Hosted Ubuntu 1604", apiPools, false},
-		{"API: unknown pool flagged", "my-pool", apiPools, true},
+		{"API: unknown pool flagged as self-hosted", "my-pool", apiPools, true},
 		{"API: vmImage still safe", "ubuntu-latest", apiPools, false},
+		{"API: self-hosted pool with ubuntu prefix detected", "ubuntu-builders", apiPools, true},
+		{"API: self-hosted pool by name", "shire-self-hosted", apiPools, true},
+		{"API: hosted pool with Azure Pipelines name", "Azure Pipelines", apiPools, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isSelfHostedPool(tt.runsOn, tt.hostedPools)
+			got := isSelfHostedPool(tt.runsOn, tt.poolMap)
 			assert.Equal(t, tt.want, got)
 		})
 	}

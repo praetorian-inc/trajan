@@ -34,7 +34,7 @@ func New() *Detection {
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
-	hostedPools := buildHostedPoolSet(g)
+	poolMap := buildPoolMap(g)
 
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
@@ -45,7 +45,7 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			if node.Type() == graph.NodeTypeJob {
 				job := node.(*graph.JobNode)
 
-				if isSelfHostedPool(job.RunsOn, hostedPools) {
+				if isSelfHostedPool(job.RunsOn, poolMap) {
 					findings = append(findings, detections.Finding{
 						Type:        detections.VulnSelfHostedAgent,
 						Platform:    platforms.PlatformAzureDevOps,
@@ -76,49 +76,55 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// buildHostedPoolSet reads agent pool metadata from the graph (set by the scan
-// command via ListAgentPools) and returns a set of lowercase pool names that
-// are Microsoft-hosted. Returns nil when no pool metadata is available (offline mode).
-func buildHostedPoolSet(g *graph.Graph) map[string]bool {
+// buildPoolMap reads agent pool metadata from the graph (set by the scan
+// command via ListAgentPools) and returns a map of lowercase pool name to
+// IsHosted status. Returns nil when no pool metadata is available (offline mode).
+func buildPoolMap(g *graph.Graph) map[string]bool {
 	data, ok := g.GetMetadata("ado_agent_pools")
 	if !ok {
 		return nil
 	}
 	pools, ok := data.([]azuredevops.AgentPool)
-	if !ok {
+	if !ok || len(pools) == 0 {
 		return nil
 	}
-	hosted := make(map[string]bool, len(pools))
+	m := make(map[string]bool, len(pools))
 	for _, p := range pools {
-		if p.IsHosted {
-			hosted[strings.ToLower(p.Name)] = true
-		}
+		m[strings.ToLower(p.Name)] = p.IsHosted
 	}
-	return hosted
+	return m
 }
 
 // isSelfHostedPool checks if the RunsOn value indicates a self-hosted agent pool.
-// When hostedPools is non-nil (API data available), pool names are checked against
-// the API's IsHosted field. When nil (offline mode), a vmImage heuristic is used.
-func isSelfHostedPool(runsOn string, hostedPools map[string]bool) bool {
+// When poolMap is non-nil (API data available), pool names are checked against
+// the API's IsHosted field first. The vmImage heuristic is only used for pool
+// names not found in the API data, or in offline mode.
+func isSelfHostedPool(runsOn string, poolMap map[string]bool) bool {
 	if runsOn == "" {
 		return false
 	}
 
 	runsOnLower := strings.ToLower(runsOn)
 
-	// vmImage values are always Microsoft-hosted regardless of API data
+	// When API pool data is available, it is authoritative
+	if poolMap != nil {
+		if isHosted, known := poolMap[runsOnLower]; known {
+			return !isHosted
+		}
+	}
+
+	// For pool names not in the API (or offline mode), use vmImage heuristic
 	if isVMImage(runsOnLower) {
 		return false
 	}
 
-	// When API pool data is available, use IsHosted for accurate classification
-	if hostedPools != nil {
-		return !hostedPools[runsOnLower]
+	// Offline fallback for non-vmImage pool names
+	if poolMap == nil {
+		return runsOnLower != "azure pipelines"
 	}
 
-	// Offline fallback: "Azure Pipelines" is the only well-known hosted pool name
-	return runsOnLower != "azure pipelines"
+	// API available but pool not listed -- conservative: flag as self-hosted
+	return true
 }
 
 // isVMImage returns true if the RunsOn value (already lowercased) is a
