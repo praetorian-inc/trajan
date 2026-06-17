@@ -58,6 +58,56 @@ jobs:
 	assert.Len(t, findings, 0)
 }
 
+func TestPwnRequestPlugin_EvidenceNamesSinkCommand(t *testing.T) {
+	// Operators need to see WHICH command is the sink, not "may execute
+	// untrusted code, review to confirm." Gato-X-style: "Sink: <command>".
+	yaml := `
+name: PR Target with Pnpm Sink
+on: pull_request_target
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: pnpm install
+`
+	findings, err := testWorkflow(t, yaml)
+	require.NoError(t, err)
+	require.Len(t, findings, 1)
+
+	assert.Contains(t, findings[0].Evidence, "Sink: pnpm install",
+		"Evidence must name the specific execution sink command")
+
+	require.NotNil(t, findings[0].Details)
+	assert.Equal(t, "pnpm install", findings[0].Details.Metadata["sink"],
+		"Metadata[sink] must be the bare command for programmatic consumers")
+}
+
+func TestPwnRequestPlugin_EvidenceTruncatesLongSinkCommand(t *testing.T) {
+	yaml := `
+name: PR Target with Long Sink
+on: pull_request_target
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: pnpm --filter=@example/very-long-package-name run build:with:many:colons:and:options --flag-one --flag-two --flag-three
+`
+	findings, err := testWorkflow(t, yaml)
+	require.NoError(t, err)
+	require.Len(t, findings, 1)
+
+	// The command exceeds 60 chars; assert we truncate (with ellipsis) so
+	// long evidence strings stay readable.
+	assert.Contains(t, findings[0].Evidence, "Sink: pnpm --filter=")
+	assert.Contains(t, findings[0].Evidence, "...")
+}
+
 func TestPwnRequestPlugin_Properties(t *testing.T) {
 	p := New()
 	assert.Equal(t, "pwn-request", p.Name())
