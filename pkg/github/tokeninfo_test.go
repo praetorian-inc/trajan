@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -228,5 +229,64 @@ func TestClient_GetTokenInfo(t *testing.T) {
 				t.Errorf("GetTokenInfo().Scopes len = %d, want %d", len(info.Scopes), tt.wantScopeCount)
 			}
 		})
+	}
+}
+
+func TestIsAppToken(t *testing.T) {
+	tests := []struct {
+		name  string
+		token string
+		want  bool
+	}{
+		{"installation opaque", "ghs_AbCdEf0123456789", true},
+		{"installation jwt-shaped", "ghs_eyJhbG.payload.sig", true},
+		{"classic PAT", "ghp_AbCdEf0123456789", false},
+		{"fine-grained PAT", "github_pat_11ABC", false},
+		{"user-to-server", "ghu_AbCdEf0123456789", false},
+		{"oauth", "gho_AbCdEf0123456789", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsAppToken(tt.token); got != tt.want {
+				t.Errorf("IsAppToken(%q) = %v, want %v", tt.token, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDetectTokenType_GitHubApp(t *testing.T) {
+	// No scopes, no expiration, ghs_ prefix => github_app
+	if got := detectTokenType(nil, false, "ghs_AbCdEf0123456789"); got != TokenTypeGitHubApp {
+		t.Errorf("detectTokenType(ghs_) = %q, want %q", got, TokenTypeGitHubApp)
+	}
+	// ghu_ must NOT be classified as app
+	if got := detectTokenType(nil, false, "ghu_AbCdEf0123456789"); got == TokenTypeGitHubApp {
+		t.Errorf("detectTokenType(ghu_) = %q, must not be github_app", got)
+	}
+}
+
+func TestClient_GetTokenInfo_GitHubApp(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// App tokens must validate via /installation/repositories, NOT /user.
+		if r.URL.Path != "/installation/repositories" {
+			t.Errorf("app token hit %s, want /installation/repositories", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"total_count":0,"repository_selection":"selected","repositories":[]}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "ghs_test")
+	info, err := client.GetTokenInfo(context.Background())
+	if err != nil {
+		t.Fatalf("GetTokenInfo() error = %v", err)
+	}
+	if info.Type != TokenTypeGitHubApp {
+		t.Errorf("Type = %q, want %q", info.Type, TokenTypeGitHubApp)
+	}
+	if info.User != "" {
+		t.Errorf("User = %q, want empty for app token", info.User)
 	}
 }

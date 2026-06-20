@@ -17,7 +17,16 @@ const (
 	TokenTypeClassic     TokenType = "classic"
 	TokenTypeFineGrained TokenType = "fine_grained"
 	TokenTypeUnknown     TokenType = "unknown"
+	TokenTypeGitHubApp   TokenType = "github_app"
 )
+
+// IsAppToken reports whether the token is a GitHub App installation access token.
+// Detection is prefix-only ("ghs_") so it accepts both the legacy opaque form and the
+// newer stateless-JWT form. Other prefixes (ghu_, gho_, ghp_, github_pat_) are NOT
+// installation tokens and must keep the user-backed (/user) validation path.
+func IsAppToken(token string) bool {
+	return strings.HasPrefix(token, "ghs_")
+}
 
 // TokenInfo contains metadata about the authenticated GitHub token
 type TokenInfo struct {
@@ -93,6 +102,9 @@ func detectTokenType(scopes []string, hasExpiration bool, token string) TokenTyp
 	}
 
 	// Priority 2: Token prefix detection (CORS/WASM fallback)
+	if IsAppToken(token) {
+		return TokenTypeGitHubApp
+	}
 	if strings.HasPrefix(token, "ghp_") {
 		return TokenTypeClassic
 	}
@@ -105,6 +117,15 @@ func detectTokenType(scopes []string, hasExpiration bool, token string) TokenTyp
 
 // GetTokenInfo retrieves metadata about the authenticated token
 func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, error) {
+	// GitHub App installation tokens authenticate as the app, not a user.
+	// /user returns 403; validate via the installation-scoped endpoint instead.
+	if c.IsGitHubAppToken() {
+		if _, _, err := c.ListInstallationRepos(ctx); err != nil {
+			return nil, fmt.Errorf("validating installation token: %w", err)
+		}
+		return &TokenInfo{Type: TokenTypeGitHubApp}, nil
+	}
+
 	resp, err := c.do(ctx, http.MethodGet, "/user", nil)
 	if err != nil {
 		return nil, fmt.Errorf("getting token info: %w", err)
