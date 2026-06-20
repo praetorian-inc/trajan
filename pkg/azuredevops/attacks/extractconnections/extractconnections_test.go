@@ -465,7 +465,7 @@ func TestCleanupWithClient(t *testing.T) {
 			deletedBranch = true
 			resp := azuredevops.GitRefList{
 				Value: []azuredevops.GitRef{
-					{Name: "refs/heads/trajan-extract-conn-test", ObjectID: "0000000000000000000000000000000000000000"},
+					{Name: "refs/heads/trajan-extract-conn-test", ObjectID: "0000000000000000000000000000000000000000", Success: true, UpdateStatus: "succeeded"},
 				},
 				Count: 1,
 			}
