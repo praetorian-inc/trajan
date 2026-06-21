@@ -2,7 +2,8 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'
 
 concurrency:
   group: release
@@ -12,43 +13,8 @@ permissions:
   contents: write
 
 jobs:
-  create-tag:
-    name: Create Tag
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag_created: ${{ steps.tag.outputs.tag_created }}
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      with:
-        fetch-depth: 0
-
-    - name: Fetch all tags
-      run: git fetch --tags --force
-
-    - name: Calculate version
-      id: version
-      run: |
-        NEW_VERSION=$(make -s version)
-        echo "New version: $NEW_VERSION"
-        echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-
-    - name: Create and push tag
-      id: tag
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git tag -a "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
-        git push origin "${{ steps.version.outputs.version }}"
-        echo "tag_created=true" >> "$GITHUB_OUTPUT"
-      env:
-        GH_TOKEN: ${{ github.token }}
-
   goreleaser:
     name: GoReleaser
-    needs: [create-tag]
     environment: production
     runs-on: ubuntu-latest
 
@@ -57,7 +23,7 @@ jobs:
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         fetch-depth: 0
-        ref: ${{ needs.create-tag.outputs.version }}
+        ref: ${{ github.ref_name }}
 
     - name: Set up Go
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -72,21 +38,3 @@ jobs:
         args: release --clean
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  cleanup-on-failure:
-    name: Cleanup on Failure
-    needs: [create-tag, goreleaser]
-    if: failure() && needs.create-tag.outputs.tag_created == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-    - name: Delete release and tag
-      run: |
-        echo "Cleaning up failed release ${{ needs.create-tag.outputs.version }}"
-        gh release delete "${{ needs.create-tag.outputs.version }}" --yes || true
-        git push --delete origin "${{ needs.create-tag.outputs.version }}" || true
-      env:
-        GH_TOKEN: ${{ github.token }}

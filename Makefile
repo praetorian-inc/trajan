@@ -26,7 +26,7 @@ WASM_LDFLAGS := -s -w -X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT)
 # Safety: delete partial outputs on error
 .DELETE_ON_ERROR:
 
-.PHONY: all build test test-short test-coverage clean fmt vet lint deps help version wasm wasm-dist wasm-serve jenkins-test-up jenkins-test-down jenkins-integration
+.PHONY: all build test test-short test-coverage clean fmt vet lint deps help wasm wasm-dist wasm-serve jenkins-test-up jenkins-test-down jenkins-integration
 
 all: build
 
@@ -80,23 +80,6 @@ wasm-dist: wasm
 wasm-serve: wasm
 	@echo "Starting dev server at http://localhost:8080"
 	@cd $(WASM_DIR) && $(GO) run server.go
-
-## version: Calculate next semantic version from git tags and commit message
-version:
-	@tag=$$(git tag -l 'v*' --sort=-v:refname | head -n1); \
-	if [ -z "$$tag" ]; then latest="0.0.0"; else latest=$$(echo "$$tag" | sed 's/^v//'); fi; \
-	msg=$$(git log -1 --format=%s); \
-	major=$$(echo "$$latest" | cut -d. -f1); \
-	minor=$$(echo "$$latest" | cut -d. -f2); \
-	patch=$$(echo "$$latest" | cut -d. -f3); \
-	if echo "$$msg" | grep -q '\[major-release\]'; then \
-		major=$$((major + 1)); minor=0; patch=0; \
-	elif echo "$$msg" | grep -q '\[minor-release\]'; then \
-		minor=$$((minor + 1)); patch=0; \
-	else \
-		patch=$$((patch + 1)); \
-	fi; \
-	echo "v$$major.$$minor.$$patch"
 
 ## clean: Remove build artifacts
 clean:
