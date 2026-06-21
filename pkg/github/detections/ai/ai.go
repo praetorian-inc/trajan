@@ -42,18 +42,28 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 		var currentJob *graph.JobNode
 
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			switch node.Type() {
 			case graph.NodeTypeJob:
-				currentJob = node.(*graph.JobNode)
+				job, ok := node.(*graph.JobNode)
+				if !ok {
+					return true
+				}
+				currentJob = job
 			case graph.NodeTypeStep:
 				if currentJob == nil {
 					return true
 				}
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 				if !aipatterns.IsAIStep(step) {
 					return true
 				}
@@ -91,19 +101,19 @@ func checkTokenExfiltration(wf *graph.WorkflowNode, job *graph.JobNode, step *gr
 	}
 
 	return []detections.Finding{{
-		Type:        detections.VulnAITokenExfiltration,
-		Platform:    "github",
-		Class:       detections.GetVulnerabilityClass(detections.VulnAITokenExfiltration),
-		Severity:    detections.SeverityMedium,
-		Confidence:  detections.ConfidenceHigh,
-		Complexity:  detections.ComplexityLow,
+		Type:         detections.VulnAITokenExfiltration,
+		Platform:     "github",
+		Class:        detections.GetVulnerabilityClass(detections.VulnAITokenExfiltration),
+		Severity:     detections.SeverityMedium,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityLow,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Name,
 		WorkflowFile: wf.Path,
 		Step:         step.Name,
 		Trigger:      aipatterns.GetTriggerString(wf),
 		Evidence:     fmt.Sprintf("AI action (%s) with secret access and untrusted input", step.Uses),
-		Remediation: "Avoid passing untrusted input (github.event.*.body) to AI actions. Use separate trusted workflows with workflow_run triggers or remove secret access from AI actions.",
+		Remediation:  "Avoid passing untrusted input (github.event.*.body) to AI actions. Use separate trusted workflows with workflow_run triggers or remove secret access from AI actions.",
 	}}
 }
 
@@ -136,12 +146,12 @@ func checkCodeInjection(wf *graph.WorkflowNode, job *graph.JobNode, step *graph.
 	}
 
 	return []detections.Finding{{
-		Type:        detections.VulnAICodeInjection,
-		Platform:    "github",
-		Class:       detections.GetVulnerabilityClass(detections.VulnAICodeInjection),
-		Severity:    severity,
-		Confidence:  detections.ConfidenceHigh,
-		Complexity:  detections.ComplexityLow,
+		Type:         detections.VulnAICodeInjection,
+		Platform:     "github",
+		Class:        detections.GetVulnerabilityClass(detections.VulnAICodeInjection),
+		Severity:     severity,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityLow,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Name,
 		WorkflowFile: wf.Path,
@@ -170,12 +180,12 @@ func checkSupplyChainPoisoning(wf *graph.WorkflowNode, job *graph.JobNode, step 
 	}
 
 	return []detections.Finding{{
-		Type:        detections.VulnAISupplyChainPoisoning,
-		Platform:    "github",
-		Class:       detections.GetVulnerabilityClass(detections.VulnAISupplyChainPoisoning),
-		Severity:    detections.SeverityMedium,
-		Confidence:  detections.ConfidenceHigh,
-		Complexity:  detections.ComplexityZeroClick,
+		Type:         detections.VulnAISupplyChainPoisoning,
+		Platform:     "github",
+		Class:        detections.GetVulnerabilityClass(detections.VulnAISupplyChainPoisoning),
+		Severity:     detections.SeverityMedium,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityZeroClick,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Name,
 		WorkflowFile: wf.Path,
@@ -184,7 +194,7 @@ func checkSupplyChainPoisoning(wf *graph.WorkflowNode, job *graph.JobNode, step 
 		Line:         step.Line,
 		Trigger:      aipatterns.GetTriggerString(wf),
 		Evidence:     "AI action with write permissions and untrusted input in prompt",
-		Remediation: "Remove AI/LLM actions from workflows with write permissions. If needed, use read-only permissions only. Never pass untrusted GitHub contexts (PR body, issue title, comments) to AI actions.",
+		Remediation:  "Remove AI/LLM actions from workflows with write permissions. If needed, use read-only permissions only. Never pass untrusted GitHub contexts (PR body, issue title, comments) to AI actions.",
 	}}
 }
 
@@ -195,7 +205,7 @@ func hasSupplyChainPermissions(job *graph.JobNode) bool {
 		return true // BUG FIX: missing permissions block = dangerous defaults
 	}
 	for perm, level := range job.Permissions {
-		if strings.ToLower(level) != "write" {
+		if !strings.EqualFold(level, "write") {
 			continue
 		}
 		if perm == "packages" || perm == "contents" {
@@ -233,19 +243,19 @@ func checkPrivilegeEscalation(wf *graph.WorkflowNode, job *graph.JobNode, step *
 		}
 		if dangerousPermissions[perm] {
 			return []detections.Finding{{
-				Type:        detections.VulnAIPrivilegeEscalation,
-				Platform:    "github",
-				Class:       detections.GetVulnerabilityClass(detections.VulnAIPrivilegeEscalation),
-				Severity:    detections.SeverityMedium,
-				Confidence:  detections.ConfidenceHigh,
-				Complexity:  detections.ComplexityLow,
+				Type:         detections.VulnAIPrivilegeEscalation,
+				Platform:     "github",
+				Class:        detections.GetVulnerabilityClass(detections.VulnAIPrivilegeEscalation),
+				Severity:     detections.SeverityMedium,
+				Confidence:   detections.ConfidenceHigh,
+				Complexity:   detections.ComplexityLow,
 				Repository:   wf.RepoSlug,
 				Workflow:     wf.Name,
 				WorkflowFile: wf.Path,
 				Job:          job.Name,
 				Trigger:      aipatterns.GetTriggerString(wf),
 				Evidence:     fmt.Sprintf("%s: write on %s trigger with AI action", perm, aipatterns.GetTriggerString(wf)),
-				Remediation: fmt.Sprintf("Remove %s: write permission or avoid using AI actions on untrusted triggers (issue_comment, pull_request_target, etc)", perm),
+				Remediation:  fmt.Sprintf("Remove %s: write permission or avoid using AI actions on untrusted triggers (issue_comment, pull_request_target, etc)", perm),
 			}}
 		}
 	}
@@ -288,12 +298,12 @@ func checkWorkflowSabotage(wf *graph.WorkflowNode, job *graph.JobNode, step *gra
 	}
 
 	return []detections.Finding{{
-		Type:        detections.VulnAIWorkflowSabotage,
-		Platform:    "github",
-		Class:       detections.GetVulnerabilityClass(detections.VulnAIWorkflowSabotage),
-		Severity:    severity,
-		Confidence:  detections.ConfidenceHigh,
-		Complexity:  detections.ComplexityLow,
+		Type:         detections.VulnAIWorkflowSabotage,
+		Platform:     "github",
+		Class:        detections.GetVulnerabilityClass(detections.VulnAIWorkflowSabotage),
+		Severity:     severity,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityLow,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Name,
 		WorkflowFile: wf.Path,
@@ -302,7 +312,7 @@ func checkWorkflowSabotage(wf *graph.WorkflowNode, job *graph.JobNode, step *gra
 		Line:         step.Line,
 		Trigger:      trigger,
 		Evidence:     fmt.Sprintf("AI action '%s' with actions:write permission on %s trigger", step.Uses, trigger),
-		Remediation: remediation,
+		Remediation:  remediation,
 	}}
 }
 
@@ -324,12 +334,12 @@ func checkUnsafeUserAccess(wf *graph.WorkflowNode, job *graph.JobNode, step *gra
 		if strings.Contains(keyLower, "allowed") && strings.Contains(keyLower, "user") {
 			if strings.TrimSpace(value) == "*" {
 				return []detections.Finding{{
-					Type:        detections.VulnAIWorkflowSabotage,
-					Platform:    "github",
-					Class:       detections.GetVulnerabilityClass(detections.VulnAIWorkflowSabotage),
-					Severity:    detections.SeverityMedium,
-					Confidence:  detections.ConfidenceHigh,
-					Complexity:  detections.ComplexityZeroClick,
+					Type:         detections.VulnAIWorkflowSabotage,
+					Platform:     "github",
+					Class:        detections.GetVulnerabilityClass(detections.VulnAIWorkflowSabotage),
+					Severity:     detections.SeverityMedium,
+					Confidence:   detections.ConfidenceHigh,
+					Complexity:   detections.ComplexityZeroClick,
 					Repository:   wf.RepoSlug,
 					Workflow:     wf.Name,
 					WorkflowFile: wf.Path,
@@ -338,7 +348,7 @@ func checkUnsafeUserAccess(wf *graph.WorkflowNode, job *graph.JobNode, step *gra
 					Line:         step.Line,
 					Trigger:      aipatterns.GetTriggerString(wf),
 					Evidence:     fmt.Sprintf("AI action '%s' configured with %s: \"*\" allowing any user to trigger", step.Uses, key),
-					Remediation: "Remove wildcard user access. Restrict AI action triggers to repository collaborators with write permission.",
+					Remediation:  "Remove wildcard user access. Restrict AI action triggers to repository collaborators with write permission.",
 				}}
 			}
 		}
@@ -378,12 +388,12 @@ func checkMCPAbuse(wf *graph.WorkflowNode, step *graph.StepNode) []detections.Fi
 	}
 
 	return []detections.Finding{{
-		Type:        detections.VulnAIMCPAbuse,
-		Platform:    "github",
-		Class:       detections.GetVulnerabilityClass(detections.VulnAIMCPAbuse),
-		Severity:    severity,
-		Confidence:  confidence,
-		Complexity:  detections.ComplexityLow,
+		Type:         detections.VulnAIMCPAbuse,
+		Platform:     "github",
+		Class:        detections.GetVulnerabilityClass(detections.VulnAIMCPAbuse),
+		Severity:     severity,
+		Confidence:   confidence,
+		Complexity:   detections.ComplexityLow,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Name,
 		WorkflowFile: wf.Path,
@@ -489,7 +499,7 @@ func checkGitHubToken(step *graph.StepNode) bool {
 		return false
 	}
 	for key, value := range step.Env {
-		if strings.ToUpper(key) == "GITHUB_TOKEN" {
+		if strings.EqualFold(key, "GITHUB_TOKEN") {
 			if strings.Contains(value, "secrets.GITHUB_TOKEN") ||
 				strings.Contains(value, "github.token") ||
 				strings.HasPrefix(value, "$") {

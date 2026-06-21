@@ -36,7 +36,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Only process root workflows to avoid duplicates
 		if !common.IsRootWorkflow(g, wf) {
@@ -83,23 +86,23 @@ func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *det
 			}
 
 			return &detections.Finding{
-				Type:        detections.VulnUnpinnedAction,
-				Platform:    "gitlab",
-				Class:       detections.GetVulnerabilityClass(detections.VulnUnpinnedAction),
-				Severity:    detections.SeverityLow,
-				Confidence:  detections.ConfidenceHigh,
-				Complexity:  detections.ComplexityZeroClick,
+				Type:         detections.VulnUnpinnedAction,
+				Platform:     "gitlab",
+				Class:        detections.GetVulnerabilityClass(detections.VulnUnpinnedAction),
+				Severity:     detections.SeverityLow,
+				Confidence:   detections.ConfidenceHigh,
+				Complexity:   detections.ComplexityZeroClick,
 				Repository:   wf.RepoSlug,
 				Workflow:     wf.Name,
 				WorkflowFile: wf.Path,
 				Line:         1, // Includes typically at line 1
-					Evidence:    evidence,
-					Remediation: "Pin project includes to a full commit SHA to prevent supply chain attacks. Visit " + inc.Project + " to find the commit SHA for the current version.",
-					Details: &detections.FindingDetails{
-						LineRanges: lineRanges,
-						Metadata:   metadata,
-					},
-				}
+				Evidence:     evidence,
+				Remediation:  "Pin project includes to a full commit SHA to prevent supply chain attacks. Visit " + inc.Project + " to find the commit SHA for the current version.",
+				Details: &detections.FindingDetails{
+					LineRanges: lineRanges,
+					Metadata:   metadata,
+				},
+			}
 		}
 
 	case "remote":
@@ -117,12 +120,12 @@ func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *det
 		}
 
 		return &detections.Finding{
-			Type:        detections.VulnUnpinnedAction,
-			Platform:    "gitlab",
-			Class:       detections.GetVulnerabilityClass(detections.VulnUnpinnedAction),
-			Severity:    detections.SeverityLow,
-			Confidence:  detections.ConfidenceHigh,
-			Complexity:  detections.ComplexityZeroClick,
+			Type:         detections.VulnUnpinnedAction,
+			Platform:     "gitlab",
+			Class:        detections.GetVulnerabilityClass(detections.VulnUnpinnedAction),
+			Severity:     detections.SeverityLow,
+			Confidence:   detections.ConfidenceHigh,
+			Complexity:   detections.ComplexityZeroClick,
 			Repository:   wf.RepoSlug,
 			Workflow:     wf.Name,
 			WorkflowFile: wf.Path,
@@ -153,7 +156,7 @@ func isCommitSHA(ref string) bool {
 		return false
 	}
 	for _, c := range ref {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}

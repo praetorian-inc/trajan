@@ -159,13 +159,9 @@ func WriteExtractedDataToFile(path string, results []*attacks.AttackResult) erro
 			continue
 		}
 
-		for _, s := range toStringSlice(dataMap["secrets"]) {
-			lines = append(lines, s)
-		}
+		lines = append(lines, toStringSlice(dataMap["secrets"])...)
 
-		for _, line := range toStringSlice(dataMap["output"]) {
-			lines = append(lines, line)
-		}
+		lines = append(lines, toStringSlice(dataMap["output"])...)
 	}
 
 	if len(lines) == 0 {
@@ -173,5 +169,5 @@ func WriteExtractedDataToFile(path string, results []*attacks.AttackResult) erro
 	}
 
 	content := strings.Join(lines, "\n") + "\n"
-	return os.WriteFile(path, []byte(content), 0600)
+	return os.WriteFile(path, []byte(content), 0o600)
 }

@@ -68,10 +68,10 @@ func WithTimeout(timeout time.Duration) ClientOption {
 }
 
 // WithConcurrency sets the maximum concurrent requests
-func WithConcurrency(max int64) ClientOption {
+func WithConcurrency(maxVal int64) ClientOption {
 	return func(c *Client) {
-		if max > 0 {
-			c.semaphore = semaphore.NewWeighted(max)
+		if maxVal > 0 {
+			c.semaphore = semaphore.NewWeighted(maxVal)
 		}
 	}
 }
@@ -88,11 +88,9 @@ func WithHTTPTransport(transport http.RoundTripper) ClientOption {
 func NewClient(baseURL, token string, opts ...ClientOption) *Client {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
-	} else {
+	} else if !strings.HasSuffix(baseURL, "/api/v4") {
 		// Auto-append /api/v4 if not present for self-hosted instances
-		if !strings.HasSuffix(baseURL, "/api/v4") {
-			baseURL = strings.TrimRight(baseURL, "/") + "/api/v4"
-		}
+		baseURL = strings.TrimRight(baseURL, "/") + "/api/v4"
 	}
 
 	c := &Client{
@@ -281,8 +279,9 @@ func (c *Client) ListProjectMembers(ctx context.Context, projectID int) ([]Membe
 }
 
 // ListProjectPipelines lists all pipelines for a project (no filtering)
-// Deprecated: Use ListPipelines with empty ref instead for new code
 // GET /api/v4/projects/:id/pipelines
+//
+// Deprecated: Use ListPipelines with empty ref instead for new code
 func (c *Client) ListProjectPipelines(ctx context.Context, projectID int) ([]Pipeline, error) {
 	return c.ListPipelines(ctx, projectID, "")
 }
@@ -624,11 +623,12 @@ func (c *Client) GetRunner(ctx context.Context, runnerID int) (*RunnerInfo, erro
 // This adds platform, version, architecture, and other detailed fields
 func (c *Client) EnrichRunnersWithDetails(ctx context.Context, runners []RunnerInfo) ([]RunnerInfo, error) {
 	enriched := make([]RunnerInfo, 0, len(runners))
-	for _, runner := range runners {
+	for i := range runners {
+		runner := &runners[i]
 		detailed, err := c.GetRunner(ctx, runner.ID)
 		if err != nil {
 			// If we can't get details, keep the basic info
-			enriched = append(enriched, runner)
+			enriched = append(enriched, *runner)
 			continue
 		}
 		enriched = append(enriched, *detailed)

@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 )
 
 func TestAuthorizeVariableGroups(t *testing.T) {

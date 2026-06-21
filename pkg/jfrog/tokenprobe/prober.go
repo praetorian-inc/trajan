@@ -198,7 +198,7 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		return nil
 	})
 
-	g.Wait()
+	_ = g.Wait()
 
 	return result, nil
 }
@@ -209,7 +209,7 @@ func (p *TokenProber) listRepositories(ctx context.Context) ([]Repository, error
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, nil
@@ -238,7 +238,7 @@ func (p *TokenProber) listBuilds(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, nil
@@ -272,7 +272,7 @@ func (p *TokenProber) listUsers(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return resp.StatusCode == http.StatusOK, nil
 }
@@ -283,7 +283,7 @@ func (p *TokenProber) listGroups(ctx context.Context) ([]Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, nil
@@ -313,7 +313,7 @@ func (p *TokenProber) listPermissions(ctx context.Context) ([]Permission, error)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, nil

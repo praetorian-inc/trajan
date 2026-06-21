@@ -153,19 +153,19 @@ func (d *Detection) createFinding(g *graph.Graph, job *graph.JobNode) detections
 	}
 
 	return detections.Finding{
-		Type:       detections.VulnSelfHostedRunner,
-		Platform:   "gitlab",
-		Class:      detections.GetVulnerabilityClass(detections.VulnSelfHostedRunner),
-		Severity:   detections.SeverityHigh,
-		Confidence: detections.ConfidenceHigh,
-		Complexity: detections.ComplexityZeroClick,
+		Type:         detections.VulnSelfHostedRunner,
+		Platform:     "gitlab",
+		Class:        detections.GetVulnerabilityClass(detections.VulnSelfHostedRunner),
+		Severity:     detections.SeverityHigh,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityZeroClick,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Path,
 		WorkflowFile: wf.Path,
 		Job:          job.Name,
-		Line:       job.Line,
-		Trigger:    strings.Join(wf.Triggers, ", "),
-		Evidence:   evidence,
+		Line:         job.Line,
+		Trigger:      strings.Join(wf.Triggers, ", "),
+		Evidence:     evidence,
 		Remediation: "Restrict this job to protected branches only by adding a rules condition like '$CI_COMMIT_BRANCH == \"main\"' or use GitLab SaaS runners (saas-linux-small-amd64, etc.) instead of self-hosted runners for untrusted merge requests.\n\n" +
 			"Example:\n\n" +
 			"  " + job.Name + ":\n" +

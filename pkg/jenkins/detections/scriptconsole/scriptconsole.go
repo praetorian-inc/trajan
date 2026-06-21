@@ -40,7 +40,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	if !ok {
 		return nil, nil
 	}
-	client := clientData.(*jenkins.Client)
+	client, ok := clientData.(*jenkins.Client)
+	if !ok {
+		return nil, nil
+	}
 
 	accessible, statusCode, err := client.CheckScriptConsole(ctx)
 	if err != nil {

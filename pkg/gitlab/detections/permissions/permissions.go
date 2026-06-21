@@ -36,7 +36,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Only DFS from root workflows to avoid duplicates
 		if !common.IsRootWorkflow(g, wf) {
@@ -54,7 +57,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		// DFS through all steps
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeStep {
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 
 				// Check for token exposure in scripts
 				for _, token := range common.DangerousTokenVariables {
@@ -106,20 +112,20 @@ func (d *Detection) createFinding(g *graph.Graph, step *graph.StepNode, token st
 	attackChain := []detections.ChainNode{{NodeType: "step", Name: step.Name, Line: step.Line}}
 
 	return detections.Finding{
-		Type:        detections.VulnTokenExposure,
-		Platform:    "gitlab",
-		Class:       detections.GetVulnerabilityClass(detections.VulnTokenExposure),
-		Severity:    detections.SeverityHigh,
-		Confidence:  detections.ConfidenceHigh,
-		Complexity:  detections.ComplexityZeroClick,
+		Type:         detections.VulnTokenExposure,
+		Platform:     "gitlab",
+		Class:        detections.GetVulnerabilityClass(detections.VulnTokenExposure),
+		Severity:     detections.SeverityHigh,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityZeroClick,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Path,
 		WorkflowFile: wf.Path,
 		Job:          jobName,
-		Step:        step.Name,
-		Line:        step.Line,
-		Evidence:    evidence,
-		Remediation: "Do not expose $" + token + " in scripts on merge request triggers. Restrict job to protected branches.",
+		Step:         step.Name,
+		Line:         step.Line,
+		Evidence:     evidence,
+		Remediation:  "Do not expose $" + token + " in scripts on merge request triggers. Restrict job to protected branches.",
 		Details: &detections.FindingDetails{
 			LineRanges:  []detections.LineRange{{Start: step.Line, End: step.Line}},
 			AttackChain: attackChain,

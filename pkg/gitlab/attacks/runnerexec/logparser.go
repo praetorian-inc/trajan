@@ -94,8 +94,8 @@ func ExtractBase64Output(logs string, command string) (string, error) {
 // isBase64 checks if a string contains only valid base64 characters
 func isBase64(s string) bool {
 	for _, r := range s {
-		if !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') ||
-			(r >= '0' && r <= '9') || r == '+' || r == '/' || r == '=') {
+		if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') &&
+			(r < '0' || r > '9') && r != '+' && r != '/' && r != '=' {
 			return false
 		}
 	}

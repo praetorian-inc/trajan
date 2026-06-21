@@ -263,7 +263,6 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 		select {
 		case <-ctx.Done():
 			fmt.Printf("Timeout: %v\n", ctx.Err())
-			break
 		case <-time.After(5 * time.Second):
 		}
 		if ctx.Err() != nil {
@@ -325,8 +324,10 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 				}
 				allOutput = deduped
 				if len(allOutput) > 0 {
-					result.Data.(map[string]interface{})["output"] = allOutput
-					result.Data.(map[string]interface{})["output_lines"] = len(allOutput)
+					if m, ok := result.Data.(map[string]interface{}); ok {
+						m["output"] = allOutput
+						m["output_lines"] = len(allOutput)
+					}
 					result.Message = fmt.Sprintf("Agent exec successful on pool %q. Pipeline ID: %d, Run ID: %d. Captured %d output lines.",
 						poolName, pipeline.ID, run.ID, len(allOutput))
 				}
@@ -373,8 +374,10 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 				}
 				allOutput = deduped
 				if len(allOutput) > 0 {
-					result.Data.(map[string]interface{})["output"] = allOutput
-					result.Data.(map[string]interface{})["output_lines"] = len(allOutput)
+					if m, ok := result.Data.(map[string]interface{}); ok {
+						m["output"] = allOutput
+						m["output_lines"] = len(allOutput)
+					}
 				}
 			}
 		}

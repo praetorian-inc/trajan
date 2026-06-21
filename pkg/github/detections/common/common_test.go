@@ -3,8 +3,9 @@ package common
 import (
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 )
 
 func TestInjectableContexts_Contains(t *testing.T) {

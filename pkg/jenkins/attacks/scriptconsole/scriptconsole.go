@@ -38,7 +38,8 @@ func New() *Plugin {
 
 // CanAttack checks if script console execution is applicable.
 func (p *Plugin) CanAttack(findings []detections.Finding) bool {
-	for _, f := range findings {
+	for i := range findings {
+		f := &findings[i]
 		if f.Platform == "jenkins" && f.Workflow == "/script" {
 			return true
 		}

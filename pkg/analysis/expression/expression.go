@@ -150,12 +150,6 @@ func (e *Evaluator) ExtractAll(input string) ([]*Expression, error) {
 
 // Parse parses a single expression
 func (e *Evaluator) Parse(input string) (*Expression, error) {
-	// Remove ${{ and }} if present
-	cleaned := strings.TrimSpace(input)
-	if strings.HasPrefix(cleaned, "${{") && strings.HasSuffix(cleaned, "}}") {
-		cleaned = strings.TrimSpace(cleaned[3 : len(cleaned)-2])
-	}
-
 	expr := &Expression{
 		Raw:        input,
 		References: []ContextRef{},
@@ -386,7 +380,7 @@ func parsePrimary(tokens []Token, pos *int) (*Node, error) {
 
 		// Parse arguments
 		var args []*Node
-		for *pos < len(tokens) && !(tokens[*pos].Type == TokenParen && tokens[*pos].Value == ")") {
+		for *pos < len(tokens) && (tokens[*pos].Type != TokenParen || tokens[*pos].Value != ")") {
 			// Skip commas
 			if tokens[*pos].Type == TokenOperator && tokens[*pos].Value == "," {
 				*pos++

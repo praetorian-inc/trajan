@@ -26,14 +26,15 @@ func (p *Platform) AnalyzeProjectLogs(ctx context.Context, projectID int, pipeli
 			continue
 		}
 
-		for _, job := range jobs {
+		for i := range jobs {
+			job := &jobs[i]
 			var runner RunnerInfo
 			needsTraceEnrichment := true
 
 			// Try to extract from job metadata first (fast path)
 			if job.Runner != nil {
 				if desc, ok := job.Runner["description"].(string); ok && desc != "" {
-					if baseRunner := p.createRunnerFromMetadata(job, desc); baseRunner != nil {
+					if baseRunner := p.createRunnerFromMetadata(*job, desc); baseRunner != nil {
 						runner = *baseRunner
 						// Check if metadata has enough details
 						if runner.Version != "" && runner.Executor != "" {
@@ -69,7 +70,7 @@ func (p *Platform) AnalyzeProjectLogs(ctx context.Context, projectID int, pipeli
 				}
 
 				// Enrich with trace details
-				traceRunner := p.logInfoToRunnerInfo(logInfo, job)
+				traceRunner := p.logInfoToRunnerInfo(logInfo, *job)
 				if runner.Description == "" {
 					runner = traceRunner
 				} else {

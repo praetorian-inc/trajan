@@ -7,7 +7,6 @@ import "strings"
 type PlatformContextResolver struct {
 	platform     string
 	taintedPaths map[string]bool
-	safePatterns []string
 }
 
 // NewPlatformContextResolver creates a resolver for a specific platform

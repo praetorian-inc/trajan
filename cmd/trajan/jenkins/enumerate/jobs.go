@@ -66,7 +66,10 @@ func runJobsEnumerate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("initializing platform: %w", err)
 	}
 
-	jPlatform := platform.(*jenkins.Platform)
+	jPlatform, ok := platform.(*jenkins.Platform)
+	if !ok {
+		return fmt.Errorf("unexpected platform type %T", platform)
+	}
 	client := jPlatform.Client()
 
 	if output == "console" || output == "" {

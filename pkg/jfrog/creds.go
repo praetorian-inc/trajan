@@ -20,7 +20,7 @@ func (p *Platform) ExtractRemoteRepoCredentials(ctx context.Context) ([]RemoteRe
 	if err != nil {
 		return nil, fmt.Errorf("listing repositories: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API error (%d) listing repositories", resp.StatusCode)
@@ -44,7 +44,7 @@ func (p *Platform) ExtractRemoteRepoCredentials(ctx context.Context) ([]RemoteRe
 		}
 
 		if repoResp.StatusCode != http.StatusOK {
-			repoResp.Body.Close()
+			_ = repoResp.Body.Close()
 			continue
 		}
 
@@ -55,10 +55,10 @@ func (p *Platform) ExtractRemoteRepoCredentials(ctx context.Context) ([]RemoteRe
 			Password string `json:"password"`
 		}
 		if err := json.NewDecoder(repoResp.Body).Decode(&repoConfig); err != nil {
-			repoResp.Body.Close()
+			_ = repoResp.Body.Close()
 			continue
 		}
-		repoResp.Body.Close()
+		_ = repoResp.Body.Close()
 
 		result := RemoteRepoCredentials{
 			Key:      repoConfig.Key,
@@ -79,7 +79,7 @@ func (p *Platform) GetAPIKey(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("getting API key: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("API error (%d) getting API key", resp.StatusCode)
@@ -103,7 +103,7 @@ func (p *Platform) GetLDAPConfig(ctx context.Context) ([]LDAPSetting, error) {
 	if err != nil {
 		return nil, fmt.Errorf("getting config: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusForbidden {
 		return nil, fmt.Errorf("access denied: admin privileges required")
@@ -133,7 +133,7 @@ func (p *Platform) ScanBuildsForSecrets(ctx context.Context, limit int) ([]Build
 	if err != nil {
 		return nil, fmt.Errorf("listing builds: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API error (%d) listing builds", resp.StatusCode)
@@ -163,7 +163,7 @@ func (p *Platform) ScanBuildsForSecrets(ctx context.Context, limit int) ([]Build
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			continue
 		}
 
@@ -173,10 +173,10 @@ func (p *Platform) ScanBuildsForSecrets(ctx context.Context, limit int) ([]Build
 			} `json:"buildsNumbers"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&buildNumbers); err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		// Limit build numbers scanned per project
 		numToScan := limit
@@ -197,7 +197,7 @@ func (p *Platform) ScanBuildsForSecrets(ctx context.Context, limit int) ([]Build
 			}
 
 			if resp.StatusCode != http.StatusOK {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				continue
 			}
 
@@ -207,10 +207,10 @@ func (p *Platform) ScanBuildsForSecrets(ctx context.Context, limit int) ([]Build
 				} `json:"buildInfo"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&buildInfo); err != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			// Scan properties for secrets
 			for key, value := range buildInfo.BuildInfo.Properties {

@@ -34,7 +34,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		hasUntrustedTrigger := false
 		for _, trigger := range wf.Triggers {
@@ -46,7 +49,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeJob {
-				job := node.(*graph.JobNode)
+				job, ok := node.(*graph.JobNode)
+				if !ok {
+					return true
+				}
 				isDeploymentJob := false
 
 				if containsKeyword(job.Name, deploymentKeywords) || containsKeyword(job.RunsOn, deploymentKeywords) {
@@ -55,7 +61,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 
 				graph.DFS(g, job.ID(), func(stepNode graph.Node) bool {
 					if stepNode.Type() == graph.NodeTypeStep {
-						step := stepNode.(*graph.StepNode)
+						step, ok := stepNode.(*graph.StepNode)
+						if !ok {
+							return true
+						}
 						if step.Run != "" && containsKeyword(step.Run, deploymentKeywords) {
 							isDeploymentJob = true
 						}
@@ -80,11 +89,11 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 						}
 
 						findings = append(findings, detections.Finding{
-							Type:       detections.VulnEnvironmentBypass,
-							Platform:   "github",
-							Class:      detections.GetVulnerabilityClass(detections.VulnEnvironmentBypass),
-							Severity:   detections.SeverityLow,
-							Confidence: detections.ConfidenceMedium,
+							Type:         detections.VulnEnvironmentBypass,
+							Platform:     "github",
+							Class:        detections.GetVulnerabilityClass(detections.VulnEnvironmentBypass),
+							Severity:     detections.SeverityLow,
+							Confidence:   detections.ConfidenceMedium,
 							Repository:   wf.RepoSlug,
 							Workflow:     wf.Path, // Use path for matching
 							WorkflowFile: wf.Path,
@@ -120,11 +129,11 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 						}
 
 						findings = append(findings, detections.Finding{
-							Type:       detections.VulnEnvironmentBypass,
-							Platform:   "github",
-							Class:      detections.GetVulnerabilityClass(detections.VulnEnvironmentBypass),
-							Severity:   detections.SeverityMedium,
-							Confidence: detections.ConfidenceMedium,
+							Type:         detections.VulnEnvironmentBypass,
+							Platform:     "github",
+							Class:        detections.GetVulnerabilityClass(detections.VulnEnvironmentBypass),
+							Severity:     detections.SeverityMedium,
+							Confidence:   detections.ConfidenceMedium,
 							Repository:   wf.RepoSlug,
 							Workflow:     wf.Path, // Use path for matching
 							WorkflowFile: wf.Path,

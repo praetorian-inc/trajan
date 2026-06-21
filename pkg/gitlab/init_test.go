@@ -3,9 +3,10 @@ package gitlab
 import (
 	"testing"
 
-	"github.com/praetorian-inc/trajan/internal/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/internal/registry"
 )
 
 // TestRegistration verifies that gitlab platform is registered

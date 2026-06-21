@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/olekukonko/tablewriter"
+
 	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 

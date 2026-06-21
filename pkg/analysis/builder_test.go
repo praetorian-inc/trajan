@@ -392,24 +392,24 @@ test:
 		"gitlab_ref":        "main",
 	}
 
-	graph, err := BuildGraph("owner/repo", ".gitlab-ci.yml", content, metadata)
+	gr, err := BuildGraph("owner/repo", ".gitlab-ci.yml", content, metadata)
 	require.NoError(t, err)
-	require.NotNil(t, graph)
+	require.NotNil(t, gr)
 
 	// Verify graph has workflow node
-	nodes := graph.Nodes()
+	nodes := gr.Nodes()
 	require.Greater(t, len(nodes), 0, "expected nodes in graph")
 
 	// Verify metadata is set on graph
-	clientMeta, ok := graph.GetMetadata("gitlab_client")
+	clientMeta, ok := gr.GetMetadata("gitlab_client")
 	assert.True(t, ok, "expected gitlab_client in metadata")
 	assert.Equal(t, mockClient, clientMeta)
 
-	projectIDMeta, ok := graph.GetMetadata("gitlab_project_id")
+	projectIDMeta, ok := gr.GetMetadata("gitlab_project_id")
 	assert.True(t, ok, "expected gitlab_project_id in metadata")
 	assert.Equal(t, 123, projectIDMeta)
 
-	refMeta, ok := graph.GetMetadata("gitlab_ref")
+	refMeta, ok := gr.GetMetadata("gitlab_ref")
 	assert.True(t, ok, "expected gitlab_ref in metadata")
 	assert.Equal(t, "main", refMeta)
 
@@ -427,16 +427,16 @@ jobs:
       - run: echo hello`)
 
 	// No metadata or non-GitLab platform
-	graph, err := BuildGraph("owner/repo", ".github/workflows/test.yml", content)
+	gr, err := BuildGraph("owner/repo", ".github/workflows/test.yml", content)
 	require.NoError(t, err)
-	require.NotNil(t, graph)
+	require.NotNil(t, gr)
 
 	// Should still build graph successfully without resolver
-	nodes := graph.Nodes()
+	nodes := gr.Nodes()
 	require.Greater(t, len(nodes), 0, "expected nodes in graph")
 
 	// Verify no GitLab metadata
-	_, ok := graph.GetMetadata("gitlab_client")
+	_, ok := gr.GetMetadata("gitlab_client")
 	assert.False(t, ok, "should not have gitlab_client in metadata for GitHub workflow")
 }
 

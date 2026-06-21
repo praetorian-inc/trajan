@@ -3,8 +3,9 @@ package enumerate
 import (
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 )
 
 func TestAttackPathsCommandExists(t *testing.T) {

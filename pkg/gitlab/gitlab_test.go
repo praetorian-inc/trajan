@@ -9,10 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/internal/registry"
-	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/internal/registry"
+	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
 func TestGitLabPlatform_Name(t *testing.T) {
@@ -40,8 +41,8 @@ func TestGitLabPlatform_ScanProject(t *testing.T) {
 		w.Header().Set("RateLimit-Remaining", "1999")
 		w.Header().Set("RateLimit-Limit", "2000")
 
-		switch {
-		case r.URL.Path == "/api/v4/projects/owner/project":
+		switch r.URL.Path {
+		case "/api/v4/projects/owner/project":
 			w.Write([]byte(`{
 				"id": 123,
 				"name": "project",
@@ -56,7 +57,7 @@ func TestGitLabPlatform_ScanProject(t *testing.T) {
 					"full_path": "owner"
 				}
 			}`))
-		case r.URL.Path == "/api/v4/projects/123/repository/files/.gitlab-ci.yml":
+		case "/api/v4/projects/123/repository/files/.gitlab-ci.yml":
 			w.Write([]byte(`{
 				"file_name": ".gitlab-ci.yml",
 				"file_path": ".gitlab-ci.yml",
@@ -195,8 +196,8 @@ func TestScanAttachesResolverMetadata(t *testing.T) {
 		w.Header().Set("RateLimit-Remaining", "1999")
 		w.Header().Set("RateLimit-Limit", "2000")
 
-		switch {
-		case r.URL.Path == "/api/v4/projects/owner/repo":
+		switch r.URL.Path {
+		case "/api/v4/projects/owner/repo":
 			w.Write([]byte(`{
 				"id": 123,
 				"name": "repo",
@@ -211,7 +212,7 @@ func TestScanAttachesResolverMetadata(t *testing.T) {
 					"full_path": "owner"
 				}
 			}`))
-		case r.URL.Path == "/api/v4/projects/123/repository/files/.gitlab-ci.yml":
+		case "/api/v4/projects/123/repository/files/.gitlab-ci.yml":
 			w.Write([]byte(`{
 				"file_name": ".gitlab-ci.yml",
 				"file_path": ".gitlab-ci.yml",

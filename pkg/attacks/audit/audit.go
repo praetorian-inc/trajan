@@ -38,11 +38,11 @@ func Log(entry AuditEntry) error {
 	entry.Timestamp = time.Now()
 
 	dir := filepath.Dir(auditFile())
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("creating audit directory: %w", err)
 	}
 
-	f, err := os.OpenFile(auditFile(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(auditFile(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("opening audit file: %w", err)
 	}

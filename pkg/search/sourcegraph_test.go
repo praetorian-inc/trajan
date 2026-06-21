@@ -111,7 +111,7 @@ func TestSourceGraphSearchProvider_Deduplication(t *testing.T) {
 // Test SourceGraph search with context cancellation
 func TestSourceGraphSearchProvider_Context_Cancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done() // Block until context is cancelled
+		<-r.Context().Done() // Block until context is canceled
 	}))
 	defer server.Close()
 

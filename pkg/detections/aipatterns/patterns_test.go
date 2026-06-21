@@ -3,8 +3,9 @@ package aipatterns
 import (
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 )
 
 func TestIsAIAction_KnownProviders(t *testing.T) {

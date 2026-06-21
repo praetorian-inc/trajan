@@ -181,7 +181,7 @@ func TestWriteSecretsToFile(t *testing.T) {
 	// Verify permissions are 0600
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
 func TestWriteSecretsToFile_InvalidPath(t *testing.T) {

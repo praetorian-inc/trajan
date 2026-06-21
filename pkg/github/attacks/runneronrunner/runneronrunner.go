@@ -409,8 +409,7 @@ func createRoRGist(ctx context.Context, client *github.Client, c2Repo, targetOS,
 
 	// Find matching asset for target OS/arch
 	var releaseFile string
-	var version string
-	version = release.TagName
+	version := release.TagName
 
 	// Determine release file based on OS and arch
 	osMap := map[string]string{

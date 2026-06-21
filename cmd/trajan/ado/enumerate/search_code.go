@@ -28,7 +28,7 @@ Requires --query flag.`,
 
 	cmd.Flags().SortFlags = false
 	cmd.Flags().StringVarP(&searchCodeQuery, "query", "q", "", "Search query (required)")
-	cmd.MarkFlagRequired("query")
+	_ = cmd.MarkFlagRequired("query")
 
 	return cmd
 }

@@ -1,9 +1,11 @@
 package analysis
 
 import (
-	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 )
 
 func TestComputeJobTriggers_WorkflowLevel(t *testing.T) {

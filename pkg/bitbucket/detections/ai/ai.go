@@ -37,13 +37,19 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() != graph.NodeTypeStep {
 				return true
 			}
-			step := node.(*graph.StepNode)
+			step, ok := node.(*graph.StepNode)
+			if !ok {
+				return true
+			}
 			if !aipatterns.IsAIStep(step) {
 				return true
 			}

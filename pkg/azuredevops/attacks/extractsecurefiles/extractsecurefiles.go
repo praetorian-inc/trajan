@@ -391,7 +391,7 @@ func (p *Plugin) executeWithClient(ctx context.Context, client *azuredevops.Clie
 
 	// Save to disk
 	outputDir := filepath.Join(os.Getenv("HOME"), ".trajan", "extracted", opts.SessionID)
-	if err := os.MkdirAll(outputDir, 0700); err != nil {
+	if err := os.MkdirAll(outputDir, 0o700); err != nil {
 		result.Success = true
 		result.Message = fmt.Sprintf("artifact downloaded but failed to create output directory: %v", err)
 		result.CleanupActions = buildCleanupActions(branchName, pipeline.ID)
@@ -403,7 +403,7 @@ func (p *Plugin) executeWithClient(ctx context.Context, client *azuredevops.Clie
 	if extractErr != nil {
 		// Not a zip or extraction failed — save raw
 		outputPath := filepath.Join(outputDir, "artifact-raw")
-		if err := os.WriteFile(outputPath, artifactData, 0600); err != nil {
+		if err := os.WriteFile(outputPath, artifactData, 0o600); err != nil {
 			result.Success = true
 			result.Message = fmt.Sprintf("artifact downloaded but failed to write file: %v", err)
 			result.CleanupActions = buildCleanupActions(branchName, pipeline.ID)
@@ -415,7 +415,7 @@ func (p *Plugin) executeWithClient(ctx context.Context, client *azuredevops.Clie
 		var savedFiles []string
 		for name, data := range extractedFiles {
 			filePath := filepath.Join(outputDir, name)
-			if err := os.WriteFile(filePath, data, 0600); err != nil {
+			if err := os.WriteFile(filePath, data, 0o600); err != nil {
 				fmt.Printf("Warning: failed to write %s: %v\n", name, err)
 				continue
 			}
@@ -496,13 +496,13 @@ func generateAllSecureFilesYAML(fileNames []string) string {
 
 	// Download each secure file
 	for i, name := range fileNames {
-		sb.WriteString(fmt.Sprintf("  - task: DownloadSecureFile@1\n    name: secureFile_%d\n    inputs:\n      secureFile: '%s'\n", i, name))
+		fmt.Fprintf(&sb, "  - task: DownloadSecureFile@1\n    name: secureFile_%d\n    inputs:\n      secureFile: '%s'\n", i, name)
 	}
 
 	// Stage all files to a single directory
 	sb.WriteString("  - script: |\n      mkdir -p $(Build.ArtifactStagingDirectory)/secure-files\n")
 	for _, name := range fileNames {
-		sb.WriteString(fmt.Sprintf("      cp \"$(Agent.TempDirectory)/%s\" \"$(Build.ArtifactStagingDirectory)/secure-files/\"\n", name))
+		fmt.Fprintf(&sb, "      cp \"$(Agent.TempDirectory)/%s\" \"$(Build.ArtifactStagingDirectory)/secure-files/\"\n", name)
 	}
 	sb.WriteString("    displayName: 'Stage Secure Files'\n")
 

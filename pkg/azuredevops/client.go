@@ -63,10 +63,10 @@ func WithTimeout(timeout time.Duration) ClientOption {
 }
 
 // WithConcurrency sets the maximum concurrent requests
-func WithConcurrency(max int64) ClientOption {
+func WithConcurrency(maxConc int64) ClientOption {
 	return func(c *Client) {
-		if max > 0 {
-			c.semaphore = semaphore.NewWeighted(max)
+		if maxConc > 0 {
+			c.semaphore = semaphore.NewWeighted(maxConc)
 		}
 	}
 }

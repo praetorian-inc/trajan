@@ -4,10 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
-	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
+	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
 func TestDetection_ImplementsInterface(t *testing.T) {

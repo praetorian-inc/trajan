@@ -4,8 +4,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/internal/cmdutil"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/praetorian-inc/trajan/internal/cmdutil"
 )
 
 func TestGetTokenForPlatform_GitLab(t *testing.T) {

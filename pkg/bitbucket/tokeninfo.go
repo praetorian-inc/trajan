@@ -115,8 +115,8 @@ func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, *User, *RateLimi
 	}
 
 	// Handle response based on status code
-	switch {
-	case resp.StatusCode == http.StatusOK:
+	switch resp.StatusCode {
+	case http.StatusOK:
 		// API token — parse user from body
 		body, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
@@ -136,7 +136,7 @@ func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, *User, *RateLimi
 		}
 		return info, &user, rateLimit, nil
 
-	case resp.StatusCode == http.StatusForbidden:
+	case http.StatusForbidden:
 		// Access token — no user info but headers are valid
 		info := &TokenInfo{
 			Type:       mapCredentialType(credType),
@@ -146,7 +146,7 @@ func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, *User, *RateLimi
 		}
 		return info, nil, rateLimit, nil
 
-	case resp.StatusCode == http.StatusUnauthorized:
+	case http.StatusUnauthorized:
 		if c.authMode == AuthBasic {
 			return nil, nil, nil, fmt.Errorf("authentication failed (HTTP 401): verify both email and token are correct")
 		}

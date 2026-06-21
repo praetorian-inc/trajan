@@ -4,7 +4,6 @@ package expression
 import (
 	"fmt"
 	"regexp"
-	"strings"
 	"unicode"
 )
 
@@ -226,19 +225,4 @@ func (l *Lexer) tokenizeExpression(content string, baseOffset int) ([]Token, err
 	}
 
 	return tokens, nil
-}
-
-// Helper function to check if a string is a known context
-func isKnownContext(s string) bool {
-	contexts := []string{
-		"github", "inputs", "env", "secrets", "steps", "needs",
-		"strategy", "matrix", "job", "runner", "vars",
-	}
-
-	for _, ctx := range contexts {
-		if strings.HasPrefix(s, ctx+".") || s == ctx {
-			return true
-		}
-	}
-	return false
 }

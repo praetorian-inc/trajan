@@ -69,17 +69,29 @@ func NewChainContext(opts attacks.AttackOptions) *ChainContext {
 func (c *ChainContext) Set(key attacks.ContextKey, value interface{}) {
 	switch key {
 	case attacks.C2RepoKey:
-		c.C2Repo = value.(string)
+		if v, ok := value.(string); ok {
+			c.C2Repo = v
+		}
 	case attacks.C2URLKey:
-		c.C2RepoURL = value.(string)
+		if v, ok := value.(string); ok {
+			c.C2RepoURL = v
+		}
 	case attacks.RunnersKey:
-		c.Runners = value.([]github.Runner)
+		if v, ok := value.([]github.Runner); ok {
+			c.Runners = v
+		}
 	case attacks.GistIDKey:
-		c.GistID = value.(string)
+		if v, ok := value.(string); ok {
+			c.GistID = v
+		}
 	case attacks.ForkRepoKey:
-		c.ForkRepo = value.(string)
+		if v, ok := value.(string); ok {
+			c.ForkRepo = v
+		}
 	case attacks.PRNumberKey:
-		c.PRNumber = value.(int)
+		if v, ok := value.(int); ok {
+			c.PRNumber = v
+		}
 	}
 }
 

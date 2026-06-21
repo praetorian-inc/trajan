@@ -133,7 +133,8 @@ func (p *Platform) EnumerateRepos(ctx context.Context, target platforms.Target) 
 	}
 
 	// Convert to RepositoryWithPermissions format (preserves permission data)
-	for _, repo := range repos {
+	for i := range repos {
+		repo := &repos[i]
 		result.Repositories = append(result.Repositories, RepositoryWithPermissions{
 			Repository: platforms.Repository{
 				Owner:         repo.Owner.Login,
@@ -164,13 +165,13 @@ func buildReposSummary(repos []RepositoryWithPermissions) ReposSummary {
 	}
 
 	for _, repo := range repos {
-		if repo.Repository.Private {
+		if repo.Private {
 			summary.Private++
 		} else {
 			summary.Public++
 		}
 
-		if repo.Repository.Archived {
+		if repo.Archived {
 			summary.Archived++
 		}
 
@@ -232,9 +233,10 @@ func (p *Platform) enumerateAllAccessibleRepos(ctx context.Context) ([]Repositor
 			continue
 		}
 
-		for _, repo := range orgRepos {
+		for i := range orgRepos {
+			repo := &orgRepos[i]
 			key := repo.Owner.Login + "/" + repo.Name
-			repoMap[key] = repo
+			repoMap[key] = *repo
 		}
 	}
 
@@ -245,10 +247,11 @@ func (p *Platform) enumerateAllAccessibleRepos(ctx context.Context) ([]Repositor
 	}
 
 	// Add user repos that aren't already in the map
-	for _, repo := range userRepos {
+	for i := range userRepos {
+		repo := &userRepos[i]
 		key := repo.Owner.Login + "/" + repo.Name
 		if _, exists := repoMap[key]; !exists {
-			repoMap[key] = repo
+			repoMap[key] = *repo
 		}
 	}
 

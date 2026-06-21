@@ -4,8 +4,9 @@ package runnerexec
 import (
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
 func TestPlugin_CanAttack_AlwaysReturnsFalse(t *testing.T) {

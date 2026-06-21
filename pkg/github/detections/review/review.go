@@ -46,7 +46,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Filter to review triggers only
 		if !hasReviewTrigger(wf.Triggers) {
@@ -57,7 +60,11 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeJob {
-				jobNode = node.(*graph.JobNode)
+				job, ok := node.(*graph.JobNode)
+				if !ok {
+					return true
+				}
+				jobNode = job
 				return true
 			}
 
@@ -65,7 +72,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 				return true
 			}
 
-			step := node.(*graph.StepNode)
+			step, ok := node.(*graph.StepNode)
+			if !ok {
+				return true
+			}
 			if step.Run == "" {
 				return true
 			}
@@ -142,21 +152,21 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, step *graph.StepN
 	evidence := fmt.Sprintf("Workflow uses %s trigger and injects user-controllable review contexts (%s) into run command. This allows arbitrary command injection via PR review comments.", strings.Join(wf.Triggers, ", "), contextList)
 
 	return detections.Finding{
-		Type:       detections.VulnReviewInjection,
-		Platform:   "github",
-		Class:      detections.GetVulnerabilityClass(detections.VulnReviewInjection),
-		Severity:   detections.SeverityHigh,
-		Confidence: detections.ConfidenceHigh,
-		Complexity: detections.ComplexityZeroClick,
+		Type:         detections.VulnReviewInjection,
+		Platform:     "github",
+		Class:        detections.GetVulnerabilityClass(detections.VulnReviewInjection),
+		Severity:     detections.SeverityHigh,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityZeroClick,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Path, // Use path for matching
 		WorkflowFile: wf.Path,
 		Job:          jobName,
-		Step:       step.Name,
-		Line:       step.Line,
-		Trigger:    strings.Join(wf.Triggers, ", "),
-		Evidence:    evidence,
-		Remediation: "Do not interpolate review comment bodies directly in run commands. Pass them through environment variables (env:) which are not subject to shell injection. For example, use 'env: COMMENT: ${{ github.event.review.body }}' and reference '$COMMENT' in the script.",
+		Step:         step.Name,
+		Line:         step.Line,
+		Trigger:      strings.Join(wf.Triggers, ", "),
+		Evidence:     evidence,
+		Remediation:  "Do not interpolate review comment bodies directly in run commands. Pass them through environment variables (env:) which are not subject to shell injection. For example, use 'env: COMMENT: ${{ github.event.review.body }}' and reference '$COMMENT' in the script.",
 		Details: &detections.FindingDetails{
 			LineRanges:         lineRanges,
 			AttackChain:        attackChain,

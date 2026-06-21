@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/olekukonko/tablewriter"
+
 	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
@@ -16,7 +17,7 @@ import (
 // Each finding shows attack chain, code context, and remediation guidance.
 func RenderDetailed(w io.Writer, result *platforms.ScanResult, findings []detections.Finding) {
 	if len(findings) == 0 {
-		fmt.Fprintln(w, "\nNo vulnerabilities found.")
+		_, _ = fmt.Fprintln(w, "\nNo vulnerabilities found.")
 		return
 	}
 
@@ -56,23 +57,23 @@ func RenderDetailed(w io.Writer, result *platforms.ScanResult, findings []detect
 
 			// Separator between findings (but not after last one)
 			if i < len(repoFindings)-1 {
-				fmt.Fprintln(w, "\n─────────────────────────────────────────────")
+				_, _ = fmt.Fprintln(w, "\n─────────────────────────────────────────────")
 			}
 		}
 
-		fmt.Fprintln(w) // Blank line after repository
+		_, _ = fmt.Fprintln(w) // Blank line after repository
 	}
 }
 
 // printRepoHeader prints the repository section header
 func printRepoHeader(w io.Writer, repo string, count int) {
-	fmt.Fprintln(w, "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintf(w, "Repository: %s (%d finding", repo, count)
+	_, _ = fmt.Fprintln(w, "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintf(w, "Repository: %s (%d finding", repo, count)
 	if count != 1 {
-		fmt.Fprint(w, "s")
+		_, _ = fmt.Fprint(w, "s")
 	}
-	fmt.Fprintln(w, ")")
-	fmt.Fprintln(w, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(w, ")")
+	_, _ = fmt.Fprintln(w, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 }
 
 // printFindingDetailed prints a single finding with all available evidence
@@ -80,12 +81,12 @@ func printFindingDetailed(w io.Writer, result *platforms.ScanResult, f detection
 	// Severity badge with color and alignment
 	severityText := fmt.Sprintf("[%s]", strings.ToUpper(string(f.Severity)))
 	color := severityColor(f.Severity)
-	fmt.Fprintf(w, "\n  %s\n", colorText(severityText, color)) // Aligned with Finding
-	fmt.Fprintln(w)                                            // Blank line after severity
-	fmt.Fprintf(w, "  %s %s\n", colorText("Finding:", tablewriter.FgMagentaColor), f.Type)
+	_, _ = fmt.Fprintf(w, "\n  %s\n", colorText(severityText, color)) // Aligned with Finding
+	_, _ = fmt.Fprintln(w)                                            // Blank line after severity
+	_, _ = fmt.Fprintf(w, "  %s %s\n", colorText("Finding:", tablewriter.FgMagentaColor), f.Type)
 
 	// Basic metadata
-	fmt.Fprintf(w, "  %s %s\n", colorText("Workflow:", tablewriter.FgMagentaColor), f.Workflow)
+	_, _ = fmt.Fprintf(w, "  %s %s\n", colorText("Workflow:", tablewriter.FgMagentaColor), f.Workflow)
 
 	// Location info
 	locationParts := []string{fmt.Sprintf("Line %d", f.Line)}
@@ -95,12 +96,12 @@ func printFindingDetailed(w io.Writer, result *platforms.ScanResult, f detection
 	if f.Step != "" {
 		locationParts = append(locationParts, fmt.Sprintf("Step: %s", f.Step))
 	}
-	fmt.Fprintf(w, "  %s %s\n", colorText("Location:", tablewriter.FgMagentaColor), strings.Join(locationParts, ", "))
+	_, _ = fmt.Fprintf(w, "  %s %s\n", colorText("Location:", tablewriter.FgMagentaColor), strings.Join(locationParts, ", "))
 
 	// Description
 	if f.Evidence != "" {
-		fmt.Fprintf(w, "\n  %s\n", colorText("Description:", tablewriter.FgMagentaColor))
-		fmt.Fprintf(w, "  %s\n", wrapText(f.Evidence, 78))
+		_, _ = fmt.Fprintf(w, "\n  %s\n", colorText("Description:", tablewriter.FgMagentaColor))
+		_, _ = fmt.Fprintf(w, "  %s\n", wrapText(f.Evidence, 78))
 	}
 
 	// Attack chain if available
@@ -129,43 +130,43 @@ func printFindingDetailed(w io.Writer, result *platforms.ScanResult, f detection
 	// Sink if available (for pwn-request, injection, etc.)
 	if f.Details != nil && f.Details.Metadata != nil {
 		if sink, ok := f.Details.Metadata["sink"]; ok {
-			fmt.Fprintf(w, "\n  %s\n", colorText("Sink:", tablewriter.FgMagentaColor))
-			fmt.Fprintf(w, "  %s\n", sink)
+			_, _ = fmt.Fprintf(w, "\n  %s\n", colorText("Sink:", tablewriter.FgMagentaColor))
+			_, _ = fmt.Fprintf(w, "  %s\n", sink)
 		}
 	}
 
 	// Injectable contexts if available
 	if f.Details != nil && len(f.Details.InjectableContexts) > 0 {
-		fmt.Fprintf(w, "\n  %s\n", colorText("Injectable Contexts:", tablewriter.FgMagentaColor))
+		_, _ = fmt.Fprintf(w, "\n  %s\n", colorText("Injectable Contexts:", tablewriter.FgMagentaColor))
 		for _, ctx := range f.Details.InjectableContexts {
-			fmt.Fprintf(w, "    • %s\n", ctx)
+			_, _ = fmt.Fprintf(w, "    • %s\n", ctx)
 		}
 	}
 
 	// Permissions if available
 	if f.Details != nil && len(f.Details.Permissions) > 0 {
-		fmt.Fprintf(w, "\n  %s\n", colorText("Write Permissions:", tablewriter.FgMagentaColor))
+		_, _ = fmt.Fprintf(w, "\n  %s\n", colorText("Write Permissions:", tablewriter.FgMagentaColor))
 		for _, perm := range f.Details.Permissions {
-			fmt.Fprintf(w, "    • %s\n", perm)
+			_, _ = fmt.Fprintf(w, "    • %s\n", perm)
 		}
 	}
 }
 
 // printAttackChain renders the attack chain with arrows and indentation
 func printAttackChain(w io.Writer, chain []detections.ChainNode) {
-	fmt.Fprintf(w, "\n  %s\n", colorText("Attack Chain:", tablewriter.FgMagentaColor))
+	_, _ = fmt.Fprintf(w, "\n  %s\n", colorText("Attack Chain:", tablewriter.FgMagentaColor))
 
 	for _, node := range chain {
 		// Node with line number
 		if node.Line > 0 {
-			fmt.Fprintf(w, "  → %s: %s (line %d)\n", node.NodeType, node.Name, node.Line)
+			_, _ = fmt.Fprintf(w, "  → %s: %s (line %d)\n", node.NodeType, node.Name, node.Line)
 		} else {
-			fmt.Fprintf(w, "  → %s: %s\n", node.NodeType, node.Name)
+			_, _ = fmt.Fprintf(w, "  → %s: %s\n", node.NodeType, node.Name)
 		}
 
 		// If condition indented under node
 		if node.IfCondition != "" {
-			fmt.Fprintf(w, "    ↪ If: %s\n", node.IfCondition)
+			_, _ = fmt.Fprintf(w, "    ↪ If: %s\n", node.IfCondition)
 		}
 	}
 }
@@ -193,8 +194,8 @@ func printCodeContext(w io.Writer, result *platforms.ScanResult, f detections.Fi
 
 	lines := strings.Split(string(workflowContent), "\n")
 
-	fmt.Fprintf(w, "\n  %s\n", colorText("Code Context:", tablewriter.FgMagentaColor))
-	fmt.Fprintln(w, "  ───────────────────────────────────────────")
+	_, _ = fmt.Fprintf(w, "\n  %s\n", colorText("Code Context:", tablewriter.FgMagentaColor))
+	_, _ = fmt.Fprintln(w, "  ───────────────────────────────────────────")
 
 	// Merge overlapping ranges with context to avoid duplicates
 	mergedRanges := mergeLineRanges(f.Details.LineRanges, 2) // 2 lines context
@@ -225,22 +226,22 @@ func printCodeContext(w io.Writer, result *platforms.ScanResult, f detections.Fi
 
 			// Highlight if in any original range
 			if isHighlighted(i) {
-				fmt.Fprintf(w, "  %s → %s\n",
+				_, _ = fmt.Fprintf(w, "  %s → %s\n",
 					colorText(lineNum, tablewriter.FgYellowColor),
 					colorText(lineContent, tablewriter.FgYellowColor))
 			} else {
-				fmt.Fprintf(w, "  %s   %s\n", lineNum, lineContent)
+				_, _ = fmt.Fprintf(w, "  %s   %s\n", lineNum, lineContent)
 			}
 		}
 	}
 
-	fmt.Fprintln(w, "  ───────────────────────────────────────────")
+	_, _ = fmt.Fprintln(w, "  ───────────────────────────────────────────")
 }
 
 // printMultiJobContext shows code for all jobs in attack chain, then step details
 func printMultiJobContext(w io.Writer, result *platforms.ScanResult, f detections.Finding) {
-	fmt.Fprintf(w, "\n  %s\n", colorText("Code Context:", tablewriter.FgMagentaColor))
-	fmt.Fprintln(w, "  ───────────────────────────────────────────")
+	_, _ = fmt.Fprintf(w, "\n  %s\n", colorText("Code Context:", tablewriter.FgMagentaColor))
+	_, _ = fmt.Fprintln(w, "  ───────────────────────────────────────────")
 
 	// Get workflow content
 	workflows, ok := result.Workflows[f.Repository]
@@ -297,16 +298,16 @@ func printMultiJobContext(w io.Writer, result *platforms.ScanResult, f detection
 
 				// Highlight job definition line
 				if i == chainNode.Line {
-					fmt.Fprintf(w, "  %s → %s (Job: %s)\n",
+					_, _ = fmt.Fprintf(w, "  %s → %s (Job: %s)\n",
 						colorText(lineNum, tablewriter.FgYellowColor),
 						colorText(content, tablewriter.FgYellowColor),
 						chainNode.Name)
 				} else {
-					fmt.Fprintf(w, "  %s   %s\n", lineNum, content)
+					_, _ = fmt.Fprintf(w, "  %s   %s\n", lineNum, content)
 				}
 				shownLines[i] = true
 			}
-			fmt.Fprintln(w) // Spacing between jobs
+			_, _ = fmt.Fprintln(w) // Spacing between jobs
 			shownJobs[chainNode.Line] = true
 		}
 	}
@@ -337,17 +338,17 @@ func printMultiJobContext(w io.Writer, result *platforms.ScanResult, f detection
 				lineContent := lines[i-1]
 
 				if isHighlighted(i) {
-					fmt.Fprintf(w, "  %s → %s\n",
+					_, _ = fmt.Fprintf(w, "  %s → %s\n",
 						colorText(lineNum, tablewriter.FgYellowColor),
 						colorText(lineContent, tablewriter.FgYellowColor))
 				} else {
-					fmt.Fprintf(w, "  %s   %s\n", lineNum, lineContent)
+					_, _ = fmt.Fprintf(w, "  %s   %s\n", lineNum, lineContent)
 				}
 			}
 		}
 	}
 
-	fmt.Fprintln(w, "  ───────────────────────────────────────────")
+	_, _ = fmt.Fprintln(w, "  ───────────────────────────────────────────")
 }
 
 // printCalledWorkflowContext shows code from a called reusable workflow
@@ -380,8 +381,8 @@ func printCalledWorkflowContext(w io.Writer, result *platforms.ScanResult, repo,
 			start := max(1, i+1-2)
 			end := min(len(lines), i+1+5)
 
-			fmt.Fprintf(w, "\n  %s\n", colorText("Called Workflow ("+calledWorkflowPath+"):", tablewriter.FgMagentaColor))
-			fmt.Fprintln(w, "  ───────────────────────────────────────────")
+			_, _ = fmt.Fprintf(w, "\n  %s\n", colorText("Called Workflow ("+calledWorkflowPath+"):", tablewriter.FgMagentaColor))
+			_, _ = fmt.Fprintln(w, "  ───────────────────────────────────────────")
 
 			for lineNum := start; lineNum <= end; lineNum++ {
 				if lineNum > len(lines) {
@@ -393,15 +394,15 @@ func printCalledWorkflowContext(w io.Writer, result *platforms.ScanResult, repo,
 
 				// Highlight checkout and ref lines
 				if lineNum >= i+1 && lineNum <= i+4 {
-					fmt.Fprintf(w, "  %s → %s\n",
+					_, _ = fmt.Fprintf(w, "  %s → %s\n",
 						colorText(numStr, tablewriter.FgYellowColor),
 						colorText(content, tablewriter.FgYellowColor))
 				} else {
-					fmt.Fprintf(w, "  %s   %s\n", numStr, content)
+					_, _ = fmt.Fprintf(w, "  %s   %s\n", numStr, content)
 				}
 			}
 
-			fmt.Fprintln(w, "  ───────────────────────────────────────────")
+			_, _ = fmt.Fprintln(w, "  ───────────────────────────────────────────")
 			break // Only show first checkout
 		}
 	}
@@ -486,19 +487,4 @@ func mergeLineRanges(ranges []detections.LineRange, contextPadding int) []detect
 	}
 
 	return merged
-}
-
-// Helper functions
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

@@ -105,7 +105,7 @@ func runProjectsEnumerate(cmd *cobra.Command, args []string) error {
 		if !projectsArchived {
 			filtered := make([]gitlabplatform.ProjectWithPermissions, 0, len(result.Projects))
 			for _, p := range result.Projects {
-				if !p.Repository.Archived {
+				if !p.Archived {
 					filtered = append(filtered, p)
 				}
 			}
@@ -167,7 +167,7 @@ func rebuildProjectsSummary(projects []gitlabplatform.ProjectWithPermissions) gi
 		case "public":
 			s.Public++
 		}
-		if p.Repository.Archived {
+		if p.Archived {
 			s.Archived++
 		}
 		if p.AccessLevel >= 30 {

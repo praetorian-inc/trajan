@@ -126,7 +126,8 @@ func (p *Platform) EnumerateProjects(ctx context.Context, target platforms.Targe
 		}
 	}
 
-	for _, proj := range projects {
+	for i := range projects {
+		proj := &projects[i]
 		var accessLevel int
 		if needExplicitAccessLevels {
 			// Try to get direct project access level first
@@ -205,7 +206,7 @@ func buildProjectsSummary(projects []ProjectWithPermissions) ProjectsSummary {
 		case "public":
 			s.Public++
 		}
-		if p.Repository.Archived {
+		if p.Archived {
 			s.Archived++
 		}
 		if p.AccessLevel >= 30 { // Developer+ = write
@@ -362,8 +363,9 @@ func (p *Platform) EnumerateSecrets(ctx context.Context, target platforms.Target
 		if err != nil {
 			result.Errors = append(result.Errors, "listing group projects: "+err.Error())
 		} else {
-			for _, proj := range projects {
-				p.enumerateProjectVariables(ctx, result, &proj)
+			for i := range projects {
+				proj := &projects[i]
+				p.enumerateProjectVariables(ctx, result, proj)
 			}
 		}
 

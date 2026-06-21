@@ -9,10 +9,11 @@ import (
 	"log"
 	"strings"
 
-	"github.com/praetorian-inc/trajan/pkg/jfrog/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/praetorian-inc/trajan/pkg/jfrog/proto"
 )
 
 // ErrMLSecretsAuthFailed indicates ML secrets access requires a Federation token
@@ -82,7 +83,7 @@ func (p *Platform) getTenantID(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to call footer API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -120,7 +121,7 @@ func (p *Platform) listSecretsFromAdmiral(ctx context.Context, tenantID string) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Admiral: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Create Admiral SecretService client
 	client := proto.NewSecretServiceClient(conn)
@@ -144,7 +145,7 @@ func (p *Platform) listSecretsFromAdmiral(ctx context.Context, tenantID string) 
 		return []secretMetadata{}, nil
 	}
 
-	metadata := make([]secretMetadata, 0, len(resp.AccountSecrets.Secrets))
+	metas := make([]secretMetadata, 0, len(resp.AccountSecrets.Secrets))
 	for _, s := range resp.AccountSecrets.Secrets {
 		if s.Identifier == nil {
 			continue
@@ -158,7 +159,7 @@ func (p *Platform) listSecretsFromAdmiral(ctx context.Context, tenantID string) 
 			lastUpdatedAt = s.LastUpdatedAt.AsTime().Unix()
 		}
 
-		metadata = append(metadata, secretMetadata{
+		metas = append(metas, secretMetadata{
 			Name:          s.Identifier.Name,
 			EnvironmentID: s.Identifier.EnvironmentId,
 			CreatedAt:     createdAt,
@@ -166,7 +167,7 @@ func (p *Platform) listSecretsFromAdmiral(ctx context.Context, tenantID string) 
 		})
 	}
 
-	return metadata, nil
+	return metas, nil
 }
 
 // getSecretValueFromEdge retrieves a secret value from the Edge service
@@ -178,7 +179,7 @@ func (p *Platform) getSecretValueFromEdge(ctx context.Context, tenantID, secretN
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to Edge: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Call GetSecret with correct method path (Edge uses qwak.secret.service.SecretService)
 	req := &proto.GetSecretRequest{Name: secretName}
@@ -200,8 +201,7 @@ func (p *Platform) createGRPCConnection(ctx context.Context, addr, tenantID stri
 	}
 
 	// Create connection with TLS
-	conn, err := grpc.DialContext(
-		authCtx,
+	conn, err := grpc.NewClient(
 		addr,
 		grpc.WithTransportCredentials(credentials.NewTLS(nil)),
 	)

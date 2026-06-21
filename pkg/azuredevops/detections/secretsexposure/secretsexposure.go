@@ -74,7 +74,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		// insecure-secrets checks
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeStep {
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 
 				if step.Run != "" {
 					if finding := checkInsecureSecrets(wf, step); finding != nil {
@@ -426,7 +429,10 @@ func checkForkBuildSettings(wf *graph.WorkflowNode, g *graph.Graph) []detections
 
 	graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 		if node.Type() == graph.NodeTypeStep {
-			step := node.(*graph.StepNode)
+			step, ok := node.(*graph.StepNode)
+			if !ok {
+				return true
+			}
 
 			// Check environment variables for secrets
 			for envKey, envValue := range step.Env {

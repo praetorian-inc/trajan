@@ -36,7 +36,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Only process root workflows to avoid duplicates
 		if !common.IsRootWorkflow(g, wf) {
@@ -61,11 +64,11 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 				}
 
 				findings = append(findings, detections.Finding{
-					Type:        detections.VulnIncludeInjection,
-					Platform:    "gitlab",
-					Class:       detections.GetVulnerabilityClass(detections.VulnIncludeInjection),
-					Severity:    detections.SeverityCritical,
-					Confidence:  detections.ConfidenceHigh,
+					Type:         detections.VulnIncludeInjection,
+					Platform:     "gitlab",
+					Class:        detections.GetVulnerabilityClass(detections.VulnIncludeInjection),
+					Severity:     detections.SeverityCritical,
+					Confidence:   detections.ConfidenceHigh,
 					Repository:   wf.RepoSlug,
 					Workflow:     wf.Name,
 					WorkflowFile: wf.Path,

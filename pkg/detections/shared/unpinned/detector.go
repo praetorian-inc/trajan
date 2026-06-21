@@ -63,19 +63,19 @@ func (d *Detector) Detect(step *graph.StepNode, ctx *shared.DetectionContext) *d
 	}
 
 	return &detections.Finding{
-		Type:        detections.VulnUnpinnedAction,
-		Platform:    ctx.Platform,
-		Class:       detections.GetVulnerabilityClass(detections.VulnUnpinnedAction),
-		Severity:    detections.SeverityLow,
-		Confidence:  detections.ConfidenceHigh,
-		Complexity:  detections.ComplexityZeroClick,
+		Type:         detections.VulnUnpinnedAction,
+		Platform:     ctx.Platform,
+		Class:        detections.GetVulnerabilityClass(detections.VulnUnpinnedAction),
+		Severity:     detections.SeverityLow,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityZeroClick,
 		Repository:   ctx.Repository,
 		Workflow:     ctx.Workflow.Name,
 		WorkflowFile: ctx.Workflow.Path,
 		Step:         step.Name,
-		Line:        step.Line,
-		Evidence:    step.Uses,
-		Remediation: remediation,
+		Line:         step.Line,
+		Evidence:     step.Uses,
+		Remediation:  remediation,
 	}
 }
 

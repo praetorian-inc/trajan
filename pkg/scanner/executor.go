@@ -188,7 +188,7 @@ func (e *DetectionExecutor) executeOnWorkflow(ctx context.Context, repoSlug stri
 		}
 	}
 
-	graph, err := analysis.BuildGraph(repoSlug, wf.Path, wf.Content, mergedMetadata)
+	gr, err := analysis.BuildGraph(repoSlug, wf.Path, wf.Content, mergedMetadata)
 	if err != nil {
 		return nil, []error{fmt.Errorf("building graph for %s/%s: %w", repoSlug, wf.Path, err)}
 	}
@@ -196,7 +196,7 @@ func (e *DetectionExecutor) executeOnWorkflow(ctx context.Context, repoSlug stri
 	// Record any workflows pulled in by include directives. Written into a
 	// shared discovery map under e.mu; the caller merges these into the
 	// user-visible workflows map after all goroutines complete.
-	includedWorkflows := graph.GetIncludedWorkflows(repoSlug)
+	includedWorkflows := gr.GetIncludedWorkflows(repoSlug)
 	if len(includedWorkflows) > 0 {
 		e.mu.Lock()
 		for _, incWf := range includedWorkflows {
@@ -219,7 +219,7 @@ func (e *DetectionExecutor) executeOnWorkflow(ctx context.Context, repoSlug stri
 				}
 			}()
 
-			pFindings, err := plugin.Detect(ctx, graph)
+			pFindings, err := plugin.Detect(ctx, gr)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("plugin %s on %s/%s: %w", plugin.Name(), repoSlug, wf.Path, err))
 				return

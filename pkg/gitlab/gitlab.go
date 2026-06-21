@@ -115,7 +115,8 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 	}
 
 	// Convert to platform-agnostic types
-	for _, proj := range projects {
+	for i := range projects {
+		proj := &projects[i]
 		// Extract owner from namespace path or use namespace name
 		owner := proj.Namespace.FullPath
 		if owner == "" {

@@ -3,8 +3,9 @@ package common
 import (
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 )
 
 func TestGenerateEncryptedPipelineYAML_WithDiscoveredGroups(t *testing.T) {

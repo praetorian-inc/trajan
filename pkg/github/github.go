@@ -207,7 +207,7 @@ func (p *Platform) ScanSecrets(ctx context.Context, target platforms.Target) (*S
 			// Check if this is a permission error
 			if IsPermissionDenied(err) {
 				result.PermissionErrors = append(result.PermissionErrors,
-					fmt.Sprintf("org-level Actions secrets: requires admin:org scope"))
+					"org-level Actions secrets: requires admin:org scope")
 			} else {
 				result.Errors = append(result.Errors, fmt.Errorf("org actions secrets: %w", err))
 			}

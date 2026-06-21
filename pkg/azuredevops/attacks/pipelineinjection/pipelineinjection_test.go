@@ -3,10 +3,11 @@ package pipelineinjection
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/praetorian-inc/trajan/pkg/attacks"
 	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 	"github.com/praetorian-inc/trajan/pkg/detections"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestNew(t *testing.T) {

@@ -90,10 +90,10 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("creating output file: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		for _, repo := range result.Repositories {
-			fmt.Fprintln(f, repo)
+			_, _ = fmt.Fprintln(f, repo)
 		}
 		fmt.Printf("Results written to %s\n", searchOutput)
 	} else {

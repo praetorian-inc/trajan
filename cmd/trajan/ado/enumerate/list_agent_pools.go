@@ -184,7 +184,7 @@ func renderAgentPoolsConsole(pools []azuredevops.AgentPool, agentsByPool map[int
 		}
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\t%s\n", pool.ID, pool.Name, hosted, pool.PoolType, pool.Size, autoProv)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	// Print agent details under self-hosted pools
 	if agentsByPool != nil {

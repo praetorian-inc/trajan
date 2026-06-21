@@ -61,10 +61,10 @@ func WithTimeout(timeout time.Duration) ClientOption {
 }
 
 // WithConcurrency sets the maximum concurrent requests
-func WithConcurrency(max int64) ClientOption {
+func WithConcurrency(maxVal int64) ClientOption {
 	return func(c *Client) {
-		if max > 0 {
-			c.semaphore = semaphore.NewWeighted(max)
+		if maxVal > 0 {
+			c.semaphore = semaphore.NewWeighted(maxVal)
 		}
 	}
 }
@@ -124,8 +124,8 @@ func (c *Client) getJSON(ctx context.Context, path string, v interface{}) error 
 	}
 	defer c.semaphore.Release(1)
 
-	url := c.baseURL + path
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	reqURL := c.baseURL + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}
@@ -156,8 +156,8 @@ func (c *Client) getRaw(ctx context.Context, path string) ([]byte, error) {
 	}
 	defer c.semaphore.Release(1)
 
-	url := c.baseURL + path
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	reqURL := c.baseURL + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -397,7 +397,7 @@ func (c *Client) CheckScriptConsole(ctx context.Context) (bool, int, error) {
 		return false, 0, err
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body) // drain body
+	_, _ = io.Copy(io.Discard, resp.Body) // drain body
 
 	return resp.StatusCode == http.StatusOK, resp.StatusCode, nil
 }

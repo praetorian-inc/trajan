@@ -229,12 +229,12 @@ func TestClient_ConcurrencyLimit(t *testing.T) {
 	wg.Wait()
 
 	// Verify max concurrent stayed under limit (90)
-	max := maxConcurrent.Load()
-	if max > 90 {
-		t.Errorf("Max concurrent requests = %d, want <= 90", max)
+	maxVal := maxConcurrent.Load()
+	if maxVal > 90 {
+		t.Errorf("Max concurrent requests = %d, want <= 90", maxVal)
 	}
 
-	t.Logf("Max concurrent requests observed: %d", max)
+	t.Logf("Max concurrent requests observed: %d", maxVal)
 }
 
 func TestClient_DoWithRetry_429(t *testing.T) {

@@ -274,10 +274,11 @@ func (p *AzureParser) parseJobs(jobs []interface{}) []AzureJob {
 			if displayName, ok := jobMap["displayName"].(string); ok {
 				job.DisplayName = displayName
 			}
-			if poolMap, ok := jobMap["pool"].(map[string]interface{}); ok {
-				job.Pool = p.parsePool(poolMap)
-			} else if poolStr, ok := jobMap["pool"].(string); ok {
-				job.Pool = &AzurePool{Name: poolStr}
+			switch pool := jobMap["pool"].(type) {
+			case map[string]interface{}:
+				job.Pool = p.parsePool(pool)
+			case string:
+				job.Pool = &AzurePool{Name: pool}
 			}
 			if steps, ok := jobMap["steps"].([]interface{}); ok {
 				job.Steps = p.parseSteps(steps)
@@ -430,7 +431,7 @@ func (p *AzureParser) getTriggers(pipeline *AzurePipelines) []string {
 		add("ci")
 		add("*")
 	case string:
-		if strings.ToLower(v) != "none" {
+		if !strings.EqualFold(v, "none") {
 			add("ci")
 		}
 	case []interface{}:
@@ -457,7 +458,7 @@ func (p *AzureParser) getTriggers(pipeline *AzurePipelines) []string {
 	if pipeline.PR != nil {
 		switch v := pipeline.PR.(type) {
 		case string:
-			if strings.ToLower(v) != "none" {
+			if !strings.EqualFold(v, "none") {
 				add("pr")
 			}
 		case []interface{}:
@@ -518,7 +519,8 @@ func (p *AzureParser) convertWithLines(azPipeline *AzurePipelines, lineMap map[s
 	}
 
 	// Convert jobs from stages
-	for stageIdx, stage := range azPipeline.Stages {
+	for stageIdx := range azPipeline.Stages {
+		stage := &azPipeline.Stages[stageIdx]
 		for jobIdx, azJob := range stage.Jobs {
 			jobID := stage.Name + "-" + azJob.Name
 			job := p.convertJob(azJob, jobID, azPipeline)
@@ -557,12 +559,13 @@ func (p *AzureParser) convertWithLines(azPipeline *AzurePipelines, lineMap map[s
 	}
 
 	// Convert flat jobs (no stages)
-	for jobIdx, azJob := range azPipeline.Jobs {
+	for jobIdx := range azPipeline.Jobs {
+		azJob := &azPipeline.Jobs[jobIdx]
 		jobID := azJob.Name
 		if jobID == "" {
 			jobID = fmt.Sprintf("job-%d", len(wf.Jobs))
 		}
-		job := p.convertJob(azJob, jobID, azPipeline)
+		job := p.convertJob(*azJob, jobID, azPipeline)
 		// Apply job line number
 		if line, ok := lineMap[fmt.Sprintf("jobs[%d]", jobIdx)]; ok {
 			job.Line = line
@@ -655,7 +658,8 @@ func (p *AzureParser) convertJob(azJob AzureJob, jobID string, pipeline *AzurePi
 func (p *AzureParser) convertSteps(azSteps []AzureStep) []*NormalizedStep {
 	steps := make([]*NormalizedStep, 0, len(azSteps))
 
-	for _, azStep := range azSteps {
+	for i := range azSteps {
+		azStep := &azSteps[i]
 		step := &NormalizedStep{
 			Name:      azStep.DisplayName,
 			Condition: azStep.Condition,

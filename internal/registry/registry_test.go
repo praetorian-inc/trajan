@@ -58,13 +58,13 @@ func TestConcurrentPlatformRegistration(t *testing.T) {
 	wg.Wait()
 
 	// Verify registrations succeeded
-	platforms := ListPlatforms()
-	if len(platforms) == 0 {
+	plats := ListPlatforms()
+	if len(plats) == 0 {
 		t.Fatal("Expected platforms to be registered, got none")
 	}
 
 	// Verify all registered platforms can be retrieved
-	for _, name := range platforms {
+	for _, name := range plats {
 		p, err := GetPlatform(name)
 		if err != nil {
 			t.Errorf("Failed to get platform %s: %v", name, err)
@@ -153,9 +153,9 @@ func TestReset(t *testing.T) {
 	Reset()
 
 	// Verify everything cleared
-	platforms := ListPlatforms()
-	if len(platforms) != 0 {
-		t.Errorf("After Reset(), ListPlatforms() = %d items, want 0", len(platforms))
+	plats := ListPlatforms()
+	if len(plats) != 0 {
+		t.Errorf("After Reset(), ListPlatforms() = %d items, want 0", len(plats))
 	}
 
 	// Verify GetPlatform returns error for unknown platform
@@ -217,8 +217,8 @@ func TestConcurrentReadWrite(t *testing.T) {
 	<-done
 
 	// Verify registry still functional
-	platforms := ListPlatforms()
-	if len(platforms) == 0 {
+	plats := ListPlatforms()
+	if len(plats) == 0 {
 		t.Error("After concurrent access, registry should still have platforms")
 	}
 }

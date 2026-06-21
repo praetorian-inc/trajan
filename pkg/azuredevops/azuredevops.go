@@ -39,7 +39,7 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 	}
 
 	if orgURL == "" {
-		return fmt.Errorf("Azure DevOps organization URL not provided (set BaseURL or AzureDevOps.Organization)")
+		return fmt.Errorf("missing Azure DevOps organization URL (set BaseURL or AzureDevOps.Organization)")
 	}
 
 	// Get PAT from config
@@ -56,7 +56,7 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 
 	// Require at least one auth method
 	if pat == "" && bearerToken == "" {
-		return fmt.Errorf("Azure DevOps authentication not provided (set Token, AzureDevOps.PAT, or AzureDevOps.BearerToken)")
+		return fmt.Errorf("missing Azure DevOps authentication (set Token, AzureDevOps.PAT, or AzureDevOps.BearerToken)")
 	}
 
 	// Build client options from config
@@ -142,10 +142,7 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 	// Convert to platform-agnostic types and fetch pipeline workflows.
 	for _, repo := range repositories {
 		// Extract default branch ref (refs/heads/main -> main)
-		defaultBranch := repo.DefaultBranch
-		if strings.HasPrefix(defaultBranch, "refs/heads/") {
-			defaultBranch = strings.TrimPrefix(defaultBranch, "refs/heads/")
-		}
+		defaultBranch := strings.TrimPrefix(repo.DefaultBranch, "refs/heads/")
 
 		result.Repositories = append(result.Repositories, platforms.Repository{
 			Owner:         repo.Project.Name,

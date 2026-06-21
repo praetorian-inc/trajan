@@ -6,20 +6,6 @@ import (
 	"strings"
 )
 
-// connectionFieldPatterns are YAML input fields that reference service connections
-var connectionFieldPatterns = []string{
-	"azureSubscription",
-	"kubernetesServiceConnection",
-	"dockerRegistryServiceConnection",
-	"containerRegistry",
-	"serviceConnection",
-	"sshEndpoint",
-	"connectedServiceName",
-	"connectedServiceNameARM",
-	"awsCredentials",
-	"SonarQube",
-}
-
 // commonYAMLPaths are the typical locations for Azure DevOps pipeline YAML files
 var commonYAMLPaths = []string{
 	"/azure-pipelines.yml",

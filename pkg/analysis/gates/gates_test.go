@@ -3,10 +3,11 @@ package gates
 import (
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/analysis/flow"
-	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/pkg/analysis/flow"
+	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 )
 
 func TestDetector_DeploymentApproval(t *testing.T) {

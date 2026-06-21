@@ -196,8 +196,7 @@ func (p *Plugin) cleanupWithClient(ctx context.Context, client *azuredevops.Clie
 		}
 
 		for _, action := range result.CleanupActions {
-			switch action.Type {
-			case "membership":
+			if action.Type == "membership" {
 				// Split identifier to get userDesc and groupDesc
 				parts := splitCleanupIdentifier(action.Identifier)
 				if len(parts) != 2 {

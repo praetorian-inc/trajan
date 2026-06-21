@@ -42,13 +42,19 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 		detCtx := shared.NewDetectionContext("github", wf)
 
 		// DFS through all steps
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeStep {
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 
 				if finding := d.detector.Detect(step, detCtx); finding != nil {
 					// Enhance with detailed evidence

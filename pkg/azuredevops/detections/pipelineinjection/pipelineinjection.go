@@ -51,7 +51,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		}
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeStep {
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 				if step.Run != "" {
 					if finding := checkScriptInjection(wf, step); finding != nil {
 						findings = append(findings, *finding)

@@ -39,11 +39,17 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeJob {
-				job := node.(*graph.JobNode)
+				job, ok := node.(*graph.JobNode)
+				if !ok {
+					return true
+				}
 
 				if isSelfHostedPool(job.RunsOn, poolMap) {
 					findings = append(findings, detections.Finding{

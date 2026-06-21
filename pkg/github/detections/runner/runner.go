@@ -62,13 +62,19 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	}
 
 	for _, jobNode := range jobs {
-		job := jobNode.(*graph.JobNode)
+		job, ok := jobNode.(*graph.JobNode)
+		if !ok {
+			continue
+		}
 
 		wfNode, ok := g.GetNode(job.Parent())
 		if !ok {
 			continue
 		}
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Double-layer: Only flag if BOTH config uses self-hosted AND runners exist
 		// OR if we couldn't check runner existence
@@ -95,7 +101,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		})
 
 		for _, node := range g.GetNodesByType(graph.NodeTypeJob) {
-			job := node.(*graph.JobNode)
+			job, ok := node.(*graph.JobNode)
+			if !ok {
+				continue
+			}
 			if job.Uses == "" {
 				continue
 			}
@@ -104,7 +113,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			if !ok {
 				continue
 			}
-			wf := wfNode.(*graph.WorkflowNode)
+			wf, ok := wfNode.(*graph.WorkflowNode)
+			if !ok {
+				continue
+			}
 
 			isSelfHosted, resolvedRunsOn, err := d.resolver.resolveCallee(ctx, wf.RepoSlug, job.Uses, 0)
 			if err != nil || !isSelfHosted {
@@ -172,19 +184,19 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, hasRunnerData, ru
 	}
 
 	return detections.Finding{
-		Type:       detections.VulnSelfHostedRunner,
-		Platform:   "github",
-		Class:      detections.GetVulnerabilityClass(detections.VulnSelfHostedRunner),
-		Severity:   severity,
-		Confidence: detections.ConfidenceHigh,
+		Type:         detections.VulnSelfHostedRunner,
+		Platform:     "github",
+		Class:        detections.GetVulnerabilityClass(detections.VulnSelfHostedRunner),
+		Severity:     severity,
+		Confidence:   detections.ConfidenceHigh,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Path, // Use path
 		WorkflowFile: wf.Path,
 		Job:          job.Name,
-		Line:       job.Line,
-		Trigger:    strings.Join(wf.Triggers, ", "),
-		Evidence:    evidence,
-		Remediation: "Use ephemeral (just-in-time) self-hosted runners that are destroyed after each job to prevent code persistence attacks. Restrict self-hosted runners to private repositories or use runner groups with controlled access. Avoid using self-hosted runners on public repositories with zero-click triggers (pull_request_target, issue_comment).",
+		Line:         job.Line,
+		Trigger:      strings.Join(wf.Triggers, ", "),
+		Evidence:     evidence,
+		Remediation:  "Use ephemeral (just-in-time) self-hosted runners that are destroyed after each job to prevent code persistence attacks. Restrict self-hosted runners to private repositories or use runner groups with controlled access. Avoid using self-hosted runners on public repositories with zero-click triggers (pull_request_target, issue_comment).",
 		Details: &detections.FindingDetails{
 			LineRanges: lineRanges,
 		},

@@ -3,7 +3,6 @@ package enumerate
 import (
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,14 +27,4 @@ func TestTokenCommandHasNoSubcommands(t *testing.T) {
 
 func TestTokenCommandRequiresOrg(t *testing.T) {
 	t.Skip("Integration test - requires live ADO instance")
-}
-
-// findSubcommand finds a subcommand by name within a parent command.
-func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
-	for _, sub := range parent.Commands() {
-		if sub.Name() == name {
-			return sub
-		}
-	}
-	return nil
 }

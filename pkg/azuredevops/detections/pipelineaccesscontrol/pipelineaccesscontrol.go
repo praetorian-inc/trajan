@@ -56,7 +56,10 @@ func checkJobPermissions(wf *graph.WorkflowNode, g *graph.Graph) []detections.Fi
 
 	graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 		if node.Type() == graph.NodeTypeJob {
-			job := node.(*graph.JobNode)
+			job, ok := node.(*graph.JobNode)
+			if !ok {
+				return true
+			}
 
 			if job.Permissions != nil {
 				for perm, level := range job.Permissions {
@@ -101,7 +104,10 @@ func checkVariableGroupScope(wf *graph.WorkflowNode, g *graph.Graph) []detection
 
 	graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 		if node.Type() == graph.NodeTypeStep {
-			step := node.(*graph.StepNode)
+			step, ok := node.(*graph.StepNode)
+			if !ok {
+				return true
+			}
 
 			for envKey, envValue := range step.Env {
 				envValueLower := strings.ToLower(envValue)
@@ -144,7 +150,10 @@ func checkEnvironmentGates(wf *graph.WorkflowNode, g *graph.Graph) []detections.
 
 	graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 		if node.Type() == graph.NodeTypeStep {
-			step := node.(*graph.StepNode)
+			step, ok := node.(*graph.StepNode)
+			if !ok {
+				return true
+			}
 
 			// Check step.With for environment references (case-insensitive)
 			for key := range step.With {

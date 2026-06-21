@@ -70,7 +70,7 @@ func (p *Platform) SearchArtifacts(ctx context.Context, opts ArtifactSearchOptio
 	if err != nil {
 		return nil, fmt.Errorf("searching artifacts: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -98,7 +98,7 @@ func (p *Platform) DownloadArtifacts(ctx context.Context, opts ArtifactDownloadO
 	maxTotal := parseSize(opts.MaxTotal)
 
 	// Build AQL query to list files
-	aql := fmt.Sprintf(`items.find({"repo":"%s"`, opts.Repo)
+	aql := fmt.Sprintf(`items.find({"repo":%q`, opts.Repo)
 	if opts.Path != "" {
 		aql += fmt.Sprintf(`,"path":{"$match":"*%s*"}`, opts.Path)
 	}
@@ -108,7 +108,7 @@ func (p *Platform) DownloadArtifacts(ctx context.Context, opts ArtifactDownloadO
 	if err != nil {
 		return result, fmt.Errorf("searching artifacts: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -125,7 +125,7 @@ func (p *Platform) DownloadArtifacts(ctx context.Context, opts ArtifactDownloadO
 	}
 
 	// Create output directory
-	if err := os.MkdirAll(opts.OutputDir, 0755); err != nil {
+	if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil {
 		return result, fmt.Errorf("creating output directory: %w", err)
 	}
 
@@ -160,30 +160,30 @@ func (p *Platform) DownloadArtifacts(ctx context.Context, opts ArtifactDownloadO
 		localPath := filepath.Join(opts.OutputDir, artifact.Name)
 		absLocal, err := filepath.Abs(localPath)
 		if err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			continue
 		}
 		absDir, err := filepath.Abs(opts.OutputDir)
 		if err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			continue
 		}
 		if !strings.HasPrefix(absLocal, absDir+string(os.PathSeparator)) && absLocal != absDir {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			continue
 		}
 		f, err := os.Create(localPath)
 		if err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return result, fmt.Errorf("creating file %s: %w", localPath, err)
 		}
 
 		written, err := io.Copy(f, resp.Body)
-		f.Close()
-		resp.Body.Close()
+		_ = f.Close()
+		_ = resp.Body.Close()
 
 		if err != nil {
-			os.Remove(localPath)
+			_ = os.Remove(localPath)
 			continue
 		}
 
@@ -217,14 +217,14 @@ func (p *Platform) ScanArtifactsForSecrets(ctx context.Context, repo, mode strin
 				{"name":{"$match":"*credential*"}}
 			]}`
 		if repo != "" {
-			aql += fmt.Sprintf(`,{"repo":"%s"}`, repo)
+			aql += fmt.Sprintf(`,{"repo":%q}`, repo)
 		}
 		aql += `]}).include("repo","path","name","size").limit(500)`
 	} else {
 		// Scan all files (metadata mode)
 		aql = `items.find({"type":"file","repo":{"$ne":"jfrog-usage-logs"}}`
 		if repo != "" {
-			aql = fmt.Sprintf(`items.find({"type":"file","repo":"%s"}`, repo)
+			aql = fmt.Sprintf(`items.find({"type":"file","repo":%q}`, repo)
 		}
 		aql += `).include("repo","path","name","size").limit(500)`
 	}
@@ -233,7 +233,7 @@ func (p *Platform) ScanArtifactsForSecrets(ctx context.Context, repo, mode strin
 	if err != nil {
 		return []ArtifactSecret{}, fmt.Errorf("searching artifacts: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -281,12 +281,12 @@ func (p *Platform) ScanArtifactsForSecrets(ctx context.Context, repo, mode strin
 			}
 
 			if resp.StatusCode != 200 {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				continue
 			}
 
 			content, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			// Scan content for secrets
 			secretTypes := scanForSecrets(string(content))
@@ -317,11 +317,11 @@ func buildAQLQuery(name, repo, artifactType string, limit int) string {
 	}
 
 	if repo != "" {
-		filters = append(filters, fmt.Sprintf(`"repo":"%s"`, repo))
+		filters = append(filters, fmt.Sprintf(`"repo":%q`, repo))
 	}
 
 	if artifactType != "" {
-		filters = append(filters, fmt.Sprintf(`"type":"%s"`, artifactType))
+		filters = append(filters, fmt.Sprintf(`"type":%q`, artifactType))
 	}
 
 	filterStr := ""

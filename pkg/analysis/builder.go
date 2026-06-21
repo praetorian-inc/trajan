@@ -47,7 +47,7 @@ func BuildGraph(repoSlug, path string, content []byte, metadata ...map[string]in
 	}
 
 	// Fallback to legacy GitHub Actions parser for backward compatibility
-	wf, err := parser.ParseWorkflow(content)
+	wf, err := parser.ParseWorkflow(content) //nolint:staticcheck // SA1019: legacy fallback path intentionally uses the GitHub-only parser
 	if err != nil {
 		return nil, fmt.Errorf("parsing workflow: %w", err)
 	}
@@ -118,7 +118,7 @@ type graphBuilder struct {
 	graph    *graph.Graph
 	repoSlug string
 	path     string
-	workflow *parser.Workflow
+	workflow *parser.GitHubWorkflow
 }
 
 func (b *graphBuilder) build() error {
@@ -168,7 +168,7 @@ func (b *graphBuilder) build() error {
 	return nil
 }
 
-func (b *graphBuilder) buildJob(wfID, jobName string, job *parser.Job) error {
+func (b *graphBuilder) buildJob(wfID, jobName string, job *parser.GitHubJob) error {
 	jobID := fmt.Sprintf("%s:job:%s", wfID, jobName)
 	jobNode := graph.NewJobNode(jobID, jobName, job.GetRunsOn())
 
@@ -207,7 +207,7 @@ func (b *graphBuilder) buildJob(wfID, jobName string, job *parser.Job) error {
 	return nil
 }
 
-func (b *graphBuilder) buildStep(jobID string, index int, step *parser.Step) error {
+func (b *graphBuilder) buildStep(jobID string, index int, step *parser.GitHubStep) error {
 	stepID := fmt.Sprintf("%s:step:%d", jobID, index)
 	stepNode := graph.NewStepNode(stepID, step.Name, index)
 	stepNode.Uses = step.Uses
@@ -277,10 +277,7 @@ func containsInjectableContext(s string) bool {
 			return true
 		}
 	}
-	if strings.Contains(s, taintsources.InputsPrefix) {
-		return true
-	}
-	return false
+	return strings.Contains(s, taintsources.InputsPrefix)
 }
 
 // normalizedGraphBuilder builds graphs from NormalizedWorkflow (multi-platform support)
@@ -353,11 +350,10 @@ func (b *normalizedGraphBuilder) build() error {
 	// Resolve GitLab includes if resolver is available
 	if b.resolver != nil && b.workflow.Platform == "gitlab" {
 		ctx := context.Background()
-		if err := b.resolveGitLabIncludes(ctx, wfNode); err != nil {
-			// Log warning but continue - graceful degradation
-			// In production, use structured logging
-			// For now, continue building the graph even if includes fail
-		}
+		// Log warning but continue - graceful degradation
+		// In production, use structured logging
+		// For now, continue building the graph even if includes fail
+		_ = b.resolveGitLabIncludes(ctx, wfNode)
 	}
 
 	// Build job nodes
