@@ -193,7 +193,7 @@ func runListBranchPoliciesAzDO() error {
 				row.Details,
 			)
 		}
-		w.Flush()
+		_ = w.Flush()
 
 		fmt.Printf("\nTotal: %d policies\n", len(allPolicies))
 		return nil

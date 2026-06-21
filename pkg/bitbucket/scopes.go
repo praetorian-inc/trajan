@@ -55,9 +55,9 @@ var legacyImplications = map[string][]scopeEntry{
 		{category: "pullrequest", level: ScopeLevelWrite}, {category: "pullrequest", level: ScopeLevelRead},
 		{category: "repository", level: ScopeLevelWrite}, {category: "repository", level: ScopeLevelRead},
 	},
-	"webhook":           {{category: "webhook", level: ScopeLevelRead}, {category: "webhook", level: ScopeLevelWrite}},
-	"pipeline":          {{category: "pipeline", level: ScopeLevelRead}},
-	"pipeline:write":    {{category: "pipeline", level: ScopeLevelWrite}, {category: "pipeline", level: ScopeLevelRead}},
+	"webhook":        {{category: "webhook", level: ScopeLevelRead}, {category: "webhook", level: ScopeLevelWrite}},
+	"pipeline":       {{category: "pipeline", level: ScopeLevelRead}},
+	"pipeline:write": {{category: "pipeline", level: ScopeLevelWrite}, {category: "pipeline", level: ScopeLevelRead}},
 	"pipeline:variable": {
 		{category: "pipeline", level: ScopeLevelVariable},
 		{category: "pipeline", level: ScopeLevelWrite},

@@ -13,14 +13,17 @@ import (
 // These map to the GitHub-specific types in github.go
 
 // Workflow is a backward-compatible alias for GitHubWorkflow
+//
 // Deprecated: Use WorkflowParser.Parse() for new code
 type Workflow = GitHubWorkflow
 
 // Job is a backward-compatible alias for GitHubJob
+//
 // Deprecated: Use the generic Job type from parser.go for new code
 type Job = GitHubJob
 
 // Step is a backward-compatible alias for GitHubStep
+//
 // Deprecated: Use the generic Step type from parser.go for new code
 type Step = GitHubStep
 
@@ -38,6 +41,7 @@ type Strategy = GitHubStrategy
 type Service = GitHubService
 
 // ParseWorkflow parses a GitHub Actions workflow YAML
+//
 // Deprecated: Use WorkflowParser.Parse() for new code that needs multi-platform support
 func ParseWorkflow(data []byte) (*Workflow, error) {
 	var wf Workflow

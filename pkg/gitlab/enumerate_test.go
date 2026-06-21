@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
 func TestPlatform_EnumerateToken(t *testing.T) {
@@ -255,28 +256,28 @@ func TestPlatform_EnumerateGroups_Basic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		switch {
-		case r.URL.Path == "/api/v4/user":
+		switch r.URL.Path {
+		case "/api/v4/user":
 			json.NewEncoder(w).Encode(User{ID: 1, Username: "testuser"})
 
-		case r.URL.Path == "/api/v4/groups":
+		case "/api/v4/groups":
 			json.NewEncoder(w).Encode([]Group{
 				{ID: 10, Name: "company", FullPath: "company", Visibility: "private"},
 				{ID: 11, Name: "infra", FullPath: "company/infra", Visibility: "private", ParentID: intPtr(10)},
 			})
 
-		case r.URL.Path == "/api/v4/groups/10/members/1":
+		case "/api/v4/groups/10/members/1":
 			json.NewEncoder(w).Encode(Member{ID: 1, AccessLevel: 50}) // Owner
 
-		case r.URL.Path == "/api/v4/groups/11/members/1":
+		case "/api/v4/groups/11/members/1":
 			json.NewEncoder(w).Encode(Member{ID: 1, AccessLevel: 40}) // Maintainer
 
-		case r.URL.Path == "/api/v4/groups/10/groups/shared":
+		case "/api/v4/groups/10/groups/shared":
 			json.NewEncoder(w).Encode([]SharedGroup{
 				{ID: 20, Name: "partner-tools", FullPath: "partner/tools", GroupAccessLevel: 30},
 			})
 
-		case r.URL.Path == "/api/v4/groups/11/groups/shared":
+		case "/api/v4/groups/11/groups/shared":
 			json.NewEncoder(w).Encode([]SharedGroup{})
 
 		default:
@@ -407,30 +408,30 @@ func TestPlatform_EnumerateSecrets_Group(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		switch {
-		case r.URL.Path == "/api/v4/groups/company":
+		switch r.URL.Path {
+		case "/api/v4/groups/company":
 			json.NewEncoder(w).Encode(Group{ID: 10, Name: "company", FullPath: "company"})
 
-		case r.URL.Path == "/api/v4/groups/10/variables":
+		case "/api/v4/groups/10/variables":
 			json.NewEncoder(w).Encode([]Variable{
 				{Key: "AWS_ACCESS_KEY_ID", Value: "AKIA...", VariableType: "env_var", Masked: true},
 			})
 
-		case r.URL.Path == "/api/v4/groups/company/projects":
+		case "/api/v4/groups/company/projects":
 			json.NewEncoder(w).Encode([]Project{
 				{ID: 1, Name: "api", PathWithNamespace: "company/api"},
 				{ID: 2, Name: "web", PathWithNamespace: "company/web"},
 			})
 
-		case r.URL.Path == "/api/v4/projects/1/variables":
+		case "/api/v4/projects/1/variables":
 			json.NewEncoder(w).Encode([]Variable{
 				{Key: "DB_PASSWORD", Value: "secret", VariableType: "env_var"},
 			})
 
-		case r.URL.Path == "/api/v4/projects/2/variables":
+		case "/api/v4/projects/2/variables":
 			json.NewEncoder(w).Encode([]Variable{})
 
-		case r.URL.Path == "/api/v4/admin/ci/variables":
+		case "/api/v4/admin/ci/variables":
 			w.WriteHeader(http.StatusForbidden)
 			w.Write([]byte(`{"message":"403 Forbidden"}`))
 

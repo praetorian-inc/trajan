@@ -17,6 +17,14 @@ linters:
   settings:
     errcheck:
       check-type-assertions: true
+      # Fire-and-forget calls whose error is not actionable (idiomatic to ignore).
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*text/tabwriter.Writer).Flush
     misspell:
       locale: US
     gocritic:
@@ -45,6 +53,10 @@ linters:
         - dupImport
         - nestingReduce
         - tooManyResultsChecker
+        # Perf micro-opts in non-hot paths; pointer/index rewrites add risk for little gain
+        # (consistent with hugeParam above being disabled).
+        - rangeValCopy
+        - deferInLoop
   exclusions:
     rules:
       - path: _test\.go

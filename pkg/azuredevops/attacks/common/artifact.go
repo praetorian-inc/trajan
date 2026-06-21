@@ -43,7 +43,7 @@ func ExtractFilesFromZip(zipData []byte) (map[string][]byte, error) {
 			return nil, fmt.Errorf("opening file %s in zip: %w", f.Name, err)
 		}
 		data, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
 			return nil, fmt.Errorf("reading file %s from zip: %w", f.Name, err)
 		}

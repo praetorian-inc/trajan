@@ -109,7 +109,7 @@ func runBranchProtectionsEnumerate(cmd *cobra.Command, args []string) error {
 
 		// Enumerate branch protections for each project
 		for _, proj := range projectsResult.Projects {
-			projectPath := proj.Repository.Owner + "/" + proj.Repository.Name
+			projectPath := proj.Owner + "/" + proj.Name
 			target := platforms.Target{Type: platforms.TargetRepo, Value: projectPath}
 
 			result, err := glPlatform.EnumerateBranchProtections(ctx, target)

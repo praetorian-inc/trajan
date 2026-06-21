@@ -63,7 +63,7 @@ func (p *Platform) scanModelsRecursive(ctx context.Context, repo, path string) (
 	if err != nil {
 		return []ModelInfo{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return models, nil // Skip if can't access
@@ -96,8 +96,8 @@ func (p *Platform) scanModelsRecursive(ctx context.Context, repo, path string) (
 			}
 
 			var fileInfo storageItem
-			json.NewDecoder(fileResp.Body).Decode(&fileInfo)
-			fileResp.Body.Close()
+			_ = json.NewDecoder(fileResp.Body).Decode(&fileInfo)
+			_ = fileResp.Body.Close()
 
 			// Parse size string to int64
 			size, _ := strconv.ParseInt(fileInfo.Size, 10, 64)
@@ -121,7 +121,7 @@ func (p *Platform) GetMLRepositories(ctx context.Context) ([]MLRepoInfo, error) 
 	if err != nil {
 		return nil, fmt.Errorf("getting repositories: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -166,7 +166,7 @@ func (p *Platform) scanForSecretsRecursive(ctx context.Context, repo, path strin
 	if err != nil {
 		return []MLSecret{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return secrets, nil
@@ -224,7 +224,7 @@ func (p *Platform) scanFile(ctx context.Context, repo, path string) []MLSecret {
 	if err != nil {
 		return secrets
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return secrets

@@ -1,3 +1,4 @@
+//go:build js && wasm
 // +build js,wasm
 
 package main
@@ -21,16 +22,16 @@ var (
 
 // WorkflowSimple represents a simplified GitHub Actions workflow
 type WorkflowSimple struct {
-	Name string              `yaml:"name"`
-	On   interface{}         `yaml:"on"`
+	Name string               `yaml:"name"`
+	On   interface{}          `yaml:"on"`
 	Jobs map[string]JobSimple `yaml:"jobs"`
 }
 
 // JobSimple represents a simplified job
 type JobSimple struct {
-	Name    string       `yaml:"name"`
-	RunsOn  string       `yaml:"runs-on"`
-	Steps   []StepSimple `yaml:"steps"`
+	Name   string       `yaml:"name"`
+	RunsOn string       `yaml:"runs-on"`
+	Steps  []StepSimple `yaml:"steps"`
 }
 
 // StepSimple represents a simplified step

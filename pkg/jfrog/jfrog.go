@@ -150,7 +150,7 @@ func (p *Platform) listRepositories(ctx context.Context) ([]platforms.Repository
 	if err != nil {
 		return nil, fmt.Errorf("failed to list repositories: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("API error (%d) listing repositories", resp.StatusCode)
@@ -179,7 +179,7 @@ func (p *Platform) getBuildInfo(ctx context.Context) ([]platforms.Workflow, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed to get build info: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("API error (%d) getting build info", resp.StatusCode)

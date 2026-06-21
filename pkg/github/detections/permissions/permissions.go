@@ -47,12 +47,18 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		workflows := g.GetNodesByTag(config.tag)
 
 		for _, wfNode := range workflows {
-			wf := wfNode.(*graph.WorkflowNode)
+			wf, ok := wfNode.(*graph.WorkflowNode)
+			if !ok {
+				continue
+			}
 
 			// Traverse jobs in the workflow
 			graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 				if node.Type() == graph.NodeTypeJob {
-					jobNode := node.(*graph.JobNode)
+					jobNode, ok := node.(*graph.JobNode)
+					if !ok {
+						return true
+					}
 
 					// Check for dangerous permissions
 					if finding := checkPermissions(wf, jobNode, triggerName, config.severity); finding != nil {
@@ -85,12 +91,12 @@ func checkPermissions(wf *graph.WorkflowNode, job *graph.JobNode, trigger string
 		}
 
 		return &detections.Finding{
-			Type:       detections.VulnExcessivePermissions,
-			Platform:   "github",
-			Class:      detections.GetVulnerabilityClass(detections.VulnExcessivePermissions),
-			Severity:   defaultSeverity,
-			Confidence: detections.ConfidenceHigh,
-			Complexity: detections.ComplexityLow,
+			Type:         detections.VulnExcessivePermissions,
+			Platform:     "github",
+			Class:        detections.GetVulnerabilityClass(detections.VulnExcessivePermissions),
+			Severity:     defaultSeverity,
+			Confidence:   detections.ConfidenceHigh,
+			Complexity:   detections.ComplexityLow,
 			Repository:   wf.RepoSlug,
 			Workflow:     wf.Path, // Use path
 			WorkflowFile: wf.Path,
@@ -171,12 +177,12 @@ func checkPermissions(wf *graph.WorkflowNode, job *graph.JobNode, trigger string
 			}
 
 			return &detections.Finding{
-				Type:       detections.VulnExcessivePermissions,
-				Platform:   "github",
-				Class:      detections.GetVulnerabilityClass(detections.VulnExcessivePermissions),
-				Severity:   severity,
-				Confidence: detections.ConfidenceHigh,
-				Complexity: detections.ComplexityLow,
+				Type:         detections.VulnExcessivePermissions,
+				Platform:     "github",
+				Class:        detections.GetVulnerabilityClass(detections.VulnExcessivePermissions),
+				Severity:     severity,
+				Confidence:   detections.ConfidenceHigh,
+				Complexity:   detections.ComplexityLow,
 				Repository:   wf.RepoSlug,
 				Workflow:     wf.Path, // Use path
 				WorkflowFile: wf.Path,
@@ -184,7 +190,7 @@ func checkPermissions(wf *graph.WorkflowNode, job *graph.JobNode, trigger string
 				Line:         job.Line,
 				Trigger:      trigger,
 				Evidence:     fmt.Sprintf("Job on %s trigger has dangerous write permissions: %s", trigger, perm),
-				Remediation: remediation,
+				Remediation:  remediation,
 				Details: &detections.FindingDetails{
 					LineRanges:  lineRanges,
 					Permissions: permsList,

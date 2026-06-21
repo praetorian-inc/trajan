@@ -29,7 +29,7 @@ Requires --query flag. Optional --project flag to scope search to a specific pro
 
 	cmd.Flags().SortFlags = false
 	cmd.Flags().StringVarP(&searchFilesQuery, "query", "q", "", "Filename pattern (required, case-insensitive substring match)")
-	cmd.MarkFlagRequired("query")
+	_ = cmd.MarkFlagRequired("query")
 	cmd.Flags().StringVar(&enumProject, "project", "", "Project name (optional, search across all if not provided)")
 
 	return cmd

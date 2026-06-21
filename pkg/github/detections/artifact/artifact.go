@@ -34,7 +34,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflowRunNodes := g.GetNodesByTag(graph.TagWorkflowRun)
 
 	for _, wfNode := range workflowRunNodes {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Track artifact download and subsequent execution
 		var downloadStep *graph.StepNode
@@ -43,10 +46,17 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			switch node.Type() {
 			case graph.NodeTypeJob:
-				jobNode = node.(*graph.JobNode)
+				job, ok := node.(*graph.JobNode)
+				if !ok {
+					return true
+				}
+				jobNode = job
 				downloadStep = nil // Reset per job
 			case graph.NodeTypeStep:
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 
 				// Found artifact download
 				if step.HasTag(graph.TagArtifactDownload) {
@@ -118,44 +128,25 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, downloadStep, exe
 	}
 
 	return detections.Finding{
-		Type:       detections.VulnArtifactPoison,
-		Platform:   "github",
-		Class:      detections.GetVulnerabilityClass(detections.VulnArtifactPoison),
-		Severity:   detections.SeverityHigh,
-		Confidence: detections.ConfidenceMedium,
-		Complexity: detections.ComplexityHigh,
+		Type:         detections.VulnArtifactPoison,
+		Platform:     "github",
+		Class:        detections.GetVulnerabilityClass(detections.VulnArtifactPoison),
+		Severity:     detections.SeverityHigh,
+		Confidence:   detections.ConfidenceMedium,
+		Complexity:   detections.ComplexityHigh,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Path, // Use path for matching
 		WorkflowFile: wf.Path,
 		Job:          jobName,
-		Step:       execStep.Name,
-		Line:       execStep.Line,
-		Trigger:    "workflow_run",
-		Evidence:    evidence,
-		Remediation: "Avoid executing code directly from downloaded artifacts. Validate artifact integrity (e.g., using checksums or signatures) before execution. Consider using workflow_run with explicit artifact verification steps, or restrict workflow_run triggers to trusted workflows only.",
+		Step:         execStep.Name,
+		Line:         execStep.Line,
+		Trigger:      "workflow_run",
+		Evidence:     evidence,
+		Remediation:  "Avoid executing code directly from downloaded artifacts. Validate artifact integrity (e.g., using checksums or signatures) before execution. Consider using workflow_run with explicit artifact verification steps, or restrict workflow_run triggers to trusted workflows only.",
 		Details: &detections.FindingDetails{
 			LineRanges:  lineRanges,
 			AttackChain: attackChain,
 			Metadata:    metadata,
 		},
 	}
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	// Trim whitespace and newlines for cleaner output
-	s = strings.TrimSpace(s)
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

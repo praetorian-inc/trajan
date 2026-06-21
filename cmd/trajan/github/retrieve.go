@@ -280,7 +280,7 @@ func extractArtifactFiles(zipData []byte) (encryptedSecrets, encryptedKey []byte
 		}
 
 		data, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
 			return nil, nil, fmt.Errorf("reading %s: %w", f.Name, err)
 		}

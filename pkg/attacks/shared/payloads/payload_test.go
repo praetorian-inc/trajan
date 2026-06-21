@@ -4,6 +4,7 @@ package payloads
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestPayloadRegistry_RegisterAndRetrieve(t *testing.T) {
@@ -211,7 +212,7 @@ func TestPayloadMutator_Homoglyphs(t *testing.T) {
 			if len([]rune(result)) != 1 {
 				t.Fatalf("expected single character, got %d", len([]rune(result)))
 			}
-			got := []rune(result)[0]
+			got, _ := utf8.DecodeRuneInString(result)
 			if got != tt.expected {
 				t.Errorf("homoglyph(%q) = U+%04X, want U+%04X", tt.input, got, tt.expected)
 			}

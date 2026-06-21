@@ -176,29 +176,6 @@ const (
 	gitPermContributeToPR = 16384
 )
 
-// buildPermissionInfo maps build permission bits to human-readable names
-var buildPermissionInfo = map[int]string{
-	buildPermViewBuilds:            "View builds",
-	buildPermQueueBuilds:           "Queue builds",
-	buildPermViewDefinitions:       "View build definition",
-	buildPermEditBuildDefinition:   "Edit build definition",
-	buildPermDeleteBuilds:          "Delete builds",
-	buildPermStopBuilds:            "Stop builds",
-	buildPermAdministerPermissions: "Administer build permissions",
-}
-
-// gitPermissionInfo maps git permission bits to human-readable names
-var gitPermissionInfo = map[int]string{
-	gitPermAdminister:         "Administer",
-	gitPermRead:               "Read",
-	gitPermContribute:         "Contribute",
-	gitPermForcePush:          "Force push",
-	gitPermCreateBranch:       "Create branch",
-	gitPermBypassPoliciesPush: "Bypass policies when pushing",
-	gitPermContributeToPR:     "Contribute to pull requests",
-	gitPermBypassPoliciesPR:   "Bypass policies when completing PR",
-}
-
 // formatBool returns "Yes" or "No" for a boolean value
 func formatBool(b bool) string {
 	if b {

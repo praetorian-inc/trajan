@@ -51,7 +51,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	zeroClickWorkflows = append(zeroClickWorkflows, g.GetNodesByTag(graph.TagDiscussion)...)
 
 	for _, wfNode := range zeroClickWorkflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Track nodes for complete path
 		var checkoutStep *graph.StepNode
@@ -62,7 +65,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			switch node.Type() {
 			case graph.NodeTypeJob:
-				currentJob := node.(*graph.JobNode)
+				currentJob, ok := node.(*graph.JobNode)
+				if !ok {
+					return true
+				}
 
 				// Track all jobs for complete path
 				if jobNode != nil {
@@ -85,7 +91,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 				}
 
 			case graph.NodeTypeStep:
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 
 				// Found unsafe checkout
 				if step.HasTag(graph.TagUnsafeCheckout) {
@@ -206,9 +215,14 @@ func createFindingWithPath(wf *graph.WorkflowNode, path []graph.Node) detections
 	for _, node := range path {
 		switch node.Type() {
 		case graph.NodeTypeJob:
-			job = node.(*graph.JobNode) // Keep updating to get the last job
+			if jn, ok := node.(*graph.JobNode); ok {
+				job = jn // Keep updating to get the last job
+			}
 		case graph.NodeTypeStep:
-			step := node.(*graph.StepNode)
+			step, ok := node.(*graph.StepNode)
+			if !ok {
+				continue
+			}
 			if step.HasTag(graph.TagUnsafeCheckout) && checkoutStep == nil {
 				checkoutStep = step
 			} else if checkoutStep != nil && step.Run != "" && sinkStep == nil {

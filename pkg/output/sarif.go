@@ -7,6 +7,7 @@ import (
 
 	"github.com/owenrumney/go-sarif/v3/pkg/report"
 	"github.com/owenrumney/go-sarif/v3/pkg/report/v210/sarif"
+
 	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 

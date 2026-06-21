@@ -70,11 +70,11 @@ func TestGetPromptsForVulnType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			payloads, err := GetPromptsForVulnType(tt.vulnType)
+			gotPayloads, err := GetPromptsForVulnType(tt.vulnType)
 			require.NoError(t, err)
-			assert.GreaterOrEqual(t, len(payloads), tt.wantMin)
+			assert.GreaterOrEqual(t, len(gotPayloads), tt.wantMin)
 
-			for _, p := range payloads {
+			for _, p := range gotPayloads {
 				assert.NotEmpty(t, p.ProbeName, "probe name should not be empty")
 				assert.NotEmpty(t, p.Category, "category should not be empty")
 				assert.NotEmpty(t, p.Prompts, "prompts should not be empty for %s", p.ProbeName)
@@ -84,11 +84,11 @@ func TestGetPromptsForVulnType(t *testing.T) {
 }
 
 func TestGetPromptsForVulnType_UnknownType(t *testing.T) {
-	payloads, err := GetPromptsForVulnType("unknown_vuln_type")
+	gotPayloads, err := GetPromptsForVulnType("unknown_vuln_type")
 	require.NoError(t, err)
 	// Should fall back to DefaultProbes
-	assert.NotEmpty(t, payloads)
-	assert.Equal(t, "goodside.SystemPromptConfusion", payloads[0].ProbeName)
+	assert.NotEmpty(t, gotPayloads)
+	assert.Equal(t, "goodside.SystemPromptConfusion", gotPayloads[0].ProbeName)
 }
 
 func TestGetAllPromptsForVulnTypes_Deduplication(t *testing.T) {
@@ -98,12 +98,12 @@ func TestGetAllPromptsForVulnTypes_Deduplication(t *testing.T) {
 		detections.VulnAICodeInjection,
 	}
 
-	payloads, err := GetAllPromptsForVulnTypes(vulnTypes)
+	gotPayloads, err := GetAllPromptsForVulnTypes(vulnTypes)
 	require.NoError(t, err)
 
 	// Count how many times SystemPromptConfusion appears
 	count := 0
-	for _, p := range payloads {
+	for _, p := range gotPayloads {
 		if p.ProbeName == "goodside.SystemPromptConfusion" {
 			count++
 		}

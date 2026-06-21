@@ -123,7 +123,7 @@ func runReposEnumerate(cmd *cobra.Command, args []string) error {
 		if !reposArchived {
 			filtered := make([]github.RepositoryWithPermissions, 0, len(result.Repositories))
 			for _, repo := range result.Repositories {
-				if !repo.Repository.Archived {
+				if !repo.Archived {
 					filtered = append(filtered, repo)
 				}
 			}
@@ -181,11 +181,11 @@ func outputReposConsole(result *github.ReposEnumerateResult) error {
 		fmt.Printf("\nAdmin Access (%d repositories):\n", len(adminRepos))
 		for _, repo := range adminRepos {
 			visibility := "public"
-			if repo.Repository.Private {
+			if repo.Private {
 				visibility = "private"
 			}
 			fmt.Printf("  • %s/%s [%s, %s]\n",
-				repo.Repository.Owner, repo.Repository.Name, visibility, repo.Repository.DefaultBranch)
+				repo.Owner, repo.Name, visibility, repo.DefaultBranch)
 		}
 	}
 
@@ -194,11 +194,11 @@ func outputReposConsole(result *github.ReposEnumerateResult) error {
 		fmt.Printf("\nWrite Access (%d repositories):\n", len(writeRepos))
 		for _, repo := range writeRepos {
 			visibility := "public"
-			if repo.Repository.Private {
+			if repo.Private {
 				visibility = "private"
 			}
 			fmt.Printf("  • %s/%s [%s, %s]\n",
-				repo.Repository.Owner, repo.Repository.Name, visibility, repo.Repository.DefaultBranch)
+				repo.Owner, repo.Name, visibility, repo.DefaultBranch)
 		}
 	}
 
@@ -207,11 +207,11 @@ func outputReposConsole(result *github.ReposEnumerateResult) error {
 		fmt.Printf("\nRead Access (%d repositories):\n", len(readRepos))
 		for _, repo := range readRepos {
 			visibility := "public"
-			if repo.Repository.Private {
+			if repo.Private {
 				visibility = "private"
 			}
 			fmt.Printf("  • %s/%s [%s, %s]\n",
-				repo.Repository.Owner, repo.Repository.Name, visibility, repo.Repository.DefaultBranch)
+				repo.Owner, repo.Name, visibility, repo.DefaultBranch)
 		}
 	}
 
@@ -221,11 +221,11 @@ func outputReposConsole(result *github.ReposEnumerateResult) error {
 		fmt.Printf("\nAccessible Repositories (%d) [permissions not reported]:\n", len(otherRepos))
 		for _, repo := range otherRepos {
 			visibility := "public"
-			if repo.Repository.Private {
+			if repo.Private {
 				visibility = "private"
 			}
 			fmt.Printf("  \u2022 %s/%s [%s, %s]\n",
-				repo.Repository.Owner, repo.Repository.Name, visibility, repo.Repository.DefaultBranch)
+				repo.Owner, repo.Name, visibility, repo.DefaultBranch)
 		}
 	}
 
@@ -268,11 +268,11 @@ func filterByVisibility(repos []github.RepositoryWithPermissions, visibility str
 	for _, repo := range repos {
 		switch visibility {
 		case "private":
-			if repo.Repository.Private {
+			if repo.Private {
 				filtered = append(filtered, repo)
 			}
 		case "public":
-			if !repo.Repository.Private {
+			if !repo.Private {
 				filtered = append(filtered, repo)
 			}
 		}
@@ -287,13 +287,13 @@ func buildReposSummary(repos []github.RepositoryWithPermissions) github.ReposSum
 	}
 
 	for _, repo := range repos {
-		if repo.Repository.Private {
+		if repo.Private {
 			summary.Private++
 		} else {
 			summary.Public++
 		}
 
-		if repo.Repository.Archived {
+		if repo.Archived {
 			summary.Archived++
 		}
 

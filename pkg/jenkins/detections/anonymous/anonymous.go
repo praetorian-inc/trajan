@@ -38,7 +38,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	if !ok {
 		return nil, nil
 	}
-	client := clientData.(*jenkins.Client)
+	client, ok := clientData.(*jenkins.Client)
+	if !ok {
+		return nil, nil
+	}
 
 	whoAmI, err := client.GetWhoAmI(ctx)
 	if err != nil {

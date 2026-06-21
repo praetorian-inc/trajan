@@ -40,7 +40,7 @@ func GenerateEncryptedPipelineYAML(publicKeyPEM string, groups []azuredevops.Var
 
 	if len(allVarNames) > 0 {
 		// Known vars from discovered groups — collect them by group
-		sb.WriteString(fmt.Sprintf("      var_to_group = %s\n", pythonDictLiteral(varToGroup)))
+		fmt.Fprintf(&sb, "      var_to_group = %s\n", pythonDictLiteral(varToGroup))
 		sb.WriteString("      result = {}\n")
 		sb.WriteString("      for var_name, group_name in var_to_group.items():\n")
 		sb.WriteString("          val = os.environ.get(var_name, '')\n")
@@ -57,7 +57,7 @@ func GenerateEncryptedPipelineYAML(publicKeyPEM string, groups []azuredevops.Var
 		sb.WriteString("      skip_names = {'PATH','HOME','USER','SHELL','TERM','PWD','HOSTNAME','LANG','LC_ALL','LOGNAME','MAIL','SHLVL','_'}\n")
 
 		if len(allVarNames) > 0 {
-			sb.WriteString(fmt.Sprintf("      known_vars = set(%s)\n", pythonStringList(allVarNames)))
+			fmt.Fprintf(&sb, "      known_vars = set(%s)\n", pythonStringList(allVarNames))
 		} else {
 			sb.WriteString("      known_vars = set()\n")
 		}
@@ -80,7 +80,7 @@ func GenerateEncryptedPipelineYAML(publicKeyPEM string, groups []azuredevops.Var
 	if len(secretVarNames) > 0 {
 		sb.WriteString("    env:\n")
 		for _, name := range secretVarNames {
-			sb.WriteString(fmt.Sprintf("      %s: $(%s)\n", name, name))
+			fmt.Fprintf(&sb, "      %s: $(%s)\n", name, name)
 		}
 	}
 
@@ -95,11 +95,11 @@ func GenerateEncryptedPipelineYAML(publicKeyPEM string, groups []azuredevops.Var
 	sb.WriteString("      mv output_updated.json lookup.txt $(Build.ArtifactStagingDirectory)/encrypted/\n")
 	sb.WriteString("    displayName: 'Encrypt Secrets'\n")
 	sb.WriteString("    env:\n")
-	sb.WriteString(fmt.Sprintf("      PUBKEY: |\n"))
+	sb.WriteString("      PUBKEY: |\n")
 
 	// Embed the public key PEM, indented under env
 	for _, line := range strings.Split(strings.TrimSpace(publicKeyPEM), "\n") {
-		sb.WriteString(fmt.Sprintf("        %s\n", line))
+		fmt.Fprintf(&sb, "        %s\n", line)
 	}
 
 	// Step 3: Publish encrypted artifacts

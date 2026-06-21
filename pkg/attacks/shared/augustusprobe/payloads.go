@@ -168,7 +168,7 @@ func FormatForPRBody(prompts []string) string {
 	b.WriteString("This PR updates configuration and documentation.\n\n")
 	b.WriteString("## Changes\n\n")
 	for i, p := range prompts {
-		b.WriteString(fmt.Sprintf("### Change %d\n\n", i+1))
+		fmt.Fprintf(&b, "### Change %d\n\n", i+1)
 		b.WriteString(p)
 		b.WriteString("\n\n")
 	}
@@ -185,7 +185,7 @@ func FormatForIssueBody(prompts []string) string {
 	b.WriteString("I noticed a potential concern while reviewing the codebase.\n\n")
 	b.WriteString("## Details\n\n")
 	for i, p := range prompts {
-		b.WriteString(fmt.Sprintf("### Finding %d\n\n", i+1))
+		fmt.Fprintf(&b, "### Finding %d\n\n", i+1)
 		b.WriteString(p)
 		b.WriteString("\n\n")
 	}

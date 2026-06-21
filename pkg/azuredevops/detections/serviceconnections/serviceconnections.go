@@ -47,12 +47,18 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 		connectionsInWorkflow := make(map[string]bool)
 
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeStep {
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 				findings = append(findings, checkDynamicServiceConnections(wf, step)...)
 				findings = append(findings, checkServiceConnectionInEnv(wf, step)...)
 				trackConnectionUsage(step, connectionsInWorkflow)

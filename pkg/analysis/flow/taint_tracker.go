@@ -45,7 +45,10 @@ func (tt *TaintTracker) Analyze(ctx context.Context, g *graph.Graph) (map[string
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Create initial context for workflow
 		wfCtx := NewFlowContext()

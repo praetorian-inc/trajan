@@ -171,7 +171,7 @@ func runForkSecurityAzDO() error {
 				vuln.Issue,
 			)
 		}
-		w.Flush()
+		_ = w.Flush()
 
 		// Count critical vulnerabilities for summary
 		criticalCount := 0

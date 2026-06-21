@@ -82,9 +82,10 @@ func (d *Detector) CalculateConfidence(baseConfidence flow.Confidence, gates []f
 	}
 	// Each soft gate reduces confidence by one level
 	for i := 0; i < softCount && conf > flow.ConfidenceLow; i++ {
-		if conf == flow.ConfidenceHigh {
+		switch conf {
+		case flow.ConfidenceHigh:
 			conf = flow.ConfidenceMedium
-		} else if conf == flow.ConfidenceMedium {
+		case flow.ConfidenceMedium:
 			conf = flow.ConfidenceLow
 		}
 	}

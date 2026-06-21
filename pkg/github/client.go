@@ -66,10 +66,10 @@ func WithTimeout(timeout time.Duration) ClientOption {
 }
 
 // WithConcurrency sets the maximum concurrent requests
-func WithConcurrency(max int64) ClientOption {
+func WithConcurrency(maxVal int64) ClientOption {
 	return func(c *Client) {
-		if max > 0 {
-			c.semaphore = semaphore.NewWeighted(max)
+		if maxVal > 0 {
+			c.semaphore = semaphore.NewWeighted(maxVal)
 		}
 	}
 }
@@ -195,7 +195,7 @@ func (c *Client) get(ctx context.Context, path string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -380,13 +380,14 @@ func (c *Client) getWithRetry(ctx context.Context, path string, v interface{}, m
 
 		// Success case - decode and return
 		if resp.StatusCode == http.StatusOK {
-			defer resp.Body.Close() // Only defer on success (returns immediately)
-			return json.NewDecoder(resp.Body).Decode(v)
+			err := json.NewDecoder(resp.Body).Decode(v)
+			_ = resp.Body.Close() // Close before returning (success path returns immediately)
+			return err
 		}
 
 		// Read body for error message, then close immediately
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close() // Close NOW, not deferred
+		_ = resp.Body.Close() // Close NOW, not deferred
 
 		// Check if retryable
 		switch resp.StatusCode {

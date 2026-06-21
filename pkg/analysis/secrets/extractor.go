@@ -25,7 +25,7 @@ type Location struct {
 
 // ExtractSecrets finds all secret references in workflow content
 func ExtractSecrets(workflowPath string, content []byte) ([]SecretReference, error) {
-	wf, err := parser.ParseWorkflow(content)
+	wf, err := parser.ParseWorkflow(content) //nolint:staticcheck // SA1019: secret extraction intentionally uses the GitHub-only parser
 	if err != nil {
 		return nil, fmt.Errorf("parsing workflow: %w", err)
 	}

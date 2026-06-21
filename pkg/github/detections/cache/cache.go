@@ -38,7 +38,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	privilegedNodes := append(workflowRunNodes, pullRequestTargetNodes...)
 
 	for _, wfNode := range privilegedNodes {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Determine trigger type for reporting
 		trigger := "workflow_run"
@@ -53,10 +56,17 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			switch node.Type() {
 			case graph.NodeTypeJob:
-				jobNode = node.(*graph.JobNode)
+				job, ok := node.(*graph.JobNode)
+				if !ok {
+					return true
+				}
+				jobNode = job
 				cacheStep = nil // Reset per job
 			case graph.NodeTypeStep:
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 
 				// Found cache restore
 				if step.HasTag(graph.TagCacheRestore) {
@@ -97,7 +107,7 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, cacheStep, execSt
 	var lineRanges []detections.LineRange
 
 	// Highlight cache restore step (where poison enters)
-	if cacheStep != nil && cacheStep.Line > 0 {
+	if cacheStep.Line > 0 {
 		lineRanges = append(lineRanges, detections.LineRange{
 			Start: cacheStep.Line,
 			End:   cacheStep.Line + 4, // Cache restore typically 4-5 lines
@@ -134,37 +144,25 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, cacheStep, execSt
 	}
 
 	return detections.Finding{
-		Type:       detections.VulnCachePoisoning,
-		Platform:   "github",
-		Class:      detections.GetVulnerabilityClass(detections.VulnCachePoisoning),
-		Severity:   detections.SeverityHigh,
-		Confidence: detections.ConfidenceMedium,
-		Complexity: detections.ComplexityHigh,
+		Type:         detections.VulnCachePoisoning,
+		Platform:     "github",
+		Class:        detections.GetVulnerabilityClass(detections.VulnCachePoisoning),
+		Severity:     detections.SeverityHigh,
+		Confidence:   detections.ConfidenceMedium,
+		Complexity:   detections.ComplexityHigh,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Path, // Use path for matching
 		WorkflowFile: wf.Path,
 		Job:          jobName,
-		Step:       execStep.Name,
-		Line:       execStep.Line,
-		Trigger:    trigger,
-		Evidence:    evidence,
-		Remediation: "Avoid restoring caches in privileged workflow contexts (workflow_run, pull_request_target). If caching is necessary, use scope-restricted cache keys that prevent cross-branch poisoning, and never execute binaries or scripts directly from restored cache contents.",
+		Step:         execStep.Name,
+		Line:         execStep.Line,
+		Trigger:      trigger,
+		Evidence:     evidence,
+		Remediation:  "Avoid restoring caches in privileged workflow contexts (workflow_run, pull_request_target). If caching is necessary, use scope-restricted cache keys that prevent cross-branch poisoning, and never execute binaries or scripts directly from restored cache contents.",
 		Details: &detections.FindingDetails{
 			LineRanges:  lineRanges,
 			AttackChain: attackChain,
 			Metadata:    metadata,
 		},
 	}
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	// Trim whitespace and newlines for cleaner output
-	s = strings.TrimSpace(s)
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
 }

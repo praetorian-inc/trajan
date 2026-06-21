@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
 func TestGetDescription(t *testing.T) {

@@ -36,7 +36,7 @@ func New() *Detection {
 var (
 	// secretPatterns detects hardcoded secrets in pipeline config
 	secretPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)(password|passwd|pwd)\s*[=:]\s*['"][\w!@#$%^&*()_+\-=\[\]{};:,.<>?]{8,}['"]`),
+		regexp.MustCompile(`(?i)(password|passwd|pwd)\s*[=:]\s*['"][\w!@#$%^&*()+\-=\[\]{};:,.<>?]{8,}['"]`),
 		regexp.MustCompile(`(?i)(api[_-]?key|apikey)\s*[=:]\s*['"][\w-]{20,}['"]`),
 		regexp.MustCompile(`(?i)(secret|token)\s*[=:]\s*['"][\w-]{20,}['"]`),
 		regexp.MustCompile(`(?i)(access[_-]?key)\s*[=:]\s*['"][A-Z0-9]{16,}['"]`),
@@ -50,11 +50,17 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeStep {
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 
 				// Check run commands — keyword patterns first, then structural
 				if step.Run != "" {

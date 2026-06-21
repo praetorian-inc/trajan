@@ -7,11 +7,12 @@ import (
 
 	"github.com/praetorian-inc/capability-sdk/pkg/capability"
 	"github.com/praetorian-inc/capability-sdk/pkg/capmodel"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/praetorian-inc/trajan/pkg/attacks"
 	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestSDKCapability_InterfaceCompliance(t *testing.T) {
@@ -19,16 +20,16 @@ func TestSDKCapability_InterfaceCompliance(t *testing.T) {
 }
 
 func TestSDKCapability_Metadata(t *testing.T) {
-	cap := NewSDKCapability()
-	assert.Equal(t, "trajan", cap.Name())
-	assert.Contains(t, cap.Description(), "CI/CD")
-	_, ok := cap.Input().(capmodel.Repository)
+	capInstance := NewSDKCapability()
+	assert.Equal(t, "trajan", capInstance.Name())
+	assert.Contains(t, capInstance.Description(), "CI/CD")
+	_, ok := capInstance.Input().(capmodel.Repository)
 	assert.True(t, ok)
 }
 
 func TestSDKCapability_Parameters(t *testing.T) {
-	cap := NewSDKCapability()
-	params := cap.Parameters()
+	capInstance := NewSDKCapability()
+	params := capInstance.Parameters()
 	require.Len(t, params, 13)
 	assert.Equal(t, "token", params[0].Name)
 	assert.Equal(t, "platform", params[1].Name)
@@ -45,36 +46,36 @@ func TestSDKCapability_Parameters(t *testing.T) {
 }
 
 func TestSDKCapability_Match_ValidURL(t *testing.T) {
-	cap := NewSDKCapability()
+	capInstance := NewSDKCapability()
 	ctx := capability.ExecutionContext{}
-	err := cap.Match(ctx, capmodel.Repository{URL: "https://github.com/org/repo"})
+	err := capInstance.Match(ctx, capmodel.Repository{URL: "https://github.com/org/repo"})
 	assert.NoError(t, err)
 }
 
 func TestSDKCapability_Match_EmptyURL(t *testing.T) {
-	cap := NewSDKCapability()
+	capInstance := NewSDKCapability()
 	ctx := capability.ExecutionContext{}
-	err := cap.Match(ctx, capmodel.Repository{})
+	err := capInstance.Match(ctx, capmodel.Repository{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "repository URL is required")
 }
 
 func TestSDKCapability_Match_UnsupportedURL(t *testing.T) {
-	cap := NewSDKCapability()
+	capInstance := NewSDKCapability()
 	ctx := capability.ExecutionContext{}
-	err := cap.Match(ctx, capmodel.Repository{URL: "https://unknown.com/org/repo"})
+	err := capInstance.Match(ctx, capmodel.Repository{URL: "https://unknown.com/org/repo"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported CI/CD platform")
 }
 
 func TestSDKCapability_Match_PlatformOverride(t *testing.T) {
-	cap := NewSDKCapability()
+	capInstance := NewSDKCapability()
 	ctx := capability.ExecutionContext{
 		Parameters: capability.Parameters{
 			{Name: "platform", Value: "jenkins"},
 		},
 	}
-	err := cap.Match(ctx, capmodel.Repository{URL: "https://custom.corp.com/org/repo"})
+	err := capInstance.Match(ctx, capmodel.Repository{URL: "https://custom.corp.com/org/repo"})
 	assert.NoError(t, err)
 }
 
@@ -103,7 +104,7 @@ func TestSDKCapability_Invoke_Success(t *testing.T) {
 		}, nil
 	}
 
-	cap := NewSDKCapability()
+	capInstance := NewSDKCapability()
 	var emitted []any
 	out := capability.EmitterFunc(func(models ...any) error {
 		emitted = append(emitted, models...)
@@ -121,7 +122,7 @@ func TestSDKCapability_Invoke_Success(t *testing.T) {
 		Name: "repo",
 	}
 
-	err := cap.Invoke(ctx, input, out)
+	err := capInstance.Invoke(ctx, input, out)
 	require.NoError(t, err)
 	require.Len(t, emitted, 2, "expected 1 asset + 1 risk")
 
@@ -141,7 +142,7 @@ func TestSDKCapability_Invoke_Success(t *testing.T) {
 }
 
 func TestSDKCapability_Invoke_CircleCI_Skipped(t *testing.T) {
-	cap := NewSDKCapability()
+	capInstance := NewSDKCapability()
 	var emitted []any
 	out := capability.EmitterFunc(func(models ...any) error {
 		emitted = append(emitted, models...)
@@ -154,7 +155,7 @@ func TestSDKCapability_Invoke_CircleCI_Skipped(t *testing.T) {
 		},
 	}
 
-	err := cap.Invoke(ctx, capmodel.Repository{URL: "https://circleci.com/org/repo"}, out)
+	err := capInstance.Invoke(ctx, capmodel.Repository{URL: "https://circleci.com/org/repo"}, out)
 	require.NoError(t, err)
 	assert.Empty(t, emitted, "CircleCI should emit nothing")
 }
@@ -167,7 +168,7 @@ func TestSDKCapability_Invoke_NoFindings(t *testing.T) {
 		return &ScanResult{}, nil
 	}
 
-	cap := NewSDKCapability()
+	capInstance := NewSDKCapability()
 	var emitted []any
 	out := capability.EmitterFunc(func(models ...any) error {
 		emitted = append(emitted, models...)
@@ -180,7 +181,7 @@ func TestSDKCapability_Invoke_NoFindings(t *testing.T) {
 		},
 	}
 
-	err := cap.Invoke(ctx, capmodel.Repository{
+	err := capInstance.Invoke(ctx, capmodel.Repository{
 		URL: "https://github.com/org/repo", Org: "org", Name: "repo",
 	}, out)
 	require.NoError(t, err)
@@ -256,7 +257,7 @@ func TestSDKCapability_Invoke_AllAttackPluginsFail_ReturnsError(t *testing.T) {
 		}, nil
 	}
 
-	cap := NewSDKCapability()
+	capInstance := NewSDKCapability()
 	var emitted []any
 	out := capability.EmitterFunc(func(models ...any) error {
 		emitted = append(emitted, models...)
@@ -276,7 +277,7 @@ func TestSDKCapability_Invoke_AllAttackPluginsFail_ReturnsError(t *testing.T) {
 		Name: "repo",
 	}
 
-	err := cap.Invoke(ctx, input, out)
+	err := capInstance.Invoke(ctx, input, out)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "all attack plugins failed")
 	assert.Contains(t, err.Error(), "401 unauthorized")
@@ -305,7 +306,7 @@ func TestSDKCapability_Invoke_ExtraOptsForwarded(t *testing.T) {
 		}, nil
 	}
 
-	cap := NewSDKCapability()
+	capInstance := NewSDKCapability()
 	out := capability.EmitterFunc(func(models ...any) error { return nil })
 
 	ctx := capability.ExecutionContext{
@@ -325,7 +326,7 @@ func TestSDKCapability_Invoke_ExtraOptsForwarded(t *testing.T) {
 		Name: "repo",
 	}
 
-	err := cap.Invoke(ctx, input, out)
+	err := capInstance.Invoke(ctx, input, out)
 	require.NoError(t, err)
 
 	assert.Equal(t, "owner/my-c2-repo", capturedConfig.ExtraOpts["c2_repo"])
@@ -358,7 +359,7 @@ func TestSDKCapability_Invoke_PartialAttackSuccess_ReturnsNil(t *testing.T) {
 		}, nil
 	}
 
-	cap := NewSDKCapability()
+	capInstance := NewSDKCapability()
 	var emitted []any
 	out := capability.EmitterFunc(func(models ...any) error {
 		emitted = append(emitted, models...)
@@ -378,7 +379,7 @@ func TestSDKCapability_Invoke_PartialAttackSuccess_ReturnsNil(t *testing.T) {
 		Name: "repo",
 	}
 
-	err := cap.Invoke(ctx, input, out)
+	err := capInstance.Invoke(ctx, input, out)
 	require.NoError(t, err, "partial success should not return error")
 	require.Len(t, emitted, 1, "only the successful plugin risk should be emitted")
 	risk, ok := emitted[0].(capmodel.Risk)

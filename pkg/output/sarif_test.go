@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
 func TestSeverityToLevel(t *testing.T) {

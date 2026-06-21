@@ -8,6 +8,7 @@ import (
 
 	"github.com/praetorian-inc/trajan/internal/registry"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
+
 	// Import all detections to trigger init() registration
 	_ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/pipelineinjection"
 	_ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/serviceconnections"

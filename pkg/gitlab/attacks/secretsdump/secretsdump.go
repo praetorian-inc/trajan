@@ -412,7 +412,7 @@ func saveSecretsToFile(secrets map[string]string, filename string) error {
 
 	content := strings.Join(lines, "\n") + "\n"
 
-	if err := os.WriteFile(filename, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(filename, []byte(content), 0o600); err != nil {
 		return fmt.Errorf("writing secrets file: %w", err)
 	}
 

@@ -231,7 +231,6 @@ const (
 	ComplexityHigh      Complexity = "high"
 )
 
-
 // VulnerabilityClassMap maps vulnerability types to their cross-platform classes
 var VulnerabilityClassMap = map[VulnerabilityType]VulnerabilityClass{
 	VulnActionsInjection:            ClassInjection,

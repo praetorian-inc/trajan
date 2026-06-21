@@ -59,9 +59,9 @@ type Project struct {
 }
 
 // HasCapability checks if a capability was detected
-func (r *ProbeResult) HasCapability(cap Capability) bool {
+func (r *ProbeResult) HasCapability(cp Capability) bool {
 	for _, c := range r.Capabilities {
-		if c == cap {
+		if c == cp {
 			return true
 		}
 	}

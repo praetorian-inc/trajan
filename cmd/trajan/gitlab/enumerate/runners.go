@@ -121,7 +121,7 @@ func runRunnersEnumerate(cmd *cobra.Command, args []string) error {
 
 		// Enumerate runners for each project
 		for _, proj := range projectsResult.Projects {
-			projectPath := proj.Repository.Owner + "/" + proj.Repository.Name
+			projectPath := proj.Owner + "/" + proj.Name
 			result, err := enumerateRunnersForProject(ctx, glPlatform, projectPath, includeGroup, includeInstance)
 			if err != nil {
 				// Collect error but continue with other projects

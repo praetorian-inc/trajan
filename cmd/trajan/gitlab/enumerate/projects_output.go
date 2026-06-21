@@ -53,7 +53,7 @@ func outputProjectsConsole(result *gitlabplatform.ProjectsEnumerateResult) error
 		fmt.Printf("\n%s Access (%d projects):\n", label, len(projects))
 		for _, p := range projects {
 			fmt.Printf("  * %s/%s [%s, %s]\n",
-				p.Repository.Owner, p.Repository.Name, p.Visibility, p.Repository.DefaultBranch)
+				p.Owner, p.Name, p.Visibility, p.DefaultBranch)
 		}
 	}
 

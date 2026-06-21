@@ -1,3 +1,4 @@
+//go:build js && wasm
 // +build js,wasm
 
 // Package main provides the WASM-JS bridge API for Trajan browser execution.
@@ -33,14 +34,14 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 	"github.com/praetorian-inc/trajan/pkg/analysis/parser"
 	"github.com/praetorian-inc/trajan/pkg/attacks"
-	"github.com/praetorian-inc/trajan/pkg/config"
-	"github.com/praetorian-inc/trajan/pkg/detections"
-	"github.com/praetorian-inc/trajan/pkg/platforms"
-	"github.com/praetorian-inc/trajan/pkg/scanner"
-	"github.com/praetorian-inc/trajan/pkg/github"
-	gitlabplatform "github.com/praetorian-inc/trajan/pkg/gitlab"
 	adoplatform "github.com/praetorian-inc/trajan/pkg/azuredevops"
 	"github.com/praetorian-inc/trajan/pkg/azuredevops/tokenprobe"
+	"github.com/praetorian-inc/trajan/pkg/config"
+	"github.com/praetorian-inc/trajan/pkg/detections"
+	"github.com/praetorian-inc/trajan/pkg/github"
+	gitlabplatform "github.com/praetorian-inc/trajan/pkg/gitlab"
+	"github.com/praetorian-inc/trajan/pkg/platforms"
+	"github.com/praetorian-inc/trajan/pkg/scanner"
 	"github.com/praetorian-inc/trajan/pkg/search"
 	"github.com/praetorian-inc/trajan/pkg/storage"
 
@@ -92,7 +93,6 @@ var (
 	activeScanContext    context.Context
 	activeScanCancelFunc context.CancelFunc
 )
-
 
 // validateBaseURL validates user-provided base URLs to prevent SSRF attacks.
 // For security testing tools, we allow localhost and private networks (for testing internal infrastructure)
@@ -241,7 +241,7 @@ func isGitHubHostedRunner(label string) bool {
 }
 
 type workflowYAML struct {
-	On   interface{}                `yaml:"on"`
+	On   interface{} `yaml:"on"`
 	Jobs map[string]struct {
 		RunsOn interface{} `yaml:"runs-on"`
 	} `yaml:"jobs"`
@@ -256,7 +256,7 @@ func extractSelfHostedJobs(workflowContent []byte) []map[string]interface{} {
 	var selfHostedJobs []map[string]interface{}
 	for jobName, job := range wf.Jobs {
 		var labels []string
-		
+
 		switch v := job.RunsOn.(type) {
 		case string:
 			labels = []string{v}
@@ -467,12 +467,16 @@ func StartScan(this js.Value, args []js.Value) interface{} {
 						reportProgress(pct, fmt.Sprintf("[%d/%d] %s/%s...", i+1, len(repos), repo.Owner.Login, repo.Name))
 
 						files, err := client.GetWorkflowFiles(ctx, repo.Owner.Login, repo.Name)
-						if err != nil { continue }
+						if err != nil {
+							continue
+						}
 
 						var workflows []platforms.Workflow
 						for _, f := range files {
 							content, err := client.GetWorkflowContent(ctx, repo.Owner.Login, repo.Name, f.Path)
-							if err != nil { continue }
+							if err != nil {
+								continue
+							}
 							workflows = append(workflows, platforms.Workflow{
 								Name: f.Name, Path: f.Path, Content: content, SHA: f.SHA,
 								RepoSlug: fmt.Sprintf("%s/%s", repo.Owner.Login, repo.Name),
@@ -571,116 +575,116 @@ func StartScan(this js.Value, args []js.Value) interface{} {
 					scanErr = nil
 					reportProgress(100, fmt.Sprintf("Scan complete - %d repos, %d vulnerabilities", len(scanResult.Repositories), len(findings)))
 				} else {
-				client := github.NewClient(github.DefaultBaseURL, token)
+					client := github.NewClient(github.DefaultBaseURL, token)
 
-				reportProgress(20, "Parsing repository URL...")
-				parts := strings.Split(strings.TrimPrefix(target, "https://github.com/"), "/")
-				if len(parts) < 2 {
-					scanErr = fmt.Errorf("invalid GitHub repository URL: %s", target)
-					reject.Invoke(map[string]interface{}{"error": scanErr.Error()})
-					return
-				}
-				owner, repo := parts[0], parts[1]
+					reportProgress(20, "Parsing repository URL...")
+					parts := strings.Split(strings.TrimPrefix(target, "https://github.com/"), "/")
+					if len(parts) < 2 {
+						scanErr = fmt.Errorf("invalid GitHub repository URL: %s", target)
+						reject.Invoke(map[string]interface{}{"error": scanErr.Error()})
+						return
+					}
+					owner, repo := parts[0], parts[1]
 
-				reportProgress(30, "Fetching workflow files...")
-				workflows, err := client.GetWorkflowFiles(ctx, owner, repo)
-				if err != nil {
-					scanErr = fmt.Errorf("failed to fetch workflows: %w", err)
-					reject.Invoke(map[string]interface{}{"error": scanErr.Error()})
-					return
-				}
-
-				if len(workflows) == 0 {
-					reportProgress(100, "No workflows found - scan complete")
-					findings = []detections.Finding{}
-					scanErr = nil
-				} else {
-					reportProgress(50, fmt.Sprintf("Parsing %d workflow files...", len(workflows)))
-
-					ghParser := parser.GetParser("github")
-					if ghParser == nil {
-						scanErr = fmt.Errorf("GitHub parser not registered")
+					reportProgress(30, "Fetching workflow files...")
+					workflows, err := client.GetWorkflowFiles(ctx, owner, repo)
+					if err != nil {
+						scanErr = fmt.Errorf("failed to fetch workflows: %w", err)
 						reject.Invoke(map[string]interface{}{"error": scanErr.Error()})
 						return
 					}
 
-					var parsedWorkflows []*parser.NormalizedWorkflow
-					for _, wf := range workflows {
-						content, err := client.GetWorkflowContent(ctx, owner, repo, wf.Path)
-						if err != nil {
-							fmt.Printf("Failed to get workflow %s: %v\n", wf.Path, err)
-							continue
+					if len(workflows) == 0 {
+						reportProgress(100, "No workflows found - scan complete")
+						findings = []detections.Finding{}
+						scanErr = nil
+					} else {
+						reportProgress(50, fmt.Sprintf("Parsing %d workflow files...", len(workflows)))
+
+						ghParser := parser.GetParser("github")
+						if ghParser == nil {
+							scanErr = fmt.Errorf("GitHub parser not registered")
+							reject.Invoke(map[string]interface{}{"error": scanErr.Error()})
+							return
 						}
 
-						normalized, err := ghParser.Parse(content)
-						if err != nil {
-							fmt.Printf("Failed to parse workflow %s: %v\n", wf.Path, err)
-							continue
-						}
-
-						normalized.Path = wf.Path
-						parsedWorkflows = append(parsedWorkflows, normalized)
-					}
-
-					reportProgress(70, fmt.Sprintf("Parsed %d workflows, building graphs...", len(parsedWorkflows)))
-
-					graphs := make(map[string]*graph.Graph)
-					for _, wf := range parsedWorkflows {
-						g, err := analysis.BuildGraphFromNormalized(fmt.Sprintf("%s/%s", owner, repo), wf.Path, wf)
-						if err != nil {
-							fmt.Printf("Failed to build graph for workflow %s: %v\n", wf.Path, err)
-							continue
-						}
-						graphs[wf.Path] = g
-					}
-
-					reportProgress(75, fmt.Sprintf("Built %d graphs, running detectors...", len(graphs)))
-
-					detectorRegistry := registry.GetDetections("github")
-
-					seen := make(map[string]bool)
-
-					for path, g := range graphs {
-						for _, detector := range detectorRegistry {
-							detectorFindings, err := detector.Detect(ctx, g)
+						var parsedWorkflows []*parser.NormalizedWorkflow
+						for _, wf := range workflows {
+							content, err := client.GetWorkflowContent(ctx, owner, repo, wf.Path)
 							if err != nil {
-								fmt.Printf("Detector %s failed on workflow %s: %v\n", detector.Name(), path, err)
+								fmt.Printf("Failed to get workflow %s: %v\n", wf.Path, err)
 								continue
 							}
 
-							for _, finding := range detectorFindings {
-								key := fmt.Sprintf("%s|%s|%s|%s|%s",
-									finding.Workflow,
-									finding.Job,
-									finding.Step,
-									finding.Type,
-									finding.Evidence)
+							normalized, err := ghParser.Parse(content)
+							if err != nil {
+								fmt.Printf("Failed to parse workflow %s: %v\n", wf.Path, err)
+								continue
+							}
 
-								if !seen[key] {
-									seen[key] = true
-									findings = append(findings, finding)
+							normalized.Path = wf.Path
+							parsedWorkflows = append(parsedWorkflows, normalized)
+						}
+
+						reportProgress(70, fmt.Sprintf("Parsed %d workflows, building graphs...", len(parsedWorkflows)))
+
+						graphs := make(map[string]*graph.Graph)
+						for _, wf := range parsedWorkflows {
+							g, err := analysis.BuildGraphFromNormalized(fmt.Sprintf("%s/%s", owner, repo), wf.Path, wf)
+							if err != nil {
+								fmt.Printf("Failed to build graph for workflow %s: %v\n", wf.Path, err)
+								continue
+							}
+							graphs[wf.Path] = g
+						}
+
+						reportProgress(75, fmt.Sprintf("Built %d graphs, running detectors...", len(graphs)))
+
+						detectorRegistry := registry.GetDetections("github")
+
+						seen := make(map[string]bool)
+
+						for path, g := range graphs {
+							for _, detector := range detectorRegistry {
+								detectorFindings, err := detector.Detect(ctx, g)
+								if err != nil {
+									fmt.Printf("Detector %s failed on workflow %s: %v\n", detector.Name(), path, err)
+									continue
+								}
+
+								for _, finding := range detectorFindings {
+									key := fmt.Sprintf("%s|%s|%s|%s|%s",
+										finding.Workflow,
+										finding.Job,
+										finding.Step,
+										finding.Type,
+										finding.Evidence)
+
+									if !seen[key] {
+										seen[key] = true
+										findings = append(findings, finding)
+									}
 								}
 							}
 						}
-					}
 
-					workflowContentCache := make(map[string][]byte)
-					for _, wf := range workflows {
-						content, err := client.GetWorkflowContent(ctx, owner, repo, wf.Path)
-						if err == nil {
-							workflowContentCache[wf.Path] = content
+						workflowContentCache := make(map[string][]byte)
+						for _, wf := range workflows {
+							content, err := client.GetWorkflowContent(ctx, owner, repo, wf.Path)
+							if err == nil {
+								workflowContentCache[wf.Path] = content
+							}
 						}
-					}
 
-					for i := range findings {
-						if content, ok := workflowContentCache[findings[i].Workflow]; ok {
-							findings[i].WorkflowContent = string(content)
+						for i := range findings {
+							if content, ok := workflowContentCache[findings[i].Workflow]; ok {
+								findings[i].WorkflowContent = string(content)
+							}
 						}
-					}
 
-					scanErr = nil
-					reportProgress(100, fmt.Sprintf("Scan complete - found %d vulnerabilities", len(findings)))
-				}
+						scanErr = nil
+						reportProgress(100, fmt.Sprintf("Scan complete - found %d vulnerabilities", len(findings)))
+					}
 				}
 
 			case "gitlab", "azuredevops", "bitbucket":
@@ -1107,7 +1111,7 @@ func ExecuteAttack(this js.Value, args []js.Value) interface{} {
 					ID:        result.SessionID,
 					Plugin:    result.Plugin,
 					Target:    targetValue, // Store as "owner/repo"
-					Status:    "completed",  // Map from result.Success
+					Status:    "completed", // Map from result.Success
 					CreatedAt: result.Timestamp,
 					UpdatedAt: time.Now(),
 					Metadata: map[string]interface{}{
@@ -1277,10 +1281,10 @@ func CleanupSession(this js.Value, args []js.Value) interface{} {
 			}
 
 			cleanupSummary := map[string]interface{}{
-				"session_id":     sessionID,
-				"plugin":         storageSession.Plugin,
+				"session_id":        sessionID,
+				"plugin":            storageSession.Plugin,
 				"artifacts_cleaned": len(result.Artifacts),
-				"success":        true,
+				"success":           true,
 			}
 
 			summaryJSON, err := json.Marshal(cleanupSummary)
@@ -1372,8 +1376,8 @@ func ListAttackPlugins(this js.Value, args []js.Value) interface{} {
 					continue
 				}
 				plugins = append(plugins, map[string]interface{}{
-					"id":          name,                    // Namespaced key (e.g. "github/secrets-dump") for lookup
-					"name":        plugin.Name(),           // Display name
+					"id":          name,          // Namespaced key (e.g. "github/secrets-dump") for lookup
+					"name":        plugin.Name(), // Display name
 					"description": plugin.Description(),
 					"category":    string(plugin.Category()),
 				})
@@ -2268,12 +2272,12 @@ func SelfEnumerate(this js.Value, args []js.Value) interface{} {
 							}
 
 							reposWithRunners = append(reposWithRunners, map[string]interface{}{
-								"repo":       repo.FullName,
-								"org":        org.Login,
-								"visibility": map[bool]string{true: "private", false: "public"}[repo.Private],
+								"repo":           repo.FullName,
+								"org":            org.Login,
+								"visibility":     map[bool]string{true: "private", false: "public"}[repo.Private],
 								"default_branch": repo.DefaultBranch,
-								"runners":    runnerLabels,
-								"workflow":   wf.Name,
+								"runners":        runnerLabels,
+								"workflow":       wf.Name,
 							})
 							break // Only need one workflow per repo
 						}
@@ -2301,8 +2305,8 @@ func SelfEnumerate(this js.Value, args []js.Value) interface{} {
 					"login": tokenInfo.User,
 					"name":  tokenInfo.Name,
 				},
-				"scopes":            tokenInfo.Scopes,
-				"orgs":              orgResults,
+				"scopes":             tokenInfo.Scopes,
+				"orgs":               orgResults,
 				"repos_with_runners": reposWithRunners,
 			}
 
@@ -2492,7 +2496,6 @@ func enumerateGitHubSecrets(ctx context.Context, platform *github.Platform, targ
 
 	progressCallback(100, "Complete")
 
-
 	jsonBytes, err := json.Marshal(map[string]interface{}{
 		"secrets": secrets,
 		"count":   len(secrets),
@@ -2523,7 +2526,6 @@ func enumerateGitHubRunners(ctx context.Context, platform *github.Platform, targ
 	}
 
 	progressCallback(100, "Complete")
-
 
 	jsonBytes, err := json.Marshal(map[string]interface{}{
 		"runners": runners,
@@ -2795,7 +2797,6 @@ func handleAzureDevOpsEnumerate(ctx context.Context, operation string, options j
 func enumerateADOProjects(ctx context.Context, org, token string, progressCallback ProgressCallback, resolve, reject js.Value) {
 	progressCallback(20, "Enumerating ADO projects...")
 
-
 	orgURL := fmt.Sprintf("https://dev.azure.com/%s", org)
 
 	proxyBase := adoProxyBase
@@ -2810,7 +2811,6 @@ func enumerateADOProjects(ctx context.Context, org, token string, progressCallba
 	}
 
 	progressCallback(100, "Complete")
-
 
 	jsonBytes, err := json.Marshal(map[string]interface{}{
 		"projects": projects,
@@ -2828,7 +2828,6 @@ func enumerateADOProjects(ctx context.Context, org, token string, progressCallba
 
 func enumerateADORepos(ctx context.Context, org, token, target string, progressCallback ProgressCallback, resolve, reject js.Value) {
 	progressCallback(10, "Initializing ADO client...")
-
 
 	orgURL := fmt.Sprintf("https://dev.azure.com/%s", org)
 
@@ -2875,7 +2874,6 @@ func enumerateADORepos(ctx context.Context, org, token, target string, progressC
 
 	progressCallback(100, "Complete")
 
-
 	jsonBytes, err := json.Marshal(map[string]interface{}{
 		"repositories":    allRepos,
 		"count":           len(allRepos),
@@ -2893,7 +2891,6 @@ func enumerateADORepos(ctx context.Context, org, token, target string, progressC
 
 func enumerateADOPipelines(ctx context.Context, org, token, target string, progressCallback ProgressCallback, resolve, reject js.Value) {
 	progressCallback(10, "Initializing ADO client...")
-
 
 	orgURL := fmt.Sprintf("https://dev.azure.com/%s", org)
 	proxyBase := adoProxyBase
@@ -2942,7 +2939,7 @@ func enumerateADOPipelines(ctx context.Context, org, token, target string, progr
 	progressCallback(100, "Complete")
 
 	jsonBytes, err := json.Marshal(map[string]interface{}{
-		"pipelines":       allPipelines,
+		"pipelines":        allPipelines,
 		"buildDefinitions": allBuildDefs,
 		"totalPipelines":   len(allPipelines),
 		"totalBuildDefs":   len(allBuildDefs),
@@ -2966,7 +2963,6 @@ func enumerateADOVariables(ctx context.Context, org, token, target string, progr
 
 	progressCallback(20, "Enumerating ADO variable groups...")
 
-
 	orgURL := fmt.Sprintf("https://dev.azure.com/%s", org)
 	proxyBase := adoProxyBase
 	transport := &adoProxyTransport{proxyBase: proxyBase}
@@ -2979,7 +2975,6 @@ func enumerateADOVariables(ctx context.Context, org, token, target string, progr
 	}
 
 	progressCallback(100, "Complete")
-
 
 	jsonBytes, err := json.Marshal(map[string]interface{}{
 		"variableGroups": variableGroups,
@@ -3004,7 +2999,6 @@ func enumerateADOConnections(ctx context.Context, org, token, target string, pro
 
 	progressCallback(20, "Enumerating ADO service connections...")
 
-
 	orgURL := fmt.Sprintf("https://dev.azure.com/%s", org)
 	proxyBase := adoProxyBase
 	transport := &adoProxyTransport{proxyBase: proxyBase}
@@ -3018,11 +3012,10 @@ func enumerateADOConnections(ctx context.Context, org, token, target string, pro
 
 	progressCallback(100, "Complete")
 
-
 	jsonBytes, err := json.Marshal(map[string]interface{}{
 		"connections": connections,
-		"count":        len(connections),
-		"project":      target,
+		"count":       len(connections),
+		"project":     target,
 	})
 	if err != nil {
 		reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("failed to marshal results: %v", err)})
@@ -3037,7 +3030,6 @@ func enumerateADOConnections(ctx context.Context, org, token, target string, pro
 func enumerateADOAgentPools(ctx context.Context, org, token string, progressCallback ProgressCallback, resolve, reject js.Value) {
 	progressCallback(20, "Enumerating ADO agent pools...")
 
-
 	orgURL := fmt.Sprintf("https://dev.azure.com/%s", org)
 
 	proxyBase := adoProxyBase
@@ -3051,7 +3043,6 @@ func enumerateADOAgentPools(ctx context.Context, org, token string, progressCall
 	}
 
 	progressCallback(100, "Complete")
-
 
 	jsonBytes, err := json.Marshal(map[string]interface{}{
 		"pools": pools,
@@ -3212,7 +3203,6 @@ func Search(this js.Value, args []js.Value) interface{} {
 	return promiseConstructor.New(handler)
 }
 
-
 // registerFunctions registers all exported functions to the global JavaScript scope
 func registerFunctions() {
 	js.Global().Set("trajanInitialize", js.FuncOf(Initialize))
@@ -3235,5 +3225,5 @@ func registerFunctions() {
 	js.Global().Set("trajanEnumerate", js.FuncOf(Enumerate))
 	js.Global().Set("trajanSearch", js.FuncOf(Search))
 
-		fmt.Println("Trajan WASM API initialized successfully")
+	fmt.Println("Trajan WASM API initialized successfully")
 }

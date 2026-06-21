@@ -113,7 +113,7 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		return nil
 	})
 
-	g.Wait()
+	_ = g.Wait()
 
 	// Step 4: Probe per-project resources (ALL projects)
 	if len(projects) > 0 {
@@ -199,15 +199,15 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 			})
 		}
 
-		g2.Wait()
+		_ = g2.Wait()
 	}
 
 	return result, nil
 }
 
 // addCapability adds a capability to the result if not already present
-func (r *ProbeResult) addCapability(cap Capability) {
-	if !r.HasCapability(cap) {
-		r.Capabilities = append(r.Capabilities, cap)
+func (r *ProbeResult) addCapability(cp Capability) {
+	if !r.HasCapability(cp) {
+		r.Capabilities = append(r.Capabilities, cp)
 	}
 }

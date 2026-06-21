@@ -99,9 +99,9 @@ type Permission struct {
 }
 
 // HasCapability checks if a capability was detected
-func (r *ProbeResult) HasCapability(cap Capability) bool {
+func (r *ProbeResult) HasCapability(cp Capability) bool {
 	for _, c := range r.Capabilities {
-		if c == cap {
+		if c == cp {
 			return true
 		}
 	}
@@ -109,9 +109,9 @@ func (r *ProbeResult) HasCapability(cap Capability) bool {
 }
 
 // addCapability adds a capability to the result if not already present
-func (r *ProbeResult) addCapability(cap Capability) {
-	if !r.HasCapability(cap) {
-		r.Capabilities = append(r.Capabilities, cap)
+func (r *ProbeResult) addCapability(cp Capability) {
+	if !r.HasCapability(cp) {
+		r.Capabilities = append(r.Capabilities, cp)
 	}
 }
 

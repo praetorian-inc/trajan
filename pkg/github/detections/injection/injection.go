@@ -40,7 +40,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Skip review triggers - let review_injection handle those
 		if hasReviewTrigger(wf.Triggers) {
@@ -72,7 +75,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			if !ok {
 				continue
 			}
-			step := stepNode.(*graph.StepNode)
+			step, ok := stepNode.(*graph.StepNode)
+			if !ok {
+				continue
+			}
 
 			// Detect gates in the path to this injectable step
 			pathGates := d.detector.DetectGates(g, path)
@@ -86,7 +92,9 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			var jobNode *graph.JobNode
 			for _, nodeID := range path {
 				if node, ok := g.GetNode(nodeID); ok && node.Type() == graph.NodeTypeJob {
-					jobNode = node.(*graph.JobNode)
+					if jn, ok := node.(*graph.JobNode); ok {
+						jobNode = jn
+					}
 					break
 				}
 			}
@@ -121,7 +129,11 @@ func (d *Detection) findInjectablePaths(g *graph.Graph, nodeID string, currentPa
 
 	// If this is an injectable step, save the path
 	if node.Type() == graph.NodeTypeStep {
-		step := node.(*graph.StepNode)
+		step, ok := node.(*graph.StepNode)
+		if !ok {
+			visited[nodeID] = false
+			return
+		}
 		if step.Run != "" && len(findInjectableContexts(step.Run)) > 0 {
 			pathCopy := make([]string, len(currentPath))
 			copy(pathCopy, currentPath)

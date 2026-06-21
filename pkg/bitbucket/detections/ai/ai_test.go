@@ -4,17 +4,18 @@ import (
 	"context"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
-	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
+	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
 func findingsByType(findings []detections.Finding, t detections.VulnerabilityType) []detections.Finding {
 	var result []detections.Finding
-	for _, f := range findings {
-		if f.Type == t {
-			result = append(result, f)
+	for i := range findings {
+		if findings[i].Type == t {
+			result = append(result, findings[i])
 		}
 	}
 	return result

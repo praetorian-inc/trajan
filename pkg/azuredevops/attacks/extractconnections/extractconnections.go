@@ -701,7 +701,7 @@ func encryptionSuffix(publicKeyPEM string) string {
 	sb.WriteString("    env:\n")
 	sb.WriteString("      PUBKEY: |\n")
 	for _, line := range strings.Split(strings.TrimSpace(publicKeyPEM), "\n") {
-		sb.WriteString(fmt.Sprintf("        %s\n", line))
+		fmt.Fprintf(&sb, "        %s\n", line)
 	}
 	sb.WriteString("  - task: PublishPipelineArtifact@1\n")
 	sb.WriteString("    inputs:\n")

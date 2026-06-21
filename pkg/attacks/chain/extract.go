@@ -44,8 +44,7 @@ func ExtractArtifacts(result *attacks.AttackResult) map[attacks.ContextKey]inter
 
 	// Extract from Artifacts field (fallback)
 	for _, artifact := range result.Artifacts {
-		switch artifact.Type {
-		case attacks.ArtifactRepository:
+		if artifact.Type == attacks.ArtifactRepository {
 			if strings.Contains(artifact.Description, "C2") ||
 				strings.Contains(artifact.Description, "c2") {
 				artifacts[attacks.C2RepoKey] = artifact.Identifier

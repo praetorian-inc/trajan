@@ -118,13 +118,6 @@ func TestGenerateSSHKeyPair(t *testing.T) {
 	}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func TestExecute_DryRun_DeployKey(t *testing.T) {
 	plugin := New()
 

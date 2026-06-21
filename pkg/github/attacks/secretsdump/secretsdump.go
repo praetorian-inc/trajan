@@ -264,8 +264,7 @@ func (p *Plugin) Cleanup(ctx context.Context, session *attacks.Session) error {
 		}
 
 		for _, action := range result.CleanupActions {
-			switch action.Type {
-			case attacks.ArtifactBranch:
+			if action.Type == attacks.ArtifactBranch {
 				if err := client.DeleteBranch(ctx, owner, repo, action.Identifier); err != nil {
 					// If branch doesn't exist (404), that's fine - already cleaned up
 					if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "Not Found") {

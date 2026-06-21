@@ -231,7 +231,7 @@ func TestClient_StringRedactsToken(t *testing.T) {
 	}
 
 	// Also test through fmt to ensure the interface works
-	formatted := fmt.Sprintf("%v", c)
+	formatted := fmt.Sprintf("client=%v", c)
 	if strings.Contains(formatted, "super-secret-token") {
 		t.Error("fmt.Sprintf with percent-v should not contain the actual token")
 	}

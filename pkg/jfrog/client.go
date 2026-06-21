@@ -44,10 +44,10 @@ func WithTimeout(timeout time.Duration) ClientOption {
 }
 
 // WithConcurrency sets the maximum concurrent requests
-func WithConcurrency(max int64) ClientOption {
+func WithConcurrency(maxConc int64) ClientOption {
 	return func(c *Client) {
-		if max > 0 {
-			c.semaphore = semaphore.NewWeighted(max)
+		if maxConc > 0 {
+			c.semaphore = semaphore.NewWeighted(maxConc)
 		}
 	}
 }
@@ -142,9 +142,9 @@ func (c *Client) PostAQL(ctx context.Context, query string) (*http.Response, err
 		return nil, fmt.Errorf("acquiring semaphore: %w", err)
 	}
 
-	url := c.buildURL("/api/search/aql")
+	reqURL := c.buildURL("/api/search/aql")
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(query))
+	req, err := http.NewRequestWithContext(ctx, "POST", reqURL, strings.NewReader(query))
 	if err != nil {
 		c.semaphore.Release(1)
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -196,9 +196,9 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader) (*
 		return nil, fmt.Errorf("acquiring semaphore: %w", err)
 	}
 
-	url := c.buildURL(path)
+	reqURL := c.buildURL(path)
 
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
 	if err != nil {
 		c.semaphore.Release(1)
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -297,7 +297,7 @@ func (c *Client) EnsureToken(ctx context.Context) error {
 func (c *Client) exchangeCredentialsForToken(ctx context.Context) (string, error) {
 	// Use the Artifactory security token endpoint (accepts Basic Auth)
 	// NOT the Access API endpoint which requires an existing Bearer token
-	url := c.baseURL + "/artifactory/api/security/token"
+	reqURL := c.baseURL + "/artifactory/api/security/token"
 
 	// Request a token with applied-permissions/user scope and broader audience for better API access
 	// - applied-permissions/user: grants user-level permissions
@@ -305,7 +305,7 @@ func (c *Client) exchangeCredentialsForToken(ctx context.Context) (string, error
 	// - refreshable=true: allows token refresh
 	// - audience=*@*: broad audience for cross-service access
 	body := strings.NewReader("username=" + c.username + "&scope=applied-permissions/user&expires_in=31536000&refreshable=true&audience=*@*")
-	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", reqURL, body)
 	if err != nil {
 		return "", fmt.Errorf("creating token request: %w", err)
 	}
@@ -317,7 +317,7 @@ func (c *Client) exchangeCredentialsForToken(ctx context.Context) (string, error
 	if err != nil {
 		return "", fmt.Errorf("token request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -407,7 +407,7 @@ func (c *Client) GetUser(ctx context.Context) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -428,7 +428,7 @@ func (c *Client) GetSystemInfo(ctx context.Context) (map[string]interface{}, err
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	gitlabplatform "github.com/praetorian-inc/trajan/pkg/gitlab"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	gitlabplatform "github.com/praetorian-inc/trajan/pkg/gitlab"
 )
 
 func TestOutputRunnersConsole_GroupEnumeration_DeduplicatesSharedRunners(t *testing.T) {

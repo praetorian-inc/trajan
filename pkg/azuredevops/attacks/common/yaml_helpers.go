@@ -17,7 +17,7 @@ func GenerateVariableGroupsYAML(groups []azuredevops.VariableGroup) string {
 	var sb strings.Builder
 	sb.WriteString("variables:\n")
 	for _, group := range groups {
-		sb.WriteString(fmt.Sprintf("  - group: %s\n", group.Name))
+		fmt.Fprintf(&sb, "  - group: %s\n", group.Name)
 	}
 	sb.WriteString("\n")
 
@@ -50,7 +50,7 @@ func GenerateSecretEnvYAML(groups []azuredevops.VariableGroup) string {
 	var sb strings.Builder
 	sb.WriteString("    env:\n")
 	for _, name := range sortedNames {
-		sb.WriteString(fmt.Sprintf("      %s: $(%s)\n", name, name))
+		fmt.Fprintf(&sb, "      %s: $(%s)\n", name, name)
 	}
 
 	return sb.String()

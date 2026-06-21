@@ -7,9 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
 func TestPlatform_AnalyzeProjectLogs(t *testing.T) {

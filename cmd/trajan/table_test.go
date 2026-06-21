@@ -6,10 +6,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/praetorian-inc/trajan/internal/cmdutil"
 	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestOutputFindingsConsole_TableFormat(t *testing.T) {

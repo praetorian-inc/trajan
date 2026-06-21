@@ -133,7 +133,7 @@ func FormatStructuredSecrets(decrypted []byte) (string, error) {
 		if len(vars) == 0 {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("=== Variable Group: %s ===\n", name))
+		fmt.Fprintf(&sb, "=== Variable Group: %s ===\n", name)
 		writeKeyValues(&sb, vars)
 		sb.WriteString("\n")
 	}
@@ -178,7 +178,7 @@ func SecretsSummary(decrypted []byte) string {
 
 // WriteSecretsToFile writes the formatted secrets text to a file with restricted permissions.
 func WriteSecretsToFile(formatted string, outputPath string) error {
-	return os.WriteFile(outputPath, []byte(formatted+"\n"), 0600)
+	return os.WriteFile(outputPath, []byte(formatted+"\n"), 0o600)
 }
 
 // writeKeyValues writes sorted key=value pairs to a string builder.
@@ -190,6 +190,6 @@ func writeKeyValues(sb *strings.Builder, vars map[string]string) {
 	sort.Strings(keys)
 
 	for _, k := range keys {
-		sb.WriteString(fmt.Sprintf("%s=%s\n", k, vars[k]))
+		fmt.Fprintf(sb, "%s=%s\n", k, vars[k])
 	}
 }

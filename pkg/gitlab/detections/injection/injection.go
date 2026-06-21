@@ -36,7 +36,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Only DFS from root workflows to avoid duplicates
 		if !common.IsRootWorkflow(g, wf) {
@@ -45,7 +48,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeStep {
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 
 				if step.Run == "" {
 					return true
@@ -106,19 +112,19 @@ func (d *Detection) createFinding(g *graph.Graph, step *graph.StepNode, injectab
 	metadata["injectableVariables"] = ctxList
 
 	return detections.Finding{
-		Type:        detections.VulnScriptInjection,
-		Platform:    "gitlab",
-		Class:       detections.GetVulnerabilityClass(detections.VulnScriptInjection),
-		Severity:    detections.SeverityHigh,
-		Confidence:  detections.ConfidenceHigh,
-		Complexity:  detections.ComplexityZeroClick,
+		Type:         detections.VulnScriptInjection,
+		Platform:     "gitlab",
+		Class:        detections.GetVulnerabilityClass(detections.VulnScriptInjection),
+		Severity:     detections.SeverityHigh,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityZeroClick,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Path,
 		WorkflowFile: wf.Path,
 		Step:         step.Name,
-		Line:        step.Line,
-		Evidence:    evidence,
-		Remediation: "Avoid using " + strings.Join(varList, ", ") + " directly in scripts. Sanitize the value or use GitLab's predefined CI/CD variables instead. Never execute user-controlled data as shell commands.",
+		Line:         step.Line,
+		Evidence:     evidence,
+		Remediation:  "Avoid using " + strings.Join(varList, ", ") + " directly in scripts. Sanitize the value or use GitLab's predefined CI/CD variables instead. Never execute user-controlled data as shell commands.",
 		Details: &detections.FindingDetails{
 			LineRanges:         lineRanges,
 			AttackChain:        attackChain,

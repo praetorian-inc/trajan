@@ -8,8 +8,9 @@ import (
 	"os"
 	"sort"
 
-	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 	"github.com/spf13/cobra"
+
+	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 )
 
 // Local data structures for attack path analysis

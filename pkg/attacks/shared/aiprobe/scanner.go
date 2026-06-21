@@ -112,9 +112,9 @@ func ProbeEndpoints(ctx context.Context, endpoints []DiscoveredEndpoint, config 
 // selectBestResult picks the Julius result with the highest specificity.
 func selectBestResult(results []types.Result) types.Result {
 	best := results[0]
-	for _, r := range results[1:] {
-		if r.Specificity > best.Specificity {
-			best = r
+	for i := 1; i < len(results); i++ {
+		if results[i].Specificity > best.Specificity {
+			best = results[i]
 		}
 	}
 	return best
@@ -127,7 +127,8 @@ func computeSummary(results *ScanResults) ScanSummary {
 		EndpointsProbed:     len(results.Probed),
 	}
 	services := make(map[string]bool)
-	for _, pr := range results.Probed {
+	for i := range results.Probed {
+		pr := &results.Probed[i]
 		if pr.Reachable {
 			summary.EndpointsReachable++
 		}

@@ -12,10 +12,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
-	"github.com/praetorian-inc/trajan/pkg/gitlab"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
+	"github.com/praetorian-inc/trajan/pkg/gitlab"
 )
 
 // TestGitLabIncludeResolutionEndToEnd tests the complete workflow of resolving GitLab includes

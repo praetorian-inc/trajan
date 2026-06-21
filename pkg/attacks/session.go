@@ -64,7 +64,7 @@ func sessionPath(id string) string {
 // Save persists the session to disk
 func (s *Session) Save() error {
 	dir := sessionsDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("creating sessions directory: %w", err)
 	}
 
@@ -74,7 +74,7 @@ func (s *Session) Save() error {
 	}
 
 	path := sessionPath(s.ID)
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing session file: %w", err)
 	}
 

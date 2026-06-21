@@ -56,7 +56,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	dispatchNodes := g.GetNodesByTag(graph.TagWorkflowDispatch)
 
 	for _, wfNode := range dispatchNodes {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		var checkoutStep *graph.StepNode
 		var jobNode *graph.JobNode
@@ -65,10 +68,17 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			switch node.Type() {
 			case graph.NodeTypeJob:
-				jobNode = node.(*graph.JobNode)
+				job, ok := node.(*graph.JobNode)
+				if !ok {
+					return true
+				}
+				jobNode = job
 				checkoutStep = nil // Reset checkout state for new job to prevent cross-job false positives
 			case graph.NodeTypeStep:
-				step := node.(*graph.StepNode)
+				step, ok := node.(*graph.StepNode)
+				if !ok {
+					return true
+				}
 
 				// Check for checkout with mutable ref
 				if step.HasTag(graph.TagCheckout) && step.With != nil {
@@ -163,21 +173,21 @@ func createFinding(wf *graph.WorkflowNode, job *graph.JobNode, checkoutStep, exe
 	evidence := fmt.Sprintf("Workflow uses workflow_dispatch trigger with mutable ref (%s). Attacker can update the ref between dispatch and checkout, leading to code execution with different code than expected (TOCTOU race condition).", mutableRef)
 
 	return detections.Finding{
-		Type:       detections.VulnTOCTOU,
-		Platform:   "github",
-		Class:      detections.GetVulnerabilityClass(detections.VulnTOCTOU),
-		Severity:   detections.SeverityMedium,
-		Confidence: detections.ConfidenceHigh,
-		Complexity: detections.ComplexityMedium,
+		Type:         detections.VulnTOCTOU,
+		Platform:     "github",
+		Class:        detections.GetVulnerabilityClass(detections.VulnTOCTOU),
+		Severity:     detections.SeverityMedium,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityMedium,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Path, // Use path
 		WorkflowFile: wf.Path,
 		Job:          jobName,
-		Step:       checkoutStep.Name,
-		Line:       checkoutStep.Line,
-		Trigger:    "workflow_dispatch",
-		Evidence:    evidence,
-		Remediation: "Use an immutable commit SHA instead of a mutable branch or PR ref for checkout. Pass the SHA as a workflow_dispatch input (e.g., inputs.sha) and use it directly in the checkout ref, or resolve the ref to a SHA at the start of the workflow and use that for all subsequent steps.",
+		Step:         checkoutStep.Name,
+		Line:         checkoutStep.Line,
+		Trigger:      "workflow_dispatch",
+		Evidence:     evidence,
+		Remediation:  "Use an immutable commit SHA instead of a mutable branch or PR ref for checkout. Pass the SHA as a workflow_dispatch input (e.g., inputs.sha) and use it directly in the checkout ref, or resolve the ref to a SHA at the start of the workflow and use that for all subsequent steps.",
 		Details: &detections.FindingDetails{
 			LineRanges:  lineRanges,
 			AttackChain: attackChain,

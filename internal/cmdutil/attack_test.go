@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/praetorian-inc/trajan/pkg/attacks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/praetorian-inc/trajan/pkg/attacks"
 )
 
 // captureStdout calls fn while capturing everything written to os.Stdout,

@@ -38,14 +38,9 @@ func (p *Platform) EnumerateRunners(ctx context.Context, projectPath string, inc
 		// On GitLab SaaS, filter out shared runners (saas-linux-*, saas-macos-*, etc.)
 		// Only show truly self-hosted/custom project runners
 		if isSaaS {
-			originalCount := len(projectRunners)
+			// Filtering out shared runners may leave zero self-hosted runners;
+			// this is expected behavior on SaaS and not treated as an error.
 			projectRunners = filterSelfHostedRunners(projectRunners)
-			// Only add informational note if we actually filtered out runners
-			// and ended up with zero self-hosted runners
-			if originalCount > 0 && len(projectRunners) == 0 {
-				// Don't add to Errors - this is expected behavior on SaaS
-				// The message will be clear from "0 runners" in the output
-			}
 		}
 		result.ProjectRunners = projectRunners
 	}
@@ -112,7 +107,8 @@ func (p *Platform) AnalyzeWorkflowTags(ctx context.Context, yamlContent []byte, 
 
 	// Build set of available tags from runners
 	availableTagsSet := make(map[string]bool)
-	for _, runner := range availableRunners {
+	for i := range availableRunners {
+		runner := &availableRunners[i]
 		for _, tag := range runner.Tags {
 			availableTagsSet[tag] = true
 		}
@@ -182,7 +178,8 @@ func buildRunnerSummary(project, group, instance []RunnerInfo) RunnerSummary {
 	allRunners = append(allRunners, group...)
 	allRunners = append(allRunners, instance...)
 
-	for _, runner := range allRunners {
+	for i := range allRunners {
+		runner := &allRunners[i]
 		summary.Total++
 		if runner.Online {
 			summary.Online++

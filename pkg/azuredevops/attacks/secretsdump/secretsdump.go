@@ -315,7 +315,6 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 		select {
 		case <-ctx.Done():
 			fmt.Printf("Timeout: %v\n", ctx.Err())
-			break
 		case <-time.After(5 * time.Second):
 		}
 		if ctx.Err() != nil {

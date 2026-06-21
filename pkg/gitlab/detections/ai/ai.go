@@ -37,7 +37,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
-		wf := wfNode.(*graph.WorkflowNode)
+		wf, ok := wfNode.(*graph.WorkflowNode)
+		if !ok {
+			continue
+		}
 
 		// Only DFS from root workflows to avoid duplicates
 		if !common.IsRootWorkflow(g, wf) {
@@ -48,7 +51,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			if node.Type() != graph.NodeTypeStep {
 				return true
 			}
-			step := node.(*graph.StepNode)
+			step, ok := node.(*graph.StepNode)
+			if !ok {
+				return true
+			}
 			if !aipatterns.IsAIStep(step) {
 				return true
 			}
@@ -82,12 +88,12 @@ func checkTokenExfiltration(g *graph.Graph, step *graph.StepNode) []detections.F
 	}
 
 	return []detections.Finding{{
-		Type:        detections.VulnAITokenExfiltration,
-		Platform:    "gitlab",
-		Class:       detections.GetVulnerabilityClass(detections.VulnAITokenExfiltration),
-		Severity:    detections.SeverityMedium,
-		Confidence:  detections.ConfidenceHigh,
-		Complexity:  detections.ComplexityLow,
+		Type:         detections.VulnAITokenExfiltration,
+		Platform:     "gitlab",
+		Class:        detections.GetVulnerabilityClass(detections.VulnAITokenExfiltration),
+		Severity:     detections.SeverityMedium,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityLow,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Name,
 		WorkflowFile: wf.Path,
@@ -95,7 +101,7 @@ func checkTokenExfiltration(g *graph.Graph, step *graph.StepNode) []detections.F
 		Line:         step.Line,
 		Trigger:      aipatterns.GetTriggerString(wf),
 		Evidence:     fmt.Sprintf("AI step '%s' with token access and untrusted input", step.Name),
-		Remediation: "Avoid passing untrusted input (CI_MERGE_REQUEST_TITLE, etc.) to AI steps with token access. Use separate trusted pipelines or remove token access from AI steps.",
+		Remediation:  "Avoid passing untrusted input (CI_MERGE_REQUEST_TITLE, etc.) to AI steps with token access. Use separate trusted pipelines or remove token access from AI steps.",
 	}}
 }
 
@@ -114,12 +120,12 @@ func checkCodeInjection(g *graph.Graph, step *graph.StepNode) []detections.Findi
 	}
 
 	return []detections.Finding{{
-		Type:        detections.VulnAICodeInjection,
-		Platform:    "gitlab",
-		Class:       detections.GetVulnerabilityClass(detections.VulnAICodeInjection),
-		Severity:    detections.SeverityMedium,
-		Confidence:  detections.ConfidenceHigh,
-		Complexity:  detections.ComplexityLow,
+		Type:         detections.VulnAICodeInjection,
+		Platform:     "gitlab",
+		Class:        detections.GetVulnerabilityClass(detections.VulnAICodeInjection),
+		Severity:     detections.SeverityMedium,
+		Confidence:   detections.ConfidenceHigh,
+		Complexity:   detections.ComplexityLow,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Name,
 		WorkflowFile: wf.Path,
@@ -127,7 +133,7 @@ func checkCodeInjection(g *graph.Graph, step *graph.StepNode) []detections.Findi
 		Line:         step.Line,
 		Trigger:      aipatterns.GetTriggerString(wf),
 		Evidence:     fmt.Sprintf("AI step '%s' receives untrusted input", step.Name),
-		Remediation: "Avoid passing user-controlled input directly to AI steps. Validate and sanitize input before use.",
+		Remediation:  "Avoid passing user-controlled input directly to AI steps. Validate and sanitize input before use.",
 	}}
 }
 
@@ -167,12 +173,12 @@ func checkMCPAbuse(g *graph.Graph, step *graph.StepNode) []detections.Finding {
 	}
 
 	return []detections.Finding{{
-		Type:        detections.VulnAIMCPAbuse,
-		Platform:    "gitlab",
-		Class:       detections.GetVulnerabilityClass(detections.VulnAIMCPAbuse),
-		Severity:    severity,
-		Confidence:  confidence,
-		Complexity:  detections.ComplexityLow,
+		Type:         detections.VulnAIMCPAbuse,
+		Platform:     "gitlab",
+		Class:        detections.GetVulnerabilityClass(detections.VulnAIMCPAbuse),
+		Severity:     severity,
+		Confidence:   confidence,
+		Complexity:   detections.ComplexityLow,
 		Repository:   wf.RepoSlug,
 		Workflow:     wf.Name,
 		WorkflowFile: wf.Path,

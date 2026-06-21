@@ -348,7 +348,7 @@ func (p *Plugin) Execute(ctx context.Context, opts attacks.AttackOptions) (*atta
 	// Save to file if requested
 	outputFile := opts.ExtraOpts["output-file"]
 	if outputFile != "" {
-		if err := os.WriteFile(outputFile, []byte(output), 0600); err != nil {
+		if err := os.WriteFile(outputFile, []byte(output), 0o600); err != nil {
 			fmt.Printf("Warning: failed to save output to file: %v\n", err)
 		} else {
 			fmt.Printf("Saved output to: %s\n\n", outputFile)
