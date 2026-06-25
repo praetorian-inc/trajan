@@ -1,0 +1,26 @@
+id: cat-08/apps-pats-deploy-key-reused
+scenario_id: cat-08/05
+title: "Deploy key reused across multiple repos with write access"
+subject: chain
+severity: high
+confidence: high
+description: >
+  The same public key fingerprint appears as a deploy key on >1 repo, and at
+  least one instance is write-capable. Compromise of the private key grants
+  write across all repos that share the key. Chain items come from the
+  deploy-key-reuse derivation keyed by public-key fingerprint.
+
+chain_of:
+  join: deploy-key-reuse
+  for_each: reused_keys
+  where:
+    all_of:
+      - repo_count >= 2
+      - any_write_capable == true
+
+evidence:
+  - "Key fingerprint shared across {{ repo_count }} repos: {{ repos }}"
+
+remediation_hint: >
+  Generate per-repo deploy keys; never reuse one private key across multiple
+  trust boundaries.
