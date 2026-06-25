@@ -1,0 +1,27 @@
+id: cat-05/workflow-run-default-branch
+scenario_id: cat-05/10
+title: "workflow_run downstream runs from default branch (no PR review of its YAML)"
+subject: chain
+severity: medium
+confidence: high
+description: >
+  Any workflow_run downstream. The downstream's workflow file is loaded from the
+  default branch (per GitHub semantics) — so a PR that adds/modifies the
+  downstream YAML doesn't take effect until merged, but the downstream then runs
+  against PR-derived data without further gating. Keys on every workflow_run_pair
+  (the existence of a downstream is the signal); the _id != "" predicate matches
+  every well-formed pair.
+
+chain_of:
+  join: trigger-channels
+  for_each: workflow_run_pairs
+  where:
+    all_of:
+      - downstream._id != ""
+
+evidence:
+  - "Downstream {{ downstream._id }} runs on workflow_run — file loaded from default branch."
+
+remediation_hint: >
+  Treat workflow_run downstreams as a privileged surface; if you don't need
+  workflow_run-specific data (event payload), use a regular trigger.

@@ -1,0 +1,27 @@
+id: cat-05/workflow-run-context-injection
+scenario_id: cat-05/03
+title: "workflow_run downstream interpolates attacker-controllable context"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A workflow_run downstream's run: (or other exec sink) interpolates an
+  attacker-controllable field from the workflow_run event (head_branch,
+  head_sha, display_title). Shell substitution → command injection. Fires only
+  on direct exec-context interpolation (run:/with:*); env-binding the same field
+  is the documented safe pattern, so attacker_context_fields_referenced_exec is
+  the discriminating field.
+
+chain_of:
+  join: trigger-channels
+  for_each: workflow_run_pairs
+  where:
+    all_of:
+      - downstream.attacker_context_fields_referenced_exec != []
+
+evidence:
+  - "Downstream {{ downstream._id }} interpolates attacker context in exec sink: {{ downstream.attacker_context_fields_referenced_exec }}"
+
+remediation_hint: >
+  Bind via env, never interpolate; or pull the value from an artifact and
+  validate via schema.
