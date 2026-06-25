@@ -1,0 +1,28 @@
+id: cat-10/ai-agents-dispatch-prompt-input
+scenario_id: cat-10/09
+title: "Agent prompt comes from workflow_dispatch input"
+subject: job
+severity: medium
+confidence: medium
+description: >
+  The agent reads its prompt from a `workflow_dispatch` input (or referenced
+  inputs.* expression). While dispatch is restricted to write collaborators,
+  this still expands the trust surface — any compromised collaborator can
+  craft inputs that drive privileged tool calls. The agent prompt is
+  typically a with.* input, which lands in the exec-context attacker refs.
+
+where:
+  all_of:
+    - agent_action_class != null
+    - triggers ∋ {workflow_dispatch}
+  any_of:
+    - attacker_context_fields_referenced_exec != []
+    - reads_any_secret == true
+
+evidence:
+  - "Agent {{ agent_action_class }} triggered via workflow_dispatch."
+  - "Attacker-context refs (exec): {{ attacker_context_fields_referenced_exec }}"
+
+remediation_hint: >
+  Constrain workflow_dispatch inputs to a strict enum where possible; never
+  forward raw inputs into the agent's prompt as-is.

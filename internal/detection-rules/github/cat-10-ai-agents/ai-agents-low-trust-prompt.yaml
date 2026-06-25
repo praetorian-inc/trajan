@@ -1,0 +1,32 @@
+id: cat-10/ai-agents-low-trust-prompt
+scenario_id: cat-10/01
+title: "AI agent invoked from low-trust trigger with write tokens"
+subject: job
+severity: critical
+confidence: high
+description: >
+  An AI agent action (claude, codex, gemini, openai, mcp) runs on a trigger
+  whose payload is attacker-controllable (issue comment, PR title/body, PR
+  comment, discussion comment) AND the job has write permissions on
+  issues/PRs/contents. The agent's prompt is attacker-supplied; any write tool
+  grants the attacker the ability to push changes via the agent's identity.
+
+where:
+  all_of:
+    - agent_action_class != null
+    - triggers ∋ {issue_comment, issues, pull_request, pull_request_target, pull_request_review, pull_request_review_comment, discussion_comment}
+  any_of:
+    - permissions.contents == "write"
+    - permissions.issues == "write"
+    - permissions.pull-requests == "write"
+
+evidence:
+  - "Agent action: {{ agent_action_class }} at {{ _provenance.workflow_file }}:{{ _provenance.yaml_line_range }}"
+  - "Triggers: {{ triggers }}"
+  - "Tools enabled: {{ agent_tools_enabled }}"
+  - "Output channels: {{ agent_output_channels }}"
+
+remediation_hint: >
+  Move agent invocation to a workflow_run downstream + actor-association gate;
+  drop tokens to read-only on the agent step; require explicit human approval
+  before any write-class tool.

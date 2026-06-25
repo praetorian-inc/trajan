@@ -1,0 +1,26 @@
+id: cat-10/ai-agents-pr-comment-exfil
+scenario_id: cat-10/05
+title: "Agent posts to PR comments AND reads secrets in same job"
+subject: job
+severity: high
+confidence: medium
+description: >
+  The agent has `pull-requests: write` (or `issues: write`) AND the job reads
+  at least one secret. A prompt-injection attack can coerce the agent into
+  writing the secret into a PR comment — public exfiltration via standard
+  agent output.
+
+where:
+  all_of:
+    - agent_action_class != null
+    - reads_any_secret == true
+  any_of:
+    - permissions.pull-requests == "write"
+    - permissions.issues == "write"
+
+evidence:
+  - "Agent {{ agent_action_class }} can comment (pull-requests/issues write) and reads secrets {{ secrets_referenced }}"
+
+remediation_hint: >
+  Split the secret-reading work into a non-agent job; have the agent run with
+  only the data it needs (post-processed text), without raw secret env vars.

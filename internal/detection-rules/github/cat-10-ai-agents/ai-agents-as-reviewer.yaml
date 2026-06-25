@@ -1,0 +1,28 @@
+id: cat-10/ai-agents-as-reviewer
+scenario_id: cat-10/08
+title: "Agent acts as PR reviewer/approver"
+subject: job
+severity: high
+confidence: medium
+description: >
+  An agent job's permissions include pull-requests:write AND the job's
+  trigger is one of the PR/PR-review events. Combined with the org-level
+  "Actions can approve PRs" setting (or by posting an `APPROVE` review via
+  the agent's token), this collapses the human-approval gate. NOTE: the org
+  "Actions can approve PRs" setting lives in repo/org-entity facts not
+  normalized in this build, so this rule keys only on the agent + token +
+  trigger surface.
+
+where:
+  all_of:
+    - agent_action_class != null
+    - permissions.pull-requests == "write"
+  any_of:
+    - triggers ∋ {pull_request, pull_request_target, pull_request_review}
+
+evidence:
+  - "Agent {{ agent_action_class }} runs on {{ triggers }} with pull-requests:write."
+
+remediation_hint: >
+  Remove the agent's pull-requests:write — let the agent draft, then have a
+  human approve. Disable "Actions can approve PRs" at org/repo level.

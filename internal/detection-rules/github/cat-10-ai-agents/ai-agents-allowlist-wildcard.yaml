@@ -1,0 +1,23 @@
+id: cat-10/ai-agents-allowlist-wildcard
+scenario_id: cat-10/06
+title: "Agent allowed-users list contains wildcard or non-write actors"
+subject: job
+severity: high
+confidence: medium
+description: >
+  The agent action's actor allowlist contains a wildcard (`*`) or is set to
+  match any author-association. Any read-only collaborator (or arbitrary
+  fork PR opener) can trigger the agent with write capabilities.
+
+where:
+  all_of:
+    - agent_action_class != null
+    - agent_allowlist_wildcards != []
+
+evidence:
+  - "Agent allowlist contains wildcard or low-trust entries: {{ agent_allowlist_wildcards }}"
+  - "Raw: {{ agent_actor_allowlist_raw }}"
+
+remediation_hint: >
+  Replace wildcard with an explicit list of trusted maintainers. Always
+  combine with author-association gating.

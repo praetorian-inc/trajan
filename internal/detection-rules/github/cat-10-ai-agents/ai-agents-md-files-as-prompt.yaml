@@ -1,0 +1,24 @@
+id: cat-10/ai-agents-md-files-as-prompt
+scenario_id: cat-10/02
+title: "Agent system prompt sourced from in-repo markdown files"
+subject: job
+severity: high
+confidence: medium
+description: >
+  The agent's prompt is read from a markdown file in the repository
+  (AGENT.md, CLAUDE.md, instructions.md, ...). A PR that edits the markdown
+  file can hijack the agent's instructions — the agent reads attacker-edited
+  config in the same run.
+
+where:
+  all_of:
+    - agent_action_class != null
+    - agent_prompt_sources ∋ {md_file}
+
+evidence:
+  - "Agent {{ agent_action_class }} reads prompt from a markdown file: {{ agent_prompt_sources }}"
+  - "Workflow: {{ _provenance.workflow_file }}:{{ _provenance.yaml_line_range }}"
+
+remediation_hint: >
+  Pin the agent config to a specific ref outside the PR head — or restore
+  the agent config from a trusted base ref before invocation.
