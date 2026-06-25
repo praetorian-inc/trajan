@@ -1,0 +1,28 @@
+id: cat-01/chain-prt-to-reusable
+scenario_id: cat-01/09
+title: "PRT caller of reusable workflow passes PR-controlled inputs"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A low-trust trigger job calls a reusable workflow with inputs that interpolate
+  attacker-controllable PR fields (head ref, title). The reusable workflow runs
+  in the caller's repo context with secrets: inherit, amplifying the
+  input-injection attack surface.
+  NOTE: joins the reusable-callgraph chain (the caller→callee edge graph),
+  produced by correlate during normalize.
+
+chain_of:
+  join: reusable-callgraph
+  for_each: edges
+  where:
+    all_of:
+      - caller.triggers ∋ {pull_request_target, pull_request, issue_comment}
+
+evidence:
+  - "Reusable workflow caller {{ caller._id }} (triggers={{ caller.triggers }}) → callee {{ callee.uses }}"
+  - "Callee ref kind: {{ callee.ref_kind }}, mutable: {{ callee.ref_mutable }}"
+
+remediation_hint: >
+  Pin the reusable callee to a SHA; sanitize inputs at the callee boundary; drop
+  secrets: inherit and pass narrowly-scoped secrets explicitly.

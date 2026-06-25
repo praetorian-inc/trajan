@@ -1,0 +1,27 @@
+id: cat-01/action-ref-templated-from-pr
+scenario_id: cat-01/03
+title: "Action ref templated from attacker-controlled PR context"
+subject: job
+severity: critical
+confidence: high
+description: >
+  A `uses:` value interpolates a ${{ ... }} expression that resolves an
+  attacker-controlled PR field (head ref / head sha / title / body / labels).
+  The runner loads whatever the ref resolves to, so the action ref is
+  attacker-chosen → RCE. Keyed on the exec-context attacker fields only, to skip
+  env-bound refs that never reach a `uses:`.
+
+where:
+  all_of:
+    - triggers ∋ {pull_request_target, issue_comment, pull_request_review, pull_request_review_comment, pull_request}
+    - attacker_context_fields_referenced_exec != []
+  any_of:
+    - has_checkout_of_pr_ref == true
+    - executes_checked_out_code == true
+
+evidence:
+  - "Attacker-controlled fields {{ attacker_context_fields_referenced }} appear in action refs at {{ _provenance.workflow_file }}:{{ _provenance.yaml_line_range }}"
+
+remediation_hint: >
+  Pin all `uses:` values to a literal owner/repo@SHA — never include
+  ${{ ... }} interpolation in a `uses:` value.

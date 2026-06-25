@@ -1,0 +1,24 @@
+id: cat-01/prt-docker-build
+scenario_id: cat-01/05
+title: "PRT checkout + docker build + registry login (image-tag exfil)"
+subject: job
+severity: critical
+confidence: high
+description: >
+  A low-trust trigger job checks out PR head and runs a docker build sink. Even
+  if the build step is sandboxed, the PR-controlled Dockerfile can publish images
+  to attacker-tagged refs in the trusted registry or exfiltrate via registry
+  layer pushes.
+
+where:
+  all_of:
+    - triggers ∋ {pull_request_target, issue_comment, pull_request_review, pull_request_review_comment}
+    - has_checkout_of_pr_ref == true
+    - sinks ∋ {docker_build, docker, docker_build_push_action}
+
+evidence:
+  - "PRT job checks out PR head and runs docker_build sink — sinks: {{ sinks }}"
+
+remediation_hint: >
+  Move build/push to a downstream workflow_run that does not check out PR head;
+  use detached, single-use credentials for the registry push.

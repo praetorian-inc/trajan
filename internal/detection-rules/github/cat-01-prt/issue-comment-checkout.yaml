@@ -1,0 +1,27 @@
+id: cat-01/issue-comment-checkout
+scenario_id: cat-01/10
+title: "issue_comment chatops checks out PR ref and executes it"
+subject: job
+severity: critical
+confidence: high
+description: >
+  A workflow triggered by issue_comment resolves the PR linked from the comment,
+  checks out its head ref, and executes code from that ref. The comment body is
+  attacker-controllable, and a contains()-style gate on the comment body (e.g.
+  contains(github.event.comment.body, '/build')) is not strong.
+
+where:
+  all_of:
+    - triggers ∋ {issue_comment}
+    - has_checkout_of_pr_ref == true
+    - executes_checked_out_code == true
+  none_of:
+    - if_conditions_summary.gate_strength == "strong"
+
+evidence:
+  - "issue_comment job checks out PR head and runs code from it."
+  - "Gate strength: {{ if_conditions_summary.gate_strength }}"
+
+remediation_hint: >
+  Require author-association == OWNER or compare against an explicit maintainer
+  list; do not gate on a substring match of the comment body alone.

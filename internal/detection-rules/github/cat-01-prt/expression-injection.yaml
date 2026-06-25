@@ -1,0 +1,26 @@
+id: cat-01/expression-injection
+scenario_id: cat-01/08
+title: "Attacker-controllable expression flows into a run/script sink"
+subject: job
+severity: high
+confidence: high
+description: >
+  A step's run:/script:/github-script payload contains a ${{ ... }} expression
+  that interpolates an attacker-controlled field (PR title/body/head_ref, comment
+  body, issue title). The shell substitutes the attacker's text into the command
+  → command injection. Fires only on exec-context references; env:/if:/name:
+  (binding context) is the documented safe pattern and is excluded.
+
+where:
+  all_of:
+    - attacker_context_fields_referenced_exec != []
+    - triggers ∋ {pull_request_target, pull_request, issue_comment, pull_request_review, pull_request_review_comment}
+
+evidence:
+  - "Attacker-controllable fields in exec context: {{ attacker_context_fields_referenced_exec }}"
+  - "Trigger: {{ triggers }}"
+
+remediation_hint: >
+  Bind the value to an env var first
+  (env: { PR_TITLE: ${{ github.event.pull_request.title }} }) and use $PR_TITLE
+  in run: — env-var binding is safe; inline interpolation is not.
