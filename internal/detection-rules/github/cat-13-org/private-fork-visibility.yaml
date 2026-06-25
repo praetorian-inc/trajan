@@ -1,0 +1,21 @@
+id: cat-04/private-fork-visibility
+scenario_id: cat-04/07
+title: "Org permits forking of private repositories"
+subject: org
+severity: medium
+confidence: high
+description: >
+  Org setting `members_can_fork_private_repositories` is enabled. Forking a
+  private repo into a personal account moves code outside org boundaries
+  (no IP-allowlist, no SSO, no audit) and survives org-side revocation.
+
+where:
+  all_of:
+    - members_can_fork_private_repositories == true
+
+evidence:
+  - "Org allows private-fork: members_can_fork_private_repositories=true"
+
+remediation_hint: >
+  Disable "Allow forking of private and internal repositories" in
+  Settings → Member privileges.
