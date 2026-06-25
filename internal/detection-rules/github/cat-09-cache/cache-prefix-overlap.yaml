@@ -1,0 +1,26 @@
+id: cat-09/cache-prefix-overlap
+scenario_id: cat-09/01
+title: "Multiple jobs share a cache key prefix (restore-keys bypass surface)"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  Two or more jobs write/read caches that share a literal key prefix. The
+  `restore-keys:` mechanism lets a job fall back to *any* key sharing that
+  prefix — including caches written by a low-trust trigger. Keys on the
+  cache-keyspace correlation; iterates prefix overlaps with at least one
+  low-trust (or medium-trust) participant.
+
+chain_of:
+  join: cache-keyspace
+  for_each: prefix_overlaps
+  where:
+    all_of:
+      - low_trust_participant == true
+
+evidence:
+  - "Key prefix `{{ key_prefix }}` shared across {{ writer_count }} writers / {{ reader_count }} readers."
+
+remediation_hint: >
+  Scope cache keys by trigger source: include `github.event_name` and
+  `github.event.pull_request.head.repo.full_name` in the key.

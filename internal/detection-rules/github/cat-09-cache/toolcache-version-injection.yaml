@@ -1,0 +1,28 @@
+id: cat-09/toolcache-version-injection
+scenario_id: cat-09/06
+title: "Toolcache version string interpolated from attacker context"
+subject: job
+severity: high
+confidence: medium
+description: >
+  A setup-* action's version input contains attacker-controlled context
+  (github.event.pull_request.head.ref, comment body, ...). The toolcache
+  directory name derives from the version string, so an attacker can trick the
+  action into copying their pre-staged tool from the cache. Fires only when
+  attacker data reaches a direct exec context (run/with) — env-binding alone is
+  the documented safe pattern.
+
+where:
+  all_of:
+    - has_checkout_of_pr_ref == true
+    - attacker_context_fields_referenced_exec != []
+  any_of:
+    - action_refs.uses matches "setup-node|setup-python|setup-java|setup-go"
+
+evidence:
+  - "Setup-* tool version derived from attacker exec context: {{ attacker_context_fields_referenced_exec }}"
+  - "Action refs: {{ action_refs.uses }}"
+
+remediation_hint: >
+  Hard-code the tool version. Never interpolate PR-controlled fields into a
+  `with.{node,python,java,go}-version`.

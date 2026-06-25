@@ -1,0 +1,25 @@
+id: cat-09/artifact-zip-traversal
+scenario_id: cat-09/08
+title: "Artifact (PR-produced) is downloaded and extracted without validation"
+subject: job
+severity: high
+confidence: low
+description: >
+  A job downloads an artifact and then extracts/unzips/uses it without
+  validating that paths stay inside the intended workspace. A PR-produced
+  artifact with traversal entries (../) can write outside the workspace. The
+  extract-time path validation itself is not expressible from collected facts;
+  this fires on the download-then-trigger surface only.
+
+where:
+  all_of:
+    - artifact_reads != []
+  any_of:
+    - triggers ∋ {workflow_run, push, pull_request_target}
+
+evidence:
+  - "Job downloads artifacts {{ artifact_reads.name }} (triggers: {{ triggers }})"
+
+remediation_hint: >
+  Use `actions/download-artifact@v4` (which restricts paths) AND a manual
+  path-traversal check (no leading `/`, no `..` components) before extract.
