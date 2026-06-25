@@ -1,0 +1,22 @@
+id: cat-04/allowed-actions-permissive
+scenario_id: cat-04/01
+title: "Org Actions allow-list permits all actions"
+subject: org
+severity: high
+confidence: high
+description: >
+  Org-level Actions policy allows all actions to run. Anyone with write access
+  can introduce arbitrary action references (including freshly-published or
+  typosquatted marketplace actions) into any workflow.
+
+where:
+  all_of:
+    - actions.allowed_actions == "all"
+
+evidence:
+  - "Org Actions policy: allowed_actions={{ actions.allowed_actions }} (no allow-list)"
+  - "Affected scope: all repos in org {{ org }}"
+
+remediation_hint: >
+  Set allowed_actions=selected and provide patterns_allowed; restrict to
+  github/verified/owner-prefixed actions and pinned SHAs.
