@@ -1,0 +1,23 @@
+id: cat-08/apps-pats-bot-account-pat
+scenario_id: cat-08/08
+title: "Bot/service account PAT in use as GITHUB_TOKEN replacement"
+subject: org
+severity: medium
+confidence: low
+description: >
+  Org has secrets named like BOT_TOKEN / SERVICE_TOKEN / CI_BOT_PAT —
+  suggesting a long-lived non-user token used in place of GITHUB_TOKEN. Bot
+  account PATs survive employee turnover and lack the per-workflow scoping of
+  GITHUB_TOKEN. org_actions_secret_names is the list of org actions-secret
+  names from the org normalizer; the matches op scans each name.
+
+where:
+  any_of:
+    - org_actions_secret_names matches "BOT_TOKEN|BOT_PAT|SERVICE_TOKEN|CI_BOT|MACHINE_TOKEN"
+
+evidence:
+  - "Org secrets matching bot/PAT naming present: {{ org_actions_secret_names }}"
+
+remediation_hint: >
+  Replace bot PATs with the built-in GITHUB_TOKEN where possible; otherwise
+  use a GitHub App identity for non-interactive automation.
