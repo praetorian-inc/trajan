@@ -1,0 +1,26 @@
+id: cat-04/ip-allowlist-not-applied-apps
+scenario_id: cat-04/09
+title: "GitHub App installed with admin perms — IP allowlist won't gate its traffic"
+subject: org
+severity: high
+confidence: medium
+description: >
+  An installed GitHub App holds at least one admin permission. App installation
+  tokens bypass the org's user-traffic IP allowlist (apps are server-to-server,
+  not user-to-server). If the app's key is exposed, the attacker has network
+  access from anywhere.
+  NOTE: whether an IP allowlist is actually configured (and whether app traffic
+  would bypass it) needs org IP-allowlist state that is not collected; this rule
+  ports the expressible precondition — an installed app holding admin-class
+  permissions.
+
+where:
+  all_of:
+    - any_app_has_admin_perm == true
+
+evidence:
+  - "At least one installed App has admin-class permissions: {{ apps_summary }}"
+
+remediation_hint: >
+  Audit each App's permissions; downgrade admin to write where possible.
+  Prefer fine-grained, per-repo installations over org-wide installations.
