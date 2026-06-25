@@ -1,0 +1,23 @@
+id: cat-07/self-hosted-fork-pr
+scenario_id: cat-07/01
+title: "Self-hosted runner used in workflow with PR-class triggers"
+subject: job
+severity: critical
+confidence: high
+description: >
+  Workflow runs on a self-hosted runner AND triggers include PR-class events.
+  Even with the org-level "fork PR approval" gate, once approved the PR code
+  runs on the self-hosted host's filesystem — workspace and home directory
+  persist across runs.
+
+where:
+  all_of:
+    - self_hosted == true
+    - triggers ∋ {pull_request, pull_request_target, issue_comment}
+
+evidence:
+  - "Job on self-hosted ({{ runner_labels }}) runs on {{ triggers }}"
+
+remediation_hint: >
+  Don't run fork-PR workflows on self-hosted. Use ephemeral runners
+  (JIT or ARC ephemeral pods) if required.

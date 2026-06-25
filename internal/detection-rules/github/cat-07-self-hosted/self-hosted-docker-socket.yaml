@@ -1,0 +1,28 @@
+id: cat-07/self-hosted-docker-socket
+scenario_id: cat-07/10
+title: "Self-hosted job mounts docker socket or uses passwordless sudo"
+subject: job
+severity: high
+confidence: medium
+description: >
+  Self-hosted job has a step that mounts `/var/run/docker.sock` or invokes
+  `sudo` (i.e. assumes passwordless escalation). Either is a runner-host
+  privilege-escalation primitive. NOTE: whether the host actually grants
+  passwordless sudo / a mountable docker socket is runner host-state data,
+  which is deferred; this rule ports only the workflow-text signal.
+
+where:
+  all_of:
+    - self_hosted == true
+  any_of:
+    # Double-quoted so the trailing space in `sudo ` survives (a plain scalar
+    # strips it). parseValue does no escape processing, so the single backslash
+    # in \. reaches the regex engine verbatim as the literal-dot escape.
+    - 'steps.run matches "/var/run/docker\.sock|docker\.sock|sudo "'
+
+evidence:
+  - "Self-hosted job references docker socket or sudo invocation."
+
+remediation_hint: >
+  Don't mount docker.sock from inside the runner; if Docker access is
+  required, isolate via DOOD with a network-restricted daemon.
