@@ -1,0 +1,29 @@
+id: cat-06/oidc-reusable-unpinned
+scenario_id: cat-06/06
+title: "OIDC mint inside an un-pinned reusable workflow"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  Caller invokes a reusable workflow with a mutable ref (branch/tag, not SHA).
+  When the caller has `id-token: write`, the callee's `job_workflow_ref`
+  embedded in the OIDC sub resolves to the mutable target — cloud-side trust
+  that gates on job_workflow_ref still accepts updated callee code.
+  PARTIAL (GitHub-side only): the reusable-callgraph chain carries the caller
+  and callee refs but not the caller's resolved id-token permission, so this
+  fires on every mutable-ref callee edge; cloud-side job_workflow_ref trust
+  policy is not collectable here.
+
+chain_of:
+  join: reusable-callgraph
+  for_each: edges
+  where:
+    all_of:
+      - callee.ref_mutable == true
+
+evidence:
+  - "Reusable caller {{ caller._id }} calls {{ callee.uses }} (mutable ref: {{ callee.ref }})"
+
+remediation_hint: >
+  Pin reusable workflow callees to a SHA. Have cloud-side trust verify
+  `job_workflow_ref` against the SHA, not the branch/tag.

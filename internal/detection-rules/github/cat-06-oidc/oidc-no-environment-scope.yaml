@@ -1,0 +1,23 @@
+id: cat-06/oidc-no-environment-scope
+scenario_id: cat-06/10
+title: "OIDC sub-claim customization risk: id-token write + no env"
+subject: job
+severity: medium
+confidence: low
+description: >
+  Job mints id-token but does NOT scope itself to an environment. The OIDC sub
+  claim omits `environment:` — cloud-side trust loses one of the most reliable
+  scoping dimensions.
+
+where:
+  all_of:
+    - mints_id_token == true
+  none_of:
+    - environment.name != null
+
+evidence:
+  - "Job mints id-token without env: triggers={{ triggers }}"
+
+remediation_hint: >
+  Add `environment:` to the job. Cloud-side trust should require
+  `environment` in the OIDC sub.

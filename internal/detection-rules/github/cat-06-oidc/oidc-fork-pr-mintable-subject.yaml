@@ -1,0 +1,22 @@
+id: cat-06/oidc-fork-pr-mintable-subject
+scenario_id: cat-06/05
+title: "OIDC token mintable from a PR / PRT trigger"
+subject: job
+severity: critical
+confidence: high
+description: >
+  Job mints an OIDC token AND is triggered by pull_request / pull_request_target.
+  Even though GitHub strips secrets on fork PRs, the OIDC token IS still minted;
+  a cloud trust that uses StringLike `*pull_request*` will accept fork PR tokens.
+
+where:
+  all_of:
+    - mints_id_token == true
+    - triggers ∋ {pull_request, pull_request_target}
+
+evidence:
+  - "Job mints id-token on a PR trigger ({{ triggers }})."
+
+remediation_hint: >
+  Never mint id-tokens on pull_request / pull_request_target. Move the
+  minting step to a push-to-main / workflow_dispatch job.

@@ -1,0 +1,24 @@
+id: cat-06/oidc-mints-id-token
+scenario_id: cat-06/01
+title: "Job mints an OIDC id-token (default sub template is broad)"
+subject: job
+severity: medium
+confidence: medium
+description: >
+  Job has `id-token: write` permission. The default sub template
+  (`repo:<owner>/<repo>:ref:<ref>`) is permissive — combined with cloud-side
+  trust that uses StringLike with wildcards, it accepts any branch/tag/PR.
+  PARTIAL (GitHub-side only): accurate scoring needs cloud-side trust policy
+  data (StringLike patterns, audience binding) that is not collectable here.
+
+where:
+  all_of:
+    - mints_id_token == true
+
+evidence:
+  - "Job mints id-token. sub template (default): {{ oidc_sub_template }}"
+  - "Triggers: {{ triggers }}"
+
+remediation_hint: >
+  Set a custom sub-claim template that includes `environment` or `job_workflow_ref`;
+  pin cloud-side trust on a specific branch ref or tag prefix.
