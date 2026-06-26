@@ -54,6 +54,7 @@ func correlate(prior engine.PriorPhase, cp engine.CurrentPhase, _ []Job) error {
 		func() error { return cp.Write(chainPath("app-mintable"), deriveAppMintable(jobs, apps)) },
 		func() error { return cp.Write(chainPath("env-deployments"), deriveEnvDeployments(jobs, envs)) },
 		func() error { return cp.Write(chainPath("deploy-key-reuse"), deriveDeployKeyReuse(deployKeyFiles)) },
+		func() error { return cp.Write(chainPath("job-output-flow"), deriveJobOutputFlow(jobs)) },
 	}
 	for _, w := range writers {
 		if err := w(); err != nil {
@@ -193,6 +194,119 @@ func deriveReusableCallgraph(jobs []map[string]any) map[string]any {
 		"edges":      edges,
 		"edge_count": len(edges),
 	}
+}
+
+// deriveJobOutputFlow emits one edge per consumer-step needs.<job>.outputs.<var>
+// reference, joined single-hop to the producer job in the same workflow. needs
+// is intra-workflow and names the producer explicitly, so the join key is
+// (repo, workflow_filename, job_id); a producer absent from the workflow is
+// silently skipped (no recursion).
+func deriveJobOutputFlow(jobs []map[string]any) map[string]any {
+	byKey := map[[3]string]map[string]any{}
+	for _, j := range jobs {
+		byKey[[3]string{mStr(j, "repo"), mStr(j, "workflow_filename"), mStr(j, "job_id")}] = j
+	}
+
+	edges := []map[string]any{}
+	for _, consumer := range jobs {
+		if len(mList(consumer, "needs_output_refs")) == 0 {
+			continue
+		}
+		repo := mStr(consumer, "repo")
+		wf := mStr(consumer, "workflow_filename")
+		emit := func(stepIdx int, ctxName, jobID, outputName string) {
+			producer, ok := byKey[[3]string{repo, wf, jobID}]
+			if !ok {
+				return
+			}
+			matched := matchProducerOutput(producer, outputName)
+			if matched == nil {
+				return
+			}
+			influenced := len(asStrings(mGet(matched, "attacker_context_fields_referenced"))) > 0 ||
+				len(asStrings(mGet(matched, "producing_step_attacker_exec_refs"))) > 0
+			edges = append(edges, map[string]any{
+				"_id": fmt.Sprintf("jof__%s__%s__%s__s%d__%s", mStr(producer, "_id"), mStr(consumer, "_id"), outputName, stepIdx, ctxName),
+				"producer": map[string]any{
+					"_id":      mGet(producer, "_id"),
+					"job_id":   mGet(producer, "job_id"),
+					"triggers": listOrEmpty(producer, "triggers"),
+					"outputs":  []any{matched},
+				},
+				"consumer": map[string]any{
+					"_id":         mGet(consumer, "_id"),
+					"job_id":      mGet(consumer, "job_id"),
+					"step_index":  stepIdx,
+					"output_name": outputName,
+					"triggers":    listOrEmpty(consumer, "triggers"),
+					"context":     ctxName,
+				},
+				"attacker_influenced": influenced,
+				"attacker_path":       jobOutputAttackerPath(producer, matched),
+			})
+		}
+
+		stepRefs := map[[2]string]bool{}
+		for stepIdx, s := range mList(consumer, "steps") {
+			step, _ := s.(map[string]any)
+			for _, ctx := range []struct {
+				key  string
+				name string
+			}{{"needs_output_refs_exec", "exec"}, {"needs_output_refs_binding", "binding"}} {
+				for _, r := range mList(step, ctx.key) {
+					ref, _ := r.(map[string]any)
+					jobID := mStr(ref, "job_id")
+					outputName := mStr(ref, "output_name")
+					stepRefs[[2]string{jobID, outputName}] = true
+					emit(stepIdx, ctx.name, jobID, outputName)
+				}
+			}
+		}
+
+		// Job-level exec refs not carried by any step come from the strategy/matrix
+		// block (e.g. fromJSON(needs.<job>.outputs.matrix)); emit them at step -1.
+		for _, r := range mList(consumer, "needs_output_refs_exec") {
+			ref, _ := r.(map[string]any)
+			jobID := mStr(ref, "job_id")
+			outputName := mStr(ref, "output_name")
+			if stepRefs[[2]string{jobID, outputName}] {
+				continue
+			}
+			emit(-1, "exec", jobID, outputName)
+		}
+	}
+
+	return map[string]any{
+		"chain":      "job-output-flow",
+		"edges":      edges,
+		"edge_count": len(edges),
+	}
+}
+
+func matchProducerOutput(producer map[string]any, name string) map[string]any {
+	for _, o := range mList(producer, "outputs") {
+		out, _ := o.(map[string]any)
+		if mStr(out, "name") == name {
+			return out
+		}
+	}
+	return nil
+}
+
+func jobOutputAttackerPath(producer, output map[string]any) []any {
+	steps := []any{
+		fmt.Sprintf("producer job %s output %s", mStr(producer, "job_id"), mStr(output, "name")),
+	}
+	if sid := mGet(output, "references_step_id"); sid != nil {
+		steps = append(steps, fmt.Sprintf("producing step %v", sid))
+	}
+	for _, f := range asStrings(mGet(output, "attacker_context_fields_referenced")) {
+		steps = append(steps, "value expr references "+f)
+	}
+	for _, f := range asStrings(mGet(output, "producing_step_attacker_exec_refs")) {
+		steps = append(steps, "producing step exec references "+f)
+	}
+	return steps
 }
 
 func classifyCalleeRef(ref string, isNil bool) (kind string, mutable bool) {
