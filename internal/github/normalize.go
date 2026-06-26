@@ -306,6 +306,10 @@ func normalizeJob(in jobInputs) (Job, bool) {
 	attackerAll := []string{}
 	attackerExec := []string{}
 	attackerBinding := []string{}
+	needsExec := []NeedsOutputRef{}
+	needsBinding := []NeedsOutputRef{}
+	needsUnion := []NeedsOutputRef{}
+	stepByID := map[string]map[string]any{}
 
 	// Runs before the step loop so a job-level uses lands first in the ref lists.
 	if jobUses, ok := jobPlain["uses"].(string); ok {
@@ -382,11 +386,31 @@ func normalizeJob(in jobInputs) (Job, bool) {
 				attackerAll = appendUnique(attackerAll, ref)
 			}
 
+			for _, ref := range stepRec.NeedsOutputRefsExec {
+				needsExec = appendUniqueNeedsRef(needsExec, ref)
+				needsUnion = appendUniqueNeedsRef(needsUnion, ref)
+			}
+			for _, ref := range stepRec.NeedsOutputRefsBinding {
+				needsBinding = appendUniqueNeedsRef(needsBinding, ref)
+				needsUnion = appendUniqueNeedsRef(needsUnion, ref)
+			}
+			if stepRec.ID != nil {
+				stepByID[*stepRec.ID] = step
+			}
+
 			if stepsNode != nil && stepLineNodes != nil && idx < len(stepLineNodes) {
 				stepRec.Provenance = newSourceProvenance(in.relpath, stepLineNodes[idx].Range())
 			}
 			stepsOut = append(stepsOut, stepRec)
 		}
+	}
+
+	// A needs.<job>.outputs.<var> ref appearing only in the job's strategy/matrix
+	// block drives job execution but lives in no step; capture it as a job-level
+	// exec ref (step_index -1, mirroring SecretRef) so it joins to its producer.
+	for _, ref := range extractNeedsOutputRefs(jsonDump(jobPlain["strategy"])) {
+		needsExec = appendUniqueNeedsRef(needsExec, ref)
+		needsUnion = appendUniqueNeedsRef(needsUnion, ref)
 	}
 
 	jobEnvText := jsonDump(jobPlain["env"])
@@ -410,6 +434,44 @@ func normalizeJob(in jobInputs) (Job, bool) {
 
 	agent := classifyAgentSurface(jobPlain, perms)
 
+	outputsOut := []JobOutput{}
+	if outs, ok := jobPlain["outputs"].(map[string]any); ok {
+		outputsNode := in.jobNode.Field("outputs")
+		names := make([]string, 0, len(outs))
+		for name := range outs {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			expr := anyToStr(outs[name])
+			attacker := nonNilSlice(findAttackerReferences(expr, in.triggers))
+
+			var refStepID *string
+			var producingRefs []string
+			if m := stepOutputRefRE.FindStringSubmatch(expr); m != nil {
+				id := m[1]
+				refStepID = &id
+				if raw, ok := stepByID[id]; ok {
+					producingRefs = findAttackerReferences(stepExecText(raw), in.triggers)
+				}
+			}
+
+			var prov *SourceProvenance
+			if outputsNode != nil {
+				prov = newSourceProvenance(in.relpath, outputFieldRange(outputsNode, name))
+			}
+
+			outputsOut = append(outputsOut, JobOutput{
+				Name:                            name,
+				ValueExpression:                 expr,
+				AttackerContextFieldsReferenced: attacker,
+				ReferencesStepID:                refStepID,
+				ProducingStepAttackerExecRefs:   nonNilSlice(producingRefs),
+				Provenance:                      prov,
+			})
+		}
+	}
+
 	return Job{
 		ID:         in.repo + "__" + engineWFStem(in.workflowFilename) + "__" + in.jobID,
 		Provenance: &JobProvenance{WorkflowFile: in.relpath, YAMLLineRange: lineRangeOrZero(in.jobNode.Range()), Repo: in.repo},
@@ -430,12 +492,17 @@ func normalizeJob(in jobInputs) (Job, bool) {
 		AttackerContextFieldsReferencedExec:    attackerExec,
 		AttackerContextFieldsReferencedBinding: attackerBinding,
 
+		NeedsOutputRefsExec:    needsExec,
+		NeedsOutputRefsBinding: needsBinding,
+		NeedsOutputRefs:        needsUnion,
+
 		RunsOn:       runsOn,
 		SelfHosted:   selfHosted,
 		RunnerLabels: runnerLabels,
 		RunnerGroup:  runnerGroup,
 
 		Steps:                  stepsOut,
+		Outputs:                outputsOut,
 		ExecutesCheckedOutCode: executesCheckedOut,
 		HasCheckoutOfPRRef:     checkoutOfPR,
 		Sinks:                  sinksSeen,
@@ -479,12 +546,15 @@ func normalizeJob(in jobInputs) (Job, bool) {
 
 func buildStep(step map[string]any, idx int) Step {
 	s := Step{
-		StepIndex: idx,
-		Uses:      stringPtrFromAny(step["uses"]),
-		With:      mapFromAny(step["with"]),
-		Run:       stringPtrFromAny(step["run"]),
-		Name:      stringPtrFromAny(step["name"]),
-		If:        stringPtrFromAny(step["if"]),
+		StepIndex:              idx,
+		ID:                     stringPtrFromAny(step["id"]),
+		Uses:                   stringPtrFromAny(step["uses"]),
+		With:                   mapFromAny(step["with"]),
+		Run:                    stringPtrFromAny(step["run"]),
+		Name:                   stringPtrFromAny(step["name"]),
+		If:                     stringPtrFromAny(step["if"]),
+		NeedsOutputRefsExec:    extractNeedsOutputRefs(stepExecText(step)),
+		NeedsOutputRefsBinding: extractNeedsOutputRefs(stepBindingText(step)),
 	}
 	s.Classifiers = classifyStep(s)
 	return s
@@ -596,6 +666,8 @@ func resolveEnvironment(value any) (*EnvironmentRef, bool) {
 }
 
 var secretRefRE = regexp.MustCompile(`secrets\.([A-Za-z_][A-Za-z0-9_]*)`)
+
+var stepOutputRefRE = regexp.MustCompile(`steps\.([A-Za-z_][A-Za-z0-9_-]*)\.outputs\.`)
 
 func findSecretsReferenced(text string) []string {
 	var out []string
@@ -1128,6 +1200,22 @@ func appendUnique(s []string, v string) []string {
 		return s
 	}
 	return append(s, v)
+}
+
+func appendUniqueNeedsRef(s []NeedsOutputRef, v NeedsOutputRef) []NeedsOutputRef {
+	if slices.Contains(s, v) {
+		return s
+	}
+	return append(s, v)
+}
+
+// outputFieldRange returns the range of a single output entry under the outputs
+// node, falling back to the whole outputs block when the child is absent.
+func outputFieldRange(outputsNode *LineNode, name string) *LineRange {
+	if child := outputsNode.Field(name); child != nil {
+		return child.Range()
+	}
+	return outputsNode.Range()
 }
 
 // nonNilSlice forces a nil slice to a non-nil empty so it marshals as [] not null.
