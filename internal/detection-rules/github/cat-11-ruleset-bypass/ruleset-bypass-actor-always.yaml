@@ -1,0 +1,27 @@
+id: cat-11/ruleset-bypass-actor-always
+scenario_id: cat-11/01
+title: "Active ruleset on default branch has always-mode bypass actors"
+subject: chain
+severity: high
+confidence: high
+description: >
+  At least one active ruleset covering the repo's default branch includes bypass
+  actors with bypass_mode=always — repo admins, GitHub Apps, or specific teams
+  can push directly, bypassing every rule the ruleset declares.
+  NOTE: joins the effective-ruleset chain (produced by correlate during
+  normalize) and the normalized ruleset entity records.
+
+chain_of:
+  join: effective-ruleset
+  for_each: effective_per_branch
+  where:
+    all_of:
+      - active_ruleset_count >= 1
+      - any_bypass_present_in_active == true
+
+evidence:
+  - "Repo {{ repo }} branch `{{ branch }}` has active rulesets with always-mode bypass actors."
+
+remediation_hint: >
+  Remove bypass_mode: always from production rulesets; restrict bypass to
+  pull_request mode only so bypassing actors must still submit a PR.
