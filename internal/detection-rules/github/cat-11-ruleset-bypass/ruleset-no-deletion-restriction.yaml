@@ -1,0 +1,29 @@
+id: cat-11/ruleset-no-deletion-restriction
+scenario_id: cat-11/11
+title: "Default branch ruleset does not restrict deletions"
+subject: chain
+severity: medium
+confidence: medium
+description: >
+  An active ruleset covers the default branch but does not restrict deletions
+  (no deletion rule type). An attacker who briefly gains write can delete and
+  recreate the branch off their own commit, replacing history without trace —
+  creation is a distinct event from update, so the update protection is skipped.
+  NOTE: joins the effective-ruleset chain (produced by correlate during
+  normalize).
+
+chain_of:
+  join: effective-ruleset
+  for_each: effective_per_branch
+  where:
+    all_of:
+      - active_ruleset_count >= 1
+    none_of:
+      - restricts_deletions == true
+
+evidence:
+  - "Repo {{ repo }} branch `{{ branch }}`: active rulesets do not restrict deletions."
+
+remediation_hint: >
+  Add deletion and non_fast_forward rule types to the active ruleset for the
+  default branch.
