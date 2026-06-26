@@ -1,5 +1,4 @@
-//go:build js && wasm
-// +build js,wasm
+//go:build js
 
 // Package main provides the WASM-JS bridge API for Trajan browser execution.
 //
@@ -27,32 +26,16 @@ import (
 	"syscall/js"
 	"time"
 
-	yaml "gopkg.in/yaml.v3"
-
 	"github.com/praetorian-inc/trajan/internal/registry"
-	"github.com/praetorian-inc/trajan/pkg/analysis"
-	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
-	"github.com/praetorian-inc/trajan/pkg/analysis/parser"
-	"github.com/praetorian-inc/trajan/pkg/attacks"
 	adoplatform "github.com/praetorian-inc/trajan/pkg/azuredevops"
 	"github.com/praetorian-inc/trajan/pkg/azuredevops/tokenprobe"
 	"github.com/praetorian-inc/trajan/pkg/config"
 	"github.com/praetorian-inc/trajan/pkg/detections"
-	"github.com/praetorian-inc/trajan/pkg/github"
 	gitlabplatform "github.com/praetorian-inc/trajan/pkg/gitlab"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/praetorian-inc/trajan/pkg/scanner"
 	"github.com/praetorian-inc/trajan/pkg/search"
 	"github.com/praetorian-inc/trajan/pkg/storage"
-
-	// Import attack plugins for init() auto-registration
-	_ "github.com/praetorian-inc/trajan/pkg/github/attacks/c2setup"
-	_ "github.com/praetorian-inc/trajan/pkg/github/attacks/interactiveshell"
-	_ "github.com/praetorian-inc/trajan/pkg/github/attacks/persistence"
-	_ "github.com/praetorian-inc/trajan/pkg/github/attacks/prattack"
-	_ "github.com/praetorian-inc/trajan/pkg/github/attacks/runneronrunner"
-	_ "github.com/praetorian-inc/trajan/pkg/github/attacks/secretsdump"
-	_ "github.com/praetorian-inc/trajan/pkg/github/attacks/workflowinjection"
 
 	// Import all detections to trigger init() registration
 	_ "github.com/praetorian-inc/trajan/pkg/detections/all"
@@ -236,82 +219,6 @@ func countWorkflows(sr *platforms.ScanResult) int {
 	return count
 }
 
-func isGitHubHostedRunner(label string) bool {
-	return parser.GitHubHostedRunners[label]
-}
-
-type workflowYAML struct {
-	On   interface{} `yaml:"on"`
-	Jobs map[string]struct {
-		RunsOn interface{} `yaml:"runs-on"`
-	} `yaml:"jobs"`
-}
-
-func extractSelfHostedJobs(workflowContent []byte) []map[string]interface{} {
-	var wf workflowYAML
-	if err := yaml.Unmarshal(workflowContent, &wf); err != nil {
-		return nil
-	}
-
-	var selfHostedJobs []map[string]interface{}
-	for jobName, job := range wf.Jobs {
-		var labels []string
-
-		switch v := job.RunsOn.(type) {
-		case string:
-			labels = []string{v}
-		case []interface{}:
-			for _, label := range v {
-				if s, ok := label.(string); ok {
-					labels = append(labels, s)
-				}
-			}
-		}
-
-		isSelfHosted := false
-		for _, label := range labels {
-			if !isGitHubHostedRunner(label) {
-				isSelfHosted = true
-				break
-			}
-		}
-
-		if isSelfHosted {
-			selfHostedJobs = append(selfHostedJobs, map[string]interface{}{
-				"job":    jobName,
-				"labels": labels,
-			})
-		}
-	}
-
-	return selfHostedJobs
-}
-
-func extractTriggers(workflowContent []byte) []string {
-	var wf workflowYAML
-	if err := yaml.Unmarshal(workflowContent, &wf); err != nil {
-		return []string{}
-	}
-
-	var triggers []string
-	switch v := wf.On.(type) {
-	case string:
-		triggers = []string{v}
-	case []interface{}:
-		for _, t := range v {
-			if s, ok := t.(string); ok {
-				triggers = append(triggers, s)
-			}
-		}
-	case map[string]interface{}:
-		for key := range v {
-			triggers = append(triggers, key)
-		}
-	}
-
-	return triggers
-}
-
 // Initialize sets up the WASM application (config, storage, plugin registration)
 //
 // JavaScript signature:
@@ -432,260 +339,10 @@ func StartScan(this js.Value, args []js.Value) interface{} {
 
 			switch platform {
 			case "github":
-				if scope == "org" || scope == "user" {
-					reportProgress(5, "Connecting to GitHub API...")
-					client := github.NewClient(github.DefaultBaseURL, token)
-
-					reportProgress(8, fmt.Sprintf("Enumerating %s repositories...", target))
-					var repos []github.Repository
-					var listErr error
-					if scope == "org" {
-						repos, listErr = client.ListOrgRepos(ctx, target)
-					} else {
-						repos, listErr = client.ListUserRepos(ctx, target)
-					}
-					if listErr != nil {
-						reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("listing repos: %v", listErr)})
-						return
-					}
-					reportProgress(15, fmt.Sprintf("Found %d repositories, fetching workflows...", len(repos)))
-
-					scanResult := &platforms.ScanResult{
-						Workflows: make(map[string][]platforms.Workflow),
-					}
-					for _, r := range repos {
-						scanResult.Repositories = append(scanResult.Repositories, platforms.Repository{
-							Owner: r.Owner.Login, Name: r.Name,
-							DefaultBranch: r.DefaultBranch, Private: r.Private,
-							Archived: r.Archived, URL: r.HTMLURL,
-						})
-					}
-
-					totalWF := 0
-					for i, repo := range repos {
-						pct := 15 + int(float64(i)/float64(len(repos))*35) // 15-50%
-						reportProgress(pct, fmt.Sprintf("[%d/%d] %s/%s...", i+1, len(repos), repo.Owner.Login, repo.Name))
-
-						files, err := client.GetWorkflowFiles(ctx, repo.Owner.Login, repo.Name)
-						if err != nil {
-							continue
-						}
-
-						var workflows []platforms.Workflow
-						for _, f := range files {
-							content, err := client.GetWorkflowContent(ctx, repo.Owner.Login, repo.Name, f.Path)
-							if err != nil {
-								continue
-							}
-							workflows = append(workflows, platforms.Workflow{
-								Name: f.Name, Path: f.Path, Content: content, SHA: f.SHA,
-								RepoSlug: fmt.Sprintf("%s/%s", repo.Owner.Login, repo.Name),
-							})
-						}
-						if len(workflows) > 0 {
-							scanResult.Workflows[repo.FullName] = workflows
-							totalWF += len(workflows)
-						}
-					}
-					reportProgress(50, fmt.Sprintf("Found %d workflows across %d repos, parsing...", totalWF, len(repos)))
-
-					ghParser := parser.GetParser("github")
-					if ghParser == nil {
-						scanErr = fmt.Errorf("GitHub parser not registered")
-						reject.Invoke(map[string]interface{}{"error": scanErr.Error()})
-						return
-					}
-
-					type workflowWithRepo struct {
-						workflow *parser.NormalizedWorkflow
-						repoSlug string
-					}
-					var parsedWorkflows []workflowWithRepo
-					for repoSlug, workflows := range scanResult.Workflows {
-						for _, wf := range workflows {
-							normalized, err := ghParser.Parse(wf.Content)
-							if err != nil {
-								fmt.Printf("Failed to parse workflow %s: %v\n", wf.Path, err)
-								continue
-							}
-							normalized.Path = wf.Path
-							parsedWorkflows = append(parsedWorkflows, workflowWithRepo{
-								workflow: normalized,
-								repoSlug: repoSlug,
-							})
-						}
-					}
-
-					reportProgress(60, fmt.Sprintf("Parsed %d workflows, building graphs...", len(parsedWorkflows)))
-
-					graphs := make(map[string]*graph.Graph)
-					for _, pair := range parsedWorkflows {
-						g, err := analysis.BuildGraphFromNormalized(pair.repoSlug, pair.workflow.Path, pair.workflow)
-						if err != nil {
-							fmt.Printf("Failed to build graph for workflow %s: %v\n", pair.workflow.Path, err)
-							continue
-						}
-						graphKey := fmt.Sprintf("%s/%s", pair.repoSlug, pair.workflow.Path)
-						graphs[graphKey] = g
-					}
-
-					reportProgress(70, fmt.Sprintf("Built %d graphs, running detectors...", len(graphs)))
-
-					detectorRegistry := registry.GetDetections("github")
-
-					seen := make(map[string]bool)
-
-					for path, g := range graphs {
-						for _, detector := range detectorRegistry {
-							detectorFindings, err := detector.Detect(ctx, g)
-							if err != nil {
-								fmt.Printf("Detector %s failed on workflow %s: %v\n", detector.Name(), path, err)
-								continue
-							}
-
-							for _, finding := range detectorFindings {
-								key := fmt.Sprintf("%s|%s|%s|%s|%s",
-									finding.Workflow,
-									finding.Job,
-									finding.Step,
-									finding.Type,
-									finding.Evidence)
-
-								if !seen[key] {
-									seen[key] = true
-									findings = append(findings, finding)
-								}
-							}
-						}
-					}
-
-					for i := range findings {
-						for repoSlug, workflows := range scanResult.Workflows {
-							if findings[i].Repository == repoSlug || findings[i].Repository == strings.TrimPrefix(repoSlug, "https://github.com/") {
-								for _, wf := range workflows {
-									if findings[i].Workflow == wf.Path || findings[i].Workflow == wf.Name {
-										findings[i].WorkflowContent = string(wf.Content)
-										break
-									}
-								}
-							}
-						}
-					}
-
-					scanErr = nil
-					reportProgress(100, fmt.Sprintf("Scan complete - %d repos, %d vulnerabilities", len(scanResult.Repositories), len(findings)))
-				} else {
-					client := github.NewClient(github.DefaultBaseURL, token)
-
-					reportProgress(20, "Parsing repository URL...")
-					parts := strings.Split(strings.TrimPrefix(target, "https://github.com/"), "/")
-					if len(parts) < 2 {
-						scanErr = fmt.Errorf("invalid GitHub repository URL: %s", target)
-						reject.Invoke(map[string]interface{}{"error": scanErr.Error()})
-						return
-					}
-					owner, repo := parts[0], parts[1]
-
-					reportProgress(30, "Fetching workflow files...")
-					workflows, err := client.GetWorkflowFiles(ctx, owner, repo)
-					if err != nil {
-						scanErr = fmt.Errorf("failed to fetch workflows: %w", err)
-						reject.Invoke(map[string]interface{}{"error": scanErr.Error()})
-						return
-					}
-
-					if len(workflows) == 0 {
-						reportProgress(100, "No workflows found - scan complete")
-						findings = []detections.Finding{}
-						scanErr = nil
-					} else {
-						reportProgress(50, fmt.Sprintf("Parsing %d workflow files...", len(workflows)))
-
-						ghParser := parser.GetParser("github")
-						if ghParser == nil {
-							scanErr = fmt.Errorf("GitHub parser not registered")
-							reject.Invoke(map[string]interface{}{"error": scanErr.Error()})
-							return
-						}
-
-						var parsedWorkflows []*parser.NormalizedWorkflow
-						for _, wf := range workflows {
-							content, err := client.GetWorkflowContent(ctx, owner, repo, wf.Path)
-							if err != nil {
-								fmt.Printf("Failed to get workflow %s: %v\n", wf.Path, err)
-								continue
-							}
-
-							normalized, err := ghParser.Parse(content)
-							if err != nil {
-								fmt.Printf("Failed to parse workflow %s: %v\n", wf.Path, err)
-								continue
-							}
-
-							normalized.Path = wf.Path
-							parsedWorkflows = append(parsedWorkflows, normalized)
-						}
-
-						reportProgress(70, fmt.Sprintf("Parsed %d workflows, building graphs...", len(parsedWorkflows)))
-
-						graphs := make(map[string]*graph.Graph)
-						for _, wf := range parsedWorkflows {
-							g, err := analysis.BuildGraphFromNormalized(fmt.Sprintf("%s/%s", owner, repo), wf.Path, wf)
-							if err != nil {
-								fmt.Printf("Failed to build graph for workflow %s: %v\n", wf.Path, err)
-								continue
-							}
-							graphs[wf.Path] = g
-						}
-
-						reportProgress(75, fmt.Sprintf("Built %d graphs, running detectors...", len(graphs)))
-
-						detectorRegistry := registry.GetDetections("github")
-
-						seen := make(map[string]bool)
-
-						for path, g := range graphs {
-							for _, detector := range detectorRegistry {
-								detectorFindings, err := detector.Detect(ctx, g)
-								if err != nil {
-									fmt.Printf("Detector %s failed on workflow %s: %v\n", detector.Name(), path, err)
-									continue
-								}
-
-								for _, finding := range detectorFindings {
-									key := fmt.Sprintf("%s|%s|%s|%s|%s",
-										finding.Workflow,
-										finding.Job,
-										finding.Step,
-										finding.Type,
-										finding.Evidence)
-
-									if !seen[key] {
-										seen[key] = true
-										findings = append(findings, finding)
-									}
-								}
-							}
-						}
-
-						workflowContentCache := make(map[string][]byte)
-						for _, wf := range workflows {
-							content, err := client.GetWorkflowContent(ctx, owner, repo, wf.Path)
-							if err == nil {
-								workflowContentCache[wf.Path] = content
-							}
-						}
-
-						for i := range findings {
-							if content, ok := workflowContentCache[findings[i].Workflow]; ok {
-								findings[i].WorkflowContent = string(content)
-							}
-						}
-
-						scanErr = nil
-						reportProgress(100, fmt.Sprintf("Scan complete - found %d vulnerabilities", len(findings)))
-					}
-				}
+				reject.Invoke(map[string]interface{}{
+					"error": "github scanning is not supported in the browser; use the trajan CLI",
+				})
+				return
 
 			case "gitlab", "azuredevops", "bitbucket":
 				reportProgress(5, fmt.Sprintf("Connecting to %s API...", platform))
@@ -1004,161 +661,15 @@ func ExecuteAttack(this js.Value, args []js.Value) interface{} {
 		})
 	}
 
-	pluginName := args[0].String()
-	target := args[1].String()
-	options := args[2]
+	_ = args[0].String()
+	_ = args[1].String()
 
 	handler := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		resolve := args[0]
 		reject := args[1]
 
 		go func() {
-			ctx := context.Background()
-
-			// CRITICAL: Verify authorization
-			if !options.Get("authorized").Bool() {
-				reject.Invoke(map[string]interface{}{
-					"error": "attack execution requires explicit authorization (set authorized: true)",
-				})
-				return
-			}
-
-			plugin, err := registry.GetAttackPluginByName(registry.PluginKey(platforms.PlatformGitHub, pluginName))
-			if err != nil {
-				reject.Invoke(map[string]interface{}{
-					"error": fmt.Sprintf("unknown attack plugin: %v", err),
-				})
-				return
-			}
-
-			targetValue := strings.TrimPrefix(target, "https://github.com/")
-			parts := strings.Split(targetValue, "/")
-			if len(parts) < 2 {
-				reject.Invoke(map[string]interface{}{
-					"error": fmt.Sprintf("invalid GitHub repository URL: %s", target),
-				})
-				return
-			}
-
-			token := options.Get("token").String()
-			ghPlatform := github.NewPlatform()
-			if err := ghPlatform.Init(ctx, platforms.Config{
-				Token:   token,
-				BaseURL: github.DefaultBaseURL,
-			}); err != nil {
-				reject.Invoke(map[string]interface{}{
-					"error": fmt.Sprintf("failed to initialize GitHub platform: %v", err),
-				})
-				return
-			}
-
-			attackOpts := attacks.AttackOptions{
-				Target: platforms.Target{
-					Type:  platforms.TargetRepo,
-					Value: targetValue, // "owner/repo"
-				},
-				Platform:  ghPlatform,
-				DryRun:    false,
-				Verbose:   true,
-				SessionID: fmt.Sprintf("session_%d", time.Now().UnixNano()),
-				ExtraOpts: make(map[string]string),
-			}
-
-			if !options.Get("dryRun").IsUndefined() {
-				attackOpts.DryRun = options.Get("dryRun").Bool()
-			}
-			if !options.Get("branch").IsUndefined() {
-				attackOpts.Branch = options.Get("branch").String()
-			}
-			if !options.Get("payload").IsUndefined() {
-				attackOpts.Payload = options.Get("payload").String()
-			}
-
-			var progressCallback js.Value
-			if !options.Get("onProgress").IsUndefined() {
-				progressCallback = options.Get("onProgress")
-			}
-
-			reportProgress := func(message string) {
-				if !progressCallback.IsUndefined() && !progressCallback.IsNull() {
-					progressCallback.Invoke(message)
-				}
-			}
-
-			reportProgress(fmt.Sprintf("Executing %s attack on %s...", pluginName, target))
-
-			result, err := plugin.Execute(ctx, attackOpts)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{
-					"error": fmt.Sprintf("attack execution failed: %v", err),
-				})
-				return
-			}
-
-			reportProgress("Attack execution complete")
-
-			saveSession := true
-			if !options.Get("saveSession").IsUndefined() {
-				saveSession = options.Get("saveSession").Bool()
-			}
-
-			if attackOpts.DryRun {
-				saveSession = false
-			}
-
-			if saveSession {
-				session := &storage.Session{
-					ID:        result.SessionID,
-					Plugin:    result.Plugin,
-					Target:    targetValue, // Store as "owner/repo"
-					Status:    "completed", // Map from result.Success
-					CreatedAt: result.Timestamp,
-					UpdatedAt: time.Now(),
-					Metadata: map[string]interface{}{
-						"token":    token,    // Store token for cleanup
-						"platform": "github", // Store platform for cleanup lookup
-					},
-				}
-
-				for _, artifact := range result.Artifacts {
-					session.Artifacts = append(session.Artifacts, storage.Artifact{
-						Type: string(artifact.Type),
-						ID:   artifact.Identifier,
-						URL:  artifact.URL,
-						Metadata: map[string]interface{}{
-							"description": artifact.Description,
-						},
-					})
-				}
-
-				for _, action := range result.CleanupActions {
-					session.CleanupActions = append(session.CleanupActions, storage.CleanupAction{
-						Type: string(action.Type),
-						Params: map[string]interface{}{
-							"identifier":  action.Identifier,
-							"action":      action.Action,
-							"description": action.Description,
-						},
-					})
-				}
-
-				if err := globalStorage.SaveSession(ctx, session); err != nil {
-					fmt.Printf("failed to save session: %v\n", err)
-				}
-
-				reportProgress("Session saved for later cleanup")
-			}
-
-			resultJSON, err := json.Marshal(result)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{
-					"error": fmt.Sprintf("failed to serialize result: %v", err),
-				})
-				return
-			}
-
-			resolve.Invoke(map[string]interface{}{
-				"result": string(resultJSON),
+			reject.Invoke(map[string]interface{}{
+				"error": "attack execution is not supported in the browser; use the trajan CLI",
 			})
 		}()
 
@@ -1181,122 +692,15 @@ func CleanupSession(this js.Value, args []js.Value) interface{} {
 		})
 	}
 
-	sessionID := args[0].String()
-	token := args[1].String() // Token from UI cleanup form
+	_ = args[0].String()
+	_ = args[1].String()
 
 	handler := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		resolve := args[0]
 		reject := args[1]
 
 		go func() {
-			ctx := context.Background()
-
-			storageSession, err := globalStorage.LoadSession(ctx, sessionID)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{
-					"error": fmt.Sprintf("failed to load session: %v", err),
-				})
-				return
-			}
-
-			sessionPlatform := "github"
-			if p, ok := storageSession.Metadata["platform"].(string); ok {
-				sessionPlatform = p
-			}
-			plugin, err := registry.GetAttackPluginByName(registry.PluginKey(sessionPlatform, storageSession.Plugin))
-			if err != nil {
-				reject.Invoke(map[string]interface{}{
-					"error": fmt.Sprintf("unknown attack plugin: %v", err),
-				})
-				return
-			}
-
-			sessionToken := token
-			if sessionToken == "" {
-				if savedToken, ok := storageSession.Metadata["token"].(string); ok {
-					sessionToken = savedToken
-				}
-			}
-
-			ghPlatform := github.NewPlatform()
-			err = ghPlatform.Init(ctx, platforms.Config{
-				Token:   sessionToken,
-				BaseURL: github.DefaultBaseURL,
-			})
-			if err != nil {
-				reject.Invoke(map[string]interface{}{
-					"error": fmt.Sprintf("failed to initialize GitHub platform: %v", err),
-				})
-				return
-			}
-
-			upstreamSession := &attacks.Session{
-				ID: storageSession.ID,
-				Target: platforms.Target{
-					Type:  platforms.TargetRepo,
-					Value: storageSession.Target, // Already in "owner/repo" format
-				},
-				CreatedAt: storageSession.CreatedAt,
-				Results:   make([]*attacks.AttackResult, 0),
-				Platform:  ghPlatform,
-			}
-
-			result := &attacks.AttackResult{
-				Plugin:    storageSession.Plugin,
-				SessionID: storageSession.ID,
-				Timestamp: storageSession.CreatedAt,
-				Success:   storageSession.Status == "completed",
-			}
-
-			for _, artifact := range storageSession.Artifacts {
-				result.Artifacts = append(result.Artifacts, attacks.Artifact{
-					Type:        attacks.ArtifactType(artifact.Type),
-					Identifier:  artifact.ID,
-					URL:         artifact.URL,
-					Description: artifact.Metadata["description"].(string),
-				})
-			}
-
-			for _, action := range storageSession.CleanupActions {
-				result.CleanupActions = append(result.CleanupActions, attacks.CleanupAction{
-					Type:        attacks.ArtifactType(action.Type),
-					Identifier:  action.Params["identifier"].(string),
-					Action:      action.Params["action"].(string),
-					Description: action.Params["description"].(string),
-				})
-			}
-
-			upstreamSession.Results = append(upstreamSession.Results, result)
-
-			err = plugin.Cleanup(ctx, upstreamSession)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{
-					"error": fmt.Sprintf("cleanup failed: %v", err),
-				})
-				return
-			}
-
-			if err := globalStorage.DeleteSession(ctx, sessionID); err != nil {
-				fmt.Printf("failed to delete session: %v\n", err)
-			}
-
-			cleanupSummary := map[string]interface{}{
-				"session_id":        sessionID,
-				"plugin":            storageSession.Plugin,
-				"artifacts_cleaned": len(result.Artifacts),
-				"success":           true,
-			}
-
-			summaryJSON, err := json.Marshal(cleanupSummary)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{
-					"error": fmt.Sprintf("failed to serialize cleanup summary: %v", err),
-				})
-				return
-			}
-
-			resolve.Invoke(map[string]interface{}{
-				"summary": string(summaryJSON),
+			reject.Invoke(map[string]interface{}{
+				"error": "attack session cleanup is not supported in the browser; use the trajan CLI",
 			})
 		}()
 
@@ -1588,14 +992,6 @@ func ValidateToken(this js.Value, args []js.Value) interface{} {
 		go func() {
 			ctx := context.Background()
 
-			token := globalConfig.GitHub.Token
-			if !options.Get("token").IsUndefined() {
-				optToken := options.Get("token").String()
-				if optToken != "" {
-					token = optToken
-				}
-			}
-
 			platform := "github"
 			if !options.Get("platform").IsUndefined() {
 				platform = options.Get("platform").String()
@@ -1607,7 +1003,9 @@ func ValidateToken(this js.Value, args []js.Value) interface{} {
 			case "azuredevops":
 				validateAzureDevOpsToken(ctx, options, resolve, reject)
 			default:
-				validateGitHubToken(ctx, token, resolve, reject)
+				reject.Invoke(map[string]interface{}{
+					"error": "github token validation is not supported in the browser; use the trajan CLI",
+				})
 			}
 		}()
 
@@ -1616,55 +1014,6 @@ func ValidateToken(this js.Value, args []js.Value) interface{} {
 
 	promiseConstructor := js.Global().Get("Promise")
 	return promiseConstructor.New(handler)
-}
-
-func validateGitHubToken(ctx context.Context, token string, resolve, reject js.Value) {
-	ghPlatform := github.NewPlatform()
-	if err := ghPlatform.Init(ctx, platforms.Config{Token: token, BaseURL: github.DefaultBaseURL}); err != nil {
-		reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("init failed: %v", err)})
-		return
-	}
-
-	tokenInfoResult, err := ghPlatform.ScanTokenInfo(ctx)
-	if err != nil {
-		reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("token scan failed: %v", err)})
-		return
-	}
-
-	if tokenInfoResult.TokenInfo == nil {
-		reject.Invoke(map[string]interface{}{"error": "no token info returned"})
-		return
-	}
-
-	orgs, err := ghPlatform.Client().ListAuthenticatedUserOrgs(ctx)
-	if err != nil {
-		reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("list orgs failed: %v", err)})
-		return
-	}
-
-	expirationStr := ""
-	if tokenInfoResult.TokenInfo.Expiration != nil {
-		expirationStr = tokenInfoResult.TokenInfo.Expiration.Format("2006-01-02 15:04:05 MST")
-	}
-
-	result := map[string]interface{}{
-		"user": map[string]interface{}{
-			"login": tokenInfoResult.TokenInfo.User,
-			"name":  tokenInfoResult.TokenInfo.Name,
-		},
-		"scopes":     tokenInfoResult.TokenInfo.Scopes,
-		"token_type": string(tokenInfoResult.TokenInfo.Type),
-		"expiration": expirationStr,
-		"orgs":       orgs,
-	}
-
-	resultJSON, err := json.Marshal(result)
-	if err != nil {
-		reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("marshal failed: %v", err)})
-		return
-	}
-
-	resolve.Invoke(map[string]interface{}{"result": string(resultJSON)})
 }
 
 func validateGitLabToken(ctx context.Context, options js.Value, resolve, reject js.Value) {
@@ -1905,428 +1254,35 @@ func validateAzureDevOpsToken(ctx context.Context, options js.Value, resolve, re
 	resolve.Invoke(map[string]interface{}{"result": string(resultJSON)})
 }
 
-// ScanSecrets scans an organization for secrets
-//
-// JavaScript signature:
-//
-//	async function trajanScanSecrets(target: string, options: {
-//	  token: string,
-//	  onProgress?: (percent: number, message: string) => void
-//	}): Promise<{result: string, error?: string}>
 func ScanSecrets(this js.Value, args []js.Value) interface{} {
-	if len(args) < 2 {
-		return js.ValueOf(map[string]interface{}{
-			"error": "missing required arguments: target and options",
-		})
-	}
-
-	target := args[0].String()
-	options := args[1]
-
-	handler := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		resolve := args[0]
-		reject := args[1]
-
-		go func() {
-			ctx := context.Background()
-
-			token := options.Get("token").String()
-			if token == "" {
-				reject.Invoke(map[string]interface{}{"error": "token required"})
-				return
-			}
-
-			var progressCallback js.Value
-			if !options.Get("onProgress").IsUndefined() {
-				progressCallback = options.Get("onProgress")
-			}
-
-			reportProgress := func(percent int, message string) {
-				if !progressCallback.IsUndefined() && !progressCallback.IsNull() {
-					progressCallback.Invoke(percent, message)
-				}
-			}
-
-			reportProgress(10, "Initializing client...")
-
-			client := github.NewClient(github.DefaultBaseURL, token)
-
-			reportProgress(20, "Fetching org secrets...")
-
-			orgSecrets, err := client.ListOrgActionsSecrets(ctx, target)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("list org secrets failed: %v", err)})
-				return
-			}
-
-			reportProgress(30, "Fetching org variables...")
-
-			orgVariables, err := client.ListOrgActionsVariables(ctx, target)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("list org variables failed: %v", err)})
-				return
-			}
-
-			reportProgress(40, "Fetching repositories...")
-
-			repos, err := client.ListOrgRepos(ctx, target)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("list repos failed: %v", err)})
-				return
-			}
-
-			reportProgress(50, fmt.Sprintf("Scanning %d repositories...", len(repos)))
-
-			repoResults := make([]map[string]interface{}, 0)
-			for i, repo := range repos {
-				repoSecrets, _ := client.ListRepoActionsSecrets(ctx, repo.Owner.Login, repo.Name)
-				repoOrgSecrets, _ := client.ListRepoOrgSecrets(ctx, repo.Owner.Login, repo.Name)
-				repoVariables, _ := client.ListRepoActionsVariables(ctx, repo.Owner.Login, repo.Name)
-
-				repoResults = append(repoResults, map[string]interface{}{
-					"name":       repo.FullName,
-					"private":    repo.Private,
-					"archived":   repo.Archived,
-					"secrets":    repoSecrets,
-					"orgSecrets": repoOrgSecrets,
-					"variables":  repoVariables,
-				})
-
-				if i%10 == 0 {
-					percent := 50 + (i * 40 / len(repos))
-					reportProgress(percent, fmt.Sprintf("Scanned %d/%d repositories", i, len(repos)))
-				}
-			}
-
-			totalSecrets := len(orgSecrets)
-			for _, r := range repoResults {
-				totalSecrets += len(r["secrets"].([]github.Secret))
-				totalSecrets += len(r["orgSecrets"].([]github.Secret))
-			}
-
-			result := map[string]interface{}{
-				"org":          target,
-				"orgSecrets":   orgSecrets,
-				"orgVariables": orgVariables,
-				"repos":        repoResults,
-				"totalSecrets": totalSecrets,
-				"totalRepos":   len(repos),
-			}
-
-			resultJSON, err := json.Marshal(result)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("marshal failed: %v", err)})
-				return
-			}
-
-			reportProgress(100, fmt.Sprintf("Scan complete - %d secrets across %d repos", totalSecrets, len(repos)))
-
-			resolve.Invoke(map[string]interface{}{"result": string(resultJSON)})
-		}()
-
-		return nil
-	})
-
-	promiseConstructor := js.Global().Get("Promise")
-	return promiseConstructor.New(handler)
+	return githubUnsupported("secret scanning")
 }
 
-// ScanRunners scans an organization for self-hosted runners
-//
-// JavaScript signature:
-//
-//	async function trajanScanRunners(target: string, options: {
-//	  token: string,
-//	  onProgress?: (percent: number, message: string) => void
-//	}): Promise<{result: string, error?: string}>
 func ScanRunners(this js.Value, args []js.Value) interface{} {
-	if len(args) < 2 {
-		return js.ValueOf(map[string]interface{}{
-			"error": "missing required arguments: target and options",
-		})
-	}
-
-	target := args[0].String()
-	options := args[1]
-
-	handler := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		resolve := args[0]
-		reject := args[1]
-
-		go func() {
-			ctx := context.Background()
-
-			token := options.Get("token").String()
-			if token == "" {
-				reject.Invoke(map[string]interface{}{"error": "token required"})
-				return
-			}
-
-			var progressCallback js.Value
-			if !options.Get("onProgress").IsUndefined() {
-				progressCallback = options.Get("onProgress")
-			}
-
-			reportProgress := func(percent int, message string) {
-				if !progressCallback.IsUndefined() && !progressCallback.IsNull() {
-					progressCallback.Invoke(percent, message)
-				}
-			}
-
-			reportProgress(10, "Fetching org runners...")
-
-			client := github.NewClient(github.DefaultBaseURL, token)
-
-			orgRunners, err := client.ListOrgRunners(ctx, target)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("list runners failed: %v", err)})
-				return
-			}
-
-			reportProgress(20, "Fetching repositories...")
-
-			repos, err := client.ListOrgRepos(ctx, target)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("list repos failed: %v", err)})
-				return
-			}
-
-			reportProgress(30, fmt.Sprintf("Scanning %d repositories for workflows...", len(repos)))
-
-			repoRunners := make([]map[string]interface{}, 0)
-			workflows := make([]map[string]interface{}, 0)
-
-			for i, repo := range repos {
-				runners, _ := client.ListRepoRunners(ctx, repo.Owner.Login, repo.Name)
-				if len(runners) > 0 {
-					repoRunners = append(repoRunners, map[string]interface{}{
-						"repo":    repo.FullName,
-						"runners": runners,
-					})
-				}
-
-				workflowFiles, err := client.GetWorkflowFiles(ctx, repo.Owner.Login, repo.Name)
-				if err != nil {
-					continue
-				}
-
-				for _, wf := range workflowFiles {
-					content, err := client.GetWorkflowContent(ctx, repo.Owner.Login, repo.Name, wf.Path)
-					if err != nil {
-						continue
-					}
-
-					selfHostedJobs := extractSelfHostedJobs(content)
-					if len(selfHostedJobs) > 0 {
-						triggers := extractTriggers(content)
-						workflows = append(workflows, map[string]interface{}{
-							"repo":           repo.FullName,
-							"file":           wf.Name,
-							"private":        repo.Private,
-							"url":            fmt.Sprintf("https://github.com/%s/blob/%s/%s", repo.FullName, repo.DefaultBranch, wf.Path),
-							"selfHostedJobs": selfHostedJobs,
-							"triggers":       triggers,
-						})
-					}
-				}
-
-				if i%10 == 0 {
-					percent := 30 + (i * 60 / len(repos))
-					reportProgress(percent, fmt.Sprintf("Scanned %d/%d repositories", i, len(repos)))
-				}
-			}
-
-			result := map[string]interface{}{
-				"org":            target,
-				"runners":        orgRunners,
-				"repoRunners":    repoRunners,
-				"workflows":      workflows,
-				"totalWorkflows": len(workflows),
-				"totalRepos":     len(repos),
-			}
-
-			resultJSON, err := json.Marshal(result)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("marshal failed: %v", err)})
-				return
-			}
-
-			reportProgress(100, fmt.Sprintf("Scan complete - %d workflows with self-hosted runners", len(workflows)))
-
-			resolve.Invoke(map[string]interface{}{"result": string(resultJSON)})
-		}()
-
-		return nil
-	})
-
-	promiseConstructor := js.Global().Get("Promise")
-	return promiseConstructor.New(handler)
+	return githubUnsupported("runner scanning")
 }
 
-// SelfEnumerate performs comprehensive token enumeration
-//
-// JavaScript signature:
-//
-//	async function trajanSelfEnumerate(options: {
-//	  token: string,
-//	  onProgress?: (percent: number, message: string) => void
-//	}): Promise<{result: string, error?: string}>
 func SelfEnumerate(this js.Value, args []js.Value) interface{} {
-	if len(args) < 1 {
-		return js.ValueOf(map[string]interface{}{
-			"error": "missing required argument: options",
-		})
-	}
+	return githubUnsupported("self enumeration")
+}
 
-	options := args[0]
-
+// githubUnsupported returns a rejected promise indicating the operation is
+// GitHub-only and not available in the browser; use the trajan CLI instead.
+func githubUnsupported(operation string) interface{} {
 	handler := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		resolve := args[0]
 		reject := args[1]
-
 		go func() {
-			ctx := context.Background()
-
-			token := options.Get("token").String()
-			if token == "" {
-				reject.Invoke(map[string]interface{}{"error": "token required"})
-				return
-			}
-
-			var progressCallback js.Value
-			if !options.Get("onProgress").IsUndefined() {
-				progressCallback = options.Get("onProgress")
-			}
-
-			reportProgress := func(percent int, message string) {
-				if !progressCallback.IsUndefined() && !progressCallback.IsNull() {
-					progressCallback.Invoke(percent, message)
-				}
-			}
-
-			reportProgress(10, "Validating token...")
-
-			client := github.NewClient(github.DefaultBaseURL, token)
-
-			tokenInfo, err := client.GetTokenInfo(ctx)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("get token info failed: %v", err)})
-				return
-			}
-
-			reportProgress(20, "Enumerating organizations...")
-
-			orgs, err := client.ListAuthenticatedUserOrgs(ctx)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("list orgs failed: %v", err)})
-				return
-			}
-
-			reportProgress(30, fmt.Sprintf("Analyzing %d organizations...", len(orgs)))
-
-			orgResults := make([]map[string]interface{}, 0)
-			reposWithRunners := make([]map[string]interface{}, 0)
-
-			for i, org := range orgs {
-				orgDetail, err := client.GetOrgDetails(ctx, org.Login)
-				isAdmin := false
-				sso := false
-				if err == nil {
-					isAdmin = orgDetail.BillingEmail != ""
-					sso = orgDetail.TwoFactorRequirementEnabled
-				}
-
-				runners, _ := client.ListOrgRunners(ctx, org.Login)
-				secrets, _ := client.ListOrgActionsSecrets(ctx, org.Login)
-				repos, _ := client.ListOrgRepos(ctx, org.Login)
-				repoCount := len(repos)
-				if repoCount > 200 {
-					repos = repos[:200]
-				}
-
-				checkLimit := 50
-				if len(repos) < checkLimit {
-					checkLimit = len(repos)
-				}
-
-				for j := 0; j < checkLimit; j++ {
-					repo := repos[j]
-					workflowFiles, err := client.GetWorkflowFiles(ctx, repo.Owner.Login, repo.Name)
-					if err != nil {
-						continue
-					}
-
-					for _, wf := range workflowFiles {
-						content, err := client.GetWorkflowContent(ctx, repo.Owner.Login, repo.Name, wf.Path)
-						if err != nil {
-							continue
-						}
-
-						selfHostedJobs := extractSelfHostedJobs(content)
-						if len(selfHostedJobs) > 0 {
-							runnerLabels := make([]string, 0)
-							for _, job := range selfHostedJobs {
-								if labels, ok := job["labels"].([]string); ok {
-									runnerLabels = append(runnerLabels, labels...)
-								}
-							}
-
-							reposWithRunners = append(reposWithRunners, map[string]interface{}{
-								"repo":           repo.FullName,
-								"org":            org.Login,
-								"visibility":     map[bool]string{true: "private", false: "public"}[repo.Private],
-								"default_branch": repo.DefaultBranch,
-								"runners":        runnerLabels,
-								"workflow":       wf.Name,
-							})
-							break // Only need one workflow per repo
-						}
-					}
-				}
-
-				orgResults = append(orgResults, map[string]interface{}{
-					"login":       org.Login,
-					"description": org.Description,
-					"admin":       isAdmin,
-					"sso":         sso,
-					"runners":     runners,
-					"secrets":     secrets,
-					"repos":       repoCount,
-				})
-
-				if i%5 == 0 {
-					percent := 30 + (i * 60 / len(orgs))
-					reportProgress(percent, fmt.Sprintf("Analyzed %d/%d organizations", i, len(orgs)))
-				}
-			}
-
-			result := map[string]interface{}{
-				"user": map[string]interface{}{
-					"login": tokenInfo.User,
-					"name":  tokenInfo.Name,
-				},
-				"scopes":             tokenInfo.Scopes,
-				"orgs":               orgResults,
-				"repos_with_runners": reposWithRunners,
-			}
-
-			resultJSON, err := json.Marshal(result)
-			if err != nil {
-				reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("marshal failed: %v", err)})
-				return
-			}
-
-			reportProgress(100, fmt.Sprintf("Enumeration complete - %d orgs, %d repos with runners", len(orgResults), len(reposWithRunners)))
-
-			resolve.Invoke(map[string]interface{}{"result": string(resultJSON)})
+			reject.Invoke(map[string]interface{}{
+				"error": fmt.Sprintf("github %s is not supported in the browser; use the trajan CLI", operation),
+			})
 		}()
-
 		return nil
 	})
 
 	promiseConstructor := js.Global().Get("Promise")
 	return promiseConstructor.New(handler)
 }
+
 
 type ProgressCallback func(percent int, message string)
 
@@ -2392,7 +1348,9 @@ func Enumerate(this js.Value, args []js.Value) interface{} {
 
 			switch platform {
 			case "github":
-				handleGitHubEnumerate(ctx, operation, options, resolve, reject)
+				reject.Invoke(map[string]interface{}{
+					"error": "github enumeration is not supported in the browser; use the trajan CLI",
+				})
 			case "gitlab":
 				handleGitLabEnumerate(ctx, operation, options, resolve, reject)
 			case "azuredevops":
@@ -2409,136 +1367,6 @@ func Enumerate(this js.Value, args []js.Value) interface{} {
 
 	promiseConstructor := js.Global().Get("Promise")
 	return promiseConstructor.New(handler)
-}
-
-// handleGitHubEnumerate routes GitHub enumerate operations
-func handleGitHubEnumerate(ctx context.Context, operation string, options js.Value, resolve, reject js.Value) {
-	token := options.Get("token").String()
-	if token == "" {
-		reject.Invoke(map[string]interface{}{"error": "token required"})
-		return
-	}
-
-	target := ""
-	if !options.Get("target").IsUndefined() {
-		target = options.Get("target").String()
-	}
-
-	progressCallback := getProgressCallback(options)
-
-	progressCallback(10, "Initializing GitHub client...")
-	platform := github.NewPlatform()
-	if err := platform.Init(ctx, platforms.Config{Token: token}); err != nil {
-		reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("failed to initialize platform: %v", err)})
-		return
-	}
-
-	switch operation {
-	case "repos", "repositories":
-		enumerateGitHubRepos(ctx, platform, target, progressCallback, resolve, reject)
-	case "secrets":
-		enumerateGitHubSecrets(ctx, platform, target, progressCallback, resolve, reject)
-	case "runners":
-		enumerateGitHubRunners(ctx, platform, target, progressCallback, resolve, reject)
-	default:
-		reject.Invoke(map[string]interface{}{
-			"error": fmt.Sprintf("unsupported GitHub operation: %s", operation),
-		})
-	}
-}
-
-func enumerateGitHubRepos(ctx context.Context, platform *github.Platform, target string, progressCallback ProgressCallback, resolve, reject js.Value) {
-	progressCallback(20, "Enumerating repositories...")
-
-	var targetType platforms.TargetType
-	if target != "" {
-		targetType = platforms.TargetOrg
-	} else {
-		targetType = platforms.TargetUser
-	}
-
-	result, err := platform.EnumerateRepos(ctx, platforms.Target{
-		Type:  targetType,
-		Value: target,
-	})
-	if err != nil {
-		reject.Invoke(map[string]interface{}{"error": err.Error()})
-		return
-	}
-
-	progressCallback(100, "Complete")
-
-	jsonBytes, err := json.Marshal(result)
-	if err != nil {
-		reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("failed to marshal results: %v", err)})
-		return
-	}
-
-	resolve.Invoke(map[string]interface{}{
-		"result": string(jsonBytes),
-	})
-}
-
-func enumerateGitHubSecrets(ctx context.Context, platform *github.Platform, target string, progressCallback ProgressCallback, resolve, reject js.Value) {
-	if target == "" {
-		reject.Invoke(map[string]interface{}{"error": "target organization required for secrets enumeration"})
-		return
-	}
-
-	progressCallback(20, "Enumerating secrets...")
-
-	client := platform.Client()
-	secrets, err := client.ListOrgActionsSecrets(ctx, target)
-	if err != nil {
-		reject.Invoke(map[string]interface{}{"error": err.Error()})
-		return
-	}
-
-	progressCallback(100, "Complete")
-
-	jsonBytes, err := json.Marshal(map[string]interface{}{
-		"secrets": secrets,
-		"count":   len(secrets),
-	})
-	if err != nil {
-		reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("failed to marshal results: %v", err)})
-		return
-	}
-
-	resolve.Invoke(map[string]interface{}{
-		"result": string(jsonBytes),
-	})
-}
-
-func enumerateGitHubRunners(ctx context.Context, platform *github.Platform, target string, progressCallback ProgressCallback, resolve, reject js.Value) {
-	if target == "" {
-		reject.Invoke(map[string]interface{}{"error": "target organization required for runners enumeration"})
-		return
-	}
-
-	progressCallback(20, "Enumerating runners...")
-
-	client := platform.Client()
-	runners, err := client.ListOrgRunners(ctx, target)
-	if err != nil {
-		reject.Invoke(map[string]interface{}{"error": err.Error()})
-		return
-	}
-
-	progressCallback(100, "Complete")
-
-	jsonBytes, err := json.Marshal(map[string]interface{}{
-		"runners": runners,
-		"count":   len(runners),
-	})
-	if err != nil {
-		reject.Invoke(map[string]interface{}{"error": fmt.Sprintf("failed to marshal results: %v", err)})
-		return
-	}
-
-	resolve.Invoke(map[string]interface{}{
-		"result": string(jsonBytes),
-	})
 }
 
 func handleGitLabEnumerate(ctx context.Context, operation string, options js.Value, resolve, reject js.Value) {
