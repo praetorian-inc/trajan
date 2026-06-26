@@ -16,14 +16,31 @@ type SourceProvenance struct {
 type TriggerFilter map[string]any
 
 type Step struct {
-	StepIndex   int               `json:"step_index"`
-	Uses        *string           `json:"uses"`
-	With        map[string]any    `json:"with"`
-	Run         *string           `json:"run"`
-	Name        *string           `json:"name"`
-	If          *string           `json:"if"`
-	Provenance  *SourceProvenance `json:"_provenance"`
-	Classifiers StepClassifiers   `json:"classifiers"`
+	StepIndex              int               `json:"step_index"`
+	ID                     *string           `json:"id"`
+	Uses                   *string           `json:"uses"`
+	With                   map[string]any    `json:"with"`
+	Run                    *string           `json:"run"`
+	Name                   *string           `json:"name"`
+	If                     *string           `json:"if"`
+	NeedsOutputRefsExec    []NeedsOutputRef  `json:"needs_output_refs_exec"`
+	NeedsOutputRefsBinding []NeedsOutputRef  `json:"needs_output_refs_binding"`
+	Provenance             *SourceProvenance `json:"_provenance"`
+	Classifiers            StepClassifiers   `json:"classifiers"`
+}
+
+type NeedsOutputRef struct {
+	JobID      string `json:"job_id"`
+	OutputName string `json:"output_name"`
+}
+
+type JobOutput struct {
+	Name                            string            `json:"name"`
+	ValueExpression                 string            `json:"value_expression"`
+	AttackerContextFieldsReferenced []string          `json:"attacker_context_fields_referenced"`
+	ReferencesStepID                *string           `json:"references_step_id"`
+	ProducingStepAttackerExecRefs   []string          `json:"producing_step_attacker_exec_refs"`
+	Provenance                      *SourceProvenance `json:"_provenance"`
 }
 
 type SecretRef struct {
@@ -92,12 +109,17 @@ type Job struct {
 	AttackerContextFieldsReferencedExec    []string `json:"attacker_context_fields_referenced_exec"`
 	AttackerContextFieldsReferencedBinding []string `json:"attacker_context_fields_referenced_binding"`
 
+	NeedsOutputRefsExec    []NeedsOutputRef `json:"needs_output_refs_exec"`
+	NeedsOutputRefsBinding []NeedsOutputRef `json:"needs_output_refs_binding"`
+	NeedsOutputRefs        []NeedsOutputRef `json:"needs_output_refs"`
+
 	RunsOn       []string `json:"runs_on"`
 	SelfHosted   bool     `json:"self_hosted"`
 	RunnerLabels []string `json:"runner_labels"`
 	RunnerGroup  *string  `json:"runner_group"`
 
-	Steps []Step `json:"steps"`
+	Steps   []Step      `json:"steps"`
+	Outputs []JobOutput `json:"outputs"`
 
 	ExecutesCheckedOutCode bool     `json:"executes_checked_out_code"`
 	HasCheckoutOfPRRef     bool     `json:"has_checkout_of_pr_ref"`
