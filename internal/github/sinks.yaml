@@ -1,0 +1,157 @@
+# Sink classifier table.
+#
+# Each entry classifies a workflow step into a "sink class" — a named
+# pattern that the normalizer uses to compute `executes_checked_out_code`.
+# Adding a new sink only needs an edit here; no code changes.
+#
+# Match types:
+#   run_regex     — match against the step's `run:` value (multiline regex)
+#   uses_prefix   — match against the step's `uses:` value (string prefix)
+#   uses_regex    — match against the step's `uses:` value (regex)
+#
+# Each entry must also set `executes_checked_out_code: true|false`.
+# Sinks that build/install repo code from the working tree set true.
+# Pure infrastructure steps (setup-node alone) set false.
+# File order is match precedence (first match wins).
+
+sinks:
+  # ─── Package managers ──────────────────────────────────────────────────────
+  - name: npm_install
+    match: run_regex
+    pattern: '\b(npm|pnpm|yarn)\s+(ci|i|install|add)\b'
+    executes_checked_out_code: true
+
+  - name: pip_install
+    match: run_regex
+    pattern: '\bpip(3)?\s+install\b|\bpoetry\s+install\b|\buv\s+(pip|sync|run)\b'
+    executes_checked_out_code: true
+
+  - name: setup_py_develop
+    match: run_regex
+    pattern: '\bpython\s+setup\.py\s+(develop|install)\b'
+    executes_checked_out_code: true
+
+  - name: pre_commit
+    match: run_regex
+    pattern: '\bpre-commit\s+(run|install|autoupdate)\b'
+    executes_checked_out_code: true
+
+  - name: tox
+    match: run_regex
+    pattern: '\btox\b'
+    executes_checked_out_code: true
+
+  # ─── Build systems ─────────────────────────────────────────────────────────
+  - name: make
+    match: run_regex
+    pattern: '(^|\s|;|&&)make(\s+|$)'
+    executes_checked_out_code: true
+
+  - name: cargo_build
+    match: run_regex
+    pattern: '\bcargo\s+(build|run|test|install)\b'
+    executes_checked_out_code: true
+
+  - name: gradle_build
+    match: run_regex
+    pattern: '(^|/)gradlew\s+|\bgradle\s+(build|test|run|assemble)\b'
+    executes_checked_out_code: true
+
+  - name: maven_build
+    match: run_regex
+    pattern: '\bmvn\s+(compile|package|install|test|verify)\b'
+    executes_checked_out_code: true
+
+  - name: go_build
+    match: run_regex
+    pattern: '\bgo\s+(build|run|test|install|generate)\b'
+    executes_checked_out_code: true
+
+  # ─── Docker ────────────────────────────────────────────────────────────────
+  - name: docker_build
+    match: run_regex
+    pattern: '\bdocker\s+(build|buildx\s+build)\b'
+    executes_checked_out_code: true
+
+  - name: docker_build_push_action
+    match: uses_prefix
+    pattern: 'docker/build-push-action'
+    executes_checked_out_code: true
+
+  # ─── Script execution from checked-out code ────────────────────────────────
+  - name: bash_local_script
+    match: run_regex
+    pattern: '(^|\s|;|&&)(bash|sh)\s+\./'
+    executes_checked_out_code: true
+
+  - name: node_local_script
+    match: run_regex
+    pattern: '(^|\s|;|&&)node\s+\./'
+    executes_checked_out_code: true
+
+  - name: python_local_script
+    match: run_regex
+    pattern: '(^|\s|;|&&)python(3)?\s+\./'
+    executes_checked_out_code: true
+
+  # Direct invocation of repo-checked-in scripts: ./scripts/build.sh,
+  # ./bin/release, ./.github/scripts/*.py — anything starting with ./ that
+  # looks like an executable.
+  - name: local_script_invocation
+    match: run_regex
+    pattern: '(^|\s|;|&&)\./[A-Za-z0-9_./-]+\.(sh|py|js|ts|rb|pl)\b'
+    executes_checked_out_code: true
+
+  # Django manage.py — common project-runtime sink with attacker reach.
+  - name: django_manage
+    match: run_regex
+    pattern: '\bpython(3)?\s+manage\.py\b'
+    executes_checked_out_code: true
+
+  # Ruby / Node task runners that load repo code.
+  - name: rake_bundle_npx
+    match: run_regex
+    pattern: '\b(bundle\s+exec|rake|npx)\b'
+    executes_checked_out_code: true
+
+  # actions/github-script: runs arbitrary JS in a privileged context, with
+  # ${{ github.event.* }} interpolation. Critical sink for cat-01.
+  - name: github_script
+    match: uses_prefix
+    pattern: 'actions/github-script'
+    executes_checked_out_code: true
+
+  # ─── Test runners (often pull in code paths from checkout) ─────────────────
+  - name: pytest
+    match: run_regex
+    pattern: '\bpytest\b'
+    executes_checked_out_code: true
+
+  - name: jest_test
+    match: run_regex
+    pattern: '\bjest\b|\bnpm\s+test\b|\byarn\s+test\b'
+    executes_checked_out_code: true
+
+  # ─── Exfil / persistence channels (not exec, but flagged via sink_class) ───
+  # These don't execute checked-out code per se, but are common in
+  # post-compromise patterns. Recorded so rules can correlate them.
+  - name: gh_pr_issue_comment
+    match: run_regex
+    pattern: '\bgh\s+(pr|issue)\s+(comment|review)\b'
+    executes_checked_out_code: false
+
+  - name: curl_post_exfil
+    match: run_regex
+    pattern: '\b(curl|wget)\b.*(\s-X\s*POST|\s--data\b|\s-d\s|\s--upload-file\b)'
+    executes_checked_out_code: false
+
+  - name: ssh_key_install
+    match: run_regex
+    pattern: '(\$HOME|~)/\.ssh/(id_|authorized_keys|known_hosts)'
+    executes_checked_out_code: false
+
+  # ─── Checkout (not itself a sink, but flagged for classification) ──────────
+  - name: actions_checkout
+    match: uses_prefix
+    pattern: 'actions/checkout'
+    executes_checked_out_code: false   # the checkout itself doesn't execute
