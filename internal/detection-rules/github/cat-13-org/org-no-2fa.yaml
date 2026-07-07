@@ -1,0 +1,20 @@
+id: cat-04/org-no-2fa
+scenario_id: cat-04/08
+title: "Org does not enforce two-factor authentication"
+subject: org
+severity: high
+confidence: high
+description: >
+  Org-wide 2FA enforcement is disabled. Any member account compromise via
+  password reuse becomes a workflow-execution vector.
+
+where:
+  all_of:
+    - two_factor_requirement_enabled == false
+
+evidence:
+  - "Org 2FA enforcement disabled (two_factor_requirement_enabled={{ two_factor_requirement_enabled }})"
+
+remediation_hint: >
+  Enable "Require two-factor authentication for everyone in this
+  organization" in Settings → Authentication security.

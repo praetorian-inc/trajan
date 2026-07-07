@@ -1,0 +1,22 @@
+id: cat-13/members-can-create-private-repositories
+scenario_id: cat-13/01
+title: "Org members can create private repositories"
+subject: org
+severity: low
+confidence: high
+description: >
+  Any member can create private repositories in the org. New repos inherit org
+  Actions/runner defaults without review, widening the surface where untrusted
+  workflows run against org-shared runners and secrets.
+
+# No firing-range oracle for this setting (unit-tested only).
+where:
+  all_of:
+    - members_can_create_private_repositories == true
+
+evidence:
+  - "Members can create private repositories (members_can_create_private_repositories={{ members_can_create_private_repositories }})"
+
+remediation_hint: >
+  Restrict private repository creation to admins under Settings → Member
+  privileges → Repository creation.

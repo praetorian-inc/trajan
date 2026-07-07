@@ -1,0 +1,25 @@
+id: cat-04/org-webhook-attacker
+scenario_id: cat-04/10
+title: "Org has webhook(s) pointing to externally-controlled URL"
+subject: org
+severity: medium
+confidence: low
+description: >
+  Org-level webhooks ship every action across the org (push, secret_change,
+  member, etc.) to the configured URL. A webhook pointed at an attacker-
+  controlled URL is a persistent exfiltration channel.
+  NOTE: deciding whether a hook URL is actually attacker/external-controlled
+  needs URL-trust classification (not collected); this rule fires on the
+  presence of any org webhook and surfaces the URLs for manual review.
+
+where:
+  all_of:
+    - hooks_count >= 1
+
+evidence:
+  - "Org webhooks present: {{ hooks_count }} (active={{ hooks_active_count }})"
+  - "URLs: {{ hook_urls }}"
+
+remediation_hint: >
+  Review each webhook URL — assert it terminates inside an internal,
+  attested system. Rotate signing secrets and lock down origin IPs.

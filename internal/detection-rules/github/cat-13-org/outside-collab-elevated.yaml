@@ -1,0 +1,22 @@
+id: cat-04/outside-collab-elevated
+scenario_id: cat-04/04
+title: "Outside collaborator has elevated role on a repo"
+subject: org
+severity: high
+confidence: high
+description: >
+  At least one outside collaborator holds write/maintain/admin on a repo.
+  Outside collaborators sit outside the org's 2FA and audit boundaries; a
+  compromised non-member account becomes a code-execution path.
+
+where:
+  all_of:
+    - outside_collaborators_elevated_count >= 1
+
+evidence:
+  - "{{ outside_collaborators_elevated_count }} outside collaborator(s) hold elevated roles"
+  - "Sample: {{ outside_collaborators_elevated }}"
+
+remediation_hint: >
+  Convert outside collaborators with write+ to org members + team-based
+  permissions, or downgrade their repo role to triage/read.

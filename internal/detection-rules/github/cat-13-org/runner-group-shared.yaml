@@ -1,0 +1,26 @@
+id: cat-04/runner-group-shared
+scenario_id: cat-04/06
+title: "Self-hosted runner group shared across trust boundaries"
+subject: org
+severity: high
+confidence: high
+description: >
+  A self-hosted runner group allows public repositories
+  (allows_public_repositories=true). Jobs from low-trust contexts can land on
+  the same physical runners that build high-trust workloads, opening a path
+  for workspace / cred reuse.
+  NOTE: detecting actual cross-boundary reuse on the runner host (workspace
+  residue, shared credentials) needs runner host state that is not collected;
+  this rule ports the policy-level signal from the runner-group config.
+
+where:
+  any_of:
+    - any_runner_group_public_repos == true
+
+evidence:
+  - "Runner groups: {{ runner_groups }}"
+  - "Any allows public repos: {{ any_runner_group_public_repos }}"
+
+remediation_hint: >
+  Set the runner group's visibility to "Selected repositories" and pin the
+  list to one trust boundary. Disable allows_public_repositories.

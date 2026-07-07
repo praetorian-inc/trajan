@@ -1,0 +1,21 @@
+id: cat-04/org-actions-approve
+scenario_id: cat-04/03
+title: "Org allows Actions to approve PRs"
+subject: org
+severity: high
+confidence: high
+description: >
+  Org setting `actions.can_approve_pull_request_reviews` is enabled. A
+  workflow running with `pull-requests: write` can self-approve PRs, breaking
+  branch-protection assumptions that require human review.
+
+where:
+  all_of:
+    - actions.can_approve_pull_request_reviews == true
+
+evidence:
+  - "Org allows Actions to approve PRs: can_approve_pull_request_reviews=true"
+
+remediation_hint: >
+  Disable "Allow GitHub Actions to create and approve pull requests" in
+  Settings → Actions → General → Workflow permissions.

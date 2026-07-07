@@ -1,0 +1,23 @@
+id: cat-08/apps-pats-fine-grained-pat-overshoot
+scenario_id: cat-08/04
+title: "Fine-grained PAT/Token secrets present at org scope (visibility=all)"
+subject: org
+severity: medium
+confidence: low
+description: >
+  At least one PAT-shaped secret exists at org scope and at least one org
+  secret has visibility=all. Even fine-grained PATs still authenticate as a
+  specific user, so any repo (incl. archived) can consume them in a workflow.
+  any_org_secret_visibility_all is precomputed by the org normalizer.
+
+where:
+  all_of:
+    - org_pat_named_secrets != []
+    - any_org_secret_visibility_all == true
+
+evidence:
+  - "Org-wide PAT secrets: {{ org_pat_named_secrets }}, and at least one secret is visibility=all."
+
+remediation_hint: >
+  Scope PATs to specific repos / environments; prefer App tokens for
+  cross-repo automation.
