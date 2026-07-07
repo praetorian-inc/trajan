@@ -506,42 +506,6 @@ class TrajanBridge {
     return result;
   }
 
-  /* ==================== LEGACY API ==================== */
-
-  /**
-   * Analyze a GitHub Actions workflow YAML for injection vulnerabilities
-   * @param {string} yamlContent - The workflow YAML content
-   * @returns {Promise<Object>} Analysis results with findings
-   * @deprecated Use startScan() for comprehensive analysis
-   */
-  async analyzeWorkflow(yamlContent) {
-    if (!this.wasmReady) {
-      await this.init();
-    }
-
-    return new Promise((resolve, reject) => {
-      try {
-        const result = window.analyzeWorkflow(yamlContent);
-
-        // Handle error response from Go
-        if (typeof result === 'object' && result.error) {
-          reject(new Error(result.error));
-          return;
-        }
-
-        // Parse JSON result from Go
-        const findings = JSON.parse(result);
-        resolve({
-          success: true,
-          findings: findings || [],
-          count: findings ? findings.length : 0
-        });
-      } catch (error) {
-        reject(new Error(`Analysis failed: ${error.message}`));
-      }
-    });
-  }
-
   /* ==================== UTILITY METHODS ==================== */
 
   /**

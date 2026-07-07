@@ -2,8 +2,19 @@ package chain
 
 import (
 	"github.com/praetorian-inc/trajan/pkg/attacks"
-	"github.com/praetorian-inc/trajan/pkg/github"
 )
+
+// RunnerInfo is a chain-local, platform-neutral description of a runner.
+// It mirrors the fields previously consumed from the GitHub Runner type,
+// keeping the shared chain framework decoupled from any single platform.
+type RunnerInfo struct {
+	ID     int64
+	Name   string
+	OS     string
+	Status string
+	Busy   bool
+	Labels []string
+}
 
 // ChainContext holds typed state passed between plugins in a chain
 type ChainContext struct {
@@ -12,7 +23,7 @@ type ChainContext struct {
 	C2RepoURL string // e.g., "https://github.com/owner/trajan-c2-abc123"
 
 	// Runner Information (set by runner-on-runner)
-	Runners []github.Runner
+	Runners []RunnerInfo
 
 	// Attack Artifacts (accumulated across plugins)
 	Artifacts []attacks.Artifact
@@ -77,7 +88,7 @@ func (c *ChainContext) Set(key attacks.ContextKey, value interface{}) {
 			c.C2RepoURL = v
 		}
 	case attacks.RunnersKey:
-		if v, ok := value.([]github.Runner); ok {
+		if v, ok := value.([]RunnerInfo); ok {
 			c.Runners = v
 		}
 	case attacks.GistIDKey:
