@@ -185,3 +185,21 @@ func findAttackerReferences(text string, triggers []string) []string {
 	}
 	return refs
 }
+
+var needsOutputRE = regexp.MustCompile(`needs\.([A-Za-z_][A-Za-z0-9_-]*)\.outputs\.([A-Za-z_][A-Za-z0-9_-]*)`)
+
+// Matches on the raw blob, not extractInterpolations, so a ref nested inside
+// fromJSON(needs.X.outputs.Y) or a larger ${{ }} expression is still caught.
+func extractNeedsOutputRefs(text string) []NeedsOutputRef {
+	out := []NeedsOutputRef{}
+	seen := map[[2]string]bool{}
+	for _, m := range needsOutputRE.FindAllStringSubmatch(text, -1) {
+		key := [2]string{m[1], m[2]}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, NeedsOutputRef{JobID: m[1], OutputName: m[2]})
+	}
+	return out
+}

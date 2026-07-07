@@ -1,0 +1,37 @@
+id: cat-01/chain-prt-cross-job-output
+scenario_id: cat-01/11
+title: "Attacker-influenced job output flows into a cross-job run/with sink"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A producing job declares an output whose value is attacker-influenced — the
+  output expression interpolates an attacker-controlled context field, or a step
+  wrote attacker data into $GITHUB_OUTPUT — and a downstream job consuming
+  needs.<job>.outputs.<var> in an exec context (run:/with:) substitutes that
+  value into a command. The taint crosses the job boundary via needs, which the
+  single-job expression-injection rule cannot see.
+  NOTE: joins the job-output-flow chain (the producer->consumer single-hop edge
+  list keyed on needs.<job>.outputs.<var>), produced by correlate during
+  normalize.
+
+chain_of:
+  join: job-output-flow
+  for_each: edges
+  where:
+    all_of:
+      - attacker_influenced == true
+      - consumer.context == "exec"
+      - any_of:
+          - consumer.triggers ∋ {pull_request_target, pull_request, issue_comment, pull_request_review, pull_request_review_comment}
+          - producer.triggers ∋ {pull_request_target, pull_request, issue_comment, pull_request_review, pull_request_review_comment}
+
+evidence:
+  - "Producer job {{ producer.job_id }} output `{{ consumer.output_name }}` flows into consumer {{ consumer.job_id }} step #{{ consumer.step_index }} (exec)."
+  - "Attacker path: {{ attacker_path }}"
+
+remediation_hint: >
+  Do not pass attacker-controllable values through job outputs into a downstream
+  run:/with:. Sanitize at the producer (bind to an env var; validate against an
+  allowlist) before writing $GITHUB_OUTPUT, and reference the value via an env
+  binding in the consumer rather than inline ${{ needs.<job>.outputs.<var> }}.
