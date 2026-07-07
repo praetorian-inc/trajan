@@ -1,0 +1,28 @@
+id: cat-05/workflow-run-reusable-laundering
+scenario_id: cat-05/09
+title: "workflow_run downstream calls reusable workflow with PR-derived inputs"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A workflow_run caller invokes a reusable workflow; its inputs are derived from
+  the upstream workflow_run event (which had a PR-triggered upstream). The
+  reusable workflow runs in the caller's repo with whatever secrets it inherits —
+  laundered from the original attacker context. Keys on the reusable-callgraph
+  edges correlation; matches caller→callee edges where the caller triggers on
+  workflow_run. NOTE: closure of the PR-derived input set is not expressible from
+  collected facts; this ports the workflow_run-caller portion only.
+
+chain_of:
+  join: reusable-callgraph
+  for_each: edges
+  where:
+    any_of:
+      - caller.triggers ∋ {workflow_run}
+
+evidence:
+  - "Reusable caller {{ caller._id }} (triggers={{ caller.triggers }}) calls {{ callee.uses }}"
+
+remediation_hint: >
+  Don't call reusable workflows from workflow_run unless the input set is
+  closed (no PR-derived fields). Pin callees to SHAs.

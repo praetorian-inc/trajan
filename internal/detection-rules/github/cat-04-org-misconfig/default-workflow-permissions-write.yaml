@@ -1,0 +1,22 @@
+id: cat-04/default-workflow-permissions-write
+scenario_id: cat-04/02
+title: "Repo default workflow permissions: write"
+subject: repo
+severity: high
+confidence: high
+description: >
+  Default GITHUB_TOKEN for new workflows is write. Any workflow that runs
+  attacker-controllable code (e.g. on PR triggers) gets write access by
+  default unless the workflow scopes them down.
+
+where:
+  all_of:
+    - default_workflow_permissions == "write"
+
+evidence:
+  - "Repo {{ repo }}: default_workflow_permissions={{ default_workflow_permissions }}"
+  - "Any new workflow without explicit `permissions:` gets write GITHUB_TOKEN."
+
+remediation_hint: >
+  Set Settings → Actions → General → Workflow permissions to "Read repository
+  contents" and have each write-needing workflow opt in with `permissions:`.

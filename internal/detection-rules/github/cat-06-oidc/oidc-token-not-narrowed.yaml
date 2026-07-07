@@ -1,0 +1,25 @@
+id: cat-06/oidc-token-not-narrowed
+scenario_id: cat-06/11
+title: "OIDC id-token write + permissive job permissions"
+subject: job
+severity: medium
+confidence: low
+description: >
+  Job has `id-token: write` AND contents:write and/or packages:write — the set
+  of capabilities the job has is much wider than "exchange OIDC for cloud creds"
+  alone. Any RCE in the job exfiltrates cloud creds *and* retains repo-write to
+  install persistence.
+
+where:
+  all_of:
+    - mints_id_token == true
+  any_of:
+    - permissions.contents == "write"
+    - permissions.packages == "write"
+
+evidence:
+  - "Job mints id-token with extra write perms: {{ permissions }}"
+
+remediation_hint: >
+  Strip workflow-token permissions to just `id-token: write` and `contents: read`.
+  Cloud creds should be the only write capability in this job.

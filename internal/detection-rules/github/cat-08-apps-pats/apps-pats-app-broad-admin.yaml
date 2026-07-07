@@ -1,0 +1,27 @@
+id: cat-08/apps-pats-app-broad-admin
+scenario_id: cat-08/01
+title: "Installed App holds admin-class permissions across all repos"
+subject: app
+severity: high
+confidence: high
+description: >
+  A GitHub App is installed with admin-class permission (administration,
+  members, organization_administration, secrets, ...) AND
+  repository_selection=all. Any compromise of the App key grants admin across
+  the whole org with no per-repo limit. broad_admin_writes / admin_permissions
+  are precomputed by the app normalizer over the installation's permission map.
+
+where:
+  all_of:
+    - repository_selection == "all"
+  any_of:
+    - broad_admin_writes != []
+    - admin_permissions != []
+
+evidence:
+  - "App {{ app_slug }} repository_selection=all, broad admin writes: {{ broad_admin_writes }}"
+  - "All write perms: {{ write_permissions }}"
+
+remediation_hint: >
+  Scope the App to selected repositories; drop admin/members/secrets perms
+  unless strictly required.

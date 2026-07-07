@@ -1,0 +1,28 @@
+id: cat-09/runtime-token-exfil
+scenario_id: cat-09/03
+title: "Cache poisoned by low-trust job is restored in a high-trust job"
+subject: chain
+severity: critical
+confidence: medium
+description: >
+  The same key prefix is written by a low-trust trigger AND read by another job.
+  The low-trust job effectively writes attacker-controlled bytes that the
+  reader restores into its workspace — a runtime token exfiltration vector via
+  injected post-step code. Keys on the cache-keyspace correlation; requires a
+  low-trust participant plus at least one writer and one reader on the prefix.
+
+chain_of:
+  join: cache-keyspace
+  for_each: prefix_overlaps
+  where:
+    all_of:
+      - low_trust_participant == true
+      - writer_count >= 1
+      - reader_count >= 1
+
+evidence:
+  - "Prefix `{{ key_prefix }}`: {{ writer_count }} writers / {{ reader_count }} readers; at least one low-trust participant."
+
+remediation_hint: >
+  Never share cache keys across trust boundaries; key by trigger source plus
+  PR fork repository name.

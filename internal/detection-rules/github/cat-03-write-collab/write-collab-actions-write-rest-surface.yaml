@@ -1,0 +1,21 @@
+id: cat-03/write-collab-actions-write-rest-surface
+scenario_id: cat-03/10
+title: "Job has actions:write (REST API attack surface)"
+subject: job
+severity: medium
+confidence: low
+description: >
+  Job has `actions: write` permission. This grants the workflow token the
+  ability to delete workflow runs, dispatch workflows, and modify repo
+  variables/secrets — surface that bypasses normal PR review.
+
+where:
+  all_of:
+    - permissions.actions == "write"
+
+evidence:
+  - "Job has actions:write at {{ _provenance.workflow_file }}:{{ _provenance.yaml_line_range }}"
+
+remediation_hint: >
+  Drop actions:write; the few legit needs (workflow dispatch from a workflow)
+  should be in a separate gated job with no other write perms.

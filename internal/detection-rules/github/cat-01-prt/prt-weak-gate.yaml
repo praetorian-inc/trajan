@@ -1,0 +1,28 @@
+id: cat-01/prt-weak-gate
+scenario_id: cat-01/04
+title: "pull_request_target checkout-execute with weak gate (label/author-association)"
+subject: job
+severity: critical
+confidence: medium
+description: >
+  Same checkout-and-execute shape as cat-01/prt-checkout-execute, but the `if:`
+  gate is non-strong (label-based or author-association). Label gates can be
+  added by anyone with triage on some repo settings; author-association includes
+  "CONTRIBUTOR", which is earned by a single merged PR.
+
+where:
+  all_of:
+    - triggers ∋ {pull_request_target, issue_comment, pull_request_review, pull_request_review_comment}
+    - has_checkout_of_pr_ref == true
+    - executes_checked_out_code == true
+  any_of:
+    - if_conditions_summary.gate_strength == "weak"
+    - if_conditions_summary.gate_strength == "pseudo"
+
+evidence:
+  - "Gate strength: {{ if_conditions_summary.gate_strength }} (raw: {{ if_conditions_summary.raw }})"
+  - "Trigger: {{ triggers }}; checkout PR ref + exec checked-out code"
+
+remediation_hint: >
+  Replace the label/author-association gate with a strong actor gate (e.g. an
+  explicit maintainer list), or move execution to a downstream workflow_run.

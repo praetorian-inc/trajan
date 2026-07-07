@@ -1,0 +1,26 @@
+id: cat-11/ruleset-no-protection-on-default
+scenario_id: cat-11/02
+title: "Default branch has no active ruleset and no legacy protection"
+subject: chain
+severity: high
+confidence: high
+description: >
+  No active ruleset applies to the repo's default branch and no legacy branch
+  protection is present, so anyone with write access can push directly to the
+  default branch.
+  NOTE: joins the effective-ruleset chain (produced by correlate during
+  normalize).
+
+chain_of:
+  join: effective-ruleset
+  for_each: effective_per_branch
+  where:
+    all_of:
+      - active_ruleset_count == 0
+      - legacy_protection_present == false
+
+evidence:
+  - "Repo {{ repo }}: branch `{{ branch }}` has no active rulesets and no legacy protection."
+
+remediation_hint: >
+  Apply at least one ruleset requiring pull_request review on the default branch.

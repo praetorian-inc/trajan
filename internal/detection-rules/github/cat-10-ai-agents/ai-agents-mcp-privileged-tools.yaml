@@ -1,0 +1,27 @@
+id: cat-10/ai-agents-mcp-privileged-tools
+scenario_id: cat-10/04
+title: "MCP server with privileged third-party tools on agent allowlist"
+subject: job
+severity: high
+confidence: medium
+description: >
+  The agent is configured with MCP servers that expose third-party-plane
+  capabilities (postgres, slack, sentry, AWS, etc.) and the tool allowlist
+  permits MCP calls. The MCP subprocess receives credentials via env vars
+  that agent-side env scrubbing does not redact. Prompt injection → arbitrary
+  query/post on those systems.
+
+where:
+  all_of:
+    - agent_action_class != null
+  any_of:
+    - agent_mcp_servers != []
+    - agent_tools_enabled ∋ {mcp__postgres__query, mcp__slack__post_message}
+
+evidence:
+  - "Agent {{ agent_action_class }} configured with MCP servers: {{ agent_mcp_servers }}"
+  - "Tools enabled: {{ agent_tools_enabled }}"
+
+remediation_hint: >
+  Drop MCP tools from the allowlist; restrict the MCP server's env vars to
+  least-privilege scope; or move MCP execution to a separate, gated job.

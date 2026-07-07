@@ -1,0 +1,27 @@
+id: cat-01/prt-local-action-after-checkout
+scenario_id: cat-01/02
+title: "pull_request_target uses local action after checking out PR head"
+subject: job
+severity: critical
+confidence: high
+description: >
+  A low-trust trigger job checks out the PR head ref AND uses one or more `./`
+  local actions. The local action's action.yml is resolved from the PR head, so
+  attacker-supplied action body runs with the base repo's GITHUB_TOKEN and
+  secrets.
+
+where:
+  all_of:
+    - triggers ∋ {pull_request_target, issue_comment, pull_request_review, pull_request_review_comment}
+    - has_checkout_of_pr_ref == true
+    - local_composite_actions_used != []
+  none_of:
+    - if_conditions_summary.gate_strength == "strong"
+
+evidence:
+  - "PRT-class trigger checks out PR ref and uses local actions {{ local_composite_actions_used }}"
+  - "Provenance: {{ _provenance.workflow_file }}:{{ _provenance.yaml_line_range }}"
+
+remediation_hint: >
+  Restore the local action body from the base ref before invoking it, OR switch
+  the trigger to pull_request (forks get a read-only token).

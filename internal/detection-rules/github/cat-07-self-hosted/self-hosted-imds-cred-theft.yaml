@@ -1,0 +1,28 @@
+id: cat-07/self-hosted-imds-cred-theft
+scenario_id: cat-07/04
+title: "Self-hosted runner workflow calls metadata service URLs"
+subject: job
+severity: high
+confidence: medium
+description: >
+  Job on a self-hosted runner has a `run:` step that calls IMDS / metadata
+  service endpoints (169.254.169.254, metadata.google.internal, ...). On a
+  misconfigured cloud-hosted runner this returns the runner's instance role
+  credentials. NOTE: confirming the runner is actually cloud-hosted and that
+  IMDS is reachable requires runner host-state / cloud-trust data, which is
+  deferred; this rule ports only the workflow-text-expressible signal.
+
+where:
+  all_of:
+    - self_hosted == true
+  any_of:
+    # Plain YAML scalar — no escape processing, so a single literal backslash
+    # reaches the regex engine as \. (the regex literal-dot escape).
+    - steps.run matches 169\.254\.169\.254|metadata\.google\.internal|instance-data\.ec2\.internal|metadata\.azure\.com
+
+evidence:
+  - "Self-hosted job references IMDS endpoint(s)."
+
+remediation_hint: >
+  Block IMDS at the runner host (IMDSv2 + ttl=1, or block traffic at the
+  network layer); use OIDC instead of instance role credentials.

@@ -1,0 +1,27 @@
+id: cat-10/ai-agents-pat-and-cloud-creds
+scenario_id: cat-10/10
+title: "Agent env contains PAT or cloud credentials alongside agent step"
+subject: job
+severity: high
+confidence: medium
+description: >
+  The agent step (or its surrounding job env) references secrets whose
+  names suggest cloud credentials or a PAT (AWS_*, GH_PAT, NPM_TOKEN,
+  GITHUB_TOKEN passed explicitly, etc.). Those credentials are visible to
+  the MCP subprocess and any shell tool the agent invokes. NOTE: this build
+  does not classify secret names by credential family, so the rule fires
+  whenever an agent job reads any secret; inspect secrets_referenced to
+  confirm a PAT/cloud-credential is among them.
+
+where:
+  all_of:
+    - agent_action_class != null
+    - reads_any_secret == true
+
+evidence:
+  - "Agent {{ agent_action_class }} job references secrets {{ secrets_referenced }}"
+
+remediation_hint: >
+  Scrub credential env vars from the agent step (`env: { AWS_*: '' }`); move
+  cloud writes to a separate, gated job that the agent triggers but doesn't
+  share credentials with.

@@ -1,0 +1,21 @@
+id: cat-12/env-bypass-self-review-allowed
+scenario_id: cat-12/04
+title: "Environment allows the deployment author to approve their own deploy"
+subject: environment
+severity: high
+confidence: high
+description: >
+  Environment's prevent_self_review is unset or false. The same actor who
+  triggered the deployment can approve it, collapsing the separation-of-duties
+  intent.
+
+where:
+  all_of:
+    - reviewers_count >= 1
+    - prevent_self_review != true
+
+evidence:
+  - "Environment {{ repo }}/{{ name }} has {{ reviewers_count }} reviewer(s) and prevent_self_review={{ prevent_self_review }}."
+
+remediation_hint: >
+  Enable "Prevent self-review" on the environment.

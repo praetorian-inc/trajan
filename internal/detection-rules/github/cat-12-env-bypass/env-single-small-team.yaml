@@ -1,0 +1,21 @@
+id: cat-12/env-bypass-single-small-team
+scenario_id: cat-12/12
+title: "Environment reviewer is a small / single-person team"
+subject: environment
+severity: medium
+confidence: low
+description: >
+  Environment requires reviewer approval but only one reviewer entry (a team or
+  person). A single compromised reviewer green-lights deployment; there is no
+  genuine quorum.
+
+where:
+  all_of:
+    - reviewers_count == 1
+
+evidence:
+  - "Environment {{ repo }}/{{ name }} has a single reviewer: {{ reviewers_required }}"
+
+remediation_hint: >
+  Add a second independent reviewer team. Even better: require explicit approval
+  from each of two disjoint teams.

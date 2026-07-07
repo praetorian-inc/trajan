@@ -1,0 +1,26 @@
+id: cat-09/docker-gha-cache-mutable
+scenario_id: cat-09/10
+title: "docker/build-push-action uses GHA cache without trust segmentation"
+subject: job
+severity: medium
+confidence: low
+description: >
+  A docker_build_push_action step builds on a PR-ref checkout and uses the GHA
+  registry cache (`cache-from: type=gha`) without further segmentation. The GHA
+  cache is shared across all triggers for the repo, so PR-built layers can be
+  restored on a push to main. Whether `cache-from: type=gha` is set is not
+  expressible from collected facts; this fires on the docker build + PR-ref
+  checkout surface only.
+
+where:
+  all_of:
+    - sinks ∋ {docker_build_push_action}
+  any_of:
+    - has_checkout_of_pr_ref == true
+
+evidence:
+  - "Docker build step on a PR-ref checkout may use GHA cache implicitly. Sinks: {{ sinks }}"
+
+remediation_hint: >
+  Add a `scope:` to the GHA cache that segments by trigger source, OR disable
+  cache-from on PR triggers.

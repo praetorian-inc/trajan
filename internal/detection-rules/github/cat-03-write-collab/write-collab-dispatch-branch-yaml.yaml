@@ -1,0 +1,22 @@
+id: cat-03/write-collab-dispatch-branch-yaml
+scenario_id: cat-03/06
+title: "workflow_dispatch on arbitrary branch (incl. branches with edited YAML)"
+subject: job
+severity: medium
+confidence: medium
+description: >
+  Workflow supports `workflow_dispatch` (any write-collab can run from any ref)
+  AND reads secrets. A write-collab can push a branch with a modified copy of
+  THIS workflow file, then dispatch their version with full secret access.
+
+where:
+  all_of:
+    - triggers ∋ {workflow_dispatch}
+    - reads_any_secret == true
+
+evidence:
+  - "workflow_dispatch + secret reads at {{ _provenance.workflow_file }}:{{ _provenance.yaml_line_range }} — dispatch branch chooses which YAML body runs."
+
+remediation_hint: >
+  Gate dispatch via environment with reviewers, OR restrict dispatch to the
+  default branch via repo settings.

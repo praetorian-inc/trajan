@@ -1,0 +1,24 @@
+id: cat-07/self-hosted-non-ephemeral
+scenario_id: cat-07/11
+title: "Self-hosted runner job — non-ephemeral by default"
+subject: job
+severity: medium
+confidence: low
+description: >
+  Job uses self-hosted runners. Without ephemeral configuration (JIT or ARC
+  ephemeral pods), workspace + home directory persist across runs — attacker
+  code from one run is visible to the next. NOTE: ephemerality is set at
+  runner registration time (host state), which is deferred and not visible in
+  the workflow; this rule flags every self-hosted job as the config-expressible
+  portion of the signal.
+
+where:
+  all_of:
+    - self_hosted == true
+
+evidence:
+  - "Self-hosted job (labels: {{ runner_labels }}). Ephemeral configuration must be enforced at runner registration time."
+
+remediation_hint: >
+  Register runners with --ephemeral; use Actions Runner Controller (ARC)
+  with ephemeral pods.

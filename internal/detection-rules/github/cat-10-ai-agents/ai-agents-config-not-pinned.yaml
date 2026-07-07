@@ -1,0 +1,29 @@
+id: cat-10/ai-agents-config-not-pinned
+scenario_id: cat-10/03
+title: "Agent invoked from workflow_run without restoring config from base ref"
+subject: job
+severity: high
+confidence: medium
+description: >
+  An agent is invoked in a workflow_run downstream that reads PR-controlled
+  content (head_sha checkout) but doesn't explicitly restore agent
+  configuration files (AGENT.md, .mcp.json, settings.json) from the trusted
+  base ref. Attacker can ship a malicious config that the agent then reads.
+  NOTE: detecting an explicit config-restore step (e.g. `git checkout <base>
+  -- <config>`) is not normalized in this build, so this rule fires on the
+  expressible portion (agent + workflow_run + PR-ref checkout) and assumes no
+  restore; that assumption is stated in the evidence rather than verified.
+
+where:
+  all_of:
+    - agent_action_class != null
+    - triggers ∋ {workflow_run}
+    - has_checkout_of_pr_ref == true
+
+evidence:
+  - "Agent {{ agent_action_class }} runs on workflow_run with PR-ref checkout."
+  - "No explicit config-restore detected. Workflow: {{ _provenance.workflow_file }}:{{ _provenance.yaml_line_range }}"
+
+remediation_hint: >
+  Before agent invocation, `git checkout <base-sha> -- <config files>` to
+  restore the trusted agent config.

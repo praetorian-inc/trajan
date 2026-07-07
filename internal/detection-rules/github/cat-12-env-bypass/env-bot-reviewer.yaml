@@ -1,0 +1,28 @@
+id: cat-12/env-bypass-bot-reviewer
+scenario_id: cat-12/02
+title: "Environment's required reviewer is a bot/App or service account"
+subject: environment
+severity: high
+confidence: medium
+description: >
+  Environment requires reviewer approval but the required reviewer is a GitHub
+  App or bot account (Type=Bot or login matches bot patterns). The "human
+  approval" check is automated away.
+
+where:
+  all_of:
+    - reviewers_count >= 1
+  any_of:
+    # Project the `type` field across the reviewers_required list and match on
+    # its value only (avoids false-positives on humans whose login happens to
+    # contain a 'bot' substring).
+    - reviewers_required.type matches "^Bot$"
+    # App-shaped reviewer logins: 'github-actions', 'dependabot[bot]', etc.
+    - reviewers_required.login matches "\[bot\]$|^github-actions$|^dependabot"
+
+evidence:
+  - "Environment {{ repo }}/{{ name }} reviewers: {{ reviewers_required }}"
+
+remediation_hint: >
+  Replace bot-account reviewers with team-based reviewers; bots can be triggered
+  via API, defeating the human-in-the-loop intent.

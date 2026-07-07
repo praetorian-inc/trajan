@@ -1,0 +1,24 @@
+id: cat-03/write-collab-unprotected-branch
+scenario_id: cat-03/02
+title: "Repo has no active ruleset OR legacy protection on default branch"
+subject: chain
+severity: high
+confidence: high
+description: >
+  Default branch has neither an active ruleset nor legacy branch protection. Any
+  write collaborator can push directly to the default branch — workflows that key
+  on default-branch state run their malicious code.
+
+chain_of:
+  join: effective-ruleset
+  for_each: effective_per_branch
+  where:
+    all_of:
+      - active_ruleset_count == 0
+      - legacy_protection_present == false
+
+evidence:
+  - "Repo {{ repo }} default branch `{{ branch }}` is unprotected (no ruleset, no legacy)."
+
+remediation_hint: >
+  Apply a ruleset requiring pull_request review on the default branch.

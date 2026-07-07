@@ -1,0 +1,26 @@
+id: cat-05/workflow-run-pr-comment-channel
+scenario_id: cat-05/08
+title: "PR comment used as cross-workflow channel for sensitive payload"
+subject: chain
+severity: medium
+confidence: low
+description: >
+  A workflow_run downstream job posts to PR/issue comments. Combined with an
+  upstream that ran on PR triggers, the comment becomes a data-laundering
+  channel: upstream's secrets get rendered into a comment downstream posts.
+  Keys on the trigger-channels workflow_run_pairs correlation; matches when the
+  downstream's sinks include a comment-posting sink.
+
+chain_of:
+  join: trigger-channels
+  for_each: workflow_run_pairs
+  where:
+    any_of:
+      - downstream.sinks ∋ {gh_pr_comment, gh_issue_comment, github_script}
+
+evidence:
+  - "Downstream {{ downstream._id }} writes PR comments via workflow_run channel."
+
+remediation_hint: >
+  Validate every value rendered into a PR comment; avoid echoing upstream
+  artifact content verbatim.

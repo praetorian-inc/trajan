@@ -1,0 +1,21 @@
+id: cat-12/env-bypass-custom-rule-webhook
+scenario_id: cat-12/08
+title: "Environment uses custom deployment protection rule (third-party App)"
+subject: environment
+severity: medium
+confidence: low
+description: >
+  Environment includes a custom deployment protection rule. These delegate
+  approval to a third-party App webhook — the App's verification logic is
+  external and can be forged or bypassed.
+
+where:
+  all_of:
+    - has_custom_rules == true
+
+evidence:
+  - "Environment {{ repo }}/{{ name }} uses custom protection rule(s)."
+
+remediation_hint: >
+  Audit the third-party App's verification logic; ensure the webhook receiver
+  actually validates event + payload signature.

@@ -1,0 +1,27 @@
+id: cat-09/setup-action-implicit-cache
+scenario_id: cat-09/05
+title: "Setup-* action's implicit cache used after PR-controlled checkout"
+subject: job
+severity: high
+confidence: medium
+description: >
+  A setup-node / setup-python / setup-java / setup-go step runs with caching
+  enabled (the default in v3+) after a PR-controlled checkout. The cache key is
+  derived from the lockfile in the workspace — an attacker swaps the lockfile in
+  their PR to seed a poisoned cache entry under that key.
+
+where:
+  all_of:
+    - has_checkout_of_pr_ref == true
+  any_of:
+    - action_refs.uses matches "actions/setup-node|setup-python|setup-java|setup-go"
+    - cache_writes != []
+
+evidence:
+  - "Job checks out PR ref then runs a setup-* action with implicit caching."
+  - "Cache writes: {{ cache_writes }}"
+  - "Action refs: {{ action_refs.uses }}"
+
+remediation_hint: >
+  Disable the setup-* implicit cache on PR triggers (`cache: false`) or isolate
+  the cache by a PR-derived key suffix.

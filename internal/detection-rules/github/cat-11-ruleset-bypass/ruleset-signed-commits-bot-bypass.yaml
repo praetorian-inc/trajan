@@ -1,0 +1,28 @@
+id: cat-11/ruleset-signed-commits-bot-bypass
+scenario_id: cat-11/06
+title: "Signed commits required but bypass actors circumvent it"
+subject: chain
+severity: medium
+confidence: medium
+description: >
+  An active ruleset on the default branch requires signed commits but also lists
+  bypass actors (e.g. a GitHub App). App/bot commits are auto-signed by GitHub's
+  verification key, so those actors push commits the system marks as signed by
+  virtue of their identity, defeating the signed-commit invariant.
+  NOTE: joins the effective-ruleset chain (produced by correlate during
+  normalize) and the normalized ruleset entity records.
+
+chain_of:
+  join: effective-ruleset
+  for_each: effective_per_branch
+  where:
+    all_of:
+      - signed_commits_required == true
+      - any_bypass_present_in_active == true
+
+evidence:
+  - "Repo {{ repo }} branch `{{ branch }}` requires signed commits but has bypass actors."
+
+remediation_hint: >
+  Remove App / team identities from bypass actors when signed_commits is the
+  load-bearing control.

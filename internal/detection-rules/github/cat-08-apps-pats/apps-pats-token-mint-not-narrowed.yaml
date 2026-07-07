@@ -1,0 +1,28 @@
+id: cat-08/apps-pats-token-mint-not-narrowed
+scenario_id: cat-08/06
+title: "Workflow mints App installation token without narrowing permissions"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A workflow uses an App-token-minting action (create-github-app-token,
+  tibdex/github-app-token, ...) without specifying permissions: or
+  repositories: to narrow the resulting installation token. The minted token
+  inherits the App's full installation perms — wider than the step needs.
+  Chain items come from the app-mintable derivation; this rule fires on every
+  detected minter (action != null).
+
+chain_of:
+  join: app-mintable
+  for_each: mints
+  where:
+    all_of:
+      - action != null
+
+evidence:
+  - "Minter job {{ minter._id }} uses {{ action_ref }} to mint a token"
+  - "Literal app_id: {{ app_id_literal }} (resolved={{ app_id_resolved }})"
+
+remediation_hint: >
+  Pass permissions: and repositories: inputs to the minter action so the
+  installation token is narrowed to the minimal scope the job needs.

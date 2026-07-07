@@ -1,0 +1,27 @@
+id: cat-05/workflow-run-checkout-execute
+scenario_id: cat-05/02
+title: "workflow_run downstream checks out PR head_sha and executes it"
+subject: chain
+severity: critical
+confidence: high
+description: >
+  A workflow_run downstream job checks out ${{ github.event.workflow_run.head_sha }}
+  (or head_branch) and runs code from it. The head_sha is attacker-controlled
+  (it is the PR's head); downstream runs with base-repo permissions. Keys on
+  the trigger-channels workflow_run_pairs correlation (upstream→downstream,
+  same repo, downstream's on.workflow_run.workflows names the upstream).
+
+chain_of:
+  join: trigger-channels
+  for_each: workflow_run_pairs
+  where:
+    all_of:
+      - downstream.has_checkout_of_pr_ref == true
+      - downstream.executes_checked_out_code == true
+
+evidence:
+  - "Downstream {{ downstream._id }} runs PR code via workflow_run; upstream {{ upstream._id }}"
+
+remediation_hint: >
+  Don't check out PR head in workflow_run. Pass the metadata you need via
+  artifact instead, and validate it before use.

@@ -1,0 +1,29 @@
+id: cat-10/ai-agents-bash-tool-shell-exec
+scenario_id: cat-10/07
+title: "Agent allowlist includes Bash/Shell or runs with bypassPermissions"
+subject: job
+severity: critical
+confidence: high
+description: >
+  The agent is configured with shell-execution tools on its allowlist
+  (Bash, Shell, Write, Edit — surfaced as the shell_exec output channel) or
+  runs with `--permission-mode bypassPermissions`. Any prompt-injection that
+  reaches the agent becomes runner RCE — the agent can execute arbitrary
+  shell commands.
+
+where:
+  all_of:
+    - agent_action_class != null
+  any_of:
+    - agent_bypass_permissions == true
+    - agent_output_channels ∋ {shell_exec}
+
+evidence:
+  - "Agent {{ agent_action_class }} has shell tools enabled: {{ agent_tools_enabled }}"
+  - "bypassPermissions: {{ agent_bypass_permissions }}"
+  - "Output channels: {{ agent_output_channels }}"
+
+remediation_hint: >
+  Drop Bash/Shell/Write tools from the allowlist; never use
+  bypassPermissions in workflows triggered by anything other than
+  workflow_dispatch by maintainers.

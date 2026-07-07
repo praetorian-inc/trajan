@@ -1,0 +1,24 @@
+id: cat-05/workflow-run-conclusion-only-gate
+scenario_id: cat-05/04
+title: "workflow_run downstream gates on conclusion only (pseudo-gate)"
+subject: job
+severity: medium
+confidence: high
+description: >
+  Downstream's if: only checks github.event.workflow_run.conclusion == 'success'.
+  Upstream conclusion is set by upstream itself — the attacker's PR controls
+  upstream and can therefore make it conclude success regardless of what it
+  actually did. Evaluated per-job (not chain): a workflow_run-triggered job whose
+  gate classifier flags a conclusion-only pseudo-gate.
+
+where:
+  all_of:
+    - triggers ∋ {workflow_run}
+    - if_conditions_summary.gate_classifiers.is_pseudo_gate_conclusion == true
+
+evidence:
+  - "workflow_run job gates only on conclusion: if={{ if_conditions_summary.raw }}"
+
+remediation_hint: >
+  Add a separate trust check (actor/repo verification of the upstream run's
+  triggering PR, e.g. require head.repo.fork == false).

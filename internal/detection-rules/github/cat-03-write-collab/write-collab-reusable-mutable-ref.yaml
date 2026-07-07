@@ -1,0 +1,23 @@
+id: cat-03/write-collab-reusable-mutable-ref
+scenario_id: cat-03/09
+title: "Reusable workflow callee pinned to mutable ref (branch/tag)"
+subject: chain
+severity: high
+confidence: high
+description: >
+  Reusable workflow is invoked with a mutable ref. Anyone with write on the
+  callee's repo (incl. self for local callees) can force-push the callee's code;
+  subsequent caller runs execute the new code.
+
+chain_of:
+  join: reusable-callgraph
+  for_each: edges
+  where:
+    all_of:
+      - callee.ref_mutable == true
+
+evidence:
+  - "Caller {{ caller._id }} uses {{ callee.uses }} (ref={{ callee.ref }}, mutable)"
+
+remediation_hint: >
+  Pin to a SHA: `uses: org/repo/.github/workflows/X.yml@<40-char-sha>`.

@@ -1,0 +1,27 @@
+id: cat-11/ruleset-app-in-bypass-actors
+scenario_id: cat-11/08
+title: "GitHub App / automation principal in ruleset bypass actors"
+subject: ruleset
+severity: high
+confidence: medium
+description: >
+  An active ruleset's bypass actors include an automation principal (e.g. an
+  Integration / GitHub App). The App becomes a single point of compromise:
+  anyone holding its private key or any installation token can push past branch
+  protections across every repo where it is in the bypass list.
+  NOTE: this keys on the normalized ruleset entity records. Distinguishing an App
+  (Integration) from other bypass actor types requires the actor_type detail
+  carried in bypass.bypass_always; this ports the any-bypass-present portion and
+  reports the bypass actors so an App entry is visible in the evidence.
+
+where:
+  all_of:
+    - enforcement == "active"
+    - bypass.any_bypass_present == true
+
+evidence:
+  - "Ruleset {{ name }} (scope {{ scope }}) has bypass actors: {{ bypass.bypass_always }}"
+
+remediation_hint: >
+  Drop App entries from the bypass list, or convert to bypass_mode: pull_request
+  so App pushes must still go through a PR.

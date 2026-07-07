@@ -1,0 +1,27 @@
+id: cat-01/prt-checkout-execute
+scenario_id: cat-01/01
+title: "pull_request_target checks out PR head and executes it"
+subject: job
+severity: critical
+confidence: high
+description: >
+  A low-trust trigger checks out the PR head ref and executes that code, running
+  attacker-controlled logic with the base repo's GITHUB_TOKEN and secrets.
+
+where:
+  all_of:
+    - triggers ∋ {pull_request_target, issue_comment, pull_request_review, pull_request_review_comment}
+    - has_checkout_of_pr_ref == true
+    - executes_checked_out_code == true
+  none_of:
+    - if_conditions_summary.gate_strength == "strong"
+
+evidence:
+  - "Trigger {{ triggers }} fires on attacker-controllable events at {{ _provenance.workflow_file }}:{{ _provenance.yaml_line_range }}"
+  - "Checkout of attacker-controlled PR head ref ({{ attacker_context_fields_referenced }})"
+  - "Executes checked-out code via sinks: {{ sinks }}"
+  - "Gate strength: {{ if_conditions_summary.gate_strength }}"
+
+remediation_hint: >
+  Replace pull_request_target with pull_request, OR add a strong actor-based
+  gate, OR move execution to a follow-up workflow that does not check out PR head.

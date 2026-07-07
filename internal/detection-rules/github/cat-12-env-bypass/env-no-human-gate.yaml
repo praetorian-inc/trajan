@@ -1,0 +1,23 @@
+id: cat-12/env-bypass-no-human-gate
+scenario_id: cat-12/01
+title: "Environment has no human gating"
+subject: environment
+severity: high
+confidence: high
+description: >
+  Environment exists but has zero reviewers and zero wait timer. Branch policy
+  alone (deployment_branch_policy) restricts WHICH ref can deploy, not WHO
+  approves — so a write-collaborator can still self-deploy without human review.
+  The environment is decorative for human-in-the-loop.
+
+where:
+  all_of:
+    - reviewers_count == 0
+    - wait_timer_minutes == 0
+
+evidence:
+  - "Environment {{ repo }}/{{ name }} requires no human approval or wait."
+
+remediation_hint: >
+  Add required reviewers (a team, not a bot) or a wait timer. Branch policy is
+  orthogonal: it limits which branch can deploy but does not add human approval.

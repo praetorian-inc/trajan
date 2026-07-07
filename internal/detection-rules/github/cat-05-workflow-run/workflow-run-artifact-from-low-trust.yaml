@@ -1,0 +1,26 @@
+id: cat-05/workflow-run-artifact-from-low-trust
+scenario_id: cat-05/01
+title: "workflow_run downstream reads an artifact written by a low-trust upstream"
+subject: chain
+severity: critical
+confidence: high
+description: >
+  A workflow_run downstream job consumes an artifact produced by an upstream
+  workflow whose triggers are low-trust (pull_request, pull_request_target,
+  issue_comment, ...). Artifact contents are attacker-controllable; downstream
+  treats them as trusted data. Keys on the trigger-channels artifact_handoffs
+  correlation (writer→reader, same repo, matching artifact name).
+
+chain_of:
+  join: trigger-channels
+  for_each: artifact_handoffs
+  where:
+    all_of:
+      - writer.triggers ∋ {pull_request, pull_request_target, issue_comment, pull_request_review, pull_request_review_comment}
+
+evidence:
+  - "Artifact `{{ artifact_name }}`: writer {{ writer._id }} (triggers={{ writer.triggers }}) → reader {{ reader._id }}"
+
+remediation_hint: >
+  Treat all artifact bytes as untrusted; validate schema, hash against a
+  known good, never eval/source/extract-to-workspace blindly.

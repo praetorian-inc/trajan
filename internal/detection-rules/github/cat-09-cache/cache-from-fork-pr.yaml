@@ -1,0 +1,27 @@
+id: cat-09/cache-from-fork-pr
+scenario_id: cat-09/11
+title: "Cache restored by a reader job after a fork PR's writer ran"
+subject: chain
+severity: critical
+confidence: medium
+description: >
+  A cache prefix has at least one fork-PR-class (low-trust) writer and at least
+  one reader. The fork's cache write is implicitly trusted at restore-keys
+  lookup time. Distinguishing a *fork* PR from a same-repo PR is not expressible
+  from collected facts, so low-trust participation stands in for fork-PR class.
+  Keys on the cache-keyspace correlation.
+
+chain_of:
+  join: cache-keyspace
+  for_each: prefix_overlaps
+  where:
+    all_of:
+      - low_trust_participant == true
+      - reader_count >= 1
+
+evidence:
+  - "Prefix `{{ key_prefix }}` mixes low-trust writers with {{ reader_count }} reader(s) ({{ writer_count }} writer(s))."
+
+remediation_hint: >
+  Lock cache writes from fork-PR triggers; or version cache keys by trigger
+  trust class.

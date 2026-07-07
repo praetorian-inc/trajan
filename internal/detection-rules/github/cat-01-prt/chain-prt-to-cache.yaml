@@ -1,0 +1,27 @@
+id: cat-01/chain-prt-to-cache
+scenario_id: cat-01/07
+title: "PRT job writes a cache prefix that a high-trust job reads"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A low-trust trigger job writes to a cache key prefix that is also read by jobs
+  from other (high-trust) triggers. The attacker poisons the cache via a PR, and
+  base-branch builds restore the poisoned cache.
+  NOTE: joins the cache-keyspace chain (the prefix-overlap correlation across
+  jobs), produced by correlate during normalize.
+
+chain_of:
+  join: cache-keyspace
+  for_each: prefix_overlaps
+  where:
+    all_of:
+      - low_trust_participant == true
+
+evidence:
+  - "Cache key prefix `{{ key_prefix }}` is touched by {{ writer_count }} writer(s) and {{ reader_count }} reader(s) including a low-trust trigger."
+
+remediation_hint: >
+  Scope cache keys by trigger context: include github.event_name and
+  github.event.pull_request.head.repo.full_name in the key so PR caches do not
+  collide with base-branch caches.

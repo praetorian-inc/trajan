@@ -1,0 +1,28 @@
+id: cat-08/apps-pats-app-pr-approval-chain
+scenario_id: cat-08/07
+title: "App-token-mint chains into PR approval surface"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A job mints an App installation token from an App whose perms include
+  pull_requests:write (and the App can act regardless of the org-wide "Actions
+  can approve PRs" toggle). The minted token can approve PRs the current user
+  could not. Chain items come from the app-mintable derivation; app.* is null
+  when the app-id literal could not be resolved to an installed App, in which
+  case the workflow-filename heuristic carries the match.
+
+chain_of:
+  join: app-mintable
+  for_each: mints
+  where:
+    any_of:
+      - app.write_permissions ∋ {pull_requests}
+      - minter.workflow_filename matches "approve|approval"
+
+evidence:
+  - "Minter {{ minter._id }} obtains token for App {{ app.slug }} with pull_requests:write"
+
+remediation_hint: >
+  Drop pull_requests:write from the App; have the minter request a narrower
+  installation token via the permissions: input.

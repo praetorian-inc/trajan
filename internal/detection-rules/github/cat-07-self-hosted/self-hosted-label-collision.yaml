@@ -1,0 +1,24 @@
+id: cat-07/self-hosted-label-collision
+scenario_id: cat-07/06
+title: "Self-hosted runner labels shared across trust boundaries"
+subject: job
+severity: medium
+confidence: low
+description: >
+  Self-hosted job's runner_labels are entirely generic (`self-hosted`,
+  `linux`, ...) with no scoping by trust class. Any job with the same labels
+  can land on the same runner — high-trust jobs can be displaced by low-trust
+  ones via label-matching races.
+
+where:
+  all_of:
+    - self_hosted == true
+  any_of:
+    - runner_labels ⊆ {self-hosted, linux, x64, ubuntu, macos, windows}
+
+evidence:
+  - "Job on self-hosted uses generic labels: {{ runner_labels }}"
+
+remediation_hint: >
+  Use named, trust-scoped labels (`prod-linux`, `pr-ci-linux`) that
+  segregate runners by trust class.

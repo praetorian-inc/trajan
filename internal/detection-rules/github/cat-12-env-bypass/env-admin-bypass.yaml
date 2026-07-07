@@ -1,0 +1,20 @@
+id: cat-12/env-bypass-admin-bypass
+scenario_id: cat-12/03
+title: "Environment admins can bypass protection rules"
+subject: environment
+severity: high
+confidence: high
+description: >
+  Environment configured with can_admins_bypass=true. Repo admins (or anyone the
+  org elevated to admin) can dismiss every protection rule on this environment.
+
+where:
+  all_of:
+    - can_admins_bypass == true
+
+evidence:
+  - "Environment {{ repo }}/{{ name }}: can_admins_bypass=true."
+
+remediation_hint: >
+  Disable "Allow administrators to bypass configured protection rules" in the
+  environment settings.
