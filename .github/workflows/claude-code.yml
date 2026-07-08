@@ -9,6 +9,7 @@ on:
 jobs:
   claude-code-action:
     uses: praetorian-inc/public-workflows/.github/workflows/claude-code.yml@3fb9ffbace86c9e93a7b92170241dd54b5031608  # v2.11.3
+    timeout-minutes: 20
     permissions:
       contents: write
       pull-requests: write

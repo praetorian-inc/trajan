@@ -12,5 +12,6 @@ permissions:
 jobs:
   metrics:
     uses: praetorian-inc/public-workflows/.github/workflows/leaderboard-metrics.yml@main
+    timeout-minutes: 20
     with:
       capability_map: '[{"path": ".", "name": "trajan"}]'
