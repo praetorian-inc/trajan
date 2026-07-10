@@ -1,0 +1,30 @@
+id: cat-13/setvariable-control-flip
+scenario_id: cat-13/01
+title: "Commit message echoed to stdout injects ##vso[task.setvariable] to flip a control variable"
+subject: pipeline
+severity: high
+confidence: high
+description: >
+  A step echoes attacker-controlled text (Build.SourceVersionMessage, a PR
+  field, or a branch name) to stdout. The agent unconditionally parses every
+  stdout line for ##vso[...] logging commands. An embedded
+  task.setvariable redefines a control variable for all later steps in the
+  job (and, with isoutput=true, for later stages), flipping a deploy gate or
+  condition the pipeline author trusted. No YAML edit or queue-time
+  permission required — only a crafted commit message.
+
+where:
+  all_of:
+    - echoes_untrusted_to_stdout == true
+    - has_downstream_variable_consumer == true
+
+evidence:
+  - "Pipeline {{ _provenance.pipeline_name }}: step {{ echo_step }} echoes {{ untrusted_source }} to stdout"
+  - "Downstream consumer: {{ variable_consumer_step }} reads variable via macro $({{ consumed_variable }})"
+  - "Logging-command parsing is unconditional — no setting disables it"
+
+remediation_hint: >
+  Never echo attacker-controlled text to stdout. Pipe untrusted data to a
+  file or use task.setvariable with isreadonly=true set by the author BEFORE
+  any untrusted echo. For commit messages, use a dedicated variable set from
+  the Git API rather than echoing Build.SourceVersionMessage.

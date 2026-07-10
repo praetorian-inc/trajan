@@ -1,0 +1,30 @@
+id: cat-13/artifact-upload-exfiltration
+scenario_id: cat-13/05
+title: "Injected ##vso[artifact.upload] exfiltrates local secret files as build artifacts"
+subject: pipeline
+severity: high
+confidence: high
+description: >
+  An injected ##vso[artifact.upload] or ##vso[task.uploadfile] line
+  publishes arbitrary local files — agent credential stores, written-out
+  secret files, service-connection token caches — as a build artifact or
+  log the attacker can later download. No outbound network call required,
+  which defeats firewalled and self-hosted agent egress controls. The
+  upload target is the build's own artifact store, readable by anyone with
+  pipeline Read permission.
+
+where:
+  all_of:
+    - echoes_untrusted_to_stdout == true
+    - earlier_step_writes_secret_file == true
+
+evidence:
+  - "Pipeline {{ _provenance.pipeline_name }}: step {{ echo_step }} echoes {{ untrusted_source }} to stdout"
+  - "Earlier step {{ auth_step }} writes credential file ({{ credential_file_path }})"
+  - "Exfil vector: ##vso[artifact.upload]<path> publishes to downloadable build artifacts"
+
+remediation_hint: >
+  Never echo attacker-controlled data to stdout after an authentication
+  step that writes credential files. Isolate auth tasks and untrusted-echo
+  steps in separate jobs. Clean up credential files immediately after use.
+  Restrict artifact download permissions.

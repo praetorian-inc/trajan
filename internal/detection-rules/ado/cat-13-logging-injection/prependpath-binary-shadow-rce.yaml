@@ -1,0 +1,31 @@
+id: cat-13/prependpath-binary-shadow-rce
+scenario_id: cat-13/02
+title: "Injected ##vso[task.prependpath] shadows a bare binary in a later privileged step"
+subject: pipeline
+severity: critical
+confidence: high
+description: >
+  An injected ##vso[task.prependpath] line in stdout prepends an
+  attacker-controlled directory to PATH for every subsequent step in the
+  job. A later step that calls a binary by bare name (git, az, kubectl,
+  python, dotnet, npm) resolves to the attacker's shim instead, executing
+  arbitrary code with System.AccessToken, mapped secrets, and any
+  service-connection tokens authenticated earlier. Deterministic RCE with
+  no required misconfiguration — ##vso[...] parsing is unconditional.
+  CVE-proven (CVE-2023-21553).
+
+where:
+  all_of:
+    - echoes_untrusted_to_stdout == true
+    - later_step_calls_bare_binary == true
+
+evidence:
+  - "Pipeline {{ _provenance.pipeline_name }}: step {{ echo_step }} echoes {{ untrusted_source }} to stdout"
+  - "Later step {{ bare_binary_step }} calls bare binary {{ bare_binary_name }}"
+  - "PATH hijack window: {{ echo_step }} → {{ bare_binary_step }}"
+
+remediation_hint: >
+  Never echo attacker-controlled data (PR files, commit messages, fetched
+  bodies) to stdout. Use absolute paths for critical binaries in privileged
+  steps. Redirect untrusted output to files instead of stdout. Consider
+  pinning PATH at the start of privileged steps.
