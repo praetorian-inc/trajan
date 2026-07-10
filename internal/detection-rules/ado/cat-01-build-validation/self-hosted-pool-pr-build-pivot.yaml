@@ -1,0 +1,29 @@
+id: cat-01/self-hosted-pool-pr-build-pivot
+scenario_id: cat-01/06
+title: "PR build on a shared non-ephemeral self-hosted pool exposes residual secrets"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A PR-buildable pipeline targets a non-ephemeral self-hosted agent pool that
+  also runs privileged pipelines. The attacker's PR code executes on an agent
+  that retains working directories, cached credentials, and environment state
+  from prior privileged runs, enabling secret harvesting and lateral movement
+  even when the PR pipeline itself carries no secrets.
+
+chain_of:
+  join: shared-pool-exposure
+  for_each: privileged_co_tenants
+  where:
+    all_of:
+      - uses_secrets_or_connections == true
+
+evidence:
+  - "PR-buildable pipeline {{ pr_pipeline }} targets self-hosted pool {{ pool_name }} (ephemeral={{ pool_ephemeral }})"
+  - "Pool also runs privileged pipeline {{ co_tenant_pipeline }} which uses {{ secret_resource_names }}"
+
+remediation_hint: >
+  Use Microsoft-hosted pools for PR/fork validation builds. If self-hosted pools
+  are required, maintain a dedicated pool for untrusted builds with ephemeral
+  agents that do not persist state between jobs. Never share a non-ephemeral
+  pool between PR-validation and secret-consuming pipelines.

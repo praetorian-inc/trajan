@@ -1,0 +1,31 @@
+id: cat-01/trigger-override-false-safe
+scenario_id: cat-01/07
+title: "YAML trigger declaration overridden by branch policy or UI — false-safe state"
+subject: chain
+severity: medium
+confidence: high
+description: >
+  The pipeline's YAML declares pr: none or trigger: none, but the effective
+  trigger is set by a branch-policy Build validation rule (Azure Repos ignores
+  the YAML pr: trigger entirely) or by the pipeline UI's "Override the YAML
+  trigger from here" setting. The in-repo safety declaration is decorative,
+  and the pipeline builds attacker PRs despite appearing hardened.
+
+chain_of:
+  join: trigger-divergence
+  for_each: override_sources
+  where:
+    all_of:
+      - effective_trigger_active == true
+
+evidence:
+  - "Pipeline {{ pipeline_name }} YAML declares {{ yaml_trigger_declaration }}"
+  - "Effective trigger source: {{ override_source }} ({{ override_detail }})"
+  - "Divergence: YAML says inert but pipeline IS PR-triggerable"
+
+remediation_hint: >
+  Do not rely on YAML pr:/trigger: declarations for Azure Repos pipelines —
+  they are ignored. Audit the branch-policy Build validation settings and
+  pipeline UI trigger overrides as the authoritative trigger controls. Remove
+  build-validation policies from pipelines that should not run on PRs. Disable
+  the "Override YAML trigger" option when YAML should be the source of truth.
