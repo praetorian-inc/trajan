@@ -1,0 +1,32 @@
+id: cat-12/overscoped-ai-extension
+scenario_id: cat-12/04
+title: "Org-wide marketplace AI extension requests over-broad OAuth scopes"
+subject: extension
+severity: high
+confidence: high
+description: >
+  A marketplace AI extension installed org-wide requests OAuth scopes far
+  exceeding its stated purpose — e.g. vso.code_manage (read/write/delete
+  code + create/complete PRs org-wide), vso.work_write, or
+  vso.serviceendpoint_query. A single prompt injection activates the full
+  granted scope, and a backdoored auto-update wields it deterministically
+  with no LLM-compliance dependency.
+
+where:
+  all_of:
+    - org_installed == true
+    - auto_update == true
+    - scopes ∋ {vso.code_manage, vso.code_write, vso.work_write, vso.serviceendpoint_query, vso.build_execute}
+  none_of:
+    - scopes ⊆ {vso.code, vso.threads_full, vso.code_status}
+
+evidence:
+  - "Extension {{ extension_name }} (publisher: {{ publisher }}) installed org-wide"
+  - "Granted scopes: {{ scopes }}"
+  - "Auto-update: {{ auto_update }}"
+
+remediation_hint: >
+  Audit the extension's vss-extension.json for requested scopes. Remove
+  scopes that exceed the extension's stated function. Disable auto-update
+  for extensions with write scopes so new versions require re-consent.
+  Prefer extensions that request only vso.code (read) and vso.threads_full.

@@ -1,0 +1,33 @@
+id: cat-12/pr-text-prompt-injection
+scenario_id: cat-12/01
+title: "PR title/description injected into agent prompt with Build Service token"
+subject: pipeline
+severity: high
+confidence: high
+description: >
+  An AI-review pipeline interpolates the PR's free-text fields (title,
+  description, source-version message) directly into the agent prompt. The
+  agent holds System.AccessToken (collection-scoped by default) and has
+  tool-use or shell execution enabled. A Contributor's PR text becomes the
+  agent's instructions, executing before any reviewer acts because build
+  validation fires on PR creation.
+
+where:
+  all_of:
+    - prompt_ingests_untrusted == true
+    - exposes_system_access_token == true
+    - has_agent_tool_use == true
+  any_of:
+    - trigger_is_build_validation == true
+    - trigger_is_pr == true
+
+evidence:
+  - "Pipeline {{ _provenance.pipeline_name }}: prompt ingests untrusted PR text ({{ untrusted_source_fields }})"
+  - "Agent has tool-use/shell execution enabled ({{ agent_tool_type }})"
+  - "System.AccessToken exposed; job auth scope: {{ job_auth_scope }}"
+
+remediation_hint: >
+  Never interpolate raw PR text into agent prompts. Use a sanitization layer
+  that strips instruction-like content. Scope the job authorization to
+  current project. Remove write tools from the agent or gate agent actions
+  behind a human approval step.

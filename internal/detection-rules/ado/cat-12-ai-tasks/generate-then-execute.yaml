@@ -1,0 +1,29 @@
+id: cat-12/generate-then-execute
+scenario_id: cat-12/05
+title: "Agent-generated script or YAML executed in the same run without human review"
+subject: pipeline
+severity: high
+confidence: high
+description: >
+  A pipeline step invokes an agent to generate a build script, pipeline
+  fragment, or remediation patch, then a subsequent step executes that
+  output in the same run. Because the agent's output is shaped by
+  attacker-controlled input (PR text, file contents) and is never reviewed,
+  the generation step becomes a code-injection sink — the model is an
+  unsanitized code source.
+
+where:
+  all_of:
+    - has_generate_then_execute_edge == true
+    - prompt_ingests_untrusted == true
+
+evidence:
+  - "Pipeline {{ _provenance.pipeline_name }}: step {{ generator_step }} generates output consumed by step {{ executor_step }}"
+  - "Generator prompt includes untrusted input from {{ untrusted_source_fields }}"
+  - "Executor step has access to: {{ executor_credentials }}"
+
+remediation_hint: >
+  Never execute agent-generated output in the same run. If generation and
+  execution must be coupled, insert a human review gate (approval check on
+  an environment) between the generate and execute stages. Store generated
+  artifacts for review before any privileged step consumes them.

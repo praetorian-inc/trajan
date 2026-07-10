@@ -1,0 +1,32 @@
+id: cat-12/indirect-injection-agentic-rce
+scenario_id: cat-12/03
+title: "Indirect prompt injection from changed files drives agentic tool-use into RCE"
+subject: pipeline
+severity: high
+confidence: high
+description: >
+  The agent is given shell/tool-use over the build agent and instructed to
+  operate on PR-derived file contents (review, test, fix). A poisoned file
+  in the PR carries indirect prompt injection that makes the agent run
+  attacker commands on the host — full RCE with the agent's token, secrets,
+  and network position. The merge commit is checked out before review.
+
+where:
+  all_of:
+    - executes_checked_out_code == true
+    - has_agent_tool_use == true
+    - prompt_ingests_untrusted == true
+  any_of:
+    - trigger_is_build_validation == true
+    - trigger_is_pr == true
+
+evidence:
+  - "Pipeline {{ _provenance.pipeline_name }}: agent operates on checked-out PR files with {{ agent_tool_type }} tool"
+  - "Checkout of attacker-controlled merge commit + agentic shell/tool-use = RCE sink"
+  - "Secrets in scope: {{ secret_resource_names }}"
+
+remediation_hint: >
+  Do not give agents shell/exec tools when processing untrusted file contents.
+  If agentic tool-use is required, run it in a sandboxed container with no
+  secrets, no service connections, and a project-scoped token. Gate any
+  generated actions behind human review.
