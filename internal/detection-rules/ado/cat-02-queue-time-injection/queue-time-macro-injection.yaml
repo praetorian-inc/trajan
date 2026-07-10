@@ -1,0 +1,27 @@
+id: cat-02/queue-time-macro-injection
+scenario_id: cat-02/01
+title: "Unrestricted queue-time variable macro-expanded into script body"
+subject: pipeline
+severity: critical
+confidence: high
+description: >
+  With "Limit variables that can be set at queue time" disabled, any user who
+  can queue the pipeline can supply arbitrary variables. A macro reference
+  $(var) in a script body splices the user-controlled string into the shell
+  command line, producing command injection without repo write access.
+
+where:
+  all_of:
+    - has_macro_in_script_sink == true
+    - enforce_settable_var == false
+
+evidence:
+  - "Pipeline {{ _provenance.pipeline_name }} has $(var) macro in script sink at {{ taint_sink_locations }}"
+  - "Org/project setting enforce_settable_var = {{ enforce_settable_var }}"
+  - "Any queuer can inject undeclared variables into the build"
+
+remediation_hint: >
+  Enable "Limit variables that can be set at queue time" at the organization
+  level. Avoid macro-expanding user-controllable variables into script bodies;
+  use environment-variable mapping (env:) or runtime parameters with a values
+  allowlist instead.

@@ -1,0 +1,30 @@
+id: cat-02/allow-override-drift
+scenario_id: cat-02/04
+title: "CLI/IaC-set allowOverride variable creates an undocumented injectable surface"
+subject: pipeline
+severity: medium
+confidence: medium
+description: >
+  A pipeline variable has allowOverride set to true via the Azure CLI, REST API,
+  or IaC provisioning — not the Variables UI. With "Limit variables that can be
+  set at queue time" enabled, the team believes only UI-flagged variables are
+  settable, but this out-of-band flag makes the variable injectable. If it flows
+  into a script or arguments sink, a queuer exploits it while the surface
+  appears locked down.
+
+where:
+  all_of:
+    - has_override_var_in_sink == true
+    - override_var_set_out_of_band == true
+    - enforce_settable_var == true
+
+evidence:
+  - "Pipeline {{ _provenance.pipeline_name }}: variable {{ override_var_name }} has allowOverride=true (set via {{ override_source }})"
+  - "Variable flows into sink at {{ taint_sink_locations }}"
+  - "Queue-time limit is ON — team expects the surface to be restricted"
+
+remediation_hint: >
+  Audit pipeline definition state for allowOverride flags set outside the UI.
+  Run az pipelines variable list and compare against the Variables UI. Remove
+  the override flag from variables that flow into script or arguments sinks, or
+  add a values allowlist via runtime parameters.

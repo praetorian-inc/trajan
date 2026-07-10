@@ -1,0 +1,27 @@
+id: cat-02/settable-var-into-arguments
+scenario_id: cat-02/02
+title: "Settable queue-time variable flows into shell task arguments"
+subject: pipeline
+severity: high
+confidence: high
+description: >
+  A variable explicitly marked "Settable at queue time" is macro-expanded into
+  the arguments input of a shell task (Bash, PowerShell, CmdLine, Ssh,
+  AzureFileCopy). Even with the queue-time variable limit enabled, the attacker
+  controls this variable by design and injects shell metacharacters into the
+  command line unless arguments validation is on.
+
+where:
+  all_of:
+    - has_settable_var_in_arguments_sink == true
+    - enable_shell_tasks_args_sanitizing == false
+
+evidence:
+  - "Pipeline {{ _provenance.pipeline_name }}: settable variable {{ settable_var_name }} flows into {{ arguments_sink_task }} arguments"
+  - "Shell tasks arguments validation: {{ enable_shell_tasks_args_sanitizing }}"
+  - "Injection survives the queue-time variable limit because the variable is intentionally settable"
+
+remediation_hint: >
+  Enable "Enable shell tasks arguments validation" at the organization level.
+  Avoid passing queue-time-settable variables into task arguments; use env:
+  mapping or restrict the variable to a values allowlist via runtime parameters.

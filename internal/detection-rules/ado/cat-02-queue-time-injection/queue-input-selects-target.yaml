@@ -1,0 +1,32 @@
+id: cat-02/queue-input-selects-target
+scenario_id: cat-02/05
+title: "Queue-time input selects the agent pool, service connection, or task"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A free-form runtime parameter or settable variable is template-expanded into
+  a compile-time keyword that selects the execution target — pool, service
+  connection, task, or checkout repository. The attacker steers the pipeline
+  onto a higher-privileged or attacker-observable target without injecting a
+  single shell character, escalating privilege through target redirection
+  rather than command injection.
+
+chain_of:
+  join: input-target-redirect
+  for_each: redirectable_targets
+  where:
+    all_of:
+      - higher_privilege_target_reachable == true
+
+evidence:
+  - "Pipeline {{ pipeline_name }}: input {{ input_name }} ({{ input_type }}) selects {{ target_keyword }}"
+  - "Redirectable to {{ redirect_target_name }} ({{ redirect_target_type }})"
+  - "Privilege delta: {{ privilege_comparison }}"
+
+remediation_hint: >
+  Restrict runtime parameters that select pools, service connections, or tasks
+  to a values allowlist of approved targets. Never template-expand a free-form
+  input into pool, azureSubscription, task, or checkout keywords. Use
+  per-pipeline authorization to limit which pools and connections the pipeline
+  can reach.
