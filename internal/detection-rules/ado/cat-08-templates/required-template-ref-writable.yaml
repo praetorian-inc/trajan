@@ -3,7 +3,6 @@ scenario_id: cat-08/08
 title: "Required template check pins a Ref a Contributor can write — governance trusts a moving target"
 subject: chain
 severity: high
-confidence: high
 description: >
   A Required template check is configured on a protected resource, but
   its Ref field points to a branch (or force-movable tag) that a

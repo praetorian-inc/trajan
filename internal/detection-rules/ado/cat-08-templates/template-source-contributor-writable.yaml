@@ -3,7 +3,6 @@ scenario_id: cat-08/01
 title: "Privileged pipeline extends a template from a Contributor-writable repo or unpinned ref"
 subject: chain
 severity: critical
-confidence: high
 description: >
   A production pipeline uses extends or resources.repositories to pull a
   template from a shared repo where Contributors hold Contribute permission,

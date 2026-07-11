@@ -3,7 +3,6 @@ scenario_id: cat-08/03
 title: "Required template satisfied by extends but real logic lives in unchecked includes"
 subject: chain
 severity: high
-confidence: high
 description: >
   The Required template check validates only the extends target, not the
   transitive closure of everything it includes. A thin required extends

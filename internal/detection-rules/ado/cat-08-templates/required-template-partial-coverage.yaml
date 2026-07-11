@@ -3,7 +3,6 @@ scenario_id: cat-08/07
 title: "Required template guards the service connection but not the variable group or environment the job also consumes"
 subject: chain
 severity: high
-confidence: high
 description: >
   A Required template check is configured on the production service
   connection, but the same pipeline job also consumes a variable group,
