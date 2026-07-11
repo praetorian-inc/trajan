@@ -1,0 +1,38 @@
+id: cat-10/deployment-group-overshare
+scenario_id: cat-10/08
+title: "Over-shared deployment pool lets low-trust release stages execute on production targets"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A deployment pool is provisioned across all projects or shared with
+  projects that should not reach production targets. A low-trust release
+  stage executes directly on deployment agents installed on production
+  machines — gaining RCE on infrastructure the attacker's project was
+  never intended to touch. The deployment group is a classic-release
+  construct that YAML-pipeline scanners typically ignore. The risk is
+  the breadth of sharing crossed with which projects can consume the
+  group and what privilege the deployment agent holds on each target.
+
+chain_of:
+  join: deployment-group-trust-boundary
+  for_each: consuming_projects
+  where:
+    all_of:
+      - deployment_group.is_shared_broadly == true
+      - deployment_group.targets_prod_hosts == true
+      - consuming_project.is_low_trust == true
+
+evidence:
+  - "Deployment pool {{ deployment_group.pool_name }} shared with {{ deployment_group.shared_project_count }} projects"
+  - "Deployment group {{ deployment_group.name }} has {{ deployment_group.target_count }} target machines"
+  - "Low-trust project {{ consuming_project.name }} can run release stages on these targets"
+  - "Target tags: {{ deployment_group.target_tags }}"
+
+remediation_hint: >
+  Remove org-wide deployment pool sharing — provision deployment groups
+  per-project and share only with projects that own the target
+  infrastructure. Audit the Manage sharing settings on each deployment
+  pool. Restrict the deployment group Administrator role to prevent
+  unauthorized target registration. Rotate any PATs embedded in target
+  registration scripts.

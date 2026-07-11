@@ -1,0 +1,32 @@
+id: cat-10/pool-open-access-self-hosted
+scenario_id: cat-10/02
+title: "Open access on a self-hosted agent pool lets any pipeline schedule onto internal infrastructure"
+subject: agent_pool
+severity: informational
+confidence: high
+description: >
+  A self-hosted agent pool has Grant access permission to all pipelines
+  enabled. Any Contributor who can create or edit a YAML pipeline in any
+  project that can reach the pool can schedule a job onto it — no
+  per-pipeline authorization request needed. This is the enabling
+  primitive for host-resident secret theft, IMDS credential harvesting,
+  and network-pivot scenarios on shared non-ephemeral agents. The finding
+  is a posture check; severity rises when the pool is confirmed to host
+  privileged agents or carry high-value host-resident assets.
+
+where:
+  all_of:
+    - grant_all_pipelines == true
+    - is_self_hosted == true
+
+evidence:
+  - "Agent pool {{ name }}: grant_all_pipelines = {{ grant_all_pipelines }}"
+  - "Pool type: self-hosted ({{ agent_count }} agents)"
+  - "Any pipeline in the project can schedule jobs without explicit authorization"
+
+remediation_hint: >
+  Disable Grant access permission to all pipelines on every self-hosted
+  pool. Authorize only the specific pipelines that require the pool.
+  Add Approvals and Checks (branch control gated to refs/heads/main,
+  approval with requester-cannot-approve) on the pool resource so that
+  even authorized pipelines must pass a gate before scheduling.

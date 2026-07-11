@@ -1,0 +1,40 @@
+id: cat-10/capability-spoofing-rogue-agent
+scenario_id: cat-10/06
+title: "Rogue agent registered with matching capabilities attracts a privileged pipeline job"
+subject: chain
+severity: medium
+confidence: medium
+description: >
+  An attacker holding the Administrator role on an agent pool registers
+  an agent advertising the exact capabilities a privileged pipeline job
+  demands. Azure Pipelines routes the job — with its secrets, service
+  connections, and System.AccessToken — to the attacker-controlled
+  machine. The pipeline YAML is legitimate; the malicious element is an
+  agent that should not exist whose capabilities match a sensitive
+  demand set. The severity is de-rated because Administrator already
+  controls the pool (small privilege delta); spoofing adds only
+  precision targeting.
+
+chain_of:
+  join: rogue-agent-capability-match
+  for_each: demand_matched_pipelines
+  where:
+    all_of:
+      - pool.has_unexpected_agent == true
+      - pipeline.demands_match_rogue == true
+      - consumes_privileged_resource == true
+
+evidence:
+  - "Agent pool {{ pool.name }} has agent {{ rogue_agent.name }} registered by {{ rogue_agent.registrar }}"
+  - "Agent capabilities match demands of pipeline {{ pipeline_name }}"
+  - "Matched demands: {{ matched_demands }}"
+  - "Pipeline consumes privileged resource: {{ privileged_resource_names }}"
+
+remediation_hint: >
+  Restrict the pool Administrator role to infrastructure teams only —
+  remove the default grants from Build Administrators, Release
+  Administrators, and Project Administrators on shared pools. Monitor
+  agent registration events for unexpected additions. Use dedicated
+  pools with locked-down agent registrations for privileged pipelines
+  rather than shared pools with demands-based routing. Add Approvals
+  and Checks on the pool to gate consumption.
