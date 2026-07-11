@@ -1,0 +1,39 @@
+id: cat-07/classic-pipeline-creation-allowed
+scenario_id: cat-07/06
+title: "Classic pipeline creation still allowed bypasses YAML-only guardrails"
+subject: chain
+severity: medium
+confidence: high
+description: >
+  The organization or project has not set "Disable creation of classic
+  build pipelines" and/or "Disable creation of classic release pipelines."
+  A Contributor can create a classic designer pipeline that reaches the
+  same service connections, variable groups, and agent pools protected by
+  YAML-side controls (extends templates, required reviews, branch
+  policies) — none of which apply to classic pipelines. Classic release
+  pipelines additionally have a separate job authorization scope toggle
+  that is frequently left unrestricted, granting collection-scoped tokens
+  even when YAML pipelines are project-scoped.
+
+chain_of:
+  join: classic-bypass-path
+  for_each: shared_protected_resources
+  where:
+    any_of:
+      - disable_classic_build_pipeline_creation == false
+      - disable_classic_release_pipeline_creation == false
+
+evidence:
+  - "Setting disable_classic_build_pipeline_creation = {{ disable_classic_build_pipeline_creation }} at {{ setting_scope }} level"
+  - "Setting disable_classic_release_pipeline_creation = {{ disable_classic_release_pipeline_creation }} at {{ setting_scope }} level"
+  - "Shared resource {{ resource_name }} ({{ resource_type }}) is reachable by a classic pipeline without YAML-side checks"
+  - "Release job auth scope: enforce_job_auth_scope_for_releases = {{ enforce_job_auth_scope_for_releases }}"
+
+remediation_hint: >
+  Enable "Disable creation of classic build pipelines" and "Disable
+  creation of classic release pipelines" at the organization level so
+  the setting applies to all projects. If classic pipelines must remain
+  for legacy workloads, enable "Limit job authorization scope to current
+  project for release pipelines" and apply Approvals and Checks on every
+  shared service connection and variable group to gate classic-pipeline
+  consumption.

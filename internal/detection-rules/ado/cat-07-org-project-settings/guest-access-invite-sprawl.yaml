@@ -1,0 +1,35 @@
+id: cat-07/guest-access-invite-sprawl
+scenario_id: cat-07/08
+title: "External guest access and admin-invite delegation widen the pipeline-capable attacker population"
+subject: org
+severity: informational
+confidence: medium
+description: >
+  The organization has both "External guest access" and "Allow team and
+  project administrators to invite new users" enabled. Together these
+  policies create a low-friction path for an external identity to join a
+  project with Contributor-level rights — gaining the ability to create
+  and edit pipelines, queue runs, and attach service connections without
+  a Project Collection Administrator approving the invitation. This
+  widens the attacker population for every pipeline weakness in the
+  catalog. The finding is an identity-plane precondition that multiplies
+  pipeline-attack surface.
+
+where:
+  all_of:
+    - external_guest_access == true
+    - allow_admins_to_invite == true
+
+evidence:
+  - "Org policy: External guest access = {{ external_guest_access }}"
+  - "Org policy: Allow team and project administrators to invite new users = {{ allow_admins_to_invite }}"
+  - "External identities can be added to pipeline-capable groups without PCA approval"
+
+remediation_hint: >
+  Disable "External guest access" if external collaboration is not
+  required. If guest access is necessary, disable "Allow team and project
+  administrators to invite new users" so that only Project Collection
+  Administrators can add external identities. Audit group memberships for
+  external guests in pipeline-capable roles (Contributors, Build
+  Administrators). Ensure Conditional Access and MFA cover guest
+  identities.

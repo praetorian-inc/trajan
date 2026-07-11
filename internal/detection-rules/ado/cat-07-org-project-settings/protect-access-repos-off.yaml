@@ -1,0 +1,37 @@
+id: cat-07/protect-access-repos-off
+scenario_id: cat-07/01
+title: "Protect access to repos in YAML pipelines OFF lets job token reach unreferenced repos"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  The organization or project setting "Protect access to repositories in
+  YAML pipelines" is disabled. With this toggle OFF, a pipeline's
+  System.AccessToken can read (and potentially write) Azure DevOps repos
+  that the pipeline never declares via checkout or uses — so any
+  Contributor who can edit a pipeline silently reaches repos beyond its
+  declared dependencies. The setting defaults to OFF for organizations
+  created before May 2020. When combined with an unrestricted job
+  authorization scope, reach extends to every repo in every project.
+
+chain_of:
+  join: unscoped-repo-token
+  for_each: reachable_unreferenced_repos
+  where:
+    all_of:
+      - protect_access_to_repos == false
+      - pipeline_is_editable == true
+
+evidence:
+  - "Setting protect_access_to_repos = {{ protect_access_to_repos }} at {{ setting_scope }} level"
+  - "Pipeline {{ pipeline_name }} can reach repo {{ unreferenced_repo_name }} (project {{ unreferenced_repo_project }}) without declaring it"
+  - "Job authorization scope: {{ job_authorization_scope }} — amplifies cross-project reach when collection-scoped"
+  - "Build service identity {{ build_service_identity }} has {{ repo_permission }} on the unreferenced repo"
+
+remediation_hint: >
+  Enable "Protect access to repositories in YAML pipelines" at the
+  organization level so the setting applies to all projects and cannot be
+  turned off per project. This restricts each pipeline's token to only
+  repos explicitly referenced by a checkout step or uses statement. Also
+  restrict the job authorization scope to the current project for both
+  release and non-release pipelines.

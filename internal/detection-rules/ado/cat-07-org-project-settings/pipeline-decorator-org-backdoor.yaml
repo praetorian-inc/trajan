@@ -1,0 +1,41 @@
+id: cat-07/pipeline-decorator-org-backdoor
+scenario_id: cat-07/03
+title: "Installed pipeline decorator extension injects steps into every job org-wide"
+subject: extension
+severity: high
+confidence: high
+description: >
+  A private marketplace extension contributing type
+  ms.azure-pipelines.pipeline-decorator is installed in the organization.
+  Pipeline decorators silently inject steps into the pre-job or post-job
+  phase of every job in every pipeline org-wide. The injected steps run
+  with each job's System.AccessToken and secret context. Pipeline authors
+  cannot see or opt out of the decorator — it appears in no committed
+  YAML. A malicious or over-broad decorator is the highest-leverage
+  org-settings backdoor: one extension compromises the entire fleet.
+
+where:
+  all_of:
+    - has_pipeline_decorator_contribution == true
+    - is_installed == true
+  any_of:
+    - decorator_targets ∋ "ms.azure-pipelines-agent-job.pre-job-tasks"
+    - decorator_targets ∋ "ms.azure-pipelines-agent-job.post-job-tasks"
+    - decorator_targets ∋ "ms.azure-pipelines-agent-job.pre-task-tasks"
+    - decorator_targets ∋ "ms.azure-pipelines-agent-job.post-task-tasks"
+    - decorator_targets ∋ "ms.azure-pipelines-agent-job.post-checkout-tasks"
+
+evidence:
+  - "Extension {{ extension_id }} ({{ extension_name }}) is installed and contributes a pipeline decorator"
+  - "Decorator targets: {{ decorator_targets }}"
+  - "Publisher: {{ publisher_id }} — template: {{ decorator_template_path }}"
+  - "Injected steps run with each job's System.AccessToken and secrets"
+
+remediation_hint: >
+  Audit every installed extension for ms.azure-pipelines.pipeline-decorator
+  contributions. Review the decorator template YAML for outbound network
+  calls, secret access, or arbitrary script execution. Uninstall any
+  decorator whose publisher or template is not explicitly sanctioned.
+  Restrict extension installation rights to a minimal set of trusted
+  administrators and require a review process before installing private
+  extensions.
