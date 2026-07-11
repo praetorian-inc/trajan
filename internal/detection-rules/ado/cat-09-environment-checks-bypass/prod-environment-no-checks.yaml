@@ -1,0 +1,38 @@
+id: cat-09/prod-environment-no-checks
+scenario_id: cat-09/01
+title: "Prod environment has zero approvals and checks — deploys run ungated"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A production environment has no approvals or checks configured, so any
+  deployment job targeting it runs immediately with no human gate. Because
+  checks live on the resource and not in YAML, a Contributor who can edit
+  the pipeline ships arbitrary code to prod under the prod service
+  connection's privileges. The environment appears correct in pipeline
+  YAML, but the absence of a check object on the environment means the
+  deployment stage has nothing to satisfy before executing.
+
+chain_of:
+  join: ungated-prod-environment
+  for_each: consuming_pipelines
+  where:
+    all_of:
+      - environment.checks == []
+      - pipeline.has_deployment_job_targeting == true
+      - consumes_privileged_resource == true
+      - pipeline.contributor_can_edit_yaml == true
+
+evidence:
+  - "Environment {{ environment.name }} has zero approvals and checks"
+  - "Deployment job in pipeline {{ pipeline_name }} targets this environment"
+  - "Stage consumes privileged resource: {{ privileged_resource_names }}"
+  - "Any Contributor who can edit the pipeline ships to prod with no gate"
+
+remediation_hint: >
+  Add at least an Approval check on the production environment with
+  requester-cannot-approve-own-runs enabled. Add a Branch control check
+  scoped to refs/heads/main (or the release branch) with branch protection
+  required. Consider adding a Required template check to enforce a
+  hardened deployment template. Ensure every resource the deploy stage
+  consumes also carries its own checks.

@@ -1,0 +1,38 @@
+id: cat-09/branch-control-allows-all-refs
+scenario_id: cat-09/04
+title: "Branch control check allows all refs or treats unknown protection as pass"
+subject: environment
+severity: high
+confidence: high
+description: >
+  The environment carries a Branch control check whose allowed-branches
+  list contains a wildcard pattern such as refs/heads/* or an overly broad
+  prefix, and/or whose "require branch protection" toggle is off or whose
+  "unknown protection status" behavior is set to allow. This makes the
+  branch control gate decorative — a Contributor creates or pushes to any
+  branch, runs the privileged pipeline from that ref, and the static check
+  passes because every branch matches the allowed list and no protection
+  is enforced. The check appears present in the Approvals tab, giving
+  false assurance.
+
+where:
+  all_of:
+    - checks ∋ "BranchControl"
+  any_of:
+    - checks[].settings.allowed_branches contains "refs/heads/*"
+    - checks[].settings.allowed_branches contains "*"
+    - checks[].settings.verify_branch_protection == false
+    - checks[].settings.allow_unknown_status_branches == true
+
+evidence:
+  - "Environment {{ name }}: Branch control allowed branches = {{ checks[].settings.allowed_branches }}"
+  - "Verify branch protection: {{ checks[].settings.verify_branch_protection }}"
+  - "Allow unknown protection status: {{ checks[].settings.allow_unknown_status_branches }}"
+
+remediation_hint: >
+  Restrict the Branch control allowed-branches list to fully qualified
+  protected branches (e.g. refs/heads/main, refs/heads/release/*) that
+  correspond to branches with enforced branch policies. Enable "Require
+  branches to have protection" and set the unknown-protection-status
+  behavior to deny. Audit that no Contributor can create a branch matching
+  the allowed pattern without a review policy.

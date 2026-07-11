@@ -1,0 +1,33 @@
+id: cat-09/environment-open-access
+scenario_id: cat-09/02
+title: "Environment grants open access to all pipelines"
+subject: environment
+severity: high
+confidence: high
+description: >
+  The environment's Pipeline permissions are set to open access (grant
+  access permission to all pipelines), allowing any pipeline in the
+  project — including ones authored by Contributors — to target it in a
+  deployment job. Combined with weak or absent checks, an attacker creates
+  or edits a pipeline to deploy to the environment and inherits the
+  service connection details from its attached VM or Kubernetes resources.
+  The finding requires the environment to front a privileged resource;
+  open access on a non-production environment with no privileged
+  connections is not a finding.
+
+where:
+  all_of:
+    - grant_all_pipelines == true
+  none_of:
+    - checks ∋ "Approval"
+
+evidence:
+  - "Environment {{ name }} has grant_all_pipelines = true (open access)"
+  - "No Approval check configured — any authorized pipeline deploys without review"
+  - "Checks present: {{ checks }}"
+
+remediation_hint: >
+  Select "Restrict permission" on the environment's Pipeline permissions
+  to revoke open access. Explicitly authorize only the trusted deployment
+  pipelines. Add an Approval check with self-approval restricted and a
+  Branch control check scoped to protected branches.
