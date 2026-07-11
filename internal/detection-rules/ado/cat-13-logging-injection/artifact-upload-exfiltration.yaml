@@ -3,7 +3,6 @@ scenario_id: cat-13/05
 title: "Injected ##vso[artifact.upload] exfiltrates local secret files as build artifacts"
 subject: pipeline
 severity: high
-confidence: high
 description: >
   An injected ##vso[artifact.upload] or ##vso[task.uploadfile] line
   publishes arbitrary local files — agent credential stores, written-out

@@ -3,7 +3,6 @@ scenario_id: cat-13/03
 title: "Injected ##vso[task.setendpoint] redirects a live service connection or captures its token"
 subject: pipeline
 severity: critical
-confidence: high
 description: >
   An injected ##vso[task.setendpoint] line mutates a service connection
   in-flight — redirecting its URL to an attacker host or overwriting its

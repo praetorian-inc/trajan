@@ -3,7 +3,6 @@ scenario_id: cat-13/01
 title: "Commit message echoed to stdout injects ##vso[task.setvariable] to flip a control variable"
 subject: pipeline
 severity: high
-confidence: high
 description: >
   A step echoes attacker-controlled text (Build.SourceVersionMessage, a PR
   field, or a branch name) to stdout. The agent unconditionally parses every

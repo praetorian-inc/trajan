@@ -3,7 +3,6 @@ scenario_id: cat-13/02
 title: "Injected ##vso[task.prependpath] shadows a bare binary in a later privileged step"
 subject: pipeline
 severity: critical
-confidence: high
 description: >
   An injected ##vso[task.prependpath] line in stdout prepends an
   attacker-controlled directory to PATH for every subsequent step in the
