@@ -2,8 +2,7 @@ id: cat-07/service-hook-outbound-exfil
 scenario_id: cat-07/10
 title: "Service hook Webhooks subscription posts event metadata to an external URL"
 subject: service_hook
-severity: informational
-confidence: high
+severity: info
 description: >
   A service-hook subscription uses the Webhooks consumer with action
   "Post a request through HTTP" to send event metadata (commits, builds,
@@ -24,8 +23,8 @@ where:
 evidence:
   - "Service hook subscription {{ subscription_id }} in project {{ project_name }}"
   - "Consumer: Webhooks — action: Post via HTTP to {{ target_url }}"
-  - "Trigger event: {{ event_type }} — fires for resources visible to creator {{ creator_identity }}"
-  - "Edit subscriptions delegated to: {{ delegated_groups }}"
+  - "Trigger event: {{ event_type }}"
+  - "Subscription status: {{ status }}"
 
 remediation_hint: >
   Audit service-hook subscriptions for Webhooks consumers targeting
