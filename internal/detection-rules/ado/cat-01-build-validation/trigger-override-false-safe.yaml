@@ -3,7 +3,6 @@ scenario_id: cat-01/07
 title: "YAML trigger declaration overridden by branch policy or UI — false-safe state"
 subject: chain
 severity: medium
-confidence: high
 description: >
   The pipeline's YAML declares pr: none or trigger: none, but the effective
   trigger is set by a branch-policy Build validation rule (Azure Repos ignores
