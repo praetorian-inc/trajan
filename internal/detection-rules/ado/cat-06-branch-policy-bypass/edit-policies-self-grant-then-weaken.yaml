@@ -28,7 +28,7 @@ chain_of:
       - triggers_privileged_pipeline == true
 
 evidence:
-  - "Identity {{ identity_name }} has Edit policies (EditPolicies) on {{ branch }}"
+  - "Identity {{ identity_name }} has {{ matched_permission }} on {{ branch }}"
   - "Branch {{ branch }} has required policies: {{ required_policy_names }}"
   - "Branch triggers privileged pipeline {{ pipeline_name }}"
   - "Holder can disable/downgrade any branch policy or self-grant bypass permissions"
