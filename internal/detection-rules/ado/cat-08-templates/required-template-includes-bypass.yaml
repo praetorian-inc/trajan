@@ -1,0 +1,38 @@
+id: cat-08/required-template-includes-bypass
+scenario_id: cat-08/03
+title: "Required template satisfied by extends but real logic lives in unchecked includes"
+subject: chain
+severity: high
+confidence: high
+description: >
+  The Required template check validates only the extends target, not the
+  transitive closure of everything it includes. A thin required extends
+  shell immediately includes a second template that does the actual work.
+  The included file is not itself a required template and lives in a
+  Contributor-writable repo or branch. The check shows green while
+  attacker-controlled steps compile and run inside the consumer pipeline.
+  Governance is decorative — the enforcement boundary stops at extends and
+  does not follow the include graph.
+
+chain_of:
+  join: template-includes-bypass
+  for_each: included_templates
+  where:
+    all_of:
+      - included_template.is_required == false
+      - included_template.contributor_can_write == true
+      - extends_template.is_required == true
+      - consumes_privileged_resource == true
+
+evidence:
+  - "Pipeline {{ pipeline_name }} extends required template {{ extends_template.path }}"
+  - "Required template includes {{ included_template.path }} from {{ included_template.repo }}"
+  - "Included template is NOT a required template and is writable by {{ included_template.write_grantees }}"
+  - "Consumer holds privileged resource: {{ privileged_resource_names }}"
+
+remediation_hint: >
+  Apply a Required template check to every template in the include chain,
+  not just the top-level extends target. Alternatively, collapse the
+  include into the required template itself so no unchecked transitive
+  dependency exists. Restrict Contribute permission on every template
+  repo in the graph to trusted maintainers.

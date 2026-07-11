@@ -1,0 +1,38 @@
+id: cat-08/cross-project-template-collection-token
+scenario_id: cat-08/06
+title: "Cross-project template checkout runs with a collection-scoped token"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A pipeline pulls a template from another project's repository and runs
+  with a collection-scoped System.AccessToken because Limit job
+  authorization scope to current project is OFF. Code in that template
+  can use the broad token to read and write repos across every project in
+  the organization. The cross-project template link is the vector; the
+  collection-scoped token is the blast-radius multiplier. Each fact
+  individually passes review — the risk is the intersection of the
+  cross-project edge, template-repo writability, and unrestricted scope.
+
+chain_of:
+  join: cross-project-template-scope
+  for_each: cross_project_templates
+  where:
+    all_of:
+      - template_source.is_cross_project == true
+      - template_source.contributor_can_write == true
+      - enforce_job_auth_scope == false
+
+evidence:
+  - "Pipeline {{ pipeline_name }} extends template from project {{ template_source.project }}"
+  - "Template repo: {{ template_source.repo }} ref: {{ template_source.ref }}"
+  - "Template repo writable by {{ template_source.write_grantees }}"
+  - "Job authorization scope: collection-wide (enforce_job_auth_scope = {{ enforce_job_auth_scope }})"
+
+remediation_hint: >
+  Enable Limit job authorization scope to current project for build
+  pipelines at the organization level. If the cross-project template must
+  remain, restrict Contribute permission on the template repo to trusted
+  maintainers and pin the ref to an immutable SHA or protected branch.
+  Consider moving the template into the consumer project's repo to
+  eliminate the cross-project edge.

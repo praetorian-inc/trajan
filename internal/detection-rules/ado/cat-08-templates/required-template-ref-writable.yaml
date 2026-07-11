@@ -1,0 +1,37 @@
+id: cat-08/required-template-ref-writable
+scenario_id: cat-08/08
+title: "Required template check pins a Ref a Contributor can write — governance trusts a moving target"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A Required template check is configured on a protected resource, but
+  its Ref field points to a branch (or force-movable tag) that a
+  Contributor can push to. The attacker edits the required template
+  itself, so every pipeline that passes the check now extends
+  attacker-controlled YAML. The check panel shows green while the
+  template it validates has been subverted. This inverts the usual
+  template-bypass scenario: instead of evading the check, the attacker
+  controls what the check requires.
+
+chain_of:
+  join: writable-required-template-ref
+  for_each: required_template_checks
+  where:
+    all_of:
+      - required_template.ref_is_mutable == true
+      - required_template.ref_contributor_can_write == true
+      - consumes_privileged_resource == true
+
+evidence:
+  - "Required template check on {{ resource_name }} ({{ resource_type }})"
+  - "Template repo: {{ required_template.repository }} ref: {{ required_template.ref }}"
+  - "Ref is mutable (branch or force-movable tag) and writable by {{ required_template.write_grantees }}"
+  - "Resource consumed by pipeline {{ pipeline_name }}"
+
+remediation_hint: >
+  Pin the Required template check Ref to an immutable tag or a SHA
+  commit hash — not a branch name. If a branch must be used, protect
+  it with required reviewers, build validation, and restrict Contribute
+  permission to template maintainers only. Audit the template repo's
+  branch policies to ensure the checked ref cannot be force-pushed.
