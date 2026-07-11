@@ -3,7 +3,6 @@ scenario_id: cat-11/08
 title: "Feed view promotion is a Contributor-level action — @Release is not an approval gate"
 subject: feed
 severity: high
-confidence: high
 description: >
   Promoting packages to the @Release view is a Feed Contributor action,
   not a separate approval workflow. The channel teams trust as curated

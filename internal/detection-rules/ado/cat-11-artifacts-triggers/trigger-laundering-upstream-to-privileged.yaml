@@ -3,7 +3,6 @@ scenario_id: cat-11/01
 title: "Low-trust upstream pipeline launders code into a privileged downstream via resource trigger"
 subject: chain
 severity: high
-confidence: high
 description: >
   A pipelines resource with trigger true makes a privileged downstream
   pipeline auto-run whenever a low-trust upstream CI pipeline completes.
