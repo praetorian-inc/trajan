@@ -3,7 +3,6 @@ scenario_id: cat-14/02
 title: "Contributor-editable task group consumed by privileged pipelines"
 subject: chain
 severity: critical
-confidence: high
 description: >
   A shared task group grants Edit permission to a low-trust group
   (Contributors by default) and is referenced by one or more classic

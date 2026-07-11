@@ -16,20 +16,20 @@ description: >
 
 where:
   all_of:
-    - stage.is_prod == true
-    - stage.has_service_connection == true
-    - stage.gates.enabled == true
-    - stage.pre_deployment_approval.enabled == false
-    - any_of:
-        - stage.gates.success_criteria_empty == true
-        - stage.gates.target_is_external == true
+    - is_prod_stage == true
+    - has_service_connection == true
+    - gates_enabled == true
+    - pre_deployment_approval_enabled == false
+  any_of:
+    - gates_success_criteria_empty == true
+    - gates_target_is_external == true
 
 evidence:
-  - "Classic release {{ release_name }} stage {{ stage.name }} gate type: {{ stage.gates.type }}"
-  - "Gate target: {{ stage.gates.target_url }}"
-  - "Success criteria: {{ stage.gates.success_criteria }}"
-  - "Pre-deployment approval alongside gate: {{ stage.pre_deployment_approval.enabled }}"
-  - "Stage deploys with connection {{ stage.service_connection_name }}"
+  - "Classic release {{ release_name }} stage {{ stage_name }} gate type: {{ gates_type }}"
+  - "Gate target: {{ gates_target_url }}"
+  - "Success criteria: {{ gates_success_criteria }}"
+  - "Pre-deployment approval alongside gate: {{ pre_deployment_approval_enabled }}"
+  - "Stage deploys with connection {{ service_connection_name }}"
 
 remediation_hint: >
   Never rely on gates alone as the sole promotion control for production

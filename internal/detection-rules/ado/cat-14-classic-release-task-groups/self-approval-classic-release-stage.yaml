@@ -3,7 +3,6 @@ scenario_id: cat-14/01
 title: "Classic release prod stage allows self-approval or has no pre-deployment approval"
 subject: classic_release
 severity: high
-confidence: high
 description: >
   A classic release pipeline's production stage either has pre-deployment
   approvals disabled entirely, or has the "requestor should not approve"
@@ -14,17 +13,17 @@ description: >
 
 where:
   all_of:
-    - stage.is_prod == true
-    - stage.has_service_connection == true
-    - any_of:
-        - stage.pre_deployment_approval.enabled == false
-        - stage.pre_deployment_approval.requestor_cannot_approve == false
+    - is_prod_stage == true
+    - has_service_connection == true
+  any_of:
+    - pre_deployment_approval_enabled == false
+    - pre_deployment_approval_requestor_cannot_approve == false
 
 evidence:
-  - "Classic release {{ release_name }} stage {{ stage.name }} consumes connection {{ stage.service_connection_name }}"
-  - "Pre-deployment approval enabled: {{ stage.pre_deployment_approval.enabled }}"
-  - "Requestor-cannot-approve policy: {{ stage.pre_deployment_approval.requestor_cannot_approve }}"
-  - "Approvers: {{ stage.pre_deployment_approval.approvers }}"
+  - "Classic release {{ release_name }} stage {{ stage_name }} consumes connection {{ service_connection_name }}"
+  - "Pre-deployment approval enabled: {{ pre_deployment_approval_enabled }}"
+  - "Requestor-cannot-approve policy: {{ pre_deployment_approval_requestor_cannot_approve }}"
+  - "Approvers: {{ pre_deployment_approval_approvers }}"
 
 remediation_hint: >
   Enable pre-deployment approvals on every production stage. Check the
