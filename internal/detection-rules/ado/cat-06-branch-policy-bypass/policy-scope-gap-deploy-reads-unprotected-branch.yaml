@@ -1,0 +1,37 @@
+id: cat-06/policy-scope-gap-deploy-reads-unprotected-branch
+scenario_id: cat-06/06
+title: "Branch policies protect main but privileged deploy pipeline builds an unprotected branch"
+subject: chain
+severity: critical
+confidence: high
+description: >
+  Branch policies are configured for main with exact-match scope, but the
+  production deploy pipeline triggers from a release/* (or hotfix/*, tag, etc.)
+  branch that has no required policies. A Contributor pushes directly to the
+  unprotected branch — no PR, no reviewer, no build gate — and the deploy
+  pipeline ships their code to production. The finding is the join failure
+  between policy scope (which branches are protected) and pipeline trigger
+  configuration (which branch the privileged pipeline actually builds).
+  ADO branch policies default to exact match and do not migrate when branches
+  are renamed or created.
+
+chain_of:
+  join: policy-scope-vs-pipeline-trigger
+  for_each: unprotected_trigger_branches
+  where:
+    all_of:
+      - has_required_policy == false
+      - triggers_privileged_pipeline == true
+
+evidence:
+  - "Protected branch {{ protected_branch }} has required policies (exact match)"
+  - "Deploy pipeline {{ pipeline_name }} triggers from {{ trigger_branch }} which has NO required branch policy"
+  - "Pipeline consumes privileged resources: {{ privileged_resource_names }}"
+  - "Any Contributor with Contribute permission can push directly to {{ trigger_branch }}"
+
+remediation_hint: >
+  Apply branch policies to every branch that triggers a privileged pipeline,
+  not just main. Use --branch-match-type prefix to cover branch families like
+  release/* and hotfix/*. Audit pipeline trigger and resource configurations
+  to ensure every deployed branch is protected. When renaming branches,
+  manually recreate policies on the new branch — ADO does not migrate them.
