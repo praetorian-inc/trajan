@@ -3,7 +3,6 @@ scenario_id: cat-09/02
 title: "Environment grants open access to all pipelines"
 subject: environment
 severity: high
-confidence: high
 description: >
   The environment's Pipeline permissions are set to open access (grant
   access permission to all pipelines), allowing any pipeline in the

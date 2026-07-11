@@ -3,7 +3,6 @@ scenario_id: cat-09/01
 title: "Prod environment has zero approvals and checks — deploys run ungated"
 subject: chain
 severity: high
-confidence: high
 description: >
   A production environment has no approvals or checks configured, so any
   deployment job targeting it runs immediately with no human gate. Because
