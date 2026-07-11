@@ -1,0 +1,36 @@
+id: cat-14/task-group-edit-affects-all
+scenario_id: cat-14/02
+title: "Contributor-editable task group consumed by privileged pipelines"
+subject: chain
+severity: critical
+confidence: high
+description: >
+  A shared task group grants Edit permission to a low-trust group
+  (Contributors by default) and is referenced by one or more classic
+  build or release pipelines that deploy with production service
+  connections or secret variable groups. A single edit to the task group
+  silently propagates to every consuming pipeline via minor-version
+  auto-pickup, giving the attacker code execution under each consumer's
+  own prod credentials — an edit-once-affects-all supply-chain foothold.
+
+chain_of:
+  join: task-group-consumer-fan-out
+  for_each: consuming_pipelines
+  where:
+    all_of:
+      - low_trust_can_edit == true
+      - consumes_privileged_resource == true
+
+evidence:
+  - "Task group {{ task_group_name }} grants Edit to {{ edit_grantees }}"
+  - "Referenced by {{ consumer_count }} pipelines including {{ consuming_pipeline_name }}"
+  - "Consumer stage {{ consuming_stage_name }} uses connection {{ consuming_service_connection }}"
+  - "Version reference: {{ version_spec }} (minor-version auto-pickup)"
+
+remediation_hint: >
+  Restrict "Edit task group" permission to Build Administrators or
+  Project Administrators only — remove the default Contributors grant.
+  Pin consuming pipelines to a reviewed major version rather than a
+  minor-version wildcard. Audit the task group's References tab to
+  understand blast radius. Consider migrating from task groups to YAML
+  templates with required-template checks for supply-chain integrity.

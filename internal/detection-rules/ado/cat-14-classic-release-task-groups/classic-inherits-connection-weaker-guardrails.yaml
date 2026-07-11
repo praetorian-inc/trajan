@@ -1,0 +1,42 @@
+id: cat-14/classic-inherits-connection-weaker-guardrails
+scenario_id: cat-14/05
+title: "Classic release consumes a checked resource under weaker guardrails than YAML"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A prod service connection or secret variable group is protected by
+  YAML-side Approvals and Checks (branch control, approval, required
+  template) but is also consumable by a classic release pipeline where
+  those resource checks do not apply. With classic pipeline creation
+  still allowed (the disable toggles are off by default) and the
+  release job authorization scope at organization level, a release
+  Contributor blocked from the YAML deploy path creates or edits a
+  classic release that names the same credential and runs under the
+  weaker classic approval model they can satisfy.
+
+chain_of:
+  join: classic-yaml-guardrail-asymmetry
+  for_each: checked_resources
+  where:
+    all_of:
+      - has_yaml_checks == true
+      - classic_consumption_ungated == true
+      - disable_classic_release_pipeline_creation == false
+
+evidence:
+  - "Resource {{ resource_name }} ({{ resource_type }}) has YAML checks: {{ yaml_check_types }}"
+  - "Classic release {{ classic_release_name }} stage {{ classic_stage_name }} consumes the same resource"
+  - "Classic stage pre-deployment approval: {{ classic_pre_deployment_approval }}"
+  - "Disable classic release creation: {{ disable_classic_release_pipeline_creation }}"
+  - "Release job auth scope limited to project: {{ enforce_job_auth_scope_for_releases }}"
+
+remediation_hint: >
+  Enable "Disable creation of classic release pipelines" at the
+  organization and project level to close the parallel weaker path.
+  Where classic must remain, ensure every classic release stage
+  consuming a prod credential has pre-deployment approvals equivalent
+  to the YAML-side checks. Enable "Limit job authorization scope to
+  current project for release pipelines" to prevent classic releases
+  from reaching cross-project resources. Audit existing classic
+  definitions for residual prod credential usage after YAML migration.

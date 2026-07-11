@@ -1,0 +1,41 @@
+id: cat-14/release-gate-fails-open
+scenario_id: cat-14/03
+title: "Classic release gate fails open or is satisfied by attacker-controlled signal"
+subject: classic_release
+severity: high
+confidence: medium
+description: >
+  A classic release production stage uses a pre-deployment gate (Invoke
+  REST API, Invoke Azure Function, Query work items, or Query Azure
+  Monitor alerts) as the sole promotion control with no accompanying
+  human approval. The gate's success criteria is empty or permissive
+  (any successful HTTP response passes), or the evaluated endpoint is
+  attacker-controllable, making the gate decorative. A release
+  Contributor who can edit the pipeline and create releases auto-promotes
+  to production with prod credentials and no real review.
+
+where:
+  all_of:
+    - stage.is_prod == true
+    - stage.has_service_connection == true
+    - stage.gates.enabled == true
+    - stage.pre_deployment_approval.enabled == false
+    - any_of:
+        - stage.gates.success_criteria_empty == true
+        - stage.gates.target_is_external == true
+
+evidence:
+  - "Classic release {{ release_name }} stage {{ stage.name }} gate type: {{ stage.gates.type }}"
+  - "Gate target: {{ stage.gates.target_url }}"
+  - "Success criteria: {{ stage.gates.success_criteria }}"
+  - "Pre-deployment approval alongside gate: {{ stage.pre_deployment_approval.enabled }}"
+  - "Stage deploys with connection {{ stage.service_connection_name }}"
+
+remediation_hint: >
+  Never rely on gates alone as the sole promotion control for production
+  stages — always pair gates with a mandatory pre-deployment human
+  approval. Define strict success criteria on Invoke REST API and
+  Invoke Azure Function gates (do not leave the success criteria
+  empty). Ensure gate endpoints are organization-owned and not writable
+  by release contributors. For Query work items gates, restrict who can
+  close or relabel the matching work items.

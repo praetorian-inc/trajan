@@ -1,0 +1,39 @@
+id: cat-14/cross-project-artifact-prod-deploy
+scenario_id: cat-14/04
+title: "Classic release deploys cross-project artifact with prod credentials"
+subject: chain
+severity: critical
+confidence: high
+description: >
+  A classic release pipeline links an artifact source from another ADO
+  project (or an external CI system) and deploys it to a production
+  stage with prod service connections and secret variable groups. With
+  the default organization-level job authorization scope and Default
+  version set to Latest with a continuous deployment trigger, whoever
+  controls the upstream producer controls what ships to prod — without
+  any permission in the consuming project. The trust boundary between
+  projects is implicitly violated by the artifact link.
+
+chain_of:
+  join: artifact-provenance-prod-deploy
+  for_each: artifact_sources
+  where:
+    all_of:
+      - source_outside_project == true
+      - prod_stage_deploys_artifact == true
+
+evidence:
+  - "Classic release {{ release_name }} links artifact from {{ artifact_source_project }} (type: {{ artifact_source_type }})"
+  - "Default version: {{ artifact_default_version }}"
+  - "Continuous deployment trigger: {{ cd_trigger_enabled }}"
+  - "Job authorization scope limited to current project: {{ enforce_job_auth_scope_for_releases }}"
+  - "Prod stage {{ prod_stage_name }} deploys with connection {{ prod_service_connection }}"
+
+remediation_hint: >
+  Enable "Limit job authorization scope to current project for release
+  pipelines" at both organization and project levels to prevent
+  cross-project artifact linking. Pin artifact versions to specific
+  builds rather than using Default version = Latest. Disable
+  continuous deployment triggers on pipelines that consume cross-trust-
+  boundary artifacts. Add pre-deployment approval on the production
+  stage to require human review of artifact provenance before deployment.

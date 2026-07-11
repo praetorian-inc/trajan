@@ -1,0 +1,35 @@
+id: cat-14/self-approval-classic-release-stage
+scenario_id: cat-14/01
+title: "Classic release prod stage allows self-approval or has no pre-deployment approval"
+subject: classic_release
+severity: high
+confidence: high
+description: >
+  A classic release pipeline's production stage either has pre-deployment
+  approvals disabled entirely, or has the "requestor should not approve"
+  policy unchecked, allowing the release creator to approve their own
+  deployment. A release Contributor who can both author the release contents
+  and satisfy the approval gate deploys unreviewed code with prod service
+  connections and secret variable groups with zero second-party review.
+
+where:
+  all_of:
+    - stage.is_prod == true
+    - stage.has_service_connection == true
+    - any_of:
+        - stage.pre_deployment_approval.enabled == false
+        - stage.pre_deployment_approval.requestor_cannot_approve == false
+
+evidence:
+  - "Classic release {{ release_name }} stage {{ stage.name }} consumes connection {{ stage.service_connection_name }}"
+  - "Pre-deployment approval enabled: {{ stage.pre_deployment_approval.enabled }}"
+  - "Requestor-cannot-approve policy: {{ stage.pre_deployment_approval.requestor_cannot_approve }}"
+  - "Approvers: {{ stage.pre_deployment_approval.approvers }}"
+
+remediation_hint: >
+  Enable pre-deployment approvals on every production stage. Check the
+  "The user requesting a release or deployment should not approve it"
+  policy checkbox. Assign approvers from a distinct team that does not
+  include the release contributors who author and queue releases. Avoid
+  single-user or broad-group approvers where the release creator is a
+  member.
