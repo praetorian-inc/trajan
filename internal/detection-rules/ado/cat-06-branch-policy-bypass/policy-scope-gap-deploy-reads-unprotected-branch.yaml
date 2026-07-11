@@ -3,7 +3,6 @@ scenario_id: cat-06/06
 title: "Branch policies protect main but privileged deploy pipeline builds an unprotected branch"
 subject: chain
 severity: critical
-confidence: high
 description: >
   Branch policies are configured for main with exact-match scope, but the
   production deploy pipeline triggers from a release/* (or hotfix/*, tag, etc.)

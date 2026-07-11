@@ -3,7 +3,6 @@ scenario_id: cat-06/04
 title: "Build validation policy set to Optional or Manual — PR completes without a passing build"
 subject: branch_policy
 severity: medium
-confidence: high
 description: >
   The build-validation branch policy on a privileged branch is set to Optional
   (blocking = false) or has its trigger set to Manual. An Optional policy

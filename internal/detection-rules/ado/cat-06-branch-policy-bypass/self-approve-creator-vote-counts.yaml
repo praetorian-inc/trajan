@@ -3,7 +3,6 @@ scenario_id: cat-06/03
 title: "Self-approval allowed: creatorVoteCounts with low reviewer minimum enables single-person merge"
 subject: branch_policy
 severity: high
-confidence: high
 description: >
   The minimum-reviewers branch policy has "Allow requestors to approve their
   own changes" enabled (creatorVoteCounts = true) with a minimum approver

@@ -3,7 +3,6 @@ scenario_id: cat-06/01
 title: "Identity with Bypass-policies-when-pushing can push directly to a CI-triggering protected branch"
 subject: chain
 severity: high
-confidence: high
 description: >
   An identity (or group) has the Bypass policies when pushing permission on a
   branch that has required branch policies and triggers a privileged pipeline.
