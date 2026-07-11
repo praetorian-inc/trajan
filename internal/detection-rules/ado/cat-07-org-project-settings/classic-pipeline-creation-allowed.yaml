@@ -3,7 +3,6 @@ scenario_id: cat-07/06
 title: "Classic pipeline creation still allowed bypasses YAML-only guardrails"
 subject: chain
 severity: medium
-confidence: high
 description: >
   The organization or project has not set "Disable creation of classic
   build pipelines" and/or "Disable creation of classic release pipelines."

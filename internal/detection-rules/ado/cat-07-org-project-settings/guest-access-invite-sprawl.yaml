@@ -2,7 +2,7 @@ id: cat-07/guest-access-invite-sprawl
 scenario_id: cat-07/08
 title: "External guest access and admin-invite delegation widen the pipeline-capable attacker population"
 subject: org
-severity: informational
+severity: info
 confidence: medium
 description: >
   The organization has both "External guest access" and "Allow team and

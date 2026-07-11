@@ -3,7 +3,6 @@ scenario_id: cat-07/03
 title: "Installed pipeline decorator extension injects steps into every job org-wide"
 subject: extension
 severity: high
-confidence: high
 description: >
   A private marketplace extension contributing type
   ms.azure-pipelines.pipeline-decorator is installed in the organization.
