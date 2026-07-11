@@ -1,0 +1,44 @@
+id: cat-04/pcbsa-collection-admin-escalation
+scenario_id: cat-04/05
+title: "PCBSA in Project Collection Administrators enables org takeover via pipeline"
+subject: chain
+severity: high
+description: >
+  The Project Collection Build Service Accounts (PCBSA) group holds membership in
+  Project Collection Administrators, the pipeline runs under a collection-scoped
+  identity (i.e., the job-authorization scope is not restricted to the current
+  project), and a Contributor-level user can edit the pipeline YAML. This chain
+  allows any contributor to author pipeline steps that invoke the ADO REST API
+  using the collection-scoped System.AccessToken with org-admin privileges: adding
+  users to Project Collection Administrators, modifying organization policies,
+  creating or deleting projects, or reading all secrets across the collection.
+  Because this is a non-default grant (PCBSA does not receive collection-admin
+  membership by default), confidence is high and the attack path is fully
+  confirmable from ADO metadata.
+
+chain_of:
+  join: pcbsa_to_pipeline
+  for_each: pipeline
+  where:
+    all_of:
+      - pcbsa.is_collection_admin == true
+      - pipeline.identity_scope == "collection"
+      - pipeline.contributor_can_edit_yaml == true
+
+evidence:
+  - "PCBSA group: {{ pcbsa.display_name }}"
+  - "PCBSA is member of Project Collection Administrators: {{ pcbsa.is_collection_admin }}"
+  - "Pipeline name: {{ pipeline.name }}"
+  - "Pipeline identity scope: {{ pipeline.identity_scope }}"
+  - "Contributor-editable YAML: {{ pipeline.contributor_can_edit_yaml }}"
+  - "Edit-permitted identities: {{ pipeline.yaml_edit_grantees }}"
+
+remediation_hint: >
+  Remove Project Collection Build Service Accounts from the Project Collection
+  Administrators group immediately. Enable "Limit job authorization scope to
+  current project" at the organization level so that pipeline tokens are project-
+  scoped rather than collection-scoped. Restrict pipeline YAML editing to a
+  dedicated maintainer group using ADO pipeline security; do not grant Contributor-
+  level users the ability to modify pipeline definitions on production pipelines.
+  Audit all custom group memberships in Project Collection Administrators and apply
+  the principle of least privilege to all collection-level role assignments.

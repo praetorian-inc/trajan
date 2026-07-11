@@ -1,0 +1,37 @@
+id: cat-04/no-checks-on-service-connection
+scenario_id: cat-04/02
+title: "Per-pipeline service connection with no Approvals & checks"
+subject: service_connection
+severity: high
+description: >
+  A service connection uses per-pipeline authorization (grant_all_pipelines is
+  false) but has no Approvals & checks configured. Per-pipeline authorization
+  binds the connection to a specific pipeline definition, not to a branch. Any
+  branch — including a feature branch, a fork-derived branch, or an attacker-
+  controlled branch — that triggers the authorized pipeline can consume the
+  connection without additional gating. An attacker with the ability to push to
+  an unprotected branch or open a pull request that triggers the pipeline can
+  exfiltrate credentials or perform cloud actions through the connection. Because
+  the absence of checks is directly observable in ADO metadata, confidence is
+  high.
+
+where:
+  all_of:
+    - grant_all_pipelines == false
+    - checks == []
+    - authorized_pipelines != []
+
+evidence:
+  - "Connection name: {{ service_connection.name }}"
+  - "Connection type: {{ service_connection.type }}"
+  - "Authorized pipelines: {{ service_connection.authorized_pipeline_names }}"
+  - "Checks defined: {{ service_connection.checks }}"
+
+remediation_hint: >
+  Add a Branch control check to the service connection to restrict usage to
+  protected branches (e.g., main, release/*). For connections that deploy to
+  production or access sensitive cloud resources, also add an Approval check
+  requiring explicit human sign-off before each pipeline run. Review whether the
+  authorized pipelines themselves run on branches protected by pull-request
+  policies that require reviewer approval, preventing direct pushes that could
+  bypass branch control.

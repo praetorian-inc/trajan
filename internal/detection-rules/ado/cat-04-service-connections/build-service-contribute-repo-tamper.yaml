@@ -1,0 +1,44 @@
+id: cat-04/build-service-contribute-repo-tamper
+scenario_id: cat-04/03
+title: "Build Service Contribute permission enables repo tampering via System.AccessToken"
+subject: chain
+severity: high
+description: >
+  The Project Build Service identity holds Contribute permission on one or more
+  repositories, a pipeline exposes System.AccessToken to its steps, and the target
+  repository has weak or absent branch policies. This combination allows any code
+  running in the pipeline — including code introduced through a pull request — to
+  use the automatically injected System.AccessToken to push commits, force-push
+  branches, or modify ref targets on the target repository. An attacker who can
+  influence pipeline YAML (e.g., via a PR to an unprotected branch) can chain
+  these conditions to tamper with source code, bypass required-reviewer policies
+  on weakly protected branches, or persist a backdoor by rewriting history on a
+  branch that is not protected by signed-commit requirements.
+
+chain_of:
+  join: build_service_to_repo
+  for_each: repo
+  where:
+    all_of:
+      - build_service.has_contribute_on_repo == true
+      - pipeline.exposes_system_access_token == true
+      - repo.branch_policy_is_weak == true
+
+evidence:
+  - "Build Service identity: {{ build_service.display_name }}"
+  - "Target repository: {{ repo.name }}"
+  - "Build Service permission on repo: {{ build_service.permission_level }}"
+  - "Pipeline name: {{ pipeline.name }}"
+  - "System.AccessToken exposed: {{ pipeline.exposes_system_access_token }}"
+  - "Branch policy state: {{ repo.branch_policy_state }}"
+
+remediation_hint: >
+  Remove the Contribute (and Force Push) permission from the Project Build Service
+  identity on sensitive repositories. If the pipeline legitimately needs to push
+  changes (e.g., version bumping), create a dedicated service account with
+  narrowly scoped permissions and use a stored PAT or service connection instead
+  of System.AccessToken. Strengthen branch policies on all default and release
+  branches: require a minimum number of reviewers, disallow self-approval, and
+  enable the "Require a merge strategy" policy. Restrict System.AccessToken
+  permissions at the pipeline level using the YAML permissions block to read-only
+  where write access is not needed.
