@@ -3,14 +3,12 @@ scenario_id: cat-14/05
 title: "Classic release consumes a checked resource under weaker guardrails than YAML"
 subject: chain
 severity: high
-confidence: high
 description: >
   A prod service connection or secret variable group is protected by
   YAML-side Approvals and Checks (branch control, approval, required
   template) but is also consumable by a classic release pipeline where
   those resource checks do not apply. With classic pipeline creation
-  still allowed (the disable toggles are off by default) and the
-  release job authorization scope at organization level, a release
+  still allowed (the disable toggles are off by default), a release
   Contributor blocked from the YAML deploy path creates or edits a
   classic release that names the same credential and runs under the
   weaker classic approval model they can satisfy.

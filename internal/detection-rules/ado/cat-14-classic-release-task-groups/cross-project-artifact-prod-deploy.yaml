@@ -3,13 +3,10 @@ scenario_id: cat-14/04
 title: "Classic release deploys cross-project artifact with prod credentials"
 subject: chain
 severity: critical
-confidence: high
 description: >
   A classic release pipeline links an artifact source from another ADO
   project (or an external CI system) and deploys it to a production
-  stage with prod service connections and secret variable groups. With
-  the default organization-level job authorization scope and Default
-  version set to Latest with a continuous deployment trigger, whoever
+  stage with prod service connections or secret variable groups. Whoever
   controls the upstream producer controls what ships to prod — without
   any permission in the consuming project. The trust boundary between
   projects is implicitly violated by the artifact link.
