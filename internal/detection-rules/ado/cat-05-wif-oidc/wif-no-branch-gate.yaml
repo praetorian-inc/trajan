@@ -1,0 +1,33 @@
+id: cat-05/wif-no-branch-gate
+scenario_id: cat-05/02
+title: "WIF subject cannot encode branch — no branch-control check is the only gate missing"
+subject: service_connection
+severity: high
+description: >
+  ADO Workload Identity Federation subjects take the form sc://{org}/{project}/{connection}.
+  Unlike GitHub OIDC claims, this subject format has no ref or branch segment, so the federated
+  credential on the app registration cannot distinguish which branch triggered the pipeline.
+  The check layer on the service connection is therefore the only available enforcement point
+  for branch-based access control. When has_branch_control_check is false on an authorized WIF
+  connection, any branch in any authorized pipeline can mint a token with the full RBAC scope
+  of the underlying identity. An attacker with push access to a non-protected branch can trigger
+  a pipeline run and obtain cloud credentials without review.
+
+where:
+  all_of:
+    - auth_scheme == "WorkloadIdentityFederation"
+    - has_branch_control_check == false
+    - is_authorized == true
+
+evidence:
+  - "Service connection: {{ service_connection.name }}"
+  - "WIF subject format: {{ service_connection.wif_subject }}"
+  - "Branch control check present: {{ service_connection.has_branch_control_check }}"
+  - "Authorized pipelines: {{ service_connection.authorized_pipeline_names }}"
+
+remediation_hint: >
+  Add a Branch control check to the service connection and restrict it to the protected branches
+  that legitimately require cloud access (e.g., main, release/*). Because the WIF subject format
+  sc://{org}/{project}/{connection} contains no branch information, this ADO-side check is the
+  sole mechanism available to prevent unprotected branches from minting tokens. Review all
+  authorized pipelines and remove any that do not require production cloud access.

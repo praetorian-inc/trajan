@@ -1,0 +1,33 @@
+id: cat-05/wif-admin-self-authorizes-pipeline
+scenario_id: cat-05/05
+title: "WIF connection admin role held by broad group enables self-authorization of pipelines"
+subject: service_connection
+severity: medium
+description: >
+  A Workload Identity Federation service connection uses per-pipeline authorization
+  (grant_all_pipelines is false), which is the intended hardening posture. However, the
+  Administrator role on the connection is held by a broad group such as Project Administrators.
+  Any member of that group can call the pipelinePermissions REST API to add their own pipeline
+  to the connection's authorized list, self-approving access without a separate approver. The
+  per-pipeline model is designed to require explicit human authorization, but the broad admin
+  grant undermines this control: a single actor can both own the pipeline and authorize it,
+  collapsing a two-party check into a one-party action.
+
+where:
+  all_of:
+    - auth_scheme == "WorkloadIdentityFederation"
+    - grant_all_pipelines == false
+    - admin_role_held_by_broad_group == true
+
+evidence:
+  - "Service connection: {{ service_connection.name }}"
+  - "Admin role grantees: {{ service_connection.admin_role_grantees }}"
+  - "Group membership breadth: {{ service_connection.admin_group_member_count }}"
+
+remediation_hint: >
+  Remove the inherited Project Administrators grant from the Administrator role on the WIF
+  service connection. Replace it with a dedicated, small service-connection-owners group whose
+  membership is separate from pipeline owners. This enforces a two-party authorization model:
+  the pipeline owner cannot be the same identity that approves the connection grant. Audit the
+  pipelinePermissions change log (available via the ADO audit log) for any historical
+  self-authorization events that may indicate prior abuse.

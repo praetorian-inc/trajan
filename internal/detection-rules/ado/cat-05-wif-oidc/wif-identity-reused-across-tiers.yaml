@@ -1,0 +1,37 @@
+id: cat-05/wif-identity-reused-across-tiers
+scenario_id: cat-05/03
+title: "One federated identity authorized to pipelines spanning dev and prod trust tiers"
+subject: chain
+severity: high
+description: >
+  A single WIF service connection — backed by one app registration or managed identity — is
+  authorized to pipelines in both a dev trust tier and a prod trust tier. Because all authorized
+  pipelines share the same federated subject and therefore receive tokens with identical RBAC
+  scope, a dev-tier pipeline (lower code review bar, broader push access, fewer required
+  approvals) can mint tokens with the full privileges of the prod-scoped identity. A contributor
+  who can trigger dev pipelines effectively inherits prod cloud permissions without passing prod
+  environment gates.
+chain_of:
+  join: authorized_pipelines
+  for_each: connection
+  where:
+    all_of:
+      - connection.auth_scheme == "WorkloadIdentityFederation"
+      - connection.authorized_across_trust_tiers == true
+      - connection.dev_tier_pipeline_count > 0
+      - connection.prod_tier_pipeline_count > 0
+
+evidence:
+  - "Service connection: {{ connection.name }}"
+  - "App / managed identity: {{ connection.identity_identifier }}"
+  - "Dev-tier pipelines: {{ connection.dev_tier_pipeline_names }}"
+  - "Prod-tier pipelines: {{ connection.prod_tier_pipeline_names }}"
+  - "Azure RBAC scope: {{ connection.scope_level }}"
+
+remediation_hint: >
+  Create separate WIF service connections backed by separate app registrations or managed
+  identities for each trust tier. Dev pipelines should use a dev-scoped identity with access
+  only to non-production subscriptions; prod pipelines should use a prod-scoped identity
+  protected by Approval and Branch control checks. Distinct federated identity credentials
+  per environment ensure that a compromised or malicious dev pipeline cannot mint tokens
+  carrying prod RBAC assignments.
