@@ -1,0 +1,34 @@
+id: cat-11/feed-view-promotion-bypass
+scenario_id: cat-11/08
+title: "Feed view promotion is a Contributor-level action — @Release is not an approval gate"
+subject: feed
+severity: high
+confidence: high
+description: >
+  Promoting packages to the @Release view is a Feed Contributor action,
+  not a separate approval workflow. The channel teams trust as curated
+  can be populated by any Feed Contributor without review. Additionally,
+  users granted access to a specific view can download packages even
+  without direct feed-level access — and an empty Specific people view
+  silently falls back to the parent feed's permissions, defeating the
+  restriction intent. Together these make @Release a decorative label,
+  not a security boundary.
+
+where:
+  all_of:
+    - has_release_view == true
+    - promote_permission_held_by_contributor == true
+
+evidence:
+  - "Feed {{ name }} has @Release view consumed by production pipelines"
+  - "Promote-to-view permission held by {{ promote_grantees }}"
+  - "View ACL state: {{ view_acl_status }}"
+  - "Any Feed Contributor can promote a package to @Release without approval"
+
+remediation_hint: >
+  Do not treat feed views as security boundaries — they are visibility
+  filters, not approval gates. Restrict Feed Contributor membership to
+  trusted publishers only. If view-scoped access is needed, explicitly
+  configure the view's Specific people list rather than relying on
+  inherited feed permissions. Consider a separate locked-down feed for
+  production-consumed packages with a distinct Contributor set.

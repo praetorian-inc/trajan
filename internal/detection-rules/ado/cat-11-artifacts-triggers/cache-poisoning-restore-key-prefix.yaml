@@ -1,0 +1,36 @@
+id: cat-11/cache-poisoning-restore-key-prefix
+scenario_id: cat-11/04
+title: "Cache@2 poisoning via coarse restoreKeys prefix and PR intermediate-branch scope"
+subject: pipeline
+severity: medium
+confidence: medium
+description: >
+  A pipeline uses Cache@2 with a coarse restoreKeys prefix that omits
+  the lockfile hash. PR runs write to the intermediate-branch cache
+  scope and CI runs on main can read it via prefix fallback — the
+  most-recently-created entry wins. An attacker opens a PR that writes
+  a poisoned cache entry (modified node_modules, tool binaries, or
+  build artifacts) which a subsequent CI run on main restores and
+  executes without re-verification. The attack window is the time
+  between the PR cache-write and the next CI cache-miss on main.
+
+where:
+  all_of:
+    - uses_cache_task == true
+    - restore_keys_is_coarse == true
+    - cached_path_is_executed == true
+    - pr_builds_enabled == true
+
+evidence:
+  - "Pipeline {{ name }} uses Cache@2 with restoreKeys: {{ restore_keys_pattern }}"
+  - "Cached path {{ cached_path }} is executed or imported by later steps"
+  - "PR builds enabled: PR runs write to intermediate-branch cache scope"
+  - "Coarse restoreKeys prefix allows cross-scope fallback to attacker-written entry"
+
+remediation_hint: >
+  Include a lockfile hash in both the primary cache key and every
+  restoreKeys entry so that cache entries are content-addressed. Verify
+  cached artifacts after restore (checksum, signature, or re-install
+  with integrity checks). Consider disabling cache sharing from PR
+  intermediate-branch scopes or using a separate cache key namespace
+  for PR validation runs.

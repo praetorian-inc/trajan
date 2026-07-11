@@ -1,0 +1,42 @@
+id: cat-11/dependency-confusion-upstream-shadow
+scenario_id: cat-11/06
+title: "Dependency confusion via upstream source auto-save shadows internal packages"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  An Azure Artifacts feed has public upstream sources enabled. Packages
+  fetched from an upstream are automatically saved into the feed by any
+  identity with Collaborator role (the default Build Service role) and
+  become immutable permanent entries — even after the upstream is
+  removed. An attacker publishes a same-named package on the public
+  registry (naming-gap variant) or a Collaborator deliberately saves a
+  malicious public version (deliberate-save variant). Either way the
+  poisoned version persists permanently and is consumed by every
+  pipeline that restores from the feed using floating versions. The
+  defect is the union of public upstream auto-save, over-broad
+  Collaborator membership, and consumers using unpinned versions.
+
+chain_of:
+  join: feed-upstream-confusion
+  for_each: vulnerable_packages
+  where:
+    all_of:
+      - feed.has_public_upstream == true
+      - feed.collaborator_population_is_broad == true
+      - consumer.uses_floating_version == true
+
+evidence:
+  - "Feed {{ feed.name }} has public upstream source: {{ feed.upstream_name }}"
+  - "Collaborator population: {{ feed.collaborator_count }} identities including {{ feed.collaborator_grantees }}"
+  - "Package {{ package.name }} consumed with floating version by pipeline {{ consumer.pipeline_name }}"
+  - "Auto-saved packages are immutable and persist after upstream removal"
+
+remediation_hint: >
+  Pin package versions in lock files and verify hashes. Restrict the
+  Collaborator role on the feed to the minimum set of build identities.
+  Use package name-reservation (NuGet ID prefix reservation, npm org
+  scope) to prevent public-registry squatting. Consider disabling
+  upstream sources on feeds that host security-critical internal
+  packages. Audit the feed's saved-from-upstream packages for
+  unexpected entries.

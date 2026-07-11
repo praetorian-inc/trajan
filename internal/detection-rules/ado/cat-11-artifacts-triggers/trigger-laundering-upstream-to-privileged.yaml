@@ -1,0 +1,39 @@
+id: cat-11/trigger-laundering-upstream-to-privileged
+scenario_id: cat-11/01
+title: "Low-trust upstream pipeline launders code into a privileged downstream via resource trigger"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A pipelines resource with trigger true makes a privileged downstream
+  pipeline auto-run whenever a low-trust upstream CI pipeline completes.
+  The downstream executes with its own identity, secrets, and service
+  connections but consumes and runs artifacts produced by the upstream.
+  An attacker who controls the upstream output gets code execution in
+  the privileged context. Neither pipeline YAML is suspicious alone —
+  the vulnerability lives in the trust gap across the trigger edge and
+  the provenance-free artifact consumption.
+
+chain_of:
+  join: trigger-laundering-edge
+  for_each: upstream_pipelines
+  where:
+    all_of:
+      - trigger.enabled == true
+      - upstream.contributor_can_edit == true
+      - downstream.consumes_privileged_resource == true
+      - downstream.executes_upstream_artifact == true
+
+evidence:
+  - "Downstream pipeline {{ downstream.pipeline_name }} triggers on upstream {{ upstream.pipeline_name }}"
+  - "Upstream editable by {{ upstream.edit_grantees }}"
+  - "Downstream consumes privileged resource: {{ downstream.privileged_resource_names }}"
+  - "Downstream executes artifact from upstream workspace without provenance check"
+
+remediation_hint: >
+  Add Approvals and Checks on the downstream pipeline's protected
+  resources so that a triggered run still requires approval before
+  accessing production credentials. Pin the upstream pipeline reference
+  to a specific branch and validate artifact provenance before
+  execution. Consider replacing the trigger with a manual or
+  approval-gated consumption model.
