@@ -2,8 +2,7 @@ id: cat-10/pool-no-checks-self-hosted
 scenario_id: cat-10/07
 title: "No Approvals and Checks on a self-hosted agent pool — any branch can consume the host"
 subject: agent_pool
-severity: informational
-confidence: high
+severity: info
 description: >
   A self-hosted agent pool has no Approvals and Checks configured. Any
   pipeline run from any branch — including attacker-created feature
@@ -22,7 +21,7 @@ where:
 
 evidence:
   - "Agent pool {{ name }}: zero Approvals and Checks configured"
-  - "Pool type: self-hosted ({{ agent_count }} agents)"
+  - "Pool type: self-hosted ({{ size }} agents)"
   - "Any authorized pipeline from any branch can schedule jobs with no gate"
 
 remediation_hint: >
