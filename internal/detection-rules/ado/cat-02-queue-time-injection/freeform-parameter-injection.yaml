@@ -3,7 +3,6 @@ scenario_id: cat-02/03
 title: "Free-form string runtime parameter template-expanded into script sink"
 subject: pipeline
 severity: high
-confidence: high
 description: >
   A runtime parameter of type string with no values allowlist accepts arbitrary
   text from any user who can run the pipeline. When template-expanded via

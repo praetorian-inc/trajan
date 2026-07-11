@@ -3,7 +3,6 @@ scenario_id: cat-02/01
 title: "Unrestricted queue-time variable macro-expanded into script body"
 subject: pipeline
 severity: critical
-confidence: high
 description: >
   With "Limit variables that can be set at queue time" disabled, any user who
   can queue the pipeline can supply arbitrary variables. A macro reference

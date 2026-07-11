@@ -3,7 +3,6 @@ scenario_id: cat-02/05
 title: "Queue-time input selects the agent pool, service connection, or task"
 subject: chain
 severity: high
-confidence: high
 description: >
   A free-form runtime parameter or settable variable is template-expanded into
   a compile-time keyword that selects the execution target — pool, service

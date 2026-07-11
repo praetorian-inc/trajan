@@ -3,7 +3,6 @@ scenario_id: cat-02/02
 title: "Settable queue-time variable flows into shell task arguments"
 subject: pipeline
 severity: high
-confidence: high
 description: >
   A variable explicitly marked "Settable at queue time" is macro-expanded into
   the arguments input of a shell task (Bash, PowerShell, CmdLine, Ssh,
