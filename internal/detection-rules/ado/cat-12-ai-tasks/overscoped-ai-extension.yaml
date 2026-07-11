@@ -3,7 +3,6 @@ scenario_id: cat-12/04
 title: "Org-wide marketplace AI extension requests over-broad OAuth scopes"
 subject: extension
 severity: high
-confidence: high
 description: >
   A marketplace AI extension installed org-wide requests OAuth scopes far
   exceeding its stated purpose — e.g. vso.code_manage (read/write/delete

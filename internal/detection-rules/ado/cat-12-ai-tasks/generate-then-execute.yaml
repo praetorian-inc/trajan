@@ -3,7 +3,6 @@ scenario_id: cat-12/05
 title: "Agent-generated script or YAML executed in the same run without human review"
 subject: pipeline
 severity: high
-confidence: high
 description: >
   A pipeline step invokes an agent to generate a build script, pipeline
   fragment, or remediation patch, then a subsequent step executes that

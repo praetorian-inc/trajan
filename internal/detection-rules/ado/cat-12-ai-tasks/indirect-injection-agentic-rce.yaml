@@ -3,7 +3,6 @@ scenario_id: cat-12/03
 title: "Indirect prompt injection from changed files drives agentic tool-use into RCE"
 subject: pipeline
 severity: high
-confidence: high
 description: >
   The agent is given shell/tool-use over the build agent and instructed to
   operate on PR-derived file contents (review, test, fix). A poisoned file
