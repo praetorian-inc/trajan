@@ -1,0 +1,32 @@
+id: cat-09/dotenv-precedence-clobber-declared-default
+scenario_id: cat-09/03
+title: "dotenv override of a consumer's job/global variable the author believed fixed"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A consumer job declares a security-relevant variable at job/global `variables:` scope and uses
+  it in an execution sink, believing the hard-coded default cannot change. A reachable, lower-trust
+  producer emits a dotenv `KEY=value` whose key collides with that declared name; because dotenv
+  outranks job/global `variables:`, the ingested value silently overrides the author's default,
+  redirecting the consumer's `image:`/deploy target/command. The finding is the name collision plus
+  a trust gradient the producer's controller cannot otherwise cross.
+
+chain_of:
+  join: dotenv-flow
+  where:
+    all_of:
+      - producer.produces_dotenv == true
+      - producer.dotenv_content_attacker_influenced == true
+      - consumer.consumes_dotenv == true
+      - consumer.dotenv_inheritance_unnarrowed == true
+      - consumer.dotenv_key_collides_declared_var == true
+      - consumer.colliding_var_in_exec_sink == true
+      - consumer.runs_on_protected_ref == true
+
+evidence:
+  - "Producer {{ producer._provenance.project_path }} emits a dotenv key that collides with a job/global variable the consumer {{ consumer._provenance.project_path }} declares and uses in an execution sink; dotenv precedence overrides the declared default."
+
+remediation_hint: >
+  Pin security-relevant defaults as protected project/group/instance variables (which outrank
+  dotenv) rather than declaring them at job/global scope, and narrow dotenv inheritance.
