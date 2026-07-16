@@ -1,0 +1,33 @@
+id: cat-09/cache-poisoning-static-key-separation-disabled
+scenario_id: cat-09/04
+title: "Cache poisoning across the protected boundary via a static key with separation disabled"
+subject: chain
+severity: high
+confidence: low
+description: >
+  Protected/unprotected cache separation is disabled (`ci_separated_caches: false`), collapsing
+  both classes into one namespace. A Developer-writable unprotected-branch job writes a static
+  `cache:key` with `policy: pull-push`, and a protected-ref consumer pulls the same key onto
+  executable/loaded paths — extracted before scripts run — giving the low-trust pusher code
+  execution in the protected context. Confidence is low because whether the runner's distributed
+  cache backend persists and serves the object across the boundary is deferred host state.
+
+chain_of:
+  join: cache-keyspace
+  where:
+    all_of:
+      - producer.cache_separation_enabled == false
+      - producer.runs_on_untrusted_ref == true
+      - producer.cache_key_static_cross_boundary == true
+      - producer.cache_policy_writes == true
+      - producer.cache_paths_executable == true
+      - consumer.protected_ref_gate == "strong"
+      - consumer.cache_key_static_cross_boundary == true
+      - consumer.cache_paths_executable == true
+
+evidence:
+  - "With cache separation disabled, unprotected-branch writer {{ producer._provenance.project_path }} shares a static cache key with a protected-ref consumer that extracts executable cached paths."
+
+remediation_hint: >
+  Re-enable "Use separate caches for protected branches" (`ci_separated_caches: true`), or scope
+  the cache key by protection class / ref so unprotected and protected pipelines never collide.
