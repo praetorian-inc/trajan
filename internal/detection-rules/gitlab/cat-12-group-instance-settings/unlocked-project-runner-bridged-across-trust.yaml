@@ -1,0 +1,25 @@
+id: cat-12/unlocked-project-runner-bridged-across-trust
+scenario_id: cat-12/08
+title: "Unlocked project runner enabled across projects of differing trust shares a host across the boundary"
+subject: runner
+severity: high
+confidence: medium
+description: >
+  A project runner with `locked == false` (the non-default deviation) is enabled on two or more
+  projects of differing trust, so a lower-trust project's jobs share a non-ephemeral host with a
+  higher-trust workload. On a non-ephemeral executor the lower-trust Maintainer can read residual
+  build dirs, caches, and checkouts left by the higher-trust project. Whether the executor is
+  non-ephemeral is the deferred half, hence medium confidence.
+
+where:
+  all_of:
+    - runner_type == "project_type"
+    - locked == false
+    - bridges_trust_boundary == true
+
+evidence:
+  - "Unlocked project runner is enabled on {{ projects }}, bridging projects of differing trust on a shared host."
+
+remediation_hint: >
+  Lock the project runner to its project (`locked: true`), or dedicate separate runners to
+  projects of differing trust so higher-trust workloads never share a host.
