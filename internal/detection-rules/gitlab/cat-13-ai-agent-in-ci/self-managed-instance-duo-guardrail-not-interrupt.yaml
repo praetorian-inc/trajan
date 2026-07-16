@@ -1,0 +1,31 @@
+id: cat-13/self-managed-instance-duo-guardrail-not-interrupt
+scenario_id: cat-13/04
+title: "Self-managed instance Duo enabled with instance-level prompt-injection guardrail not set to Interrupt and secrets in a flow's CI job"
+subject: job
+severity: critical
+confidence: low
+description: >
+  On self-managed GitLab the Duo posture is an instance-level admin decision. A flow runs as a CI
+  job on an operator-provisioned `gitlab-duo` runner, ingesting untrusted content, while the
+  instance prompt-injection guardrail is not `INTERRUPT` (either `LOG_ONLY` or `NO_CHECKS`). The
+  job carries an unprotected CI/CD variable and/or a broad job token and the agent has write-capable
+  actions with no per-action approval — the self-managed analog of the SaaS group-level scenarios.
+
+where:
+  all_of:
+    - is_duo_flow == true
+    - any_of:
+        - duo_flow_context_sources ∋ {fork_mr}
+        - duo_flow_context_sources ∋ {issue_comment}
+    - duo_instance_features_enabled == true
+    - duo_instance_guardrail_level != "interrupt"
+    - runner_tags ∋ {gitlab-duo}
+    - duo_flow_secrets_in_scope == true
+    - duo_flow_autonomous_write == true
+
+evidence:
+  - "Duo flow job `{{ _provenance.config_file }}` runs on an operator-provisioned `gitlab-duo` runner with secrets in scope while the instance guardrail is `{{ duo_instance_guardrail_level }}` (not Interrupt) with write-capable autonomous actions."
+
+remediation_hint: >
+  Set the instance-level prompt-injection protection level to `INTERRUPT` under Admin > GitLab Duo,
+  and remove unprotected secrets and autonomous write actions from flows reading untrusted content.
