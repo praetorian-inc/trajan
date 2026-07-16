@@ -1,0 +1,29 @@
+id: cat-12/shared-instance-runners-open-project-creation
+scenario_id: cat-12/06
+title: "Instance runners reachable by open project creation let any account run code on shared compute"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  An instance/shared runner accepts untagged, non-protected jobs while instance runners are
+  available to newly-created projects and project creation is open to any authenticated user. Any
+  account can then create a project, push an untagged job, and land it on the shared fleet with no
+  prior relationship. The runner's host isolation is the deferred half, hence medium confidence.
+  NOTE: joins the runner-reachability chain (runner posture x instance open-creation posture).
+
+chain_of:
+  join: runner-reachability
+  where:
+    all_of:
+      - runner.runner_type == "instance_type"
+      - runner.is_shared == true
+      - runner.run_untagged == true
+      - runner.ref_protected != true
+      - instance.open_project_creation == true
+
+evidence:
+  - "Shared instance runner `{{ runner._provenance.scope }}` accepts untagged non-protected jobs, and open project creation lets any account reach it on shared compute."
+
+remediation_hint: >
+  Restrict instance runners from new projects, require tags / `ref_protected` on shared runners,
+  or lock down project creation so untrusted accounts cannot self-provision onto the fleet.
