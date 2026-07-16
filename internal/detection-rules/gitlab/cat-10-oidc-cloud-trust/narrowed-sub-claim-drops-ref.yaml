@@ -1,0 +1,26 @@
+id: cat-10/narrowed-sub-claim-drops-ref
+scenario_id: cat-10/01
+title: "OIDC subject claim narrowed to drop the ref, so every branch mints the same identity as protected main"
+subject: job
+severity: high
+confidence: medium
+description: >
+  The project narrowed `ci_id_token_sub_claim_components` away from the secure default so the
+  id_token `sub` no longer carries the ref — every branch now mints an identical `sub`. An
+  `id_tokens:` job reachable on a non-protected ref therefore mints a token byte-identical to the
+  trusted `main` pipeline's. Exploitability leans on the deferred cloud/Vault policy having pinned
+  the ref via `sub`, so confidence is medium.
+
+where:
+  all_of:
+    - mints_id_token == true
+    - sub_claim_omits_ref == true
+    - runs_on_untrusted_ref == true
+    - protected_ref_gate != "strong"
+
+evidence:
+  - "id_tokens job mints on an untrusted ref (gate {{ protected_ref_gate }}) while sub_claim_components {{ sub_claim_omits_ref }} omit the ref, so its sub equals protected main's."
+
+remediation_hint: >
+  Restore `ci_id_token_sub_claim_components` to include `ref_type` and `ref`, or gate the id_tokens
+  job to a protected ref so a Developer branch cannot mint the trusted identity.
