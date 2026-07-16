@@ -1,0 +1,27 @@
+id: cat-01/shell-injection-commit-message
+scenario_id: cat-01/06
+title: "Shell injection from a commit message interpolated unquoted into a job script"
+subject: job
+severity: high
+confidence: high
+description: >
+  A job interpolates `$CI_COMMIT_MESSAGE` / `$CI_COMMIT_TITLE` / `$CI_COMMIT_DESCRIPTION`
+  unquoted into its script and is reachable by a lower-trust pusher's commit, with secrets or a
+  self-managed runner in scope.
+
+where:
+  all_of:
+    - script_uses_untrusted_input == true
+    - attacker_input_fields ∋ {commit_message}
+    - runs_on_untrusted_ref == true
+    - any_of:
+        - reads_cicd_variable == true
+        - mints_id_token == true
+        - targets_self_managed_runner == true
+
+evidence:
+  - "Job interpolates an unquoted commit message ({{ attacker_input_fields }}) and is reachable by a lower-trust pusher's commit with secrets or a self-managed runner in scope."
+
+remediation_hint: >
+  Do not interpolate commit messages into a shell; use quoted variables. Restrict secret-bearing
+  jobs to protected refs.
