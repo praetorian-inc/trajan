@@ -1,0 +1,34 @@
+id: cat-09/dotenv-injection-cross-project-needs
+scenario_id: cat-09/01
+title: "dotenv variable injection from a lower-trust upstream project via needs:project"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A consumer job pulls a dotenv report cross-project via `needs:project:…:artifacts:true` from a
+  lower-trust upstream whose producer job emits attacker-influenceable `KEY=value` content on a
+  Developer-writable ref. The consumer does not narrow inheritance and uses an inherited variable
+  in an execution sink (`image:`, script, deploy target), while running in a higher-trust context
+  the upstream Developer holds no membership in. The dotenv values override the consumer's
+  job/global `variables:`, so the injection crosses the project boundary.
+
+chain_of:
+  join: dotenv-flow
+  where:
+    all_of:
+      - producer.produces_dotenv == true
+      - producer.dotenv_content_attacker_influenced == true
+      - producer.runs_on_untrusted_ref == true
+      - consumer.consumes_dotenv == true
+      - consumer.cross_project_needs != []
+      - consumer.dotenv_inheritance_unnarrowed == true
+      - consumer.inherited_var_in_exec_sink == true
+      - consumer.runs_on_protected_ref == true
+
+evidence:
+  - "Consumer {{ consumer._provenance.project_path }} pulls dotenv cross-project via needs:project from lower-trust producer {{ producer._provenance.project_path }} (on untrusted ref) and uses an inherited value in an execution sink without narrowing inheritance."
+
+remediation_hint: >
+  Narrow the consumer with `dependencies: []` or `inherit: {variables: false}`, validate inherited
+  names/values, and pin execution-sensitive values as protected variables rather than trusting
+  cross-project dotenv.
