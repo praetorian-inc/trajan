@@ -1,0 +1,21 @@
+id: cat-02/pipeline-execution-policy-writable-project
+scenario_id: cat-02/07
+title: "Pipeline execution policy sourcing CI from a mutable/writable policy project"
+subject: project
+severity: critical
+confidence: high
+description: >
+  A `pipeline_execution_policy` sources its CI content from a policy project at a mutable or
+  lower-trust-writable ref, and the policy is enforced over projects whose secret trust exceeds
+  the write access on that ref — so a lower-trust actor injects CI into the enforced projects.
+
+where:
+  all_of:
+    - pipeline_execution_policy_from_mutable_project == true
+
+evidence:
+  - "A pipeline_execution_policy sources CI content from a mutable / lower-trust-writable policy project, enforced over higher-trust projects."
+
+remediation_hint: >
+  Pin the policy's `content:` include to a 40-hex SHA on a protected ref, and restrict write
+  access on the policy project to the enforced projects' trust tier.
