@@ -1,0 +1,30 @@
+id: cat-04/group-scoped-inbound-allowlist-entry
+scenario_id: cat-04/02
+title: "Group-scoped inbound job-token allowlist entry with no fine-grained permissions"
+subject: chain
+severity: critical
+confidence: high
+description: >
+  The target's inbound allowlist trusts a whole group (17.0+ group-granularity) with no
+  fine-grained permissions, so it grants the full default action set to every project in that
+  group. A lower-trust member of a group project whose CI is writable makes a cross-project
+  job-token call, and the pipeline runs under a Developer+ target member — so the deputy token
+  reaches the target under the full default action set.
+
+chain_of:
+  join: job-token-allowlist
+  for_each: edges
+  where:
+    all_of:
+      - target.job_token_allowlist.mode == "group_scoped"
+      - target.job_token_allowlist.fine_grained == false
+      - source.job_token_cross_project_use != "none"
+      - source.source_ci_writable_by_lower_trust == true
+      - triggerer.access_level >= "developer"
+
+evidence:
+  - "Target {{ target._provenance.project_path }} allowlist mode {{ target.job_token_allowlist.mode }} (fine_grained {{ target.job_token_allowlist.fine_grained }}); source {{ source._provenance.project_path }} in the trusted group makes a cross-project token call under triggerer role {{ triggerer.access_level }}."
+
+remediation_hint: >
+  Replace the group-scoped allowlist entry with specific vetted projects, and configure
+  fine-grained job-token permissions to narrow the entry to the minimum required actions.
