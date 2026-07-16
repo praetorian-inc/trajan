@@ -1,0 +1,24 @@
+id: cat-05/wildcard-created-protected-branch
+scenario_id: cat-05/03
+title: "Developer creates a new branch matching a wildcard protected-branch rule and runs a protected-ref pipeline"
+subject: project
+severity: high
+confidence: high
+description: >
+  A wildcard protected-branch rule (`*`, `release-*`) grants push or merge to the Developer role
+  (access level 30) — or a group/user entry — and a `protected: true` CI/CD variable is scoped to
+  that pattern. A Developer creates a fresh branch matching the wildcard; it is protected from
+  creation, so its first pipeline runs on a protected ref and receives the protected variable
+  without any pre-existing trusted branch.
+
+where:
+  all_of:
+    - developer_creatable_wildcard_branch == true
+    - protected_var_scoped_to_writable_ref == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} has a wildcard protected-branch rule granting Developer push or merge, and a protected CI/CD variable is scoped to that pattern."
+
+remediation_hint: >
+  Restrict wildcard protected-branch rules' push and merge access to Maintainers so Developers
+  cannot create matching branches that instantiate a protected ref on demand.
