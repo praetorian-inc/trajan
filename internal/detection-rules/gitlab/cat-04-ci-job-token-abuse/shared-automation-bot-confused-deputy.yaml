@@ -1,0 +1,31 @@
+id: cat-04/shared-automation-bot-confused-deputy
+scenario_id: cat-04/04
+title: "Shared automation bot (single service account across trust boundaries) as job-token confused deputy"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A single shared bot / service account is a member of both a low-trust source project and a
+  sensitive target with Developer+, with no per-project isolation — a standing confused deputy.
+  A lower-trust member who controls the source CI the bot executes makes a cross-project
+  job-token call that carries the bot's target reach. Whether the bot actually runs the
+  attacker-influenceable code under its own identity at run time is deferred behavioral state,
+  hence medium confidence.
+
+chain_of:
+  join: job-token-allowlist
+  for_each: edges
+  where:
+    all_of:
+      - triggerer.is_bot == true
+      - triggerer.access_level >= "developer"
+      - source.job_token_cross_project_use != "none"
+      - source.source_ci_writable_by_lower_trust == true
+      - target.job_token_allowlist.trusts_source == true
+
+evidence:
+  - "A shared bot identity (is_bot {{ triggerer.is_bot }}, role {{ triggerer.access_level }}) spans source {{ source._provenance.project_path }} and target {{ target._provenance.project_path }}; the writable source CI makes a cross-project token call ({{ source.job_token_cross_project_use }})."
+
+remediation_hint: >
+  Split the shared automation identity into per-project, least-privilege service accounts so no
+  single bot spans a low-trust source and a sensitive target.
