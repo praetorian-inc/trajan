@@ -1,0 +1,33 @@
+id: cat-09/cache-poisoning-cachekeyfiles-collision
+scenario_id: cat-09/05
+title: "Cache poisoning across the protected boundary via cache:key:files collision"
+subject: chain
+severity: high
+confidence: low
+description: >
+  With protected/unprotected cache separation disabled, a `cache:key:files` key (a hash of listed
+  files such as lockfiles) lets a Developer deterministically collide into a protected pipeline's
+  bucket: they set the hashed file contents on their unprotected branch to match what the protected
+  pipeline hashes, writing poisoned content into the exact content-addressed bucket the protected
+  consumer pulls onto executable paths. Confidence is low because whether the distributed cache
+  backend persists and serves the object across the boundary is deferred host state.
+
+chain_of:
+  join: cache-keyspace
+  where:
+    all_of:
+      - producer.cache_separation_enabled == false
+      - producer.runs_on_untrusted_ref == true
+      - producer.cache_key_files_attacker_writable == true
+      - producer.cache_policy_writes == true
+      - producer.cache_paths_executable == true
+      - consumer.protected_ref_gate == "strong"
+      - consumer.cache_key_files_attacker_writable == true
+      - consumer.cache_paths_executable == true
+
+evidence:
+  - "With cache separation disabled, unprotected-branch writer {{ producer._provenance.project_path }} controls the files a cache:key:files hashes and collides into the protected consumer's bucket over executable cached paths."
+
+remediation_hint: >
+  Re-enable "Use separate caches for protected branches", or ensure `cache:key:files` inputs are
+  not writable by lower-trust actors on refs that share a namespace with protected pipelines.
