@@ -1,0 +1,30 @@
+id: cat-13/external-mcp-server-untrusted-tool-output
+scenario_id: cat-13/05
+title: "Duo CI agent wired via mcp.json to an external MCP server whose tool output is trusted context, with secrets and write actions in scope"
+subject: job
+severity: critical
+confidence: low
+description: >
+  A Duo CI agent is wired through `.gitlab/duo/mcp.json` to an MCP server whose endpoint is outside
+  the org trust boundary, with `duoWorkflowMcpEnabled` on at the group. Every tool call returns
+  content the operator does not control, fed to the model as trusted context. The job carries an
+  unprotected CI/CD variable and/or a broad job token and the agent has write-capable autonomous
+  actions — and the prompt-injection guardrail does not filter MCP tool output, so it is not the
+  lever here.
+
+where:
+  all_of:
+    - is_duo_flow == true
+    - duo_mcp_endpoint_untrusted_host == true
+    - duo_group_features_enabled == true
+    - duo_workflow_mcp_enabled == true
+    - runner_tags ∋ {gitlab-duo}
+    - duo_flow_secrets_in_scope == true
+    - duo_flow_autonomous_write == true
+
+evidence:
+  - "Duo CI agent job `{{ _provenance.config_file }}` is wired via mcp.json to an out-of-trust MCP endpoint with `duoWorkflowMcpEnabled` on, runs on a `gitlab-duo` runner with secrets in scope, and has write-capable autonomous actions."
+
+remediation_hint: >
+  Restrict the agent's MCP servers to org-internal/allowlisted endpoints, isolate tool output as
+  untrusted, and remove secrets and autonomous write actions from the agent's CI job.
