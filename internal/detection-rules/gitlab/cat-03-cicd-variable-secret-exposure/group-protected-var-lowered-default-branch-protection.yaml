@@ -1,0 +1,30 @@
+id: cat-03/group-protected-var-lowered-default-branch-protection
+scenario_id: cat-03/06
+title: "Group-inherited protected variable reached via lowered default-branch protection in a descendant project"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A group (or ancestor/instance) CI/CD variable marked `protected == true` inherits into a
+  descendant whose group/instance `default_branch_protection` default is lowered to
+  "Partially protected"/"Not protected", so Developers may push the descendant's default branch
+  directly. The default branch is still a protected ref, so it receives the inherited secret: a
+  Developer pushes an attacker-authored `.gitlab-ci.yml` to it and reads the group secret. The
+  finding is the cross-scope pairing; lowered default-branch protection alone is cat-05's lane.
+
+chain_of:
+  join: protected-var-reachability
+  where:
+    all_of:
+      - var.scope_level in {group, instance}
+      - var.protected == true
+      - group.default_branch_protection in {partial, none}
+      - group.descendants ∋ member._provenance.project_path
+      - member.access_level == 30
+
+evidence:
+  - "Group protected variable `{{ var.key }}` inherits into descendant `{{ member._provenance.project_path }}` whose default-branch protection is `{{ group.default_branch_protection }}`, letting Developers (max role {{ member.access_level }}) push the still-protected default ref."
+
+remediation_hint: >
+  Raise the group/instance `default_branch_protection_defaults` so Developers cannot push default
+  branches directly, or scope the group secret to trusted projects instead of inherited protection.
