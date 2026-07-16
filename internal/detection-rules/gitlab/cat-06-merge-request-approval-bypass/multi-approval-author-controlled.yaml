@@ -1,0 +1,28 @@
+id: cat-06/multi-approval-author-controlled
+scenario_id: cat-06/03
+title: "Multi-approval gate cleared entirely by author-controlled identities (no independent reviewer)"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  A `approvals_required >= 2` gate looks stronger but is defeated because independence controls are
+  permissive (author or committer approval allowed), the approver set is broad, and the count of
+  distinct independent eligible approvers — those who are neither the author nor a committer — is
+  smaller than the required count. Author-controlled identities supply the full count, so no party
+  independent of the change reviews the code before it merges to a protected branch.
+
+where:
+  all_of:
+    - approvals_required >= 2
+    - approver_set_broad == true
+    - independent_approver_count < approvals_required
+    - any_of:
+        - author_approval_allowed == true
+        - committer_approval_disabled == false
+
+evidence:
+  - "A gate requiring {{ approvals_required }} approvals has only {{ independent_approver_count }} independent eligible approver(s) with author/committer approval permitted, so author-controlled identities clear it."
+
+remediation_hint: >
+  Scope the approval rule to an eligible-approver set with more distinct independent members than the
+  required count, and enable both author- and committer-approval prevention.
