@@ -1,0 +1,33 @@
+id: cat-04/terraform-state-read-poison-via-job-token-backend
+scenario_id: cat-04/05
+title: "Cross-project Terraform/OpenTofu state read and poison via the job-token state backend"
+subject: chain
+severity: critical
+confidence: high
+description: >
+  The source CI calls a different project's managed Terraform/OpenTofu state backend
+  (`/terraform/state/`) with `gitlab-ci-token:$CI_JOB_TOKEN`, and the target's allowlist entry
+  grants state admin — either fine-grained permissions absent (full default set) or an explicit
+  `ADMIN_TERRAFORM_STATE`. Under a Developer+ triggerer with writable source CI, the deputy
+  token reads the target's plaintext state (secrets, resource IDs) and PUTs a poisoned state.
+
+chain_of:
+  join: job-token-allowlist
+  for_each: edges
+  where:
+    all_of:
+      - source.job_token_cross_project_use == "terraform_state"
+      - target.uses_managed_terraform_state == true
+      - target.job_token_allowlist.trusts_source == true
+      - any_of:
+          - target.job_token_allowlist.fine_grained == false
+          - target.job_token_allowlist.policies ∋ {ADMIN_TERRAFORM_STATE}
+      - triggerer.access_level >= "developer"
+      - source.source_ci_writable_by_lower_trust == true
+
+evidence:
+  - "Source {{ source._provenance.project_path }} calls target {{ target._provenance.project_path }}'s managed Terraform state backend cross-project; allowlist entry grants state admin (fine_grained {{ target.job_token_allowlist.fine_grained }}) under triggerer role {{ triggerer.access_level }}."
+
+remediation_hint: >
+  Narrow the allowlist entry's fine-grained permissions to `READ_TERRAFORM_STATE` (or remove
+  Terraform-state access), and scope the entry to specific trusted projects only.
