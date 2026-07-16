@@ -1,0 +1,32 @@
+id: cat-09/cross-project-artifact-executed-no-integrity-check
+scenario_id: cat-09/06
+title: "Cross-project artifact pulled from a mutable source ref and executed without integrity check"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A consumer job pulls an artifact via `needs:project:…:artifacts:true` from a lower-trust project
+  at a mutable branch ref a Developer can push, then extracts/executes the fetched bytes with no
+  checksum/signature/pinned-digest step, while running in a higher-trust context the source-project
+  Developer holds no membership in. GitLab resolves the source by ref, so attacker-controlled bytes
+  are ingested and run with the consumer's credentials. Reachability is via the consumer being on
+  the source's job-token inbound allowlist (private source).
+
+chain_of:
+  join: cross-project-artifact
+  where:
+    all_of:
+      - consumer.cross_project_needs != []
+      - consumer.artifact_source_ref_mutable == true
+      - consumer.executes_fetched_artifact == true
+      - consumer.artifact_integrity_checked == false
+      - consumer.runs_on_protected_ref == true
+      - producer.source_ref_developer_pushable == true
+      - producer.on_consumer_job_token_allowlist == true
+
+evidence:
+  - "Consumer {{ consumer._provenance.project_path }} pulls an artifact from lower-trust producer {{ producer._provenance.project_path }} at a mutable Developer-pushable ref and executes it with no integrity check."
+
+remediation_hint: >
+  Pin cross-project `needs:` to an immutable tag/SHA, verify a checksum or signature before
+  executing the fetched artifact, and do not rely on `artifacts:access` to gate job-token fetches.
