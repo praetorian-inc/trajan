@@ -1,0 +1,27 @@
+id: cat-08/reusable-registration-token-rogue-runner
+scenario_id: cat-08/07
+title: "Legacy runner registration-token flow re-enabled lets a rogue runner steal jobs"
+subject: instance
+severity: high
+confidence: medium
+description: >
+  The legacy reusable runner registration-token flow is re-enabled against the 17.0 default-disable
+  and delegated to project/group members, on a scope that services protected/deploy pipelines. A
+  delegated member (or anyone holding a leaked reusable token) stands up a rogue runner that
+  authenticates to that scope and races the trusted runner for its jobs, capturing their variables and
+  artifacts. Token leak and race outcome are deferred, so this is confidence medium.
+
+where:
+  all_of:
+    - runner_registration_token_allowed == true
+    - any_of:
+        - valid_runner_registrars ∋ {project}
+        - valid_runner_registrars ∋ {group}
+    - reusable_token_scope_serves_secrets == true
+
+evidence:
+  - "Instance has runner_registration_token_allowed={{ runner_registration_token_allowed }} with valid_runner_registrars={{ valid_runner_registrars }}, delegating reusable-token registration on a scope that carries protected variables/deploy credentials."
+
+remediation_hint: >
+  Disable allow_runner_registration_token (keep the 17.0 default) and use per-runner authentication
+  tokens, so a reusable token cannot register additional rogue runners in a trusted scope.
