@@ -1,0 +1,30 @@
+id: cat-13/code-review-flow-fork-mr-guardrail-not-interrupt
+scenario_id: cat-13/01
+title: "Duo Code Review flow runs in CI on a fork merge request with prompt-injection guardrail not set to Interrupt and secrets in scope"
+subject: job
+severity: critical
+confidence: low
+description: >
+  The Duo Code Review flow runs as a `gitlab-duo` CI job that ingests fork-MR
+  description/diff/comments as untrusted context while its group prompt-injection guardrail is
+  detect-only (`LOG_ONLY`), the job carries an unprotected CI/CD variable and/or a broad job
+  token, and the agent has write-capable actions with no per-action approval — so a fork-MR
+  author who never held membership can steer the agent to exfiltrate secrets or act as its
+  service account.
+
+where:
+  all_of:
+    - is_duo_flow == true
+    - duo_flow_context_sources ∋ {fork_mr}
+    - duo_group_features_enabled == true
+    - duo_guardrail_level == "log_only"
+    - runner_tags ∋ {gitlab-duo}
+    - duo_flow_secrets_in_scope == true
+    - duo_flow_autonomous_write == true
+
+evidence:
+  - "Duo Code Review flow job `{{ _provenance.config_file }}` ingests fork-MR content, runs on a `gitlab-duo` runner with secrets in scope, and its group guardrail is `{{ duo_guardrail_level }}` (not Interrupt) with write-capable autonomous actions."
+
+remediation_hint: >
+  Set the group prompt-injection protection level to `INTERRUPT`, remove unprotected secrets from
+  the flow job, and require per-action human approval for write actions on fork-MR-triggered flows.
