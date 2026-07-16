@@ -1,0 +1,27 @@
+id: cat-11/reused-readwrite-deploy-key-cross-trust
+scenario_id: cat-11/08
+title: "Read/write deploy key reused across a trust boundary, pushing to trigger privileged CI"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  The same deploy-key fingerprint is enabled on more than one project with `can_push == true`
+  on at least one, spanning a trust boundary. When such a key pushes a commit, the pushed
+  pipeline runs with the key creator's access to protected environments and secret variables. An
+  attacker who reads the private half from a low-trust project's unprotected variable pushes into
+  a higher-trust project and executes a privileged pipeline their own role could not trigger.
+  Whether the private half is genuinely reachable is the deferred leg, so this is medium.
+chain_of:
+  join: deploy-key-reuse
+  where:
+    all_of:
+      - key.kind == "deploy_key"
+      - key.can_push == true
+      - source.in_unprotected_variable == true
+      - target.holds_protected_resources == true
+      - key.creator_has_target_protected_access == true
+evidence:
+  - "Deploy key {{ key.deploy_key_fingerprint }} (can_push {{ key.can_push }}) is reused on a low-trust project with a reachable private half in an unprotected variable and on a higher-trust project holding protected resources, where its creator has protected-resource access the pushed pipeline inherits."
+remediation_hint: >
+  Use a distinct, read-only deploy key per project, never share a read/write key across a trust
+  boundary, and keep any private key out of unprotected CI/CD variables.
