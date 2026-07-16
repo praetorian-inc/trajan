@@ -1,0 +1,24 @@
+id: cat-02/dynamic-child-pipeline-cross-project-artifact
+scenario_id: cat-02/06
+title: "Dynamic child pipeline built from a cross-project artifact from a lower-trust project"
+subject: job
+severity: high
+confidence: high
+description: >
+  A `trigger: include:` builds a child pipeline from an artifact produced by a generator job that
+  pulls a cross-project artifact from a lower-trust project/ref — so that project's content
+  becomes the child pipeline definition, run with protected variables or a broad job token.
+
+where:
+  all_of:
+    - child_pipeline_from_cross_project_artifact == true
+    - any_of:
+        - reads_protected_variable == true
+        - outbound_job_token_broad == true
+
+evidence:
+  - "Child pipeline is generated from a cross-project artifact pulled from a lower-trust project, with protected variables or a broad job token in scope."
+
+remediation_hint: >
+  Generate child pipelines only from artifacts produced within your trust boundary on a protected
+  ref, and pin cross-project `needs:` to trusted refs.
