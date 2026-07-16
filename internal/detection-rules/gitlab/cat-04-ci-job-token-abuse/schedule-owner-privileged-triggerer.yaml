@@ -1,0 +1,30 @@
+id: cat-04/schedule-owner-privileged-triggerer
+scenario_id: cat-04/03
+title: "Pipeline schedule owned by a privileged user, on a ref a lower-trust member can edit"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A pipeline schedule in the source is owned by a Maintainer/Owner who is a Developer+ member of
+  a sensitive target, but the schedule's ref (or an include it resolves) is writable by a
+  lower-trust member. The scheduled run mechanically executes the edited ref under the owner's
+  identity, so a cross-project job-token call in that CI carries the owner's cross-project reach
+  into the target the attacker holds no membership on.
+
+chain_of:
+  join: job-token-allowlist
+  for_each: edges
+  where:
+    all_of:
+      - triggerer.is_schedule_owner == true
+      - triggerer.access_level >= "developer"
+      - source.job_token_cross_project_use != "none"
+      - source.source_ci_writable_by_lower_trust == true
+      - target.job_token_allowlist.trusts_source == true
+
+evidence:
+  - "Source {{ source._provenance.project_path }} has a schedule owned by a Developer+ target member (role {{ triggerer.access_level }}); its writable ref makes a cross-project token call ({{ source.job_token_cross_project_use }}) reaching target {{ target._provenance.project_path }}."
+
+remediation_hint: >
+  Reassign the schedule to a least-privilege identity, or lock the scheduled ref's
+  `.gitlab-ci.yml` behind a protected branch with CODEOWNERS on the CI config.
