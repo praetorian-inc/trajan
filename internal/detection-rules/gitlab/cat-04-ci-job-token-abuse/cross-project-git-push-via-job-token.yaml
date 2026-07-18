@@ -20,7 +20,7 @@ chain_of:
       - target.job_token_cross_project_push_allowed == true
       - target.job_token_allowlist.trusts_source == true
       - source.job_token_cross_project_use == "git_push"
-      - triggerer.access_level >= "developer"
+      - triggerer.access_level >= 30
       - source.source_ci_writable_by_lower_trust == true
       - any_of:
           - target.developer_writable_protected_branch == true
