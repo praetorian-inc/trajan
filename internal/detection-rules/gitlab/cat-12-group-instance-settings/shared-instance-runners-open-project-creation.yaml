@@ -13,6 +13,7 @@ description: >
 
 chain_of:
   join: runner-reachability
+  for_each: reachable_runners
   where:
     all_of:
       - runner.runner_type == "instance_type"
