@@ -20,7 +20,7 @@ chain_of:
       - target.job_token_allowlist.fine_grained == false
       - source.job_token_cross_project_use != "none"
       - source.source_ci_writable_by_lower_trust == true
-      - triggerer.access_level >= "developer"
+      - triggerer.access_level >= 30
 
 evidence:
   - "Target {{ target._provenance.project_path }} allowlist mode {{ target.job_token_allowlist.mode }} (fine_grained {{ target.job_token_allowlist.fine_grained }}); source {{ source._provenance.project_path }} in the trusted group makes a cross-project token call under triggerer role {{ triggerer.access_level }}."
