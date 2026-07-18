@@ -13,6 +13,7 @@ description: >
   Whether the private half is genuinely reachable is the deferred leg, so this is medium.
 chain_of:
   join: deploy-key-reuse
+  for_each: reused_keys
   where:
     all_of:
       - key.kind == "deploy_key"
