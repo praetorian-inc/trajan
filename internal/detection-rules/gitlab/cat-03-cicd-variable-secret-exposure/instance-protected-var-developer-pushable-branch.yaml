@@ -13,12 +13,12 @@ description: >
 
 chain_of:
   join: protected-var-reachability
+  for_each: reachable_vars
   where:
     all_of:
       - var.scope_level == "instance"
       - var.protected == true
       - branch.push_access_levels ∋ {30}
-      - member._provenance.project_path == branch._provenance.project_path
       - member.access_level == 30
 
 evidence:
