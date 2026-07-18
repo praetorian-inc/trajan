@@ -17,7 +17,7 @@ where:
     - is_duo_flow == true
     - duo_flow_context_sources ∋ {issue_comment}
     - duo_group_features_enabled == true
-    - duo_guardrail_level == "log_only"
+    - duo_guardrail_level == "LOG_ONLY"
     - runner_tags ∋ {gitlab-duo}
     - duo_flow_secrets_in_scope == true
     - duo_flow_autonomous_write == true
