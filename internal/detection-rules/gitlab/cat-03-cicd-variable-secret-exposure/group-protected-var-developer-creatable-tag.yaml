@@ -14,15 +14,14 @@ description: >
 
 chain_of:
   join: protected-var-reachability
+  for_each: reachable_vars
   where:
     all_of:
       - var.scope_level == "group"
       - var.protected == true
-      - group.descendants ∋ tag._provenance.project_path
       - any_of:
           - tag.create_access_levels ∋ {30}
           - tag.pattern matches "^(\\*|v\\*)$"
-      - member._provenance.project_path == tag._provenance.project_path
       - member.access_level == 30
 
 evidence:
