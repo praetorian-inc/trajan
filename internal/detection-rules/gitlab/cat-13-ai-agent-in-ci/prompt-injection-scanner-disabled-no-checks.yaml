@@ -18,7 +18,7 @@ where:
         - duo_flow_context_sources ∋ {fork_mr}
         - duo_flow_context_sources ∋ {issue_comment}
     - duo_group_features_enabled == true
-    - duo_guardrail_level == "no_checks"
+    - duo_guardrail_level == "NO_CHECKS"
     - runner_tags ∋ {gitlab-duo}
     - duo_flow_secrets_in_scope == true
     - duo_flow_autonomous_write == true
