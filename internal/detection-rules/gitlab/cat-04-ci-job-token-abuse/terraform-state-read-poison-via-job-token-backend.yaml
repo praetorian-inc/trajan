@@ -22,7 +22,7 @@ chain_of:
       - any_of:
           - target.job_token_allowlist.fine_grained == false
           - target.job_token_allowlist.policies ∋ {ADMIN_TERRAFORM_STATE}
-      - triggerer.access_level >= "developer"
+      - triggerer.access_level >= 30
       - source.source_ci_writable_by_lower_trust == true
 
 evidence:
