@@ -17,7 +17,7 @@ chain_of:
   where:
     all_of:
       - triggerer.is_schedule_owner == true
-      - triggerer.access_level >= "developer"
+      - triggerer.access_level >= 30
       - source.job_token_cross_project_use != "none"
       - source.source_ci_writable_by_lower_trust == true
       - target.job_token_allowlist.trusts_source == true
