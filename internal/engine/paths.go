@@ -124,7 +124,10 @@ func adoKey(s string) string {
 	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-' {
+		// '_' is deliberately NOT preserved: the NormalizeADO*/CollectADO* helpers
+		// join sanitized components with "__", so a component containing "_" would
+		// make that delimiter ambiguous (X + Y__Z vs X__Y + Z collide).
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' {
 			b.WriteByte(c)
 		} else {
 			b.WriteByte('-')
@@ -242,6 +245,76 @@ func CollectADOChecks(project, rtype, rid string) string {
 }
 func CollectADORepoACL(project, repo string) string {
 	return adoCollect("acl-repo", adoKey(project), adoKey(repo)+".json")
+}
+
+// ---- Azure DevOps normalize paths ----
+func adoNorm(parts ...string) string {
+	return path.Join(append([]string{dirNormalize}, parts...)...)
+}
+
+func NormalizeADOOrg(org string) string { return adoNorm("org", adoKey(org)+".json") }
+func NormalizeADOProject(project string) string {
+	return adoNorm("projects", adoKey(project)+".json")
+}
+func NormalizeADORepo(project, repo string) string {
+	return adoNorm("repos", adoKey(project)+"__"+adoKey(repo)+".json")
+}
+func NormalizeADOPipeline(project string, id int64) string {
+	return adoNorm("pipelines", fmt.Sprintf("%s__%d.json", adoKey(project), id))
+}
+func NormalizeADOJob(project string, pipelineID int64, stage, job string) string {
+	return adoNorm("jobs", fmt.Sprintf("%s__%d__%s__%s.json", adoKey(project), pipelineID, adoKey(stage), adoKey(job)))
+}
+func NormalizeADOServiceConnection(project, connID string) string {
+	return adoNorm("service-connections", adoKey(project)+"__"+adoKey(connID)+".json")
+}
+func NormalizeADOVariableGroup(project string, id int64) string {
+	return adoNorm("variable-groups", fmt.Sprintf("%s__%d.json", adoKey(project), id))
+}
+func NormalizeADOEnvironment(project, name string) string {
+	return adoNorm("environments", adoKey(project)+"__"+adoKey(name)+".json")
+}
+func NormalizeADOBranch(project, repo, branch string) string {
+	return adoNorm("branches", adoKey(project)+"__"+adoKey(repo)+"__"+adoKey(branch)+".json")
+}
+func NormalizeADOStage(project string, pipelineID int64, stage string) string {
+	return adoNorm("stages", fmt.Sprintf("%s__%d__%s.json", adoKey(project), pipelineID, adoKey(stage)))
+}
+func NormalizeADOKeyVault(project, vault string) string {
+	return adoNorm("key-vaults", adoKey(project)+"__"+adoKey(vault)+".json")
+}
+func NormalizeADOExtension(id string) string {
+	return adoNorm("extensions", adoKey(id)+".json")
+}
+func NormalizeADOSecureFile(project, id string) string {
+	return adoNorm("secure-files", adoKey(project)+"__"+adoKey(id)+".json")
+}
+func NormalizeADOServiceHook(id string) string {
+	return adoNorm("service-hooks", adoKey(id)+".json")
+}
+func NormalizeADOAgentPool(id int64) string {
+	return adoNorm("agent-pools", fmt.Sprintf("%d.json", id))
+}
+func NormalizeADOFeed(scope, id string) string {
+	return adoNorm("feeds", adoKey(scope)+"__"+adoKey(id)+".json")
+}
+func NormalizeADOPolicy(project, repo, policyType string) string {
+	return adoNorm("policies", adoKey(project)+"__"+adoKey(repo)+"__"+adoKey(policyType)+".json")
+}
+func NormalizeADOPrincipal(kind, descriptor string) string {
+	return adoNorm("principals", adoKey(kind), adoKey(descriptor)+".json")
+}
+func NormalizeADOEdges(kind, key string) string {
+	return adoNorm("edges", adoKey(kind), adoKey(key)+".json")
+}
+func NormalizeADOSecretVariable(groupID int64, name string) string {
+	return adoNorm("secret-variables", fmt.Sprintf("%d__%s.json", groupID, adoKey(name)))
+}
+func NormalizeADOWIFCredential(connID, subject string) string {
+	return adoNorm("wif-credentials", adoKey(connID)+"__"+adoKey(subject)+".json")
+}
+func NormalizeADOProjectAgentPool(project string, poolID int64) string {
+	return adoNorm("project-agent-pools", fmt.Sprintf("%s__%d.json", adoKey(project), poolID))
 }
 
 func NormalizeJob(repo, workflow, jobID string) string {
