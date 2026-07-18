@@ -14,7 +14,7 @@ where:
   all_of:
     - visibility == "private"
     - public_pipelines == true
-    - members ∋ {access_level == 10}
+    - has_guest_member == true
 
 evidence:
   - "Private project {{ _provenance.project_path }} has public_pipelines {{ public_pipelines }} with a Guest member, granting Guests read of job logs and artifacts."
