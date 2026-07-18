@@ -14,6 +14,7 @@ description: >
 
 chain_of:
   join: cache-keyspace
+  for_each: prefix_overlaps
   where:
     all_of:
       - producer.cache_separation_enabled == false
