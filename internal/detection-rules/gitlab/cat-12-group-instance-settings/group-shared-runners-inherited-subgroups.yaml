@@ -14,6 +14,7 @@ description: >
 
 chain_of:
   join: group-runner-reachability
+  for_each: reachable_runners
   where:
     all_of:
       - runner.runner_type == "group_type"
