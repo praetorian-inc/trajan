@@ -6,13 +6,16 @@ import (
 	"strings"
 )
 
-// ErrNoToken is returned when no Azure DevOps PAT is found in the environment.
-var ErrNoToken = errors.New("no Azure DevOps PAT: set ADO_PAT, AZURE_DEVOPS_PAT, or AZDO_PAT")
+// ErrNoToken is returned when no Azure DevOps PAT is found.
+var ErrNoToken = errors.New("no Azure DevOps PAT: pass --token or set ADO_PAT, AZURE_DEVOPS_PAT, or AZDO_PAT")
 
-// ResolveToken reads the PAT from the environment. ADO_PAT is checked first to
-// match the firing-range convention; the AZURE_DEVOPS_PAT / AZDO_PAT names are
-// the ones the legacy CLI already documents.
-func ResolveToken() (string, error) {
+// ResolveToken returns the PAT: an explicit value (the global --token flag) wins,
+// otherwise the environment. ADO_PAT is checked first to match the firing-range
+// convention; AZURE_DEVOPS_PAT / AZDO_PAT are the names the legacy CLI documents.
+func ResolveToken(explicit string) (string, error) {
+	if v := strings.TrimSpace(explicit); v != "" {
+		return v, nil
+	}
 	for _, k := range []string{"ADO_PAT", "AZURE_DEVOPS_PAT", "AZDO_PAT"} {
 		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
 			return v, nil

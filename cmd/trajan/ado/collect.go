@@ -21,6 +21,7 @@ func newCollectCmd() *cobra.Command {
 			if len(args) > 0 {
 				locator = args[0]
 			}
+			cfg.Token, _ = cmd.Flags().GetString("token") // honor the global --token (persistent flag)
 			_, err := adocollect.Collect(cmd.Context(), cfg, locator)
 			return err
 		},

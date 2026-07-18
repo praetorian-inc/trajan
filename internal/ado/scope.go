@@ -33,9 +33,15 @@ func ParseScope(arg string) (Scope, error) {
 	s = strings.TrimPrefix(strings.TrimPrefix(s, "https://"), "http://")
 	s = strings.Trim(s, "/")
 	parts := strings.Split(s, "/")
-	// drop a leading dev.azure.com host, or a visualstudio.com vanity host
-	if len(parts) > 0 && (strings.Contains(parts[0], "dev.azure.com") || strings.HasSuffix(parts[0], "visualstudio.com")) {
-		parts = parts[1:]
+	if len(parts) > 0 {
+		switch host := parts[0]; {
+		case strings.Contains(host, "dev.azure.com"):
+			parts = parts[1:] // dev.azure.com/<org>/<project>... — org is the first path segment
+		case strings.HasSuffix(host, ".visualstudio.com"):
+			// legacy vanity host: the org IS the subdomain (<org>.visualstudio.com/<project>),
+			// so replace the host with the org rather than dropping it (which loses the org).
+			parts[0] = strings.TrimSuffix(host, ".visualstudio.com")
+		}
 	}
 	parts = slices.DeleteFunc(parts, func(p string) bool { return p == "" })
 	if len(parts) == 0 {

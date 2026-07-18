@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 
 	yaml "go.yaml.in/yaml/v4"
@@ -37,41 +38,45 @@ func collectPipelineYAML(ctx context.Context, cl ADO, cp engine.CurrentPhase, pr
 	}
 
 	visited := map[string]bool{}
-	return fetchYAMLClosure(ctx, cl, cp, project, byName, id, repoID, yamlPath, branch, 0, visited)
+	return fetchYAMLClosure(ctx, cl, cp, project, byName, id, repoID, normalizePath(yamlPath), branch, "branch", 0, visited)
 }
 
-func fetchYAMLClosure(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string, reposByName map[string]string, pipelineID int64, repoID, path, version string, depth int, visited map[string]bool) error {
-	key := repoID + "|" + path + "|" + version
+func fetchYAMLClosure(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string, reposByName map[string]string, pipelineID int64, repoID, filePath, version, versionType string, depth int, visited map[string]bool) error {
+	key := repoID + "|" + filePath + "|" + version
 	if visited[key] || depth > maxTemplateDepth {
 		return nil
 	}
 	visited[key] = true
 
-	raw, content, status, err := fetchItem(ctx, cl, project, repoID, path, version)
+	raw, content, status, err := fetchItem(ctx, cl, project, repoID, filePath, version, versionType)
 	if err != nil {
 		return err
 	}
-	name := fmt.Sprintf("%s@%s__%s", repoID, version, path)
+	name := fmt.Sprintf("%s@%s__%s", repoID, version, filePath)
 	if status != 0 {
 		return envelope(cp, engine.CollectADOPipelineYAML(project, pipelineID, name), "pipeline-yaml",
-			itemPath(project, repoID, path, version),
-			map[string]any{"_unresolved": true, "_status": status, "repo_id": repoID, "path": path, "version": version})
+			itemPath(project, repoID, filePath, version),
+			map[string]any{"_unresolved": true, "_status": status, "repo_id": repoID, "path": filePath, "version": version})
 	}
 	if err := envelope(cp, engine.CollectADOPipelineYAML(project, pipelineID, name), "pipeline-yaml",
-		itemPath(project, repoID, path, version), raw); err != nil {
+		itemPath(project, repoID, filePath, version), raw); err != nil {
 		return err
 	}
 
 	refs, aliases := parseTemplateRefs(content)
 	for _, r := range refs {
-		targetRepo, targetVer := repoID, version
+		targetRepo, targetVer, targetVerType := repoID, version, versionType
+		// Same-repo template paths resolve relative to the including file's directory;
+		// a leading "/" is repo-root absolute (ADO template resolution semantics).
+		childPath := resolveTemplatePath(filePath, r.path)
 		if r.alias != "" {
 			res, ok := aliases[strings.ToLower(r.alias)]
 			if !ok {
 				continue // unknown alias
 			}
-			rid, ok := reposByName[strings.ToLower(lastSegment(res.name))]
-			if !ok {
+			localName, external := resolveRepoName(res.name, project)
+			rid, ok := reposByName[strings.ToLower(localName)]
+			if external || !ok {
 				// cross-project or external template repo: record the reference, don't fetch
 				_ = envelope(cp, engine.CollectADOPipelineYAML(project, pipelineID,
 					fmt.Sprintf("unresolved__%s__%s", r.alias, adoName(r.path))), "pipeline-yaml", "",
@@ -79,24 +84,26 @@ func fetchYAMLClosure(ctx context.Context, cl ADO, cp engine.CurrentPhase, proje
 				continue
 			}
 			targetRepo = rid
-			if v := stripRef(res.ref); v != "" {
-				targetVer = v
+			if v, vt := refVersion(res.ref); v != "" {
+				targetVer, targetVerType = v, vt
 			}
+			// a cross-repo path is relative to that repo's root, not the including file
+			childPath = normalizePath(r.path)
 		}
-		if err := fetchYAMLClosure(ctx, cl, cp, project, reposByName, pipelineID, targetRepo, normalizePath(r.path), targetVer, depth+1, visited); err != nil {
+		if err := fetchYAMLClosure(ctx, cl, cp, project, reposByName, pipelineID, targetRepo, childPath, targetVer, targetVerType, depth+1, visited); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func fetchItem(ctx context.Context, cl ADO, project, repoID, path, version string) (json.RawMessage, string, int, error) {
+func fetchItem(ctx context.Context, cl ADO, project, repoID, filePath, version, versionType string) (json.RawMessage, string, int, error) {
 	p := fmt.Sprintf("/%s/_apis/git/repositories/%s/items", url.PathEscape(project), repoID)
 	params := url.Values{
-		"path":                          []string{normalizePath(path)},
+		"path":                          []string{normalizePath(filePath)},
 		"includeContent":                []string{"true"},
 		"versionDescriptor.version":     []string{version},
-		"versionDescriptor.versionType": []string{"branch"},
+		"versionDescriptor.versionType": []string{versionType},
 	}
 	raw, _, err := cl.Get(ctx, "core", APIVersion, p, params, true)
 	if err != nil {
@@ -204,11 +211,36 @@ func normalizePath(p string) string {
 	return p
 }
 
-func lastSegment(s string) string {
-	if i := strings.LastIndex(s, "/"); i >= 0 {
-		return s[i+1:]
+// refVersion resolves a resources.repositories ref to (version, versionType). A
+// tag ref must be fetched with versionType "tag" — sending it as a branch 404s.
+func refVersion(ref string) (version, versionType string) {
+	if strings.HasPrefix(ref, "refs/tags/") {
+		return strings.TrimPrefix(ref, "refs/tags/"), "tag"
 	}
-	return s
+	return stripRef(ref), "branch"
+}
+
+// resolveRepoName returns the local repo name to look up and whether the reference
+// is cross-project/external. A bare "Repo" is same-project; "Project/Repo" is
+// external unless Project is the current one — so a cross-project repo that merely
+// shares a name with a local repo is NOT matched to the local one.
+func resolveRepoName(name, project string) (local string, external bool) {
+	if i := strings.Index(name, "/"); i >= 0 {
+		if !strings.EqualFold(name[:i], project) {
+			return "", true
+		}
+		return name[i+1:], false
+	}
+	return name, false
+}
+
+// resolveTemplatePath resolves a same-repo template reference relative to the
+// including file's directory (ADO semantics); a leading "/" is repo-root absolute.
+func resolveTemplatePath(includingFile, ref string) string {
+	if strings.HasPrefix(ref, "/") {
+		return ref
+	}
+	return path.Join(path.Dir(includingFile), ref)
 }
 
 func adoName(s string) string {

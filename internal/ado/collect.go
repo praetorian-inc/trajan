@@ -23,7 +23,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if err != nil {
 		return "", err
 	}
-	token, err := ResolveToken()
+	token, err := ResolveToken(cfg.Token)
 	if err != nil {
 		return "", err
 	}
@@ -140,13 +140,13 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 	// $expand=machines option is no longer supported, so per-machine detail would
 	// need per-group queries (deferred — none exist in the target estate).
 	softSurface(timer, lbl("deployment-groups"), func() error {
-		items, _, e := softList(ctx, cl, "core", APIVersionPreview,
+		items, status, e := softList(ctx, cl, "core", APIVersionPreview,
 			"/"+pe+"/_apis/distributedtask/deploymentgroups", nil)
 		if e != nil {
 			return e
 		}
-		return envelope(cp, engine.CollectADODeploymentGroups(project), "deployment-groups",
-			"/"+project+"/_apis/distributedtask/deploymentgroups", rawArray(items))
+		return writeListOrMark(cp, engine.CollectADODeploymentGroups(project), "deployment-groups",
+			"/"+project+"/_apis/distributedtask/deploymentgroups", items, status)
 	})
 	softSurface(timer, lbl("task-groups"), func() error {
 		_, e := listSurface(ctx, cl, cp, project, "core", APIVersionPreview,
@@ -161,8 +161,8 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 		if e != nil {
 			return e
 		}
-		if e := envelope(cp, engine.CollectADOReleases(project), "release-definitions",
-			"/"+project+"/_apis/release/definitions", rawArray(items)); e != nil {
+		if e := writeListOrMark(cp, engine.CollectADOReleases(project), "release-definitions",
+			"/"+project+"/_apis/release/definitions", items, status); e != nil {
 			return e
 		}
 		if status == 0 {
@@ -176,24 +176,24 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 	// one endpoint is still collected.
 	pipelineNames := map[int64]string{}
 	softSurface(timer, lbl("build-definitions"), func() error {
-		items, _, e := softList(ctx, cl, "core", APIVersion, "/"+pe+"/_apis/build/definitions", nil)
+		items, status, e := softList(ctx, cl, "core", APIVersion, "/"+pe+"/_apis/build/definitions", nil)
 		if e != nil {
 			return e
 		}
-		if e := envelope(cp, engine.CollectADOBuildDefs(project), "build-definitions",
-			"/"+project+"/_apis/build/definitions", rawArray(items)); e != nil {
+		if e := writeListOrMark(cp, engine.CollectADOBuildDefs(project), "build-definitions",
+			"/"+project+"/_apis/build/definitions", items, status); e != nil {
 			return e
 		}
 		addPipelineIDs(pipelineNames, items)
 		return nil
 	})
 	softSurface(timer, lbl("pipelines"), func() error {
-		items, _, e := softList(ctx, cl, "core", APIVersion, "/"+pe+"/_apis/pipelines", nil)
+		items, status, e := softList(ctx, cl, "core", APIVersion, "/"+pe+"/_apis/pipelines", nil)
 		if e != nil {
 			return e
 		}
-		if e := envelope(cp, engine.CollectADOPipelines(project), "pipelines",
-			"/"+project+"/_apis/pipelines", rawArray(items)); e != nil {
+		if e := writeListOrMark(cp, engine.CollectADOPipelines(project), "pipelines",
+			"/"+project+"/_apis/pipelines", items, status); e != nil {
 			return e
 		}
 		addPipelineIDs(pipelineNames, items)

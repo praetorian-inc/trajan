@@ -17,6 +17,10 @@ func TestParseScope(t *testing.T) {
 		{in: "org/proj/repo", kind: ScopeRepo, org: "org", project: "proj", repo: "repo", slug: "org__proj__repo"},
 		{in: "https://dev.azure.com/org/proj", kind: ScopeProject, org: "org", project: "proj"},
 		{in: "dev.azure.com/org", kind: ScopeOrg, org: "org"},
+		// legacy vanity host: org is the subdomain, must NOT be dropped
+		{in: "org.visualstudio.com/proj", kind: ScopeProject, org: "org", project: "proj"},
+		{in: "https://org.visualstudio.com/proj", kind: ScopeProject, org: "org", project: "proj"},
+		{in: "org.visualstudio.com", kind: ScopeOrg, org: "org"},
 		{in: "org/", kind: ScopeOrg, org: "org"},
 		{in: "  org/proj  ", kind: ScopeProject, org: "org", project: "proj"},
 		{in: "", wantErr: true},

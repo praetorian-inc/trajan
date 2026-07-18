@@ -59,6 +59,23 @@ func writeOrMark(cp engine.CurrentPhase, rel, collector, sourcePath string, raw 
 	return envelope(cp, rel, collector, sourcePath, raw)
 }
 
+// listOrMark returns the list (never nil) on success, or a {"_unobserved":<status>}
+// marker when it soft-failed (401/403/404) — so downstream can tell "no access"
+// from "genuinely empty" (CLAUDE.md: 403/404 → skip AND mark). Used for both
+// top-level list surfaces and embedded sub-lists (feed views/permissions).
+func listOrMark(items []json.RawMessage, status int) any {
+	if status != 0 {
+		return map[string]any{"_unobserved": status}
+	}
+	return rawArray(items)
+}
+
+// writeListOrMark envelopes a list surface via listOrMark. The list analog of
+// writeOrMark; a forbidden list must not read to the scanner as "none exist".
+func writeListOrMark(cp engine.CurrentPhase, rel, collector, sourcePath string, items []json.RawMessage, status int) error {
+	return envelope(cp, rel, collector, sourcePath, listOrMark(items, status))
+}
+
 // softGet returns (raw, status): status is 0 on success, or the soft HTTP code
 // (401/403/404) when the resource was unobservable (raw nil). A non-soft error
 // propagates.
@@ -158,11 +175,11 @@ type resourceRef struct {
 // ================= ORG =================
 
 func collectProjects(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) ([]projectRef, error) {
-	items, _, err := softList(ctx, cl, "core", APIVersion, "/_apis/projects", nil)
+	items, status, err := softList(ctx, cl, "core", APIVersion, "/_apis/projects", nil)
 	if err != nil {
 		return nil, err
 	}
-	if err := envelope(cp, engine.CollectADOProjects(org), "projects", "/_apis/projects", rawArray(items)); err != nil {
+	if err := writeListOrMark(cp, engine.CollectADOProjects(org), "projects", "/_apis/projects", items, status); err != nil {
 		return nil, err
 	}
 	out := make([]projectRef, 0, len(items))
@@ -260,11 +277,11 @@ func boolField(raw json.RawMessage, key string) bool {
 }
 
 func collectSecurityNamespaces(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {
-	items, _, err := softList(ctx, cl, "core", APIVersion, "/_apis/securitynamespaces", nil)
+	items, status, err := softList(ctx, cl, "core", APIVersion, "/_apis/securitynamespaces", nil)
 	if err != nil {
 		return err
 	}
-	return envelope(cp, engine.CollectADOSecurityNS(org), "security-namespaces", "/_apis/securitynamespaces", rawArray(items))
+	return writeListOrMark(cp, engine.CollectADOSecurityNS(org), "security-namespaces", "/_apis/securitynamespaces", items, status)
 }
 
 func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {
@@ -272,7 +289,7 @@ func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 	if err != nil {
 		return err
 	}
-	users, _, err := softList(ctx, cl, "vssps", APIVersionGraph, "/_apis/graph/users", nil)
+	users, ustatus, err := softList(ctx, cl, "vssps", APIVersionGraph, "/_apis/graph/users", nil)
 	if err != nil {
 		return err
 	}
@@ -296,8 +313,12 @@ func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 		}
 	}
 	data := map[string]any{"groups": rawArray(groups), "users": rawArray(users), "memberships": memberships}
+	// Mark the bundle if either principal list was unobservable (groups and users
+	// need the same graph-read scope, but a partial failure must still signal).
 	if gstatus != 0 {
 		data["_unobserved"] = gstatus
+	} else if ustatus != 0 {
+		data["_unobserved"] = ustatus
 	}
 	return envelope(cp, engine.CollectADOGraph(org), "graph", "/_apis/graph/{groups,users,memberships}", data)
 }
@@ -315,11 +336,11 @@ func collectExtensions(ctx context.Context, cl ADO, cp engine.CurrentPhase, org 
 }
 
 func collectServiceHooks(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {
-	items, _, err := softList(ctx, cl, "core", APIVersionPreview, "/_apis/hooks/subscriptions", nil)
+	items, status, err := softList(ctx, cl, "core", APIVersionPreview, "/_apis/hooks/subscriptions", nil)
 	if err != nil {
 		return err
 	}
-	return envelope(cp, engine.CollectADOServiceHooks(org), "service-hooks", "/_apis/hooks/subscriptions", rawArray(items))
+	return writeListOrMark(cp, engine.CollectADOServiceHooks(org), "service-hooks", "/_apis/hooks/subscriptions", items, status)
 }
 
 // collectFeeds pulls org-scoped feeds (feeds are org-scoped in practice) plus
@@ -330,12 +351,12 @@ func collectFeeds(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 		return err
 	}
 	if status != 0 {
-		return envelope(cp, engine.CollectADOFeeds(org), "feeds", "/_apis/packaging/feeds", []json.RawMessage{})
+		return envelope(cp, engine.CollectADOFeeds(org), "feeds", "/_apis/packaging/feeds", map[string]any{"_unobserved": status})
 	}
 	type feedBundle struct {
-		Feed        json.RawMessage   `json:"feed"`
-		Views       []json.RawMessage `json:"views"`
-		Permissions []json.RawMessage `json:"permissions"`
+		Feed        json.RawMessage `json:"feed"`
+		Views       any             `json:"views"`       // list, or {_unobserved} on soft-fail
+		Permissions any             `json:"permissions"` // list, or {_unobserved} on soft-fail
 	}
 	bundles := make([]feedBundle, 0, len(feeds))
 	for _, f := range feeds {
@@ -344,9 +365,9 @@ func collectFeeds(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 			bundles = append(bundles, feedBundle{Feed: f, Views: []json.RawMessage{}, Permissions: []json.RawMessage{}})
 			continue
 		}
-		views, _, _ := softList(ctx, cl, "feeds", APIVersionPreview, "/_apis/packaging/feeds/"+fid+"/views", nil)
-		perms, _, _ := softList(ctx, cl, "feeds", APIVersionPreview, "/_apis/packaging/feeds/"+fid+"/permissions", nil)
-		bundles = append(bundles, feedBundle{Feed: f, Views: rawArray(views), Permissions: rawArray(perms)})
+		views, vstatus, _ := softList(ctx, cl, "feeds", APIVersionPreview, "/_apis/packaging/feeds/"+fid+"/views", nil)
+		perms, pstatus, _ := softList(ctx, cl, "feeds", APIVersionPreview, "/_apis/packaging/feeds/"+fid+"/permissions", nil)
+		bundles = append(bundles, feedBundle{Feed: f, Views: listOrMark(views, vstatus), Permissions: listOrMark(perms, pstatus)})
 	}
 	return envelope(cp, engine.CollectADOFeeds(org), "feeds", "/_apis/packaging/feeds", bundles)
 }
@@ -381,12 +402,12 @@ func collectProjectProperties(ctx context.Context, cl ADO, cp engine.CurrentPhas
 }
 
 func collectRepos(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string) ([]repoRef, error) {
-	items, _, err := softList(ctx, cl, "core", APIVersion, "/"+url.PathEscape(project)+"/_apis/git/repositories", nil)
+	items, status, err := softList(ctx, cl, "core", APIVersion, "/"+url.PathEscape(project)+"/_apis/git/repositories", nil)
 	if err != nil {
 		return nil, err
 	}
-	if err := envelope(cp, engine.CollectADORepos(project), "repositories",
-		"/"+project+"/_apis/git/repositories", rawArray(items)); err != nil {
+	if err := writeListOrMark(cp, engine.CollectADORepos(project), "repositories",
+		"/"+project+"/_apis/git/repositories", items, status); err != nil {
 		return nil, err
 	}
 	out := make([]repoRef, 0, len(items))
@@ -401,14 +422,14 @@ func collectRepos(ctx context.Context, cl ADO, cp engine.CurrentPhase, project s
 // listSurface fetches a project list, stores it, and returns resourceRefs of the
 // given type for downstream pipeline-permissions / checks fan-out.
 func listSurface(ctx context.Context, cl ADO, cp engine.CurrentPhase, project, host, api, apiPath, rel, collector, rtype string) ([]resourceRef, error) {
-	items, _, err := softList(ctx, cl, host, api, apiPath, nil)
+	items, status, err := softList(ctx, cl, host, api, apiPath, nil)
 	if err != nil {
 		return nil, err
 	}
-	if err := envelope(cp, rel, collector, apiPath, rawArray(items)); err != nil {
+	if err := writeListOrMark(cp, rel, collector, apiPath, items, status); err != nil {
 		return nil, err
 	}
-	if rtype == "" {
+	if rtype == "" || status != 0 {
 		return nil, nil
 	}
 	out := make([]resourceRef, 0, len(items))
