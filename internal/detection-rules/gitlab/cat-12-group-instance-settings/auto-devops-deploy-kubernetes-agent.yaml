@@ -14,6 +14,7 @@ description: >
 
 chain_of:
   join: agent-ci-access
+  for_each: grants
   where:
     all_of:
       - agent.ci_access_targets != []
