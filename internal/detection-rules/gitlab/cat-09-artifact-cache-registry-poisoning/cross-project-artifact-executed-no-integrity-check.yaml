@@ -14,6 +14,7 @@ description: >
 
 chain_of:
   join: cross-project-artifact
+  for_each: edges
   where:
     all_of:
       - consumer.cross_project_needs != []
