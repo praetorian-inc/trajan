@@ -1,37 +1,32 @@
 id: cat-05/wif-identity-reused-across-tiers
 scenario_id: cat-05/03
-title: "One federated identity authorized to pipelines spanning dev and prod trust tiers"
-subject: chain
+title: "WIF service connection shared across projects — one identity, mixed trust tiers"
+subject: service_connection
 severity: high
+confidence: medium
 description: >
-  A single WIF service connection — backed by one app registration or managed identity — is
-  authorized to pipelines in both a dev trust tier and a prod trust tier. Because all authorized
-  pipelines share the same federated subject and therefore receive tokens with identical RBAC
-  scope, a dev-tier pipeline (lower code review bar, broader push access, fewer required
-  approvals) can mint tokens with the full privileges of the prod-scoped identity. A contributor
-  who can trigger dev pipelines effectively inherits prod cloud permissions without passing prod
-  environment gates.
-chain_of:
-  join: authorized_pipelines
-  for_each: connection
-  where:
-    all_of:
-      - connection.auth_scheme == "WorkloadIdentityFederation"
-      - connection.authorized_across_trust_tiers == true
-      - connection.dev_tier_pipeline_count > 0
-      - connection.prod_tier_pipeline_count > 0
-
+  A Workload Identity Federation service connection is shared out of its owning project into
+  one or more other projects (is_shared == true; shared_into lists the consumer projects). A
+  single connection has a single federated subject sc://{org}/{project}/{connection}, hence a
+  single Entra federated credential and a single Azure RBAC posture. Every project it is shared
+  into can mint the same token with that identical RBAC. Cross-project sharing therefore collapses
+  the trust boundary between tiers: a lower-trust consumer project (more Contributors, looser
+  branch policy, PR-triggered builds) can mint tokens carrying the full — often prod-scoped —
+  privileges the identity holds for its highest-trust consumer. The effective access control on
+  the cloud RBAC degrades to the weakest project that shares the identity.
+where:
+  all_of:
+    - "is_wif == true"
+    - "is_shared == true"
 evidence:
-  - "Service connection: {{ connection.name }}"
-  - "App / managed identity: {{ connection.identity_identifier }}"
-  - "Dev-tier pipelines: {{ connection.dev_tier_pipeline_names }}"
-  - "Prod-tier pipelines: {{ connection.prod_tier_pipeline_names }}"
-  - "Azure RBAC scope: {{ connection.scope_level }}"
-
+  - "Service connection: {{ name }} (owner project {{ owner_project }})"
+  - "Auth scheme: {{ auth_scheme }}"
+  - "Shared into projects: {{ shared_into }}"
+  - "Visible in projects: {{ visible_in_projects }}"
+  - "Scope level: {{ scope_level }}"
 remediation_hint: >
-  Create separate WIF service connections backed by separate app registrations or managed
-  identities for each trust tier. Dev pipelines should use a dev-scoped identity with access
-  only to non-production subscriptions; prod pipelines should use a prod-scoped identity
-  protected by Approval and Branch control checks. Distinct federated identity credentials
-  per environment ensure that a compromised or malicious dev pipeline cannot mint tokens
-  carrying prod RBAC assignments.
+  Do not share one WIF connection across trust tiers. Create separate WIF connections backed by
+  separate app registrations or managed identities per tier: a dev-scoped identity limited to
+  non-production subscriptions for dev projects, and a prod-scoped identity — gated by Approval
+  and Branch control checks — for prod. Distinct federated credentials per environment ensure a
+  malicious or compromised lower-trust project cannot mint tokens carrying the higher tier's RBAC.

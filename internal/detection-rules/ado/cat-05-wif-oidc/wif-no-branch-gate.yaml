@@ -1,33 +1,32 @@
 id: cat-05/wif-no-branch-gate
 scenario_id: cat-05/02
-title: "WIF subject cannot encode branch — no branch-control check is the only gate missing"
+title: "WIF service connection has no Approval or Branch-control check"
 subject: service_connection
 severity: high
+confidence: medium
 description: >
-  ADO Workload Identity Federation subjects take the form sc://{org}/{project}/{connection}.
-  Unlike GitHub OIDC claims, this subject format has no ref or branch segment, so the federated
-  credential on the app registration cannot distinguish which branch triggered the pipeline.
-  The check layer on the service connection is therefore the only available enforcement point
-  for branch-based access control. When has_branch_control_check is false on an authorized WIF
-  connection, any branch in any authorized pipeline can mint a token with the full RBAC scope
-  of the underlying identity. An attacker with push access to a non-protected branch can trigger
-  a pipeline run and obtain cloud credentials without review.
-
+  A Workload Identity Federation subject takes the form sc://{org}/{project}/{connection}.
+  Unlike GitHub OIDC claims, this subject encodes the connection, never a branch, ref, or
+  environment, and Entra matches it case-sensitively with no wildcards. The federated trust
+  therefore cannot distinguish which branch triggered a run: the OIDC token carries the same
+  sub for a feature branch as for main. The ADO check layer — an Approval or a Branch control
+  check on the connection — is the only place branch/approval enforcement can live. This
+  connection has no checks configured, so any branch of any authorized pipeline can mint a
+  token with the full RBAC scope of the backing identity. A Contributor who can push to a
+  non-protected branch (or queue on an arbitrary branch) obtains cloud credentials without review.
 where:
   all_of:
-    - auth_scheme == "WorkloadIdentityFederation"
-    - has_branch_control_check == false
-    - is_authorized == true
-
+    - "is_wif == true"
+    - "checks == []"
 evidence:
-  - "Service connection: {{ service_connection.name }}"
-  - "WIF subject format: {{ service_connection.wif_subject }}"
-  - "Branch control check present: {{ service_connection.has_branch_control_check }}"
-  - "Authorized pipelines: {{ service_connection.authorized_pipeline_names }}"
-
+  - "Service connection: {{ name }} ({{ project }})"
+  - "Auth scheme: {{ auth_scheme }}"
+  - "Checks configured: {{ checks }}"
+  - "All pipelines authorized: {{ pipeline_permissions.all_pipelines }}"
 remediation_hint: >
-  Add a Branch control check to the service connection and restrict it to the protected branches
-  that legitimately require cloud access (e.g., main, release/*). Because the WIF subject format
-  sc://{org}/{project}/{connection} contains no branch information, this ADO-side check is the
-  sole mechanism available to prevent unprotected branches from minting tokens. Review all
-  authorized pipelines and remove any that do not require production cloud access.
+  Add a Branch control check restricting allowedBranches to the protected branches that
+  legitimately require cloud access (e.g. refs/heads/main, refs/heads/releases/*) and an
+  Approval check requiring a human reviewer. Because the WIF subject sc://{org}/{project}/{connection}
+  contains no branch component, this connection-side check is the sole mechanism that prevents
+  an unprotected branch from minting the identity's token. Alternatively gate use behind an
+  Environment that carries these checks.

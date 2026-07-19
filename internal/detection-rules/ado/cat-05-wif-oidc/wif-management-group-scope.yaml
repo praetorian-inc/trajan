@@ -1,35 +1,31 @@
 id: cat-05/wif-management-group-scope
 scenario_id: cat-05/04
-title: "Federated identity scoped to management group — token spans all child subscriptions"
+title: "WIF service connection scoped to a management group — token spans all child subscriptions"
 subject: service_connection
 severity: high
 confidence: medium
 description: >
-  A Workload Identity Federation service connection has scope_level set to ManagementGroup.
-  The ADO serviceendpoint/endpoints API surfaces scopeLevel as a first-class field, making this
-  condition directly collectable. Any pipeline authorized to this connection can mint a token
-  whose RBAC role assignment applies across every subscription under the management group.
-  Lateral movement from a pipeline compromise therefore extends to the full organizational
-  subscription hierarchy rather than a single subscription. The blast radius scales with the
-  number of child subscriptions and the role held by the identity.
-
+  A Workload Identity Federation service connection has scope_level == ManagementGroup. ADO's
+  serviceendpoint/endpoints API surfaces scopeLevel directly, so this breadth signal is
+  ADO-visible even though the exact role behind the identity lives in Azure RBAC. Any pipeline
+  authorized to this connection mints a token whose role assignment applies across every
+  subscription under the management group. A tidy-looking, per-pipeline-authorized, even
+  branch-gated connection can still yield tenant-wide cloud access purely because its scope was
+  chosen at the management-group level during creation. Blast radius from a single pipeline
+  compromise is the entire child-subscription estate rather than one subscription.
 where:
   all_of:
-    - auth_scheme == "WorkloadIdentityFederation"
-    - scope_level == "ManagementGroup"
-    - is_authorized == true
-
+    - "is_wif == true"
+    - "scope_level == 'ManagementGroup'"
 evidence:
-  - "Service connection: {{ service_connection.name }}"
-  - "Scope level: {{ service_connection.scope_level }}"
-  - "Management group: {{ service_connection.management_group_id }}"
-  - "Authorized pipeline count: {{ service_connection.authorized_pipeline_count }}"
-
+  - "Service connection: {{ name }} ({{ project }})"
+  - "Auth scheme: {{ auth_scheme }}"
+  - "Scope level: {{ scope_level }}"
+  - "All pipelines authorized: {{ pipeline_permissions.all_pipelines }}"
 remediation_hint: >
-  Scope the WIF service connection to the narrowest subscription that meets operational
-  requirements. If management-group scope is genuinely necessary (e.g., policy enforcement
-  pipelines), add mandatory Approval checks requiring at least one security reviewer and a
-  Branch control check limiting use to the exact protected branch that runs the policy pipeline.
-  Restrict pipeline authorization to the minimum set and audit the identity's role assignments
-  in Azure to confirm the role is the least-privileged custom role rather than a built-in
-  broad role such as Contributor or Owner.
+  Scope the WIF connection to the narrowest subscription (or resource group) that meets the
+  operational need rather than a management group. If management-group scope is genuinely
+  required (e.g. a policy-enforcement pipeline), add mandatory Approval and Branch control
+  checks on the connection and restrict pipeline authorization to the minimum set. Confirm in
+  Azure that the backing identity holds a least-privilege custom role, not a broad built-in
+  role such as Contributor or Owner, at that scope.

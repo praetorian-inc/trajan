@@ -1,33 +1,31 @@
 id: cat-05/wif-all-pipelines-grant
 scenario_id: cat-05/01
-title: "Federated connection granted to all pipelines with no Approvals & checks"
+title: "WIF service connection authorized to all pipelines"
 subject: service_connection
 severity: high
 confidence: medium
 description: >
-  A Workload Identity Federation service connection has grant_all_pipelines enabled and carries
-  no approval or branch-control checks. Any pipeline in the project can request a token scoped
-  to the underlying app registration's Azure RBAC role. If that registration holds Owner or
-  Contributor at subscription scope, every pipeline in the project can mutate cloud resources
-  without a secondary approval gate. The combination of open authorization and absent checks
-  eliminates both access control and compensating controls in a single misconfiguration.
-
+  A Workload Identity Federation service connection has "Grant access permission to
+  all pipelines" enabled (pipeline_permissions.all_pipelines == true). WIF connections
+  carry no secret to steal, so the only control on their use is who can drive them.
+  With the all-pipelines grant, any pipeline in the project — including a throwaway one
+  a Contributor authors on a non-protected branch — can name this connection and mint an
+  Entra access token with the full Azure RBAC of the backing app registration. Microsoft
+  explicitly marks this option "not recommended". The per-pipeline authorization gate that
+  would otherwise force explicit authorization is removed.
 where:
   all_of:
-    - auth_scheme == "WorkloadIdentityFederation"
-    - grant_all_pipelines == true
-    - checks == []
-
+    - "is_wif == true"
+    - "pipeline_permissions.all_pipelines == true"
 evidence:
-  - "Service connection: {{ service_connection.name }}"
-  - "Auth scheme: {{ service_connection.auth_scheme }}"
-  - "Scope level: {{ service_connection.scope_level }}"
-  - "Grant all pipelines: {{ service_connection.grant_all_pipelines }}"
-  - "Checks configured: {{ service_connection.checks }}"
-
+  - "Service connection: {{ name }} ({{ project }})"
+  - "Auth scheme: {{ auth_scheme }}"
+  - "Scope level: {{ scope_level }}"
+  - "All pipelines authorized: {{ pipeline_permissions.all_pipelines }}"
 remediation_hint: >
-  Disable "Grant access to all pipelines" on the service connection and switch to explicit
-  per-pipeline authorization. Add at minimum a Branch control check limiting use to protected
-  branches and an Approval check requiring a human reviewer before token issuance. Audit the
-  underlying app registration's Azure RBAC assignments and reduce the role to the narrowest
-  scope required (prefer a custom role over Owner or Contributor at subscription scope).
+  Disable "Grant access permission to all pipelines" on the connection and switch to
+  explicit per-pipeline authorization. Because the WIF subject sc://{org}/{project}/{connection}
+  cannot pin a branch, also add an Approval and a Branch control check on the connection so a
+  non-protected branch cannot mint the token. Audit the backing app registration's Azure RBAC
+  and reduce it to the narrowest scope required (prefer a custom least-privilege role over
+  Owner/Contributor at subscription scope).
