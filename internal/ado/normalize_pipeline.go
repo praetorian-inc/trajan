@@ -3,6 +3,7 @@ package ado
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -95,11 +96,12 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 			"_provenance": prov(engine.CollectADOBuildDefFull(project, id)),
 		}
 
+		settable := settableVarSet(entObj(def, "variables"))
 		facts := pipelineYAMLFacts{}
 		if processType == 2 && strings.EqualFold(entStr(repo["type"]), "TfsGit") {
 			content := entryYAML(prior, project, id, repo, entStr(process["yamlFilename"]))
 			if content != "" {
-				facts, err = parsePipelineYAML(cp, timer, project, id, content)
+				facts, err = parsePipelineYAML(cp, timer, project, id, content, settable)
 				if err != nil {
 					return err
 				}
@@ -114,6 +116,11 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 		pipe["pr_trigger"] = facts.prTrigger
 		pipe["enable_shell_tasks_args_sanitizing"] = enableShellSanitize
 		pipe["enforce_settable_var"] = enforceSettableVar
+		// settable_variables: the YAML `settableVariables:` restriction (nil = all
+		// vars overridable; [] = none). The per-definition allowOverride names are
+		// the settable surface when the org/project limit is enforced (cat-02 gate).
+		pipe["settable_variables"] = facts.settableVariables
+		pipe["definition_settable_variables"] = sortedSet(settable)
 
 		if err := emit(cp, timer, engine.NormalizeADOPipeline(project, id), pipe); err != nil {
 			return err
@@ -168,13 +175,14 @@ func entryYAML(prior engine.PriorPhase, project string, id int64, repo map[strin
 // node: the extends-template reference, the pipeline-level variable groups, and
 // the CI/PR trigger declarations (nil = absent/implicit; "none" = explicitly off).
 type pipelineYAMLFacts struct {
-	extendsTemplate string
-	extendsSource   map[string]any // resolved source repo/ref of the extends template
-	templateSources []any          // all resources.repositories, resolved (cat-08 surface)
-	variableGroups  []string
-	parameters      []any // runtime parameters (queue-time settable; freeform = injectable)
-	ciTrigger       any
-	prTrigger       any
+	extendsTemplate   string
+	extendsSource     map[string]any // resolved source repo/ref of the extends template
+	templateSources   []any          // all resources.repositories, resolved (cat-08 surface)
+	variableGroups    []string
+	parameters        []any // runtime parameters (queue-time settable; freeform = injectable)
+	ciTrigger         any
+	prTrigger         any
+	settableVariables any // YAML root `settableVariables:` (nil = all overridable, [] = none)
 }
 
 // normalizeParameters projects the YAML root `parameters:` declarations. A
@@ -262,17 +270,18 @@ func splitRepoName(name, dfltProject string) (project, repo string) {
 // TRIGGERS_ON_COMPLETION edges, and returns the root-level facts. Variable groups
 // are NOT merged down levels — each of Pipeline/Stage/Job carries only what it
 // declares, so the CONSUMES_GROUP level (schema) is recoverable.
-func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, content string) (pipelineYAMLFacts, error) {
+func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, content string, settable map[string]bool) (pipelineYAMLFacts, error) {
 	var root map[string]any
 	if err := yaml.Unmarshal([]byte(content), &root); err != nil {
 		timer.Errors = append(timer.Errors, fmt.Sprintf("pipeline %s/%d: yaml parse: %v", project, pipelineID, err))
 		return pipelineYAMLFacts{}, nil // a bad YAML doc is per-item non-fatal
 	}
 	facts := pipelineYAMLFacts{
-		variableGroups: variableGroups(root["variables"]),
-		parameters:     normalizeParameters(root["parameters"]),
-		ciTrigger:      root["trigger"],
-		prTrigger:      root["pr"],
+		variableGroups:    variableGroups(root["variables"]),
+		parameters:        normalizeParameters(root["parameters"]),
+		ciTrigger:         root["trigger"],
+		prTrigger:         root["pr"],
+		settableVariables: settableVariablesOf(root["variables"]),
 	}
 	if err := emitPipelineResources(cp, timer, project, pipelineID, root); err != nil {
 		return facts, err
@@ -302,17 +311,22 @@ func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project
 			if !ok {
 				continue
 			}
+			if sm["template"] != nil && sm["stage"] == nil {
+				continue // stage-template reference — expanded in the deferred template pass
+			}
 			stageName := firstStr(sm, "stage", fmt.Sprintf("stage_%d", i))
-			if err := emitStageJobs(cp, timer, project, pipelineID, stageName, sm, pipelinePool); err != nil {
+			if err := emitStageJobs(cp, timer, project, pipelineID, stageName, sm, pipelinePool, settable); err != nil {
 				return facts, err
 			}
 		}
 		return facts, nil
 	}
 	// implicit single stage: root plays pipeline+stage+job. The pipeline-level
-	// groups are stamped on the Pipeline node by the caller; the Stage/Job here
-	// carry only their own (here: none extra), so no level is double-counted.
-	return facts, emitStageJobs(cp, timer, project, pipelineID, "__default", root, pipelinePool)
+	// variable groups are already stamped on the Pipeline node by the caller, so
+	// strip them from the map before it stands in for the Stage/Job — otherwise the
+	// same declaration is counted at every level (duplicate CONSUMES_GROUP edges).
+	delete(root, "variables")
+	return facts, emitStageJobs(cp, timer, project, pipelineID, "__default", root, pipelinePool, settable)
 }
 
 // emitPipelineResources emits a TRIGGERS_ON_COMPLETION edge per resources.pipelines
@@ -341,7 +355,7 @@ func emitPipelineResources(cp engine.CurrentPhase, timer *engine.PhaseTimer, pro
 	return nil
 }
 
-func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, stage string, m map[string]any, inheritedPool any) error {
+func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, stage string, m map[string]any, inheritedPool any, settable map[string]bool) error {
 	stagePool := m["pool"]
 	if stagePool == nil {
 		stagePool = inheritedPool
@@ -365,84 +379,158 @@ func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project str
 
 	jobs, ok := m["jobs"].([]any)
 	if !ok {
-		return emitJob(cp, timer, project, pipelineID, stage, "__default", m, stagePool)
+		return emitJob(cp, timer, project, pipelineID, stage, "__default", m, stagePool, settable)
 	}
 	for i, j := range jobs {
 		jm, ok := j.(map[string]any)
 		if !ok {
 			continue
 		}
+		if jm["template"] != nil && jm["job"] == nil && jm["deployment"] == nil {
+			continue // job-template reference — expanded in the deferred template pass
+		}
 		jobName := firstStr(jm, "job", firstStr(jm, "deployment", fmt.Sprintf("job_%d", i)))
-		if err := emitJob(cp, timer, project, pipelineID, stage, jobName, jm, stagePool); err != nil {
+		if err := emitJob(cp, timer, project, pipelineID, stage, jobName, jm, stagePool, settable); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, stage, job string, m map[string]any, inheritedPool any) error {
-	steps := collectSteps(m)
-	scUsages, checkouts, taskRefs := walkSteps(steps)
+func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, stage, job string, m map[string]any, inheritedPool any, settable map[string]bool) error {
 	jobPool := m["pool"]
 	if jobPool == nil {
 		jobPool = inheritedPool
 	}
+	// a per-job YAML settableVariables list adds to the queue-time-settable surface
+	// used for is_declared_settable annotation on macro sinks.
+	if extra := settableVariablesOf(m["variables"]); extra != nil {
+		settable = mergeSettable(settable, extra)
+	}
+
+	f := walkSteps(collectSteps(m), settable)
+	// compile-time keyword sinks: a runtime parameter / runtime-expression selecting
+	// pool or container steers the execution target/identity (cat-02 redirect).
+	scanCompileKeyword(&f, "pool", poolExpr(jobPool), -1, "")
+	scanCompileKeyword(&f, "container", yamlStr(m["container"]), -1, "")
 
 	rec := map[string]any{
-		"_id":                       fmt.Sprintf("%d/%s/%s", pipelineID, stage, job),
-		"kind":                      "Job",
-		"project":                   project,
-		"pipeline_id":               pipelineID,
-		"stage":                     stage,
-		"job":                       job,
-		"is_deployment":             m["deployment"] != nil,
-		"condition":                 yamlStr(m["condition"]),
-		"depends_on":                stringsOf(m["dependsOn"]),
-		"pool":                      normalizePool(jobPool),
-		"variable_groups":           toAnyList(variableGroups(m["variables"])), // job-level declarations only
-		"targets_environment":       strOrNull(jobEnvironment(m)),
-		"service_connection_usages": scUsages,
-		"checkout_steps":            checkouts,
-		"task_usages":               taskRefs,
-		"_provenance":               prov(engine.CollectADOBuildDefFull(project, pipelineID)),
+		"_id":                         fmt.Sprintf("%d/%s/%s", pipelineID, stage, job),
+		"kind":                        "Job",
+		"project":                     project,
+		"pipeline_id":                 pipelineID,
+		"stage":                       stage,
+		"job":                         job,
+		"is_deployment":               m["deployment"] != nil,
+		"condition":                   yamlStr(m["condition"]),
+		"depends_on":                  stringsOf(m["dependsOn"]),
+		"pool":                        normalizePool(jobPool),
+		"variable_groups":             toAnyList(variableGroups(m["variables"])), // job-level declarations only
+		"targets_environment":         strOrNull(jobEnvironment(m)),
+		"service_connection_usages":   f.scUsages,
+		"checkout_steps":              f.checkouts,
+		"task_usages":                 f.taskUsages,
+		"script_bodies":               f.scriptBodies,
+		"macro_sinks":                 f.macroSinks,
+		"parameter_sinks":             f.paramSinks,
+		"vso_echo_sources":            f.vsoEchoSources,
+		"ai_task_sinks":               f.aiTaskSinks,
+		"variable_consumers":          f.varConsumers,
+		"bare_binary_calls":           f.bareBinaries,
+		"cred_writes":                 f.credWrites,
+		"exec_sinks":                  f.execSinks,
+		"executes_checked_out_code":   f.executesCheckedOutCode,
+		"exposes_system_access_token": f.referencesAccessToken,
+		"_provenance":                 prov(engine.CollectADOBuildDefFull(project, pipelineID)),
 	}
 	return emit(cp, timer, engine.NormalizeADOJob(project, pipelineID, stage, job), rec)
 }
 
-// collectSteps returns the step list from a job/deployment strategy.
+// collectSteps returns the step list from a job/deployment strategy. Deployment
+// jobs nest steps under every lifecycle hook (not just deploy) — preDeploy/
+// routeTraffic/postRouteTraffic and on.failure/on.success can each consume a
+// service connection or run a task, so all hooks are gathered in execution order.
 func collectSteps(m map[string]any) []any {
 	if s, ok := m["steps"].([]any); ok {
 		return s
 	}
-	// deployment jobs nest steps under strategy.runOnce/rolling.deploy.steps
+	var out []any
 	strat := entMap(m["strategy"])
 	for _, kind := range []string{"runOnce", "rolling", "canary"} {
 		phase := entMap(strat[kind])
-		if dep := entMap(phase["deploy"]); dep != nil {
-			if s, ok := dep["steps"].([]any); ok {
-				return s
+		for _, hook := range []string{"preDeploy", "deploy", "routeTraffic", "postRouteTraffic"} {
+			if s, ok := entMap(phase[hook])["steps"].([]any); ok {
+				out = append(out, s...)
+			}
+		}
+		on := entMap(phase["on"])
+		for _, hook := range []string{"failure", "success"} {
+			if s, ok := entMap(on[hook])["steps"].([]any); ok {
+				out = append(out, s...)
 			}
 		}
 	}
-	return nil
+	return out
 }
 
-func walkSteps(steps []any) (scUsages, checkouts, taskRefs []any) {
-	scUsages, checkouts, taskRefs = []any{}, []any{}, []any{}
+// jobFacts collects the security-relevant step facts collapsed onto a :Job — the
+// structural usages plus the taint-pass sinks/sources the derived attack edges
+// (correlate) key on. All slices stay non-nil so empties serialize as [].
+type jobFacts struct {
+	scUsages               []any
+	checkouts              []any
+	taskUsages             []any
+	scriptBodies           []any
+	macroSinks             []any
+	paramSinks             []any
+	vsoEchoSources         []any
+	aiTaskSinks            []any
+	varConsumers           []any
+	bareBinaries           []any
+	credWrites             []any
+	execSinks              []any
+	executesCheckedOutCode bool
+	referencesAccessToken  bool
+}
+
+func newJobFacts() jobFacts {
+	return jobFacts{
+		scUsages: []any{}, checkouts: []any{}, taskUsages: []any{}, scriptBodies: []any{},
+		macroSinks: []any{}, paramSinks: []any{}, vsoEchoSources: []any{}, aiTaskSinks: []any{},
+		varConsumers: []any{}, bareBinaries: []any{}, credWrites: []any{}, execSinks: []any{},
+	}
+}
+
+func walkSteps(steps []any, settable map[string]bool) jobFacts {
+	f := newJobFacts()
 	for i, s := range steps {
 		sm, ok := s.(map[string]any)
 		if !ok {
 			continue
 		}
 		if ck, ok := sm["checkout"]; ok {
-			checkouts = append(checkouts, map[string]any{
-				"repository":          yamlStr(ck),
-				"clean":               sm["clean"],
-				"fetch_depth":         sm["fetchDepth"],
-				"persist_credentials": sm["persistCredentials"],
-				"submodules":          sm["submodules"],
-				"step_index":          i,
+			f.checkouts = append(f.checkouts, map[string]any{
+				"repository": yamlStr(ck), "clean": sm["clean"], "fetch_depth": sm["fetchDepth"],
+				"persist_credentials": sm["persistCredentials"], "submodules": sm["submodules"], "step_index": i,
 			})
+			scanCompileKeyword(&f, "checkout", yamlStr(ck), i, "")
+			continue
+		}
+		if cond := yamlStr(sm["condition"]); cond != "" {
+			for _, name := range conditionVars(cond) {
+				f.varConsumers = append(f.varConsumers, map[string]any{"name": name, "step_index": i, "via": "condition"})
+			}
+		}
+		f.scanEnv(entMap(sm["env"]))
+
+		matched := false
+		for _, key := range []string{"script", "bash", "powershell", "pwsh"} {
+			if body := yamlStr(sm[key]); body != "" {
+				f.scanScriptBody(shorthandShells[key], body, i, "", settable)
+				matched = true
+			}
+		}
+		if matched {
 			continue
 		}
 		task := yamlStr(sm["task"])
@@ -450,19 +538,129 @@ func walkSteps(steps []any) (scUsages, checkouts, taskRefs []any) {
 			continue
 		}
 		inputs := entMap(sm["inputs"])
-		taskRefs = append(taskRefs, map[string]any{"task": task, "step_index": i})
+		f.taskUsages = append(f.taskUsages, taskUsageRec(task, i))
 		for _, inputName := range scInputNames {
 			if conn := yamlStr(inputs[inputName]); conn != "" {
-				scUsages = append(scUsages, map[string]any{
-					"task":            task,
-					"input_name":      inputName,
-					"connection_name": conn,
-					"step_index":      i,
+				f.scUsages = append(f.scUsages, map[string]any{
+					"task": task, "input_name": inputName, "connection_name": conn, "step_index": i,
 				})
 			}
 		}
+		if file, ok := credWritingTasks[task]; ok {
+			f.credWrites = append(f.credWrites, map[string]any{"task": task, "step_index": i, "file": file})
+		}
+		if matchesAITask(task) {
+			f.aiTaskSinks = append(f.aiTaskSinks, aiTaskRec(task, inputs, i))
+		}
+		et, isExecutor := executorTasks[task]
+		if isExecutor {
+			for _, in := range et.scriptInputs {
+				if body := yamlStr(inputs[in]); body != "" {
+					f.scanScriptBody(et.shell, body, i, task, settable)
+				}
+			}
+			for _, in := range et.argInputs {
+				if arg := yamlStr(inputs[in]); arg != "" {
+					f.scanArgs(arg, i, task, settable)
+				}
+			}
+		}
+		for _, in := range sortedKeys(inputs) {
+			if isExecutor && (slices.Contains(et.scriptInputs, in) || slices.Contains(et.argInputs, in)) {
+				continue
+			}
+			if val := yamlStr(inputs[in]); val != "" {
+				f.scanTaskInput(val, in, i, task, settable)
+			}
+		}
 	}
-	return
+	return f
+}
+
+func (f *jobFacts) scanScriptBody(shell, body string, stepIdx int, task string, settable map[string]bool) {
+	f.scriptBodies = append(f.scriptBodies, map[string]any{"content": body, "shell": shell, "step_index": stepIdx})
+	for _, name := range macroNames(body) {
+		if macroKind(name) == "system" {
+			continue
+		}
+		f.macroSinks = append(f.macroSinks, macroSinkRec(name, "script", task, stepIdx, settable))
+		f.varConsumers = append(f.varConsumers, map[string]any{"name": name, "step_index": stepIdx, "via": "macro"})
+	}
+	for _, p := range paramNames(body) {
+		f.paramSinks = append(f.paramSinks, paramSinkRec(p, "script", "", task, stepIdx))
+	}
+	if name, isExec := classifyExecSink(body); isExec {
+		f.execSinks = append(f.execSinks, map[string]any{"name": name, "step_index": stepIdx})
+		f.executesCheckedOutCode = true
+	}
+	for _, bin := range bareBinaryCalls(body) {
+		f.bareBinaries = append(f.bareBinaries, map[string]any{"bin": bin, "step_index": stepIdx})
+	}
+	if matchesAICLI(body) {
+		f.aiTaskSinks = append(f.aiTaskSinks, map[string]any{
+			"task_id": "cli", "vendor": aiVendor(body), "capabilities": aiCapabilities(body),
+			"inputs": map[string]any{}, "source": "script", "step_index": stepIdx,
+		})
+	}
+	if strings.Contains(strings.ToLower(body), "system.accesstoken") {
+		f.referencesAccessToken = true
+	}
+	if src, ok := untrustedEcho(body); ok {
+		f.vsoEchoSources = append(f.vsoEchoSources, map[string]any{
+			"untrusted_source": src, "echo_mechanism": echoMechanism(shell), "step_index": stepIdx,
+			"has_literal_vso": reVsoLit.MatchString(body),
+		})
+	}
+}
+
+func (f *jobFacts) scanArgs(arg string, stepIdx int, task string, settable map[string]bool) {
+	for _, name := range macroNames(arg) {
+		if macroKind(name) == "system" {
+			continue
+		}
+		f.macroSinks = append(f.macroSinks, macroSinkRec(name, "task_input", task, stepIdx, settable))
+		f.varConsumers = append(f.varConsumers, map[string]any{"name": name, "step_index": stepIdx, "via": "macro"})
+	}
+	for _, p := range paramNames(arg) {
+		f.paramSinks = append(f.paramSinks, paramSinkRec(p, "task_input", "arguments", task, stepIdx))
+	}
+}
+
+func (f *jobFacts) scanTaskInput(val, inputName string, stepIdx int, task string, settable map[string]bool) {
+	for _, name := range macroNames(val) {
+		if macroKind(name) == "system" {
+			continue
+		}
+		f.macroSinks = append(f.macroSinks, macroSinkRec(name, "task_input", task, stepIdx, settable))
+	}
+	for _, p := range paramNames(val) {
+		loc := "task_input"
+		if isCompileKeywordInput(inputName) {
+			loc = "compile_keyword" // param selects the identity/target (input_target_redirect)
+		}
+		f.paramSinks = append(f.paramSinks, paramSinkRec(p, loc, inputName, task, stepIdx))
+	}
+}
+
+func (f *jobFacts) scanEnv(env map[string]any) {
+	for _, k := range sortedKeys(env) {
+		if strings.Contains(strings.ToLower(yamlStr(env[k])), "system.accesstoken") {
+			f.referencesAccessToken = true
+		}
+	}
+}
+
+// scanCompileKeyword records parameter/runtime-expression expansion into a
+// compile-time keyword (pool/container/checkout) — the target-redirect surface.
+// `$(macro)` does not expand in compile keywords, so only ${{ }}/$[ ] and
+// predefined-untrusted references count.
+func scanCompileKeyword(f *jobFacts, keyword, val string, stepIdx int, task string) {
+	if val == "" {
+		return
+	}
+	for _, p := range paramNames(val) {
+		f.paramSinks = append(f.paramSinks, paramSinkRec(p, "compile_keyword", keyword, task, stepIdx))
+	}
 }
 
 func normalizePool(v any) map[string]any {

@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path"
 	"strings"
@@ -304,8 +306,14 @@ func NormalizeADOPolicy(project, repo, policyType string) string {
 func NormalizeADOPrincipal(kind, descriptor string) string {
 	return adoNorm("principals", adoKey(kind), adoKey(descriptor)+".json")
 }
+// NormalizeADOEdges hashes the composite key into a fixed-length, collision-free
+// stem. Callers build keys by joining components with "__", but adoKey folds "_"
+// to "-", which would both flatten that delimiter and overflow the 255-byte path
+// limit for long branch/connection/input names. The readable components stay as
+// fields on the edge record; the filename only has to be unique.
 func NormalizeADOEdges(kind, key string) string {
-	return adoNorm("edges", adoKey(kind), adoKey(key)+".json")
+	sum := sha256.Sum256([]byte(key))
+	return adoNorm("edges", adoKey(kind), hex.EncodeToString(sum[:16])+".json")
 }
 func NormalizeADOSecretVariable(groupID int64, name string) string {
 	return adoNorm("secret-variables", fmt.Sprintf("%d__%s.json", groupID, adoKey(name)))

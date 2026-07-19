@@ -52,6 +52,8 @@ func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPh
 		func() error { return deriveEffectiveRoles(ctx, prior, cp, timer, org) },
 		func() error { return deriveMemberOf(prior, cp, timer, org) },
 		func() error { return deriveJobResourceEdges(prior, cp, timer, jobs) },
+		func() error { return deriveTaintEdges(prior, cp, timer, jobs, pipelines) },
+		func() error { return deriveBranchAccessEdges(prior, cp, timer) },
 	} {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -668,7 +670,15 @@ func deriveBranches(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines,
 	branches := map[string]map[string]any{}
 	add := func(project, repo, repoID, branch string, isDefault, isPrefix bool) {
 		id := project + "/" + repo + "@" + branch
-		if _, ok := branches[id]; ok {
+		if b, ok := branches[id]; ok {
+			// a branch reached by more than one reference (pipeline default + policy
+			// scope, or several policies) keeps every flag that any reference set.
+			if isDefault {
+				b["is_default"] = true
+			}
+			if isPrefix {
+				b["is_prefix"] = true
+			}
 			return
 		}
 		branches[id] = map[string]any{
