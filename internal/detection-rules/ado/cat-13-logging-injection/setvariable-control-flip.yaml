@@ -1,29 +1,33 @@
 id: cat-13/setvariable-control-flip
 scenario_id: cat-13/01
-title: "Commit message echoed to stdout injects ##vso[task.setvariable] to flip a control variable"
-subject: pipeline
+title: "Untrusted text echoed to stdout injects ##vso[task.setvariable] to flip a control variable"
+subject: logging_command_injection
 severity: high
+confidence: high
 description: >
-  A step echoes attacker-controlled text (Build.SourceVersionMessage, a PR
-  field, or a branch name) to stdout. The agent unconditionally parses every
-  stdout line for ##vso[...] logging commands. An embedded
-  task.setvariable redefines a control variable for all later steps in the
-  job (and, with isoutput=true, for later stages), flipping a deploy gate or
-  condition the pipeline author trusted. No YAML edit or queue-time
-  permission required — only a crafted commit message.
+  A step echoes attacker-controlled text (a commit message, PR source
+  branch, a file from the checked-out PR, or a fetched HTTP body) to stdout.
+  The Azure Pipelines agent unconditionally parses every stdout line for
+  ##vso[...] logging commands, so an embedded task.setvariable redefines a
+  control variable for all later steps in the job (and, with isoutput=true,
+  for later stages), flipping a deploy gate or condition the author trusted.
+  No YAML edit or queue-time permission is required — only crafted untrusted
+  content. Parsing is unconditional; no control-plane setting disables it.
 
 where:
   all_of:
-    - echoes_untrusted_to_stdout == true
-    - has_downstream_variable_consumer == true
+    - "via == 'setvariable_control_flip'"
+    - "untrusted_source in {commit_message, pr_source_branch, file_content, http_response}"
 
 evidence:
-  - "Pipeline {{ _provenance.pipeline_name }}: step {{ echo_step }} echoes {{ untrusted_source }} to stdout"
-  - "Downstream consumer: {{ variable_consumer_step }} reads variable via macro $({{ consumed_variable }})"
-  - "Logging-command parsing is unconditional — no setting disables it"
+  - "Pipeline {{ pipeline_id }} job {{ job }} ({{ project }}): untrusted {{ untrusted_source }} echoed at step {{ echo_step }}"
+  - "Injected ##vso[task.setvariable] consumed at step {{ consumer_step }}, effect {{ effect }} on {{ target_resource }}"
+  - "confidence={{ confidence }} identity_scope={{ identity_scope }}"
 
 remediation_hint: >
-  Never echo attacker-controlled text to stdout. Pipe untrusted data to a
-  file or use task.setvariable with isreadonly=true set by the author BEFORE
-  any untrusted echo. For commit messages, use a dedicated variable set from
-  the Git API rather than echoing Build.SourceVersionMessage.
+  Never echo attacker-controlled text (commit messages, PR fields, PR files,
+  fetched bodies) to stdout. Pipe untrusted data to a file instead of
+  printing it, or set security-critical control variables in a static YAML
+  variables: block (set before any step runs) rather than via runtime
+  setvariable. Isolate untrusted-echo steps from steps that read control
+  variables.
