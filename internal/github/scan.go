@@ -2,175 +2,116 @@ package github
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
+	"strings"
 
-	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/engine/detect"
+	"github.com/praetorian-inc/trajan/internal/finding"
 )
 
-var subjectDirs = map[string]string{
-	"job":         "jobs",
-	"repo":        "repos",
-	"org":         "org",
-	"app":         "apps",
-	"env":         "environments",
-	"environment": "environments",
-	"ruleset":     "rulesets",
-	"deploy_key":  "deploy-keys",
+// provider wires GitHub into the shared detection engine (internal/engine/detect):
+// the subject-kind → normalize-dir map, the "github" rule subtree, and the
+// finding-construction hooks that read GitHub-specific fields.
+var provider = detect.Provider{
+	Name:        "github",
+	RuleSubtree: "github",
+	SubjectDirs: map[string]string{
+		"job":         "jobs",
+		"repo":        "repos",
+		"org":         "org",
+		"app":         "apps",
+		"env":         "environments",
+		"environment": "environments",
+		"ruleset":     "rulesets",
+		"deploy_key":  "deploy-keys",
+	},
+	Display: subjectDisplay,
+	Code:    buildCode,
+	Repo:    func(s map[string]any) string { return detect.StringField(s, "repo") },
+	File:    func(s map[string]any) string { return detect.StringField(s, "workflow_name") },
 }
 
-// RuleFires includes rules that fired zero times.
-type scanSummary struct {
-	RulesLoaded   int            `json:"rules_loaded"`
-	TotalFindings int            `json:"total_findings"`
-	RuleFires     map[string]int `json:"rule_fires"`
-}
-
-type ScanOptions struct {
-	OrgOnly bool
-}
+// ScanOptions and Scan are re-exported so cmd/trajan/github keeps calling
+// github.Scan / github.ScanOptions unchanged.
+type ScanOptions = detect.ScanOptions
 
 func Scan(ctx context.Context, runDir string, opts ScanOptions) error {
-	state, err := engine.LoadState(runDir)
-	if err != nil {
-		return err
-	}
-	if err := state.CheckPhase(engine.PhaseScan); err != nil {
-		return err
-	}
-
-	timer := engine.StartPhaseTimer(engine.PhaseScan, "scan")
-	scanErr := runScan(ctx, runDir, state.Org, opts, timer)
-
-	rec := timer.Stop(scanErr)
-	state.RecordPhase(rec)
-	if err := state.Save(runDir); err != nil {
-		return err
-	}
-	return scanErr
+	return detect.Scan(ctx, runDir, provider, opts)
 }
 
-// Filters on SubjectKind, not folder, so it holds even though cat-13-org rules
-// keep their original cat-NN IDs.
-func orgOnlyRules(rules []Rule) []Rule {
-	return slices.DeleteFunc(rules, func(r Rule) bool { return r.SubjectKind() != "org" })
-}
-
-func runScan(ctx context.Context, runDir, org string, opts ScanOptions, timer *engine.PhaseTimer) error {
-	prior := engine.PriorPhase{RunDir: runDir}
-	cp := engine.CurrentPhase{RunDir: runDir}
-
-	if err := os.RemoveAll(filepath.Join(runDir, "20-scan")); err != nil {
-		return fmt.Errorf("clear 20-scan: %w", err)
-	}
-
-	rules, err := LoadRules()
-	if err != nil {
-		return fmt.Errorf("load rules: %w", err)
-	}
-	if opts.OrgOnly {
-		rules = orgOnlyRules(rules)
-	}
-	timer.InputFiles = len(rules)
-
-	subjectsByKind := map[string][]map[string]any{}
-	for i := range rules {
-		if rules[i].SubjectKind() == "chain" {
-			continue
-		}
-		kind := rules[i].SubjectKind()
-		if _, done := subjectsByKind[kind]; done {
-			continue
-		}
-		subs, err := loadSubjects(prior, kind)
-		if err != nil {
-			return fmt.Errorf("load %s subjects: %w", kind, err)
-		}
-		subjectsByKind[kind] = subs
-	}
-
-	onError := func(e error) { timer.Errors = append(timer.Errors, e.Error()) }
-
-	ruleFires := make(map[string]int, len(rules))
-	total := 0
-	for i := range rules {
-		rule := &rules[i]
-		kind := rule.SubjectKind()
-
-		var matched []map[string]any
-		if kind == "chain" {
-			chainData, err := loadChain(prior, rule.ChainOf)
-			if err != nil {
-				onError(fmt.Errorf("%s: %w", rule.ID, err))
+// subjectDisplay is a pre-rendered label so the renderer never parses subject.id.
+func subjectDisplay(kind string, subject map[string]any) string {
+	if kind == "job" {
+		var parts []string
+		for _, k := range []string{"repo", "workflow_filename", "job_id"} {
+			if v := detect.StringField(subject, k); v != "" {
+				parts = append(parts, v)
 			}
-			matched = EvaluateChainRule(rule, chainData, onError)
-		} else {
-			matched = EvaluateRule(rule, subjectsByKind[kind], onError)
 		}
-
-		fires := 0
-		for _, subj := range matched {
-			if err := emitFinding(cp, rule, subj, kind, org, runDir); err != nil {
-				onError(fmt.Errorf("%s: write finding: %w", rule.ID, err))
-				continue
-			}
-			fires++
-		}
-		ruleFires[rule.ID] = fires
-		total += fires
-		if err := ctx.Err(); err != nil {
-			return err
+		if len(parts) > 0 {
+			return strings.Join(parts, " › ")
 		}
 	}
-
-	if err := cp.Write(engine.ScanSummary(), scanSummary{
-		RulesLoaded:   len(rules),
-		TotalFindings: total,
-		RuleFires:     ruleFires,
-	}); err != nil {
-		return fmt.Errorf("write summary: %w", err)
-	}
-	timer.OutputFiles = total
-
-	slog.Info("scan complete", "rules", len(rules), "findings", total, "errors", len(timer.Errors))
-	return nil
+	return detect.StringField(subject, "_id")
 }
 
-// A malformed record is a normalize contract violation and aborts the phase.
-func loadSubjects(prior engine.PriorPhase, kind string) ([]map[string]any, error) {
-	dir, ok := subjectDirs[kind]
+// buildCode embeds the exact YAML window the subject points at, read from the
+// collected workflow, so the finding is self-contained. It is best-effort: a
+// subject without a code location, or an unreadable file, yields nil (code stays
+// null) — never a scan failure.
+func buildCode(runDir string, subject map[string]any) *finding.Code {
+	prov, ok := subject["_provenance"].(map[string]any)
 	if !ok {
-		return nil, nil
+		return nil
 	}
-	return loadRecords(prior, filepath.Join("10-normalize", dir))
-}
-
-// A missing file yields (nil,nil) so the rule fires zero times; a missing join
-// is left for EvaluateChainRule to report.
-func loadChain(prior engine.PriorPhase, chain *ChainOf) (map[string]any, error) {
-	if chain == nil || chain.Join == "" {
-		return nil, nil
+	wf := detect.StringField(prov, "workflow_file")
+	lr := intPair(prov["yaml_line_range"])
+	if wf == "" || lr == nil || runDir == "" {
+		return nil
 	}
-	p := prior.Abs(filepath.Join("10-normalize", "chains", chain.Join+".json"))
-	b, err := os.ReadFile(p)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
+	snippet, err := readSnippet(filepath.Join(runDir, wf), lr[0], lr[1])
 	if err != nil {
-		return nil, err
+		return nil
 	}
-	var data map[string]any
-	if err := json.Unmarshal(b, &data); err != nil {
-		return nil, fmt.Errorf("chain %s: %w", chain.Join, err)
-	}
-	return data, nil
+	return &finding.Code{LineRange: lr, Snippet: snippet}
 }
 
-func emitFinding(cp engine.CurrentPhase, rule *Rule, subject map[string]any, kind, org, runDir string) error {
-	f := BuildFinding(rule, subject, kind, org, runDir)
-	return cp.Write(engine.Finding(rule.ID, SubjectHash(subject)), f)
+func readSnippet(path string, start, end int) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(string(b), "\n")
+	if start < 1 {
+		start = 1
+	}
+	if end > len(lines) {
+		end = len(lines)
+	}
+	if start > end {
+		return "", fmt.Errorf("invalid line range [%d,%d] for %s (%d lines)", start, end, path, len(lines))
+	}
+	return strings.Join(lines[start-1:end], "\n"), nil
+}
+
+// intPair coerces a [start,end] range from JSON (float64 elements) or native ints.
+func intPair(v any) []int {
+	list, ok := v.([]any)
+	if !ok || len(list) != 2 {
+		return nil
+	}
+	out := make([]int, 2)
+	for i, e := range list {
+		switch n := e.(type) {
+		case float64:
+			out[i] = int(n)
+		case int:
+			out[i] = n
+		default:
+			return nil
+		}
+	}
+	return out
 }
