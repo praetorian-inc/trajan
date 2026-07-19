@@ -1,26 +1,26 @@
 id: cat-02/settable-var-into-arguments
 scenario_id: cat-02/02
-title: "Settable queue-time variable flows into shell task arguments"
-subject: pipeline
+title: "Queue-time variable flows into a shell task arguments input"
+subject: queue_time_injection
 severity: high
+confidence: low
 description: >
-  A variable explicitly marked "Settable at queue time" is macro-expanded into
-  the arguments input of a shell task (Bash, PowerShell, CmdLine, Ssh,
-  AzureFileCopy). Even with the queue-time variable limit enabled, the attacker
-  controls this variable by design and injects shell metacharacters into the
-  command line unless arguments validation is on.
-
+  A queue-time variable is macro-expanded into the arguments input of a shell
+  task (Bash, PowerShell, CmdLine, Ssh, AzureFileCopy). The agent concatenates
+  the expanded string onto the native command line, so a queuer breaks out of
+  the intended argument position and injects shell metacharacters. This survives
+  the queue-time variable limit because the variable is one the queuer is allowed
+  to control; the only runtime guard is shell-tasks arguments validation.
 where:
   all_of:
-    - has_settable_var_in_arguments_sink == true
-    - enable_shell_tasks_args_sanitizing == false
-
+    - "sink_type == 'macro_in_task_input'"
+    - "sink_location == 'task_input'"
+  none_of:
+    - "via == 'predefined_variable'"
 evidence:
-  - "Pipeline {{ _provenance.pipeline_name }}: settable variable {{ settable_var_name }} flows into {{ arguments_sink_task }} arguments"
-  - "Shell tasks arguments validation: {{ enable_shell_tasks_args_sanitizing }}"
-  - "Injection survives the queue-time variable limit because the variable is intentionally settable"
-
+  - "Pipeline {{ pipeline_id }} job {{ job }}: variable $({{ macro_name }}) flows into a task_input arguments sink"
+  - "Via {{ via }}, args validation enabled={{ enable_args_validation }}, confidence {{ confidence }}"
 remediation_hint: >
-  Enable "Enable shell tasks arguments validation" at the organization level.
-  Avoid passing queue-time-settable variables into task arguments; use env:
-  mapping or restrict the variable to a values allowlist via runtime parameters.
+  Enable "Enable shell tasks arguments validation". Do not pass queue-time
+  variables into task arguments — map them via env: or constrain them with a
+  runtime parameter values: allowlist.

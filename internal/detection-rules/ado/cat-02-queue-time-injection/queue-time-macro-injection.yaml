@@ -1,26 +1,26 @@
 id: cat-02/queue-time-macro-injection
 scenario_id: cat-02/01
-title: "Unrestricted queue-time variable macro-expanded into script body"
-subject: pipeline
+title: "Unrestricted queue-time variable macro-expanded into a script body"
+subject: queue_time_injection
 severity: critical
+confidence: high
 description: >
-  With "Limit variables that can be set at queue time" disabled, any user who
-  can queue the pipeline can supply arbitrary variables. A macro reference
-  $(var) in a script body splices the user-controlled string into the shell
-  command line, producing command injection without repo write access.
-
+  A user who can queue the pipeline supplies an arbitrary, undeclared variable
+  at queue time and it is macro-expanded $(var) directly into a script body.
+  The user-controlled string is spliced onto the shell command line and executed
+  with the pipeline's identity and secrets — command injection without repo
+  write access. This is the ADO analog of GitHub script injection via the
+  queue-time variable channel. Confidence is downgraded when the org enforces
+  the queue-time limit, so key off the technique, not on that setting being off.
 where:
   all_of:
-    - has_macro_in_script_sink == true
-    - enforce_settable_var == false
-
+    - "via == 'unrestricted_macro'"
+    - "sink_type == 'macro_in_script'"
 evidence:
-  - "Pipeline {{ _provenance.pipeline_name }} has $(var) macro in script sink at {{ taint_sink_locations }}"
-  - "Org/project setting enforce_settable_var = {{ enforce_settable_var }}"
-  - "Any queuer can inject undeclared variables into the build"
-
+  - "Pipeline {{ pipeline_id }} job {{ job }}: undeclared macro $({{ macro_name }}) expands into a {{ sink_location }} sink"
+  - "Via {{ via }}, confidence {{ confidence }} (enforce_settable_var={{ enforce_settable_var }})"
+  - "Source: any principal with {{ source_permission }} on the pipeline"
 remediation_hint: >
-  Enable "Limit variables that can be set at queue time" at the organization
-  level. Avoid macro-expanding user-controllable variables into script bodies;
-  use environment-variable mapping (env:) or runtime parameters with a values
-  allowlist instead.
+  Enable "Limit variables that can be set at queue time" and do not macro-expand
+  user-controllable variables into script bodies. Map inputs through env: or use
+  runtime parameters with a values: allowlist instead.
