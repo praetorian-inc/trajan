@@ -1,29 +1,33 @@
 id: cat-01/self-hosted-pool-pr-build-pivot
 scenario_id: cat-01/06
-title: "PR build on a shared non-ephemeral self-hosted pool exposes residual secrets"
-subject: chain
+title: "Privileged job runs on a self-hosted agent pool that persists state between builds"
+subject: job
 severity: high
 confidence: medium
 description: >
-  A PR-buildable pipeline targets a non-ephemeral self-hosted agent pool that
-  also runs privileged pipelines. The attacker's PR code executes on an agent
-  that retains working directories, cached credentials, and environment state
-  from prior privileged runs, enabling secret harvesting and lateral movement
-  even when the PR pipeline itself carries no secrets.
-
-chain_of:
-  join: shared-pool-exposure
-  for_each: privileged_co_tenants
-  where:
-    all_of:
-      - uses_secrets_or_connections == true
-
+  A job runs on a self-hosted agent pool (a named pool with no Microsoft-hosted
+  vm_image) and either exposes the System.AccessToken or consumes a service
+  connection. Self-hosted agents are non-ephemeral: working directories, cached
+  credentials, and environment state survive between jobs. If the same pool ever
+  runs an attacker-influenced PR/validation build, that build harvests the
+  residue of this privileged job and pivots into the in-network machine — the
+  prize is everything the agent has touched, not just this pipeline's secrets.
+  Microsoft-hosted pools are immune because their agents are destroyed after
+  each run.
+where:
+  all_of:
+    - "pool.name != ''"
+    - "pool.name != 'server'"
+    - "pool.vm_image == ''"
+    - any_of:
+        - "exposes_system_access_token == true"
+        - "service_connection_usages != []"
 evidence:
-  - "PR-buildable pipeline {{ pr_pipeline }} targets self-hosted pool {{ pool_name }} (ephemeral={{ pool_ephemeral }})"
-  - "Pool also runs privileged pipeline {{ co_tenant_pipeline }} which uses {{ secret_resource_names }}"
-
+  - "Job {{ _id }} in {{ project }} runs on self-hosted pool {{ pool.name }}"
+  - "Exposes System.AccessToken: {{ exposes_system_access_token }}"
+  - "Service connections used: {{ service_connection_usages.connection_name }}"
 remediation_hint: >
-  Use Microsoft-hosted pools for PR/fork validation builds. If self-hosted pools
-  are required, maintain a dedicated pool for untrusted builds with ephemeral
-  agents that do not persist state between jobs. Never share a non-ephemeral
-  pool between PR-validation and secret-consuming pipelines.
+  Run PR/fork validation builds on Microsoft-hosted pools. If self-hosted pools
+  are required, keep a dedicated pool with ephemeral agents for untrusted builds
+  and never share a non-ephemeral pool between validation builds and jobs that
+  hold secrets, service connections, or the build identity's token.

@@ -1,30 +1,29 @@
 id: cat-01/trigger-override-false-safe
 scenario_id: cat-01/07
-title: "YAML trigger declaration overridden by branch policy or UI — false-safe state"
-subject: chain
+title: "Non-blocking Build validation policy — false-safe PR gate"
+subject: branch_policy
 severity: medium
+confidence: medium
 description: >
-  The pipeline's YAML declares pr: none or trigger: none, but the effective
-  trigger is set by a branch-policy Build validation rule (Azure Repos ignores
-  the YAML pr: trigger entirely) or by the pipeline UI's "Override the YAML
-  trigger from here" setting. The in-repo safety declaration is decorative,
-  and the pipeline builds attacker PRs despite appearing hardened.
-
-chain_of:
-  join: trigger-divergence
-  for_each: override_sources
-  where:
-    all_of:
-      - effective_trigger_active == true
-
+  A Build validation branch policy exists but is not blocking, so it queues the
+  pipeline on every PR yet never prevents the PR from completing. On Azure Repos
+  the branch policy — not the YAML pr: trigger, which is ignored — is what drives
+  PR builds, so this policy still runs attacker-authored PR code on the merge
+  commit. Because it is non-blocking, defenders see "a validation policy exists"
+  and assume PRs are gated, while it neither blocks merge nor prevents the
+  untrusted build from running. The in-repo pr:/trigger: declaration is
+  decorative; the real control lives here and is toothless.
+where:
+  all_of:
+    - "policy_type == 'Build'"
+    - "is_enabled == true"
+    - "is_blocking == false"
 evidence:
-  - "Pipeline {{ pipeline_name }} YAML declares {{ yaml_trigger_declaration }}"
-  - "Effective trigger source: {{ override_source }} ({{ override_detail }})"
-  - "Divergence: YAML says inert but pipeline IS PR-triggerable"
-
+  - "Non-blocking Build validation policy {{ config_id }} in {{ project }}"
+  - "Blocking: {{ is_blocking }}; enabled: {{ is_enabled }}"
+  - "Scope: {{ scope }}"
 remediation_hint: >
-  Do not rely on YAML pr:/trigger: declarations for Azure Repos pipelines —
-  they are ignored. Audit the branch-policy Build validation settings and
-  pipeline UI trigger overrides as the authoritative trigger controls. Remove
-  build-validation policies from pipelines that should not run on PRs. Disable
-  the "Override YAML trigger" option when YAML should be the source of truth.
+  Make Build validation policies blocking so a failing/pending validation build
+  prevents merge, and do not rely on YAML pr:/trigger: declarations for Azure
+  Repos — they are ignored. Audit branch-policy Build validation and pipeline
+  trigger-override settings as the authoritative PR-trigger controls.
