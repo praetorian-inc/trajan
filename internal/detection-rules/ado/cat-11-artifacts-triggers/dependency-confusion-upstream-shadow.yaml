@@ -1,42 +1,39 @@
 id: cat-11/dependency-confusion-upstream-shadow
 scenario_id: cat-11/06
-title: "Dependency confusion via upstream source auto-save shadows internal packages"
-subject: chain
+title: "Artifacts feed has public upstream sources enabled (dependency-confusion / substitution surface)"
+subject: feed
 severity: high
 confidence: medium
 description: >
-  An Azure Artifacts feed has public upstream sources enabled. Packages
-  fetched from an upstream are automatically saved into the feed by any
-  identity with Collaborator role (the default Build Service role) and
-  become immutable permanent entries — even after the upstream is
-  removed. An attacker publishes a same-named package on the public
-  registry (naming-gap variant) or a Collaborator deliberately saves a
-  malicious public version (deliberate-save variant). Either way the
-  poisoned version persists permanently and is consumed by every
-  pipeline that restores from the feed using floating versions. The
-  defect is the union of public upstream auto-save, over-broad
-  Collaborator membership, and consumers using unpinned versions.
+  An Azure Artifacts feed has upstream sources enabled with at least one
+  PUBLIC upstream (npmjs, NuGet.org, PyPI, Maven Central, crates.io, ...).
+  Any package fetched from a public upstream is automatically saved into
+  the feed and becomes immutable and trusted thereafter — persisting even
+  after the upstream is removed. This is the dependency-confusion /
+  substitution surface: an attacker who publishes a same-named package on
+  the public registry (naming gap), or an over-broad Collaborator/Build
+  Service identity who deliberately saves a chosen malicious public
+  version, permanently poisons the feed for every float-version consumer.
+  The general defect is public upstream auto-save on a private feed; the
+  saved-package origin is masked in the feed, so review cannot see it.
 
-chain_of:
-  join: feed-upstream-confusion
-  for_each: vulnerable_packages
-  where:
-    all_of:
-      - feed.has_public_upstream == true
-      - feed.collaborator_population_is_broad == true
-      - consumer.uses_floating_version == true
+where:
+  all_of:
+    - upstream_enabled == true
+    - upstream_sources.upstreamSourceType ∋ 'public'
 
 evidence:
-  - "Feed {{ feed.name }} has public upstream source: {{ feed.upstream_name }}"
-  - "Collaborator population: {{ feed.collaborator_count }} identities including {{ feed.collaborator_grantees }}"
-  - "Package {{ package.name }} consumed with floating version by pipeline {{ consumer.pipeline_name }}"
-  - "Auto-saved packages are immutable and persist after upstream removal"
+  - "Feed {{ name }} (scope {{ scope }}) has upstream sources enabled"
+  - "Public upstream types present: {{ upstream_sources.upstreamSourceType }}"
+  - "Public upstream registries: {{ upstream_sources.location }}"
+  - "Any package resolved from a public upstream is auto-saved into the feed as an immutable, trusted entry"
 
 remediation_hint: >
-  Pin package versions in lock files and verify hashes. Restrict the
-  Collaborator role on the feed to the minimum set of build identities.
-  Use package name-reservation (NuGet ID prefix reservation, npm org
-  scope) to prevent public-registry squatting. Consider disabling
-  upstream sources on feeds that host security-critical internal
-  packages. Audit the feed's saved-from-upstream packages for
-  unexpected entries.
+  Disable public upstream sources on feeds that host security-critical
+  internal packages, or restrict which upstreams are allowed. Pin package
+  versions with lock files and verify hashes so a saved public version
+  cannot silently substitute an internal name. Reserve internal package
+  names publicly (NuGet ID-prefix reservation, npm org scope) to close the
+  naming gap. Audit the feed's saved-from-upstream packages for unexpected
+  entries. Restrict save-from-upstream (Collaborator) membership to the
+  minimum set of build identities.
