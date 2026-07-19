@@ -1,0 +1,29 @@
+id: cat-07/queue-time-vars-limit-off
+scenario_id: cat-07/02
+title: "Limit variables settable at queue time OFF org-wide exposes every pipeline"
+subject: org
+severity: high
+confidence: high
+description: >
+  The organization has not enabled "Limit variables that can be set at
+  queue time" (enforce_settable_var OFF). With this toggle off, every
+  pipeline in every project accepts undeclared, attacker-supplied
+  variables at queue time — including overrides of variables the author
+  never marked settable and of system variables. Any pipeline that expands
+  a non-readonly $(var) into a script / arguments / pool / task sink
+  becomes injectable by anyone holding "Edit queue build configuration".
+  A single un-set org toggle is the fleet-wide root cause behind the
+  queue-time-injection findings in category 02.
+
+where:
+  all_of:
+    - "enforce_settable_var == false"
+
+evidence:
+  - "Org {{ org }}: enforce_settable_var = {{ enforce_settable_var }} (Limit variables settable at queue time is OFF)"
+
+remediation_hint: >
+  In Organization settings > Pipelines > Settings, enable "Limit variables
+  that can be set at queue time". Enabling it at the org level applies to
+  all projects and cannot be turned off per project. Then only variables
+  explicitly marked settable at queue time can be overridden on a run.

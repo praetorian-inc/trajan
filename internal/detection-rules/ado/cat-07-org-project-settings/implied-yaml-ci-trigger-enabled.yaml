@@ -1,0 +1,28 @@
+id: cat-07/implied-yaml-ci-trigger-enabled
+title: "Implied YAML CI trigger not disabled at project level"
+subject: project
+severity: medium
+confidence: medium
+description: >
+  The project has not disabled the implied YAML CI trigger
+  (disable_implied_yaml_ci_trigger OFF). When a YAML pipeline omits an
+  explicit trigger block, Azure DevOps implicitly runs continuous
+  integration on every branch push. With this project toggle off, any
+  Contributor who can push a branch can cause a pipeline run — expanding
+  the population that can trigger pipeline execution (and any poisoning or
+  injection sink it carries) beyond what the author intended. Disabling
+  the implied trigger forces pipelines to declare their trigger surface
+  explicitly.
+
+where:
+  all_of:
+    - "disable_implied_yaml_ci_trigger == false"
+
+evidence:
+  - "Project {{ project }}: disable_implied_yaml_ci_trigger = {{ disable_implied_yaml_ci_trigger }}"
+
+remediation_hint: >
+  In Project settings > Pipelines > Settings (or org-wide), enable "Disable
+  implied YAML CI trigger" so pipelines without an explicit trigger block
+  do not auto-run on every push. Require each pipeline to declare its
+  trigger branches explicitly.

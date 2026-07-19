@@ -1,0 +1,28 @@
+id: cat-07/fork-builds-unprotected
+title: "Fork pull-request builds enabled without fork protection org-wide"
+subject: org
+severity: high
+confidence: medium
+description: >
+  The organization allows building pull requests from forks
+  (builds_enabled_for_forks ON) and/or has fork protection disabled
+  (fork_protection_enabled OFF). Fork PR builds run attacker-authored code
+  from an outside fork against the target's pipelines. Without fork
+  protection, those runs can be granted secrets and the System.AccessToken,
+  letting an external contributor exfiltrate credentials or poison the
+  pipeline simply by opening a pull request. This is the org control-plane
+  weakness that exposes the fleet to untrusted fork contributions.
+
+where:
+  any_of:
+    - "builds_enabled_for_forks == true"
+    - "fork_protection_enabled == false"
+
+evidence:
+  - "Org {{ org }}: builds_enabled_for_forks = {{ builds_enabled_for_forks }}, fork_protection_enabled = {{ fork_protection_enabled }}"
+
+remediation_hint: >
+  Enable fork protection so pull-request builds from forks do not receive
+  secrets or the System.AccessToken. If fork PR builds are required, gate
+  them behind manual approval for outside contributors and never expose
+  protected resources to them.
