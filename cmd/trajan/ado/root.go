@@ -18,7 +18,11 @@ func init() {
 	AdoCmd.PersistentFlags().String("azure-bearer-token", "", "Azure Entra ID bearer token (or set AZURE_BEARER_TOKEN)")
 
 	AdoCmd.AddCommand(enumerateCmd)
+	// The phased-pipeline scan takes over "ado scan"; the legacy monolithic
+	// scanner stays reachable as "ado scan-legacy" until the migration completes.
+	scanCmd.Use = "scan-legacy"
 	AdoCmd.AddCommand(scanCmd)
+	AdoCmd.AddCommand(newPhasedScanCmd())
 	AdoCmd.AddCommand(attackCmd)
 	AdoCmd.AddCommand(retrieveCmd)
 }
