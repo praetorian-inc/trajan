@@ -3,33 +3,33 @@ scenario_id: cat-09/04
 title: "Branch control check allows all refs or treats unknown protection as pass"
 subject: environment
 severity: high
+confidence: medium
 description: >
   The environment carries a Branch control check whose configuration is
-  ineffective: the allowed-branches list contains a wildcard pattern such
-  as refs/heads/* or *, and/or "require branch protection" is off, and/or
-  "unknown protection status" is set to allow. This makes the branch
-  control gate decorative — a Contributor creates or pushes to any branch,
-  runs the privileged pipeline from that ref, and the check passes because
-  every branch matches the allowed list and no protection is enforced. The
-  check appears present in the Approvals tab, giving false assurance.
-
+  ineffective. Its allowed-branches list contains a catch-all pattern
+  (a bare '*' or 'refs/heads/*'), and/or "ensure branches have protection"
+  is off, and/or "allow branches whose protection status is unknown" is on.
+  The gate then returns success for attacker-reachable refs — a Contributor
+  creates or pushes to any branch, runs the privileged pipeline from that
+  ref, and the check passes because every branch matches the allowed list
+  and no protection is enforced. The check still appears in the
+  Approvals-and-checks tab, giving false assurance. A Branch control check
+  correctly scoped to a protected branch (e.g. refs/heads/main) with
+  protection required is the secure state and does not fire.
 where:
   all_of:
-    - has_branch_control_check == true
+    - "checks.settings.displayName ∋ 'Branch Control'"
   any_of:
-    - branch_control_allows_all_refs == true
-    - branch_control_verify_protection == false
-    - branch_control_allow_unknown_status == true
-
+    - "checks.settings.inputs.allowedBranches matches '(^|,)\\s*(refs/heads/)?\\*'"
+    - "checks.settings.inputs.ensureProtectionOfBranch ∋ 'false'"
+    - "checks.settings.inputs.allowUnknownStatusBranch ∋ 'true'"
 evidence:
-  - "Environment {{ name }}: Branch control allowed branches = {{ branch_control_allowed_branches }}"
-  - "Verify branch protection: {{ branch_control_verify_protection }}"
-  - "Allow unknown protection status: {{ branch_control_allow_unknown_status }}"
-
+  - "Environment {{ project }}/{{ name }} Branch control allowed branches: {{ checks.settings.inputs.allowedBranches }}"
+  - "Ensure protection: {{ checks.settings.inputs.ensureProtectionOfBranch }}"
+  - "Allow unknown protection status: {{ checks.settings.inputs.allowUnknownStatusBranch }}"
 remediation_hint: >
-  Restrict the Branch control allowed-branches list to fully qualified
-  protected branches (e.g. refs/heads/main, refs/heads/release/*) that
-  correspond to branches with enforced branch policies. Enable "Require
-  branches to have protection" and set the unknown-protection-status
-  behavior to deny. Audit that no Contributor can create a branch matching
-  the allowed pattern without a review policy.
+  Restrict the Branch control allowed-branches list to fully-qualified
+  protected branches (e.g. refs/heads/main) that carry enforced branch
+  policies. Enable "ensure branches have protection" and set the
+  unknown-protection-status behavior to deny. Audit that no Contributor can
+  create a branch matching the allowed pattern without a review policy.
