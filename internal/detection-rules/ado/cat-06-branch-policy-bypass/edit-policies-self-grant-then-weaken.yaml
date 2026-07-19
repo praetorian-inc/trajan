@@ -1,41 +1,32 @@
 id: cat-06/edit-policies-self-grant-then-weaken
 scenario_id: cat-06/07
-title: "Identity with Edit policies or Manage permissions can weaken branch protection and merge"
-subject: chain
-severity: medium
-confidence: medium
+title: "Principal with Edit-policies can weaken branch protection then land code"
+subject: can_push_to
+severity: high
+confidence: high
 description: >
-  An identity (or group) holds the Edit policies or Manage permissions
-  permission on a repository or branch that has required branch policies
-  protecting a privileged pipeline trigger. This permission sits above every
-  branch policy in the category — a holder can disable the reviewer count,
-  downgrade build validation to Optional, or self-grant Bypass policies when
-  pushing via Manage permissions. The attacker weakens the control, merges
-  the malicious change through the now-open gate, and optionally restores the
-  policy afterward so the branch audits as protected at rest. Detection of
-  the transient weaken-then-restore variant requires the audit stream; this
-  rule fires on the static grant that makes the attack possible.
-
-chain_of:
-  join: edit-policies-privileged-branch
-  for_each: policy_editor_identities
-  where:
-    any_of:
-      - repo.branch_acl.effectiveAllow ∋ EditPolicies
-      - repo.branch_acl.effectiveAllow ∋ ManagePermissions
-    all_of:
-      - branch_has_required_policy == true
-      - triggers_privileged_pipeline == true
-
+  A principal reaches a protected branch through the edit_policies weakness:
+  they hold Edit policies (or Manage permissions) on the repository or branch,
+  which sits above every branch policy. A holder can disable the reviewer
+  count, downgrade build validation to Optional, or self-grant Bypass policies
+  when pushing, land the malicious change through the now-open gate, and
+  restore the policy afterward so the branch audits as protected at rest. The
+  transient weaken-then-restore is invisible without the audit stream; this
+  rule fires on the static grant that makes the attack possible, materialized
+  as the edit_policies variant on the CAN_PUSH_TO edge.
+where:
+  all_of:
+    - "has_blocking_policy == true"
+    - any_of:
+        - "via == 'edit_policies'"
+        - "all_via ∋ 'edit_policies'"
 evidence:
-  - "Identity {{ identity_name }} has {{ matched_permission }} on {{ branch }}"
-  - "Branch {{ branch }} has required policies: {{ required_policy_names }}"
-  - "Branch triggers privileged pipeline {{ pipeline_name }}"
-  - "Holder can disable/downgrade any branch policy or self-grant bypass permissions"
-
+  - "Principal {{ principal }} can reach {{ project }}/{{ repo }}@{{ branch }} via edit_policies"
+  - "All weakness variants on this edge: {{ all_via }}"
+  - "Branch has a blocking policy: {{ has_blocking_policy }} — the holder can weaken it before merging"
 remediation_hint: >
-  Restrict Edit policies and Manage permissions to project administrators
-  only. Remove the grant from broad groups like Contributors, Team Leads,
-  or DevOps roles. Audit group membership for inheritance paths that expose
-  the permission to non-admin identities. Enable audit-stream alerting on
-  branch-policy modification events to detect transient weakening.
+  Restrict Edit policies and Manage permissions to project administrators only;
+  remove the grant from Contributors, Team Leads, and DevOps roles. Audit group
+  membership for inheritance paths that expose the permission to non-admin
+  identities, and enable audit-stream alerting on branch-policy modification
+  events to catch transient weakening.

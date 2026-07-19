@@ -1,38 +1,33 @@
 id: cat-06/bypass-policies-when-pushing-silent
 scenario_id: cat-06/01
-title: "Identity with Bypass-policies-when-pushing can push directly to a CI-triggering protected branch"
-subject: chain
+title: "Principal can land code on a policy-protected branch via a bypass weakness"
+subject: can_push_to
 severity: high
+confidence: high
 description: >
-  An identity (or group) has the Bypass policies when pushing permission on a
-  branch that has required branch policies and triggers a privileged pipeline.
-  This permission makes every required policy — minimum reviewers, build
-  validation, comment resolution — advisory only. The push lands directly on
-  the protected branch with no PR, no reviewer notification, and no warning.
-  The privileged CI pipeline then executes the attacker's code with production
-  credentials. The bypass is a per-identity ACL on the branch security
-  namespace, completely separate from the policy definitions and invisible to
-  any policy-list or YAML audit.
-
-chain_of:
-  join: bypass-push-to-privileged-branch
-  for_each: bypass_identities
-  where:
-    all_of:
-      - repo.branch_acl.effectiveAllow ∋ PolicyExempt
-      - branch_has_required_policy == true
-      - triggers_privileged_pipeline == true
-
+  A principal holds the "Bypass policies when pushing" ACL on a branch that
+  carries a blocking branch policy, so their push lands directly with no PR, no
+  review, and no opt-in or warning. The branch-policies page shows the branch as
+  protected (has_blocking_policy = true), so a policy-on/off audit reads it as
+  safe, but the CAN_PUSH_TO join proves this principal bypasses the gate anyway.
+  When that branch triggers a privileged pipeline the principal lands unreviewed
+  code that runs with production credentials. Sibling weaknesses (self-approve,
+  stale approval, editable policies) are covered by their own rules; this rule
+  isolates the direct bypass-on-push grant.
+where:
+  all_of:
+    - "has_blocking_policy == true"
+    - any_of:
+        - "via == 'bypass_policies'"
+        - "all_via ∋ 'bypass_policies'"
 evidence:
-  - "Identity {{ identity_name }} has Bypass policies when pushing (PolicyExempt) on {{ branch }}"
-  - "Branch {{ branch }} has required policies: {{ required_policy_names }}"
-  - "Branch triggers privileged pipeline {{ pipeline_name }} consuming {{ privileged_resource_names }}"
-  - "Push bypasses all required policies silently — no opt-in step or warning"
-
+  - "Principal {{ principal }} can reach {{ project }}/{{ repo }}@{{ branch }} via {{ via }}"
+  - "All weakness variants on this edge: {{ all_via }}"
+  - "Branch shows a blocking policy (has_blocking_policy = {{ has_blocking_policy }}) yet the push lands anyway"
 remediation_hint: >
-  Remove the Bypass policies when pushing permission from all non-service
-  identities. Audit group inheritance — the grant is often inherited through
-  broad groups like Contributors or Build Administrators. If the permission is
-  required for automation accounts, add compensating controls such as
-  conditional-access policies and audit-log alerting on direct pushes to
+  Remove Bypass-policies-when-pushing and Edit-policies from all non-admin
+  identities and broad groups (Contributors, Build Administrators). Disable
+  "Allow requestors to approve their own changes" and enable vote reset on
+  source push so approvals cannot be reused. Audit group inheritance for the
+  path that grants each principal the weakness, and alert on direct pushes to
   protected branches.

@@ -1,35 +1,32 @@
 id: cat-06/build-validation-optional-non-blocking
 scenario_id: cat-06/04
-title: "Build validation policy set to Optional or Manual — PR completes without a passing build"
+title: "Build-validation policy is non-blocking or manual — PR completes without a passing build"
 subject: branch_policy
 severity: medium
+confidence: high
 description: >
-  The build-validation branch policy on a privileged branch is set to Optional
-  (blocking = false) or has its trigger set to Manual. An Optional policy
-  notifies on build failure but never blocks PR completion. A Manual trigger
-  means no validation build is queued unless someone explicitly requests it.
-  In either case the build gate is decorative: the branch-policies page shows
-  a build policy attached, so auditors checking "is there a build gate?"
-  answer yes, but a PR with a failing or absent build completes normally.
-  Combined with a weak reviewer gate, a Contributor lands code on a privileged
-  branch that was never built or tested.
-
+  A build-validation branch policy is decorative rather than enforcing: its
+  Policy requirement is Optional (is_blocking = false), so a failing or absent
+  build only notifies and never blocks PR completion; or its trigger is Manual
+  (manual_queue_only = true), so no validation build is queued unless someone
+  explicitly requests it. Either way the branch-policies page shows a Build
+  policy attached — an auditor asking "is there a build gate?" answers yes —
+  while a PR whose build failed or never ran completes normally. Combined with
+  a weak reviewer gate this lands unbuilt code on a protected branch.
 where:
-  any_of:
-    - build_policy_blocking == false
-    - build_policy_manual_queue_only == true
   all_of:
-    - build_policy_enabled == true
-
+    - "policy_type == 'Build'"
+    - "is_enabled == true"
+    - any_of:
+        - "is_blocking == false"
+        - "settings.manual_queue_only == true"
 evidence:
-  - "Build validation policy on {{ branch }}: blocking = {{ build_policy_blocking }} (Optional = non-blocking)"
-  - "Manual queue only: {{ build_policy_manual_queue_only }}"
-  - "Build definition: {{ build_definition_name }} (id: {{ build_definition_id }})"
-  - "Policy is enabled but does not prevent PR completion on build failure or absence"
-
+  - "Build policy {{ config_id }} in {{ project }}: is_blocking = {{ is_blocking }}, manual_queue_only = {{ settings.manual_queue_only }}"
+  - "Build definition id: {{ settings.build_definition_id }}"
+  - "Policy scope: {{ scope }}"
 remediation_hint: >
-  Set the build-validation Policy requirement to Required (blocking = true)
-  and Trigger to Automatic so that every PR must pass a CI build before
-  completion. Set build expiration to Immediately or a short window so stale
-  builds do not persist across source changes. Review path filters to ensure
-  they cover all security-relevant files in the repository.
+  Set the build-validation Policy requirement to Required (blocking) and the
+  Trigger to Automatic so every PR must pass a CI build before completion. Set
+  build expiration to Immediately (or a short window) so stale builds do not
+  persist across source changes, and confirm the path filters cover all
+  security-relevant files.
