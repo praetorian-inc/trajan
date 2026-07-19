@@ -1,34 +1,32 @@
 id: cat-14/self-approval-classic-release-stage
 scenario_id: cat-14/01
-title: "Classic release prod stage allows self-approval or has no pre-deployment approval"
-subject: classic_release
-severity: high
+title: "Classic release creation enabled (self-approvable prod release stages possible)"
+subject: project
+severity: medium
+confidence: low
 description: >
-  A classic release pipeline's production stage either has pre-deployment
-  approvals disabled entirely, or has the "requestor should not approve"
-  policy unchecked, allowing the release creator to approve their own
-  deployment. A release Contributor who can both author the release contents
-  and satisfy the approval gate deploys unreviewed code with prod service
-  connections and secret variable groups with zero second-party review.
-
+  POSTURE PROXY — the classic-release subsystem is DEFERRED (not collected or
+  normalized), so no ClassicRelease*/stage/approval nodes exist to inspect and
+  the real per-stage self-approval defect cannot be observed. The intended
+  detection flags a classic release production stage whose pre-deployment
+  approval is disabled, or lets the requestor approve their own deployment, so
+  a release Contributor authors and self-approves an unreviewed prod-credentialed
+  deploy. Since that data is unavailable, this rule reports only the enabling
+  posture: the project has NOT disabled classic release pipeline creation, so
+  classic release definitions — whose per-stage approval model is separate from
+  YAML Approvals-and-Checks — can still be created. This is an attack-surface
+  signal, not a confirmed self-approvable stage.
 where:
   all_of:
-    - is_prod_stage == true
-    - has_service_connection == true
-  any_of:
-    - pre_deployment_approval_enabled == false
-    - pre_deployment_approval_requestor_cannot_approve == false
-
+    - "disable_classic_release_creation == false"
+    - "disable_classic_pipeline_creation == false"
 evidence:
-  - "Classic release {{ release_name }} stage {{ stage_name }} consumes connection {{ service_connection_name }}"
-  - "Pre-deployment approval enabled: {{ pre_deployment_approval_enabled }}"
-  - "Requestor-cannot-approve policy: {{ pre_deployment_approval_requestor_cannot_approve }}"
-  - "Approvers: {{ pre_deployment_approval_approvers }}"
-
+  - "Project {{ project }}: disable_classic_release_creation={{ disable_classic_release_creation }}, disable_classic_pipeline_creation={{ disable_classic_pipeline_creation }}"
+  - "Release job auth scope limited to current project: {{ limit_job_auth_scope_for_releases }}"
 remediation_hint: >
-  Enable pre-deployment approvals on every production stage. Check the
-  "The user requesting a release or deployment should not approve it"
-  policy checkbox. Assign approvers from a distinct team that does not
-  include the release contributors who author and queue releases. Avoid
-  single-user or broad-group approvers where the release creator is a
-  member.
+  Enable "Disable creation of classic release pipelines" at the organization and
+  project level to remove the classic release path entirely. Where classic
+  releases must remain, require a pre-deployment approval on every production
+  stage, check "The user requesting a release or deployment should not approve
+  it", and draw approvers from a team that excludes the release contributors who
+  author and queue releases.
