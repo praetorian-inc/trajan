@@ -1,40 +1,37 @@
 id: cat-03/keyvault-linked-group-broad-access
 scenario_id: cat-03/03
-title: "KV-linked variable group fronts service connection with vault-wide Get/List"
-subject: chain
+title: "Key Vault-linked variable group is open to every pipeline"
+subject: variable_group
 severity: high
 confidence: medium
 description: >
-  A Key Vault-linked variable group is backed by a service connection whose
-  Azure RBAC assignment grants Get and List on the entire vault rather than
-  on specific secrets. Any pipeline authorized to consume the variable group
-  inherits the ability to enumerate and read every secret in the vault,
-  including secrets not surfaced as variables in the group. The finding
-  confidence is medium because the exploitable breadth depends on the
-  Azure RBAC scope (Tier-B), which is asserted via the service connection's
-  configured scope rather than live cloud enumeration.
+  A Key Vault-linked variable group (is_linked_to_keyvault) has "Grant access
+  to all pipelines" enabled. A KV-linked group maps only selected secret names;
+  the values are fetched live at runtime by the backing Azure Resource Manager
+  service connection, whose identity typically holds vault-scoped Get/List. When
+  the group is open to every pipeline, any pipeline in the project can borrow
+  that identity and — via an AzureCLI/Key Vault task on the same connection —
+  enumerate and read every secret in the vault, not just the mapped names. The
+  mapped-secret list is a UI convenience, not a boundary. Confidence is medium
+  because the exploitable breadth ultimately depends on the connection's Azure
+  RBAC scope, which is not collectable from ADO alone.
 
-chain_of:
-  join: group_uses_service_connection
-  for_each: kv_chain
-  where:
-    all_of:
-      - group.is_keyvault_linked == true
-      - group.service_connection.scope_is_broad == true
-      - pipeline.authorized_for_group == true
+where:
+  all_of:
+    - "is_linked_to_keyvault == true"
+    - "pipeline_permissions.all_pipelines == true"
 
 evidence:
-  - "Variable group: {{ kv_chain.group.name }}"
-  - "Service connection: {{ kv_chain.group.service_connection.name }}"
-  - "Key Vault: {{ kv_chain.group.service_connection.vault_name }}"
-  - "RBAC scope level: {{ kv_chain.group.service_connection.rbac_scope }}"
-  - "Authorized pipeline: {{ kv_chain.pipeline.name }}"
+  - "Key Vault-linked variable group: {{ project }} › {{ name }}"
+  - "Backing Key Vault: {{ keyvault_name }}"
+  - "Mapped secrets: {{ secret_variable_names }}"
+  - "Open access (all pipelines authorized): {{ pipeline_permissions.all_pipelines }}"
 
 remediation_hint: >
-  Narrow the service connection's Azure RBAC assignment from vault scope to
-  individual secret-level permissions, granting Get only on the specific
-  secrets the variable group surfaces. If multiple secrets are needed, prefer
-  an explicit allowlist over vault-wide Get/List. Add a Branch control check
-  on the variable group and restrict pipeline authorization to the minimum
-  required set. Review the vault for additional secrets that should not be
-  reachable from CI pipelines.
+  Disable Open access on the variable group and authorize only the specific
+  pipelines that need the mapped secrets. Narrow the backing service
+  connection's Azure RBAC assignment from vault scope to individual
+  secret-level permissions, granting Get only on the specific secrets the group
+  surfaces. Add a Branch control check so the group is only consumable from
+  protected branches. Review the vault for additional secrets that should not
+  be reachable from CI pipelines.

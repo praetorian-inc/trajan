@@ -3,27 +3,29 @@ scenario_id: cat-03/01
 title: "Variable group Open access exposes secrets to every pipeline"
 subject: variable_group
 severity: high
+confidence: high
 description: >
-  A variable group that contains secret variables is configured with
-  "Grant access to all pipelines" enabled. Any pipeline in the project,
-  including those triggered from feature or fork branches, can consume
-  every secret in the group without any explicit authorization. An attacker
-  with pipeline-create or pipeline-edit permission can exfiltrate production
-  credentials simply by referencing the group in a new or modified pipeline.
+  A variable group that contains secret variables has "Grant access to all
+  pipelines" (Open access) enabled — pipeline_permissions.all_pipelines is true.
+  Pipeline permissions are the only per-pipeline control isolating the secrets,
+  and Open access disables it project-wide: any pipeline in the project,
+  including one authored on an attacker-controlled feature branch, can reference
+  the group and read every secret in it. A Contributor who can create or push a
+  pipeline exfiltrates production credentials with no authorization prompt.
 
 where:
   all_of:
-    - grant_all_pipelines == true
-    - contains_secrets == true
+    - "pipeline_permissions.all_pipelines == true"
+    - "secret_variable_names != []"
 
 evidence:
-  - "Variable group: {{ variable_group.name }}"
-  - "Secret variables: {{ variable_group.secret_variable_names }}"
-  - "Pipelines that can consume this group (project-wide): {{ variable_group.authorized_pipeline_count }}"
+  - "Variable group: {{ project }} › {{ name }}"
+  - "Secret variables: {{ secret_variable_names }}"
+  - "Open access (all pipelines authorized): {{ pipeline_permissions.all_pipelines }}"
 
 remediation_hint: >
   Disable "Grant access to all pipelines" on the variable group and enumerate
   only the specific pipelines that legitimately need these secrets under
-  "Pipeline permissions." Add a Branch control check on the variable group
-  so secrets are only injected when the consuming pipeline runs on a protected
+  Pipeline permissions. Add a Branch control check on the variable group so
+  secrets are only injected when the consuming pipeline runs on a protected
   branch. Rotate any secrets that may have been consumed by unintended pipelines.
