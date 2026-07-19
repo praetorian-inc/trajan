@@ -1,39 +1,38 @@
 id: cat-04/open-access-arm-connection
 scenario_id: cat-04/01
-title: "Open-access AzureRM connection with no Approvals & checks"
+title: "Open-access Azure connection with no Approvals & checks"
 subject: service_connection
 severity: high
 confidence: medium
 description: >
-  An AzureRM service connection is configured with "Grant access to all pipelines"
-  enabled and has no Approvals & checks defined. Any pipeline in the project —
-  including those triggered by a pull request from a fork or an unprotected branch —
-  can invoke this connection without additional gating. Because AzureRM connections
-  carry Azure RBAC permissions scoped to a subscription or resource group, a
-  compromised or malicious pipeline gains direct cloud access. Confidence is medium
-  because the true Azure RBAC breadth (Tier-B) cannot be confirmed from ADO
-  metadata alone; the finding should be validated against the service principal's
-  Azure role assignments.
+  An Azure Resource Manager service connection has "Grant access permission to
+  all pipelines" enabled (pipeline_permissions.all_pipelines == true) and has no
+  Approvals & checks configured. Every pipeline in the project — including any new
+  one a Contributor creates and any change pushed to an existing pipeline's YAML
+  on a non-protected branch — is pre-authorized to use it without a per-pipeline
+  authorization step and without a Branch control or manual-approval gate. Because
+  an ARM connection authenticates as a service principal that commonly holds
+  subscription- or resource-group-scoped Contributor, attacker-authored YAML runs
+  as that cloud identity. Confidence is medium because the connection's true Azure
+  RBAC breadth is not observable from ADO metadata; the ADO-confirmable part is
+  the open, ungated reachability.
 
 where:
   all_of:
-    - type == "AzureRM"
-    - grant_all_pipelines == true
-    - checks == []
+    - "type == 'azurerm'"
+    - "pipeline_permissions.all_pipelines == true"
+    - "checks == []"
 
 evidence:
-  - "Connection name: {{ service_connection.name }}"
-  - "Auth scheme: {{ service_connection.authorization.scheme }}"
-  - "Scope level: {{ service_connection.data.scopeLevel }}"
-  - "Authorized pipeline count: {{ service_connection.authorized_pipeline_count }}"
-  - "Checks defined: {{ service_connection.checks }}"
+  - "Connection: {{ name }} ({{ type }}) in project {{ project }}"
+  - "Auth scheme: {{ auth_scheme }}"
+  - "Scope level: {{ scope_level }}"
+  - "All pipelines authorized: {{ pipeline_permissions.all_pipelines }}"
+  - "Checks defined: {{ checks }}"
 
 remediation_hint: >
-  Disable "Grant access to all pipelines" on the service connection and switch to
-  explicit per-pipeline authorization so that only approved pipelines may use it.
-  Add at minimum a Branch control check (restrict to protected branches such as
-  main or release/*) and, for production connections, an Approval check requiring
-  a human sign-off before each run. On the Azure side, tighten the service
-  principal's RBAC assignment to the narrowest necessary scope (resource group or
-  individual resource) and role (e.g., Contributor scoped to a single resource
-  rather than a subscription-level Owner).
+  Disable "Grant access permission to all pipelines" and authorize each pipeline
+  individually. Add a Branch control check restricting the connection to protected
+  branches (e.g. main, release/*) and, for production connections, a manual
+  approval. On the Azure side, tighten the service principal's RBAC to the
+  narrowest scope and role required rather than subscription-level Contributor.

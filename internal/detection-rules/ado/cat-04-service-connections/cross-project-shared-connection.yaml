@@ -1,0 +1,38 @@
+id: cat-04/cross-project-shared-connection
+scenario_id: cat-04/06
+title: "Service connection shared into another project without a check"
+subject: service_connection
+severity: high
+confidence: medium
+description: >
+  A service connection is reachable outside its home project — it is shared into
+  one or more other projects (is_shared == true / shared_into non-empty) — and has
+  no Approvals & checks configured. Service connections are project-scoped objects;
+  sharing one erases the project boundary that was meant to contain its blast
+  radius. The connection's effective security posture becomes that of the weakest
+  consuming project (more Contributors, looser branch policies, no resource
+  checks). A Contributor in a low-trust consuming project can author a pipeline
+  that uses the shared connection and run as its identity. Confidence is medium:
+  the cross-project reach is ADO-confirmable, but whether the consuming project is
+  genuinely lower-trust and the connection's cloud RBAC breadth are not on this
+  record.
+
+where:
+  all_of:
+    - "is_shared == true"
+    - "checks == []"
+
+evidence:
+  - "Connection: {{ name }} ({{ type }}) owned by {{ owner_project }}"
+  - "Shared into: {{ shared_into }}"
+  - "Visible in projects: {{ visible_in_projects }}"
+  - "Checks defined: {{ checks }}"
+
+remediation_hint: >
+  Prefer a dedicated connection per consuming project over sharing a single
+  high-privilege connection across projects. Where sharing is required, add a
+  Branch control check that lists only the intended branches of every consuming
+  project and, for production connections, a manual approval. Confirm that the
+  consuming projects' branch policies prevent attacker-controlled YAML from
+  reaching the connection, and scope the backing service principal's cloud RBAC to
+  least privilege.

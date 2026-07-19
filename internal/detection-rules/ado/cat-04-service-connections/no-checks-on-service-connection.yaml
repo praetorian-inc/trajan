@@ -1,37 +1,37 @@
 id: cat-04/no-checks-on-service-connection
 scenario_id: cat-04/02
-title: "Per-pipeline service connection with no Approvals & checks"
+title: "Per-pipeline service connection with no Branch control / approval check"
 subject: service_connection
 severity: high
+confidence: medium
 description: >
-  A service connection uses per-pipeline authorization (grant_all_pipelines is
-  false) but has no Approvals & checks configured. Per-pipeline authorization
-  binds the connection to a specific pipeline definition, not to a branch. Any
-  branch — including a feature branch, a fork-derived branch, or an attacker-
-  controlled branch — that triggers the authorized pipeline can consume the
-  connection without additional gating. An attacker with the ability to push to
-  an unprotected branch or open a pull request that triggers the pipeline can
-  exfiltrate credentials or perform cloud actions through the connection. Because
-  the absence of checks is directly observable in ADO metadata, confidence is
-  high.
+  A service connection uses per-pipeline authorization
+  (pipeline_permissions.all_pipelines == false, the recommended posture) but has
+  no Approvals & checks configured. Per-pipeline authorization binds the
+  connection to a pipeline definition, not to a branch: the same definition builds
+  whatever branch is queued, and its YAML is mutable on every non-protected
+  branch. Without a Branch control or manual-approval check, a Contributor who can
+  push to a feature branch of the authorized repo can edit the YAML to consume the
+  connection and queue it on that branch, running as the connection's identity.
+  The absence of an effective resource check is the vulnerability the "authorize
+  per pipeline" advice alone does not close. Confidence is medium: dev/test
+  connections legitimately carry no checks, and the connection's cloud blast
+  radius is not observable from ADO metadata.
 
 where:
   all_of:
-    - grant_all_pipelines == false
-    - checks == []
-    - authorized_pipelines != []
+    - "pipeline_permissions.all_pipelines == false"
+    - "checks == []"
 
 evidence:
-  - "Connection name: {{ service_connection.name }}"
-  - "Connection type: {{ service_connection.type }}"
-  - "Authorized pipelines: {{ service_connection.authorized_pipeline_names }}"
-  - "Checks defined: {{ service_connection.checks }}"
+  - "Connection: {{ name }} ({{ type }}) in project {{ project }}"
+  - "Auth scheme: {{ auth_scheme }}"
+  - "All pipelines authorized: {{ pipeline_permissions.all_pipelines }}"
+  - "Checks defined: {{ checks }}"
 
 remediation_hint: >
-  Add a Branch control check to the service connection to restrict usage to
-  protected branches (e.g., main, release/*). For connections that deploy to
-  production or access sensitive cloud resources, also add an Approval check
-  requiring explicit human sign-off before each pipeline run. Review whether the
-  authorized pipelines themselves run on branches protected by pull-request
-  policies that require reviewer approval, preventing direct pushes that could
-  bypass branch control.
+  Add a Branch control check to the connection restricting it to protected
+  branches (e.g. main, release/*), so a feature/PR branch cannot consume it. For
+  production connections also require a manual approval. Ensure the authorized
+  pipelines run on branches guarded by pull-request policies so attacker-authored
+  YAML cannot reach the runner on an unprotected branch.

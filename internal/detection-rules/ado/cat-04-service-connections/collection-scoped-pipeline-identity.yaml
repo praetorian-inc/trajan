@@ -1,0 +1,39 @@
+id: cat-04/collection-scoped-pipeline-identity
+scenario_id: cat-04/05
+title: "Pipeline runs with a collection-scoped identity"
+subject: pipeline
+severity: high
+confidence: medium
+description: >
+  A pipeline's realized job-authorization scope is the whole collection
+  (effective_scope == 'collection') rather than its own project. Its
+  System.AccessToken is therefore a collection-scoped credential: any step that
+  can read it reaches the ADO REST API across every project. If the collection
+  Build Service identity has also been granted collection-level administration
+  (e.g. Project Collection Build Service placed in Project Collection
+  Administrators — a non-default grant), a Contributor who can edit or queue this
+  pipeline can escalate to org takeover through the token. This rule flags the
+  ADO-collectable enabling condition — the collection-scoped identity itself;
+  because the org and project "limit job authorization scope to current project"
+  toggles collapse the raw definition scope, a pipeline that still resolves to
+  collection scope has an explicit override. Confidence is medium because the
+  collection-admin role grant that turns this into full takeover lives on the
+  permissions plane, not on the pipeline record.
+
+where:
+  all_of:
+    - "effective_scope == 'collection'"
+
+evidence:
+  - "Pipeline: {{ name }} ({{ id }}) in project {{ project }}"
+  - "Identity scope: {{ identity_scope }}"
+  - "Effective scope: {{ effective_scope }}"
+  - "Raw job authorization scope: {{ job_authorization_scope }}"
+
+remediation_hint: >
+  Restrict this pipeline's job authorization scope to its current project (enable
+  "Limit job authorization scope to current project" at org and project level, and
+  remove any pipeline-level override that re-expands it). Remove the Project
+  Collection Build Service identity from Project Collection Administrators and any
+  other collection-level admin role. Restrict editing and queuing of this pipeline
+  to a maintainer group rather than all Contributors.
