@@ -1,0 +1,36 @@
+id: cat-10/pool-agent-autoupdate-self-hosted
+scenario_id: cat-10/09
+title: "Self-hosted agent pool with auto-update enabled — agent-software supply-chain fan-out"
+subject: agent_pool
+severity: low
+confidence: low
+description: >
+  A self-hosted agent pool has auto-update enabled, so its agents pull
+  and apply agent software automatically (and a pool Administrator can
+  force an update fleet-wide via the pool messages API). If an attacker
+  can write to the local agent package store the update draws from
+  (weak ACLs on the package directory, or a poisoned server-tier store),
+  the next auto-update installs attacker-controlled agent software on
+  every agent in the pool — code execution as the agent across the whole
+  fleet, persisting across job boundaries. The writable-store precondition
+  lives on the host plane and is not ADO-visible; this rule flags the
+  auto-update fan-out channel on persistent self-hosted pools so the host
+  ACL can be reviewed.
+
+where:
+  all_of:
+    - is_hosted == false
+    - auto_update == true
+    - size > 0
+
+evidence:
+  - "Self-hosted agent pool {{ name }} (id {{ id }}) has auto_update=true across {{ size }} agents"
+  - "An update forced pool-wide (messages API) or drawn from a writable package store fans out to the whole fleet"
+  - "Poisoned agent software would run as the agent on every host and persist across jobs"
+
+remediation_hint: >
+  Restrict write access to the agent install / local package directory
+  on every self-hosted agent host to trusted administrators only. Restrict
+  the pool Administrator role (which can trigger fleet-wide updates) to
+  infrastructure teams. Pin and verify the agent package source; monitor
+  agent-version changes across the pool for unexpected updates.

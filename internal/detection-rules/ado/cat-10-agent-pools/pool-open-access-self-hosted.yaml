@@ -1,31 +1,36 @@
 id: cat-10/pool-open-access-self-hosted
 scenario_id: cat-10/02
-title: "Open access on a self-hosted agent pool lets any pipeline schedule onto internal infrastructure"
+title: "Self-hosted agent pool auto-provisioned into all projects — broad reach onto internal infrastructure"
 subject: agent_pool
-severity: info
+severity: medium
+confidence: medium
 description: >
-  A self-hosted agent pool has Grant access permission to all pipelines
-  enabled. Any Contributor who can create or edit a YAML pipeline in any
-  project that can reach the pool can schedule a job onto it — no
-  per-pipeline authorization request needed. This is the enabling
-  primitive for host-resident secret theft, IMDS credential harvesting,
-  and network-pivot scenarios on shared non-ephemeral agents. The finding
-  is a posture check; severity rises when the pool is confirmed to host
-  privileged agents or carry high-value host-resident assets.
+  A self-hosted agent pool is auto-provisioned org-wide, so a
+  corresponding queue exists in every project and any pipeline author in
+  any project can schedule a job onto the pool's persistent, internal
+  agents. Auto-provisioning is the reachability primitive the
+  host-resident attacks ride on (residue harvest, IMDS token theft,
+  persistence): it maximizes the attacker population that can land code
+  on the shared self-hosted host. A self-hosted pool restricted to one
+  project is far less exposed; org-wide auto-provisioning removes that
+  boundary.
 
 where:
   all_of:
-    - grant_all_pipelines == true
-    - is_self_hosted == true
+    - is_hosted == false
+    - auto_provision == true
+    - size > 0
 
 evidence:
-  - "Agent pool {{ name }}: grant_all_pipelines = {{ grant_all_pipelines }}"
-  - "Pool type: self-hosted ({{ size }} agents)"
-  - "Any pipeline in the project can schedule jobs without explicit authorization"
+  - "Self-hosted agent pool {{ name }} (id {{ id }}) has auto_provision=true"
+  - "A queue is provisioned in every project — any project's pipelines can reach the {{ size }} agents"
+  - "No org-wide reachability boundary before a job lands on the internal host"
 
 remediation_hint: >
-  Disable Grant access permission to all pipelines on every self-hosted
-  pool. Authorize only the specific pipelines that require the pool.
-  Add Approvals and Checks (branch control gated to refs/heads/main,
-  approval with requester-cannot-approve) on the pool resource so that
-  even authorized pipelines must pass a gate before scheduling.
+  Disable auto-provision on self-hosted pools; create the pool only in
+  the specific projects that need it. Lock down per-pool pipeline
+  permissions to the authorized pipelines only (this ACL lives on the
+  project agent pool, not the org pool), and add Approvals and Checks
+  (branch control gated to the release branch, approval with
+  requester-cannot-approve) on the pool resource so even authorized
+  pipelines pass a gate before scheduling.

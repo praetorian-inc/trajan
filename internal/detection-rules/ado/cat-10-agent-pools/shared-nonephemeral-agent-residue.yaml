@@ -1,40 +1,38 @@
 id: cat-10/shared-nonephemeral-agent-residue
 scenario_id: cat-10/01
-title: "Shared non-ephemeral self-hosted agent exposes host-resident secrets to low-trust pipelines"
-subject: chain
-severity: high
+title: "Non-ephemeral self-hosted agent pool — host state persists between jobs for residue harvest"
+subject: agent_pool
+severity: low
 confidence: medium
 description: >
-  A self-hosted agent pool is shared across trust tiers and does not use
-  ephemeral or scale-set rotation. The work directory, tool cache,
-  run-as account home, and agent credentials persist between jobs. A
-  low-trust pipeline scheduled onto the agent can read secrets, tokens,
-  kubeconfigs, and cloud credentials a prior privileged pipeline left on
-  disk — including Managed Identity tokens reachable via IMDS and
-  privileges inherited from a high-privilege run-as account. No exploit
-  code is needed; reading disk suffices.
+  A self-hosted agent pool runs static (non-elastic / non-scale-set)
+  agents, so the machine is reused across jobs and its state persists.
+  Checked-out source, build output, tool caches under the run-as
+  account's home, and any secret a prior privileged job wrote to disk
+  survive into the next job unless that pipeline explicitly cleaned the
+  workspace. A low-trust pipeline scheduled onto the same agent can read
+  that residue with no exploit code — just reading disk. Microsoft-hosted
+  and elastic/scale-set pools get a fresh VM per job and are not exposed;
+  the risk is specific to persistent self-hosted hosts. This is a
+  posture enabler — severity rises when the pool is confirmed to carry
+  privileged run-as agents or host-resident secrets.
 
-chain_of:
-  join: shared-agent-host-exposure
-  for_each: consuming_pipelines
-  where:
-    all_of:
-      - pool.is_self_hosted == true
-      - pool.is_ephemeral == false
-      - pool.is_shared_across_trust_tiers == true
-      - pipeline.contributor_can_edit_yaml == true
+where:
+  all_of:
+    - is_hosted == false
+    - is_elastic == false
+    - size > 0
 
 evidence:
-  - "Agent pool {{ pool.name }} is self-hosted and non-ephemeral"
-  - "Pool shared across trust tiers: {{ pool.consuming_project_count }} projects"
-  - "Low-trust pipeline {{ pipeline_name }} can schedule onto this pool"
-  - "Host-resident assets at risk: workspace residue, tool cache, run-as credentials, IMDS tokens"
+  - "Self-hosted agent pool {{ name }} (id {{ id }}) is non-elastic — agents are reused across jobs"
+  - "Pool has {{ size }} persistent agents; workspace, tool cache, and run-as home survive between jobs"
+  - "A low-trust pipeline scheduled onto this pool can read a prior job's on-disk residue"
 
 remediation_hint: >
-  Use ephemeral agents (VMSS scale-set agents or container-based agents
-  that reset after each job). If non-ephemeral agents must remain,
-  restrict pipeline permissions to trusted pipelines only — remove open
-  access. Add Approvals and Checks (branch control, approval) on the
-  pool resource. Ensure privileged pipelines set workspace clean to all.
-  Audit the run-as account and any attached Managed Identity for
+  Prefer ephemeral agents — VM scale-set (elastic) pools or
+  container-based agents that reset after each job. If static agents
+  must remain, restrict pipeline permissions to trusted pipelines only,
+  set workspace clean-to-all on privileged pipelines, and add Approvals
+  and Checks (branch control, approval) on the pool resource. Audit the
+  agent run-as account and any attached Managed Identity for
   over-privilege.
