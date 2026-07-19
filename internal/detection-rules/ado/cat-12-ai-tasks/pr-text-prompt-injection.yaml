@@ -1,32 +1,33 @@
 id: cat-12/pr-text-prompt-injection
 scenario_id: cat-12/01
-title: "PR title/description injected into agent prompt with Build Service token"
-subject: pipeline
+title: "Untrusted input reaches an AI agent step holding a privileged capability with no review gate"
+subject: agent_injection
 severity: high
+confidence: high
 description: >
-  An AI-review pipeline interpolates the PR's free-text fields (title,
-  description, source-version message) directly into the agent prompt. The
-  agent holds System.AccessToken (collection-scoped by default) and has
-  tool-use or shell execution enabled. A Contributor's PR text becomes the
-  agent's instructions, executing before any reviewer acts because build
-  validation fires on PR creation.
+  An AI-agent pipeline step ingests attacker-controlled text — a PR
+  title/description, work-item field, commit message, or changed-file
+  content — into the agent prompt, and the agent is granted a dangerous
+  capability: tool/shell execution, network egress, an ID token, or the
+  ability to auto-commit / auto-open PRs. No approval gate stands between
+  the untrusted input and that capability, so a Contributor's text becomes
+  the agent's instructions and runs before any human reviews it. This is
+  the base injection primitive underlying the AI-task category.
 
 where:
   all_of:
-    - prompt_ingests_untrusted == true
-    - exposes_system_access_token == true
-    - has_agent_tool_use == true
-  any_of:
-    - trigger_is_build_validation == true
-    - trigger_is_pr == true
+    - technique == 'prompt_injection'
+    - gate_state == 'absent'
+    - capabilities ∋ {tool_exec, egress, id_token, auto_commit, auto_pr}
 
 evidence:
-  - "Pipeline {{ _provenance.pipeline_name }}: prompt ingests untrusted PR text ({{ untrusted_source_fields }})"
-  - "Agent has tool-use/shell execution enabled ({{ agent_tool_type }})"
-  - "System.AccessToken exposed; job auth scope: {{ job_auth_scope }}"
+  - "Project {{ project }} pipeline {{ pipeline_id }} job {{ job }}: {{ vendor }} agent ingests {{ source_kind }}"
+  - "Injection wiring: via={{ via }}, capabilities={{ capabilities }}, gate_state={{ gate_state }}"
+  - "Identity scope: {{ identity_scope }}; confidence: {{ confidence }}"
 
 remediation_hint: >
-  Never interpolate raw PR text into agent prompts. Use a sanitization layer
-  that strips instruction-like content. Scope the job authorization to
-  current project. Remove write tools from the agent or gate agent actions
-  behind a human approval step.
+  Never interpolate raw PR/work-item/file text into agent prompts. Strip
+  instruction-like content, and put a human approval gate (an environment
+  check) between the untrusted input and any privileged agent action.
+  Remove write/exec/egress tools from agents that process untrusted text,
+  and scope the job authorization to the current project.

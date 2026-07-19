@@ -1,31 +1,30 @@
 id: cat-12/indirect-injection-agentic-rce
 scenario_id: cat-12/03
-title: "Indirect prompt injection from changed files drives agentic tool-use into RCE"
-subject: pipeline
+title: "Injected AI agent holds tool/shell execution — indirect-injection RCE on the build host"
+subject: agent_injection
 severity: high
+confidence: high
 description: >
-  The agent is given shell/tool-use over the build agent and instructed to
-  operate on PR-derived file contents (review, test, fix). A poisoned file
-  in the PR carries indirect prompt injection that makes the agent run
-  attacker commands on the host — full RCE with the agent's token, secrets,
-  and network position. The merge commit is checked out before review.
+  The agent processes attacker-controlled input and is granted tool/shell
+  execution (tool_exec) over the build agent. A poisoned PR file, work-item
+  field, or PR text carries an injection that makes the agent run attacker
+  commands on the host — full RCE with the run's token, mapped secrets, and
+  network position — with no approval gate in between. tool_exec is the
+  capability that converts prompt injection into arbitrary code execution.
 
 where:
   all_of:
-    - executes_checked_out_code == true
-    - has_agent_tool_use == true
-    - prompt_ingests_untrusted == true
-  any_of:
-    - trigger_is_build_validation == true
-    - trigger_is_pr == true
+    - technique == 'prompt_injection'
+    - gate_state == 'absent'
+    - capabilities ∋ 'tool_exec'
 
 evidence:
-  - "Pipeline {{ _provenance.pipeline_name }}: agent operates on checked-out PR files with {{ agent_tool_type }} tool"
-  - "Checkout of attacker-controlled merge commit + agentic shell/tool-use = RCE sink"
-  - "Secrets in scope: {{ secret_resource_names }}"
+  - "Project {{ project }} pipeline {{ pipeline_id }} job {{ job }}: {{ vendor }} agent has tool_exec on {{ source_kind }}"
+  - "Capabilities: {{ capabilities }}; via={{ via }}; gate_state={{ gate_state }}"
+  - "tool_exec + attacker-controlled prompt = RCE with the run's identity ({{ identity_scope }})"
 
 remediation_hint: >
-  Do not give agents shell/exec tools when processing untrusted file contents.
+  Do not grant agents shell/exec tools when they process untrusted input.
   If agentic tool-use is required, run it in a sandboxed container with no
-  secrets, no service connections, and a project-scoped token. Gate any
-  generated actions behind human review.
+  secrets, no service connections, and a project-scoped token, and gate any
+  generated action behind a human approval check.

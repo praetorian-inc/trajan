@@ -1,28 +1,29 @@
 id: cat-12/generate-then-execute
 scenario_id: cat-12/05
-title: "Agent-generated script or YAML executed in the same run without human review"
-subject: pipeline
+title: "Agent-generated output executed in the same run without human review"
+subject: agent_injection
 severity: high
+confidence: high
 description: >
-  A pipeline step invokes an agent to generate a build script, pipeline
-  fragment, or remediation patch, then a subsequent step executes that
-  output in the same run. Because the agent's output is shaped by
-  attacker-controlled input (PR text, file contents) and is never reviewed,
-  the generation step becomes a code-injection sink — the model is an
-  unsanitized code source.
+  A pipeline invokes an AI agent to generate a build script, pipeline
+  fragment, or remediation patch shaped by attacker-controlled input, then
+  a later step executes that output in the same run. The generate→execute
+  coupling turns the model into an unsanitized code source: an injection in
+  the prompt flows straight into executed code with no review gate. This is
+  the `via == generate_then_execute` wiring of the agent-injection edge.
 
 where:
   all_of:
-    - has_generate_then_execute_edge == true
-    - prompt_ingests_untrusted == true
+    - via == 'generate_then_execute'
+    - gate_state == 'absent'
 
 evidence:
-  - "Pipeline {{ _provenance.pipeline_name }}: step {{ generator_step }} generates output consumed by step {{ executor_step }}"
-  - "Generator prompt includes untrusted input from {{ untrusted_source_fields }}"
-  - "Executor step has access to: {{ executor_credentials }}"
+  - "Project {{ project }} pipeline {{ pipeline_id }} job {{ job }}: {{ vendor }} agent generates then executes"
+  - "Source: {{ source_kind }}; capabilities: {{ capabilities }}; gate_state: {{ gate_state }}"
+  - "No review gate between generation and execution (identity scope {{ identity_scope }})"
 
 remediation_hint: >
   Never execute agent-generated output in the same run. If generation and
-  execution must be coupled, insert a human review gate (approval check on
-  an environment) between the generate and execute stages. Store generated
-  artifacts for review before any privileged step consumes them.
+  execution must be coupled, insert a human review gate (an environment
+  approval check) between the generate and execute stages, and store the
+  generated artifact for review before any privileged step consumes it.
