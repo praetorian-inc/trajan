@@ -1,0 +1,33 @@
+id: cat-01/self-hosted-pool-pr-build-pivot
+scenario_id: cat-01/06
+title: "Privileged job runs on a self-hosted agent pool that persists state between builds"
+subject: job
+severity: high
+confidence: medium
+description: >
+  A job runs on a self-hosted agent pool (a named pool with no Microsoft-hosted
+  vm_image) and either exposes the System.AccessToken or consumes a service
+  connection. Self-hosted agents are non-ephemeral: working directories, cached
+  credentials, and environment state survive between jobs. If the same pool ever
+  runs an attacker-influenced PR/validation build, that build harvests the
+  residue of this privileged job and pivots into the in-network machine — the
+  prize is everything the agent has touched, not just this pipeline's secrets.
+  Microsoft-hosted pools are immune because their agents are destroyed after
+  each run.
+where:
+  all_of:
+    - "pool.name != ''"
+    - "pool.name != 'server'"
+    - "pool.vm_image == ''"
+    - any_of:
+        - "exposes_system_access_token == true"
+        - "service_connection_usages != []"
+evidence:
+  - "Job {{ _id }} in {{ project }} runs on self-hosted pool {{ pool.name }}"
+  - "Exposes System.AccessToken: {{ exposes_system_access_token }}"
+  - "Service connections used: {{ service_connection_usages.connection_name }}"
+remediation_hint: >
+  Run PR/fork validation builds on Microsoft-hosted pools. If self-hosted pools
+  are required, keep a dedicated pool with ephemeral agents for untrusted builds
+  and never share a non-ephemeral pool between validation builds and jobs that
+  hold secrets, service connections, or the build identity's token.
