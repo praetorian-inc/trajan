@@ -16,6 +16,7 @@ description: >
 where:
   all_of:
     - "enable_shell_tasks_args_sanitizing == false"
+    - "settings_observed == true"
 
 evidence:
   - "Project {{ project }}: enable_shell_tasks_args_sanitizing = {{ enable_shell_tasks_args_sanitizing }}"

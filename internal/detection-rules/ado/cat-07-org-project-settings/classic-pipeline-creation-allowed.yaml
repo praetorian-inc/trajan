@@ -17,10 +17,12 @@ description: >
   classic escape hatch.
 
 where:
-  any_of:
-    - "disable_classic_pipeline_creation == false"
-    - "disable_classic_build_pipeline_creation == false"
-    - "disable_classic_release_creation == false"
+  all_of:
+    - "settings_observed == true"
+    - any_of:
+        - "disable_classic_pipeline_creation == false"
+        - "disable_classic_build_pipeline_creation == false"
+        - "disable_classic_release_creation == false"
 
 evidence:
   - "Org {{ org }}: disable_classic_pipeline_creation = {{ disable_classic_pipeline_creation }}"

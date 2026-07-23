@@ -17,6 +17,7 @@ description: >
 where:
   all_of:
     - "disable_implied_yaml_ci_trigger == false"
+    - "settings_observed == true"
 
 evidence:
   - "Project {{ project }}: disable_implied_yaml_ci_trigger = {{ disable_implied_yaml_ci_trigger }}"

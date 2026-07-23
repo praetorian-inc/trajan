@@ -20,6 +20,7 @@ where:
   all_of:
     - "disable_classic_build_pipeline_creation == false"
     - "disable_classic_pipeline_creation == false"
+    - "settings_observed == true"
 evidence:
   - "Project {{ project }}: disable_classic_build_pipeline_creation={{ disable_classic_build_pipeline_creation }}, disable_classic_pipeline_creation={{ disable_classic_pipeline_creation }}"
 remediation_hint: >

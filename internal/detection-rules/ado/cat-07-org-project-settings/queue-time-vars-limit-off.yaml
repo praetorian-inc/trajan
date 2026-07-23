@@ -18,6 +18,7 @@ description: >
 where:
   all_of:
     - "enforce_settable_var == false"
+    - "settings_observed == true"
 
 evidence:
   - "Org {{ org }}: enforce_settable_var = {{ enforce_settable_var }} (Limit variables settable at queue time is OFF)"

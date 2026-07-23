@@ -14,9 +14,11 @@ description: >
   weakness that exposes the fleet to untrusted fork contributions.
 
 where:
-  any_of:
-    - "builds_enabled_for_forks == true"
-    - "fork_protection_enabled == false"
+  all_of:
+    - "settings_observed == true"
+    - any_of:
+        - "builds_enabled_for_forks == true"
+        - "fork_protection_enabled == false"
 
 evidence:
   - "Org {{ org }}: builds_enabled_for_forks = {{ builds_enabled_for_forks }}, fork_protection_enabled = {{ fork_protection_enabled }}"

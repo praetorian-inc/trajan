@@ -20,6 +20,7 @@ where:
   all_of:
     - "disable_classic_release_creation == false"
     - "disable_classic_pipeline_creation == false"
+    - "settings_observed == true"
 evidence:
   - "Project {{ project }}: disable_classic_release_creation={{ disable_classic_release_creation }}, disable_classic_pipeline_creation={{ disable_classic_pipeline_creation }}"
   - "Release job auth scope limited to current project: {{ limit_job_auth_scope_for_releases }}"

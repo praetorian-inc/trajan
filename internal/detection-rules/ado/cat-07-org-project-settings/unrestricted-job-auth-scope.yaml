@@ -15,9 +15,11 @@ description: >
   the cross-project reach in the repo-token and service-connection scenarios.
 
 where:
-  any_of:
-    - "limit_job_auth_scope_to_current_project == false"
-    - "limit_job_auth_scope_for_releases == false"
+  all_of:
+    - "settings_observed == true"
+    - any_of:
+        - "limit_job_auth_scope_to_current_project == false"
+        - "limit_job_auth_scope_for_releases == false"
 
 evidence:
   - "Org {{ org }}: limit_job_auth_scope_to_current_project = {{ limit_job_auth_scope_to_current_project }}"

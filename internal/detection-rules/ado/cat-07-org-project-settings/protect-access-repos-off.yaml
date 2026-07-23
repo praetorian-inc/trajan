@@ -18,6 +18,7 @@ description: >
 where:
   all_of:
     - "limit_job_auth_scope_to_referenced_repos == false"
+    - "settings_observed == true"
 
 evidence:
   - "Project {{ project }}: limit_job_auth_scope_to_referenced_repos = {{ limit_job_auth_scope_to_referenced_repos }}"
