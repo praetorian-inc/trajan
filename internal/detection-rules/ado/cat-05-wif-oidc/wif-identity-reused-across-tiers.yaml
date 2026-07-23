@@ -1,0 +1,32 @@
+id: cat-05/wif-identity-reused-across-tiers
+scenario_id: cat-05/03
+title: "WIF service connection shared across projects — one identity, mixed trust tiers"
+subject: service_connection
+severity: high
+confidence: medium
+description: >
+  A Workload Identity Federation service connection is shared out of its owning project into
+  one or more other projects (is_shared == true; shared_into lists the consumer projects). A
+  single connection has a single federated subject sc://{org}/{project}/{connection}, hence a
+  single Entra federated credential and a single Azure RBAC posture. Every project it is shared
+  into can mint the same token with that identical RBAC. Cross-project sharing therefore collapses
+  the trust boundary between tiers: a lower-trust consumer project (more Contributors, looser
+  branch policy, PR-triggered builds) can mint tokens carrying the full — often prod-scoped —
+  privileges the identity holds for its highest-trust consumer. The effective access control on
+  the cloud RBAC degrades to the weakest project that shares the identity.
+where:
+  all_of:
+    - "is_wif == true"
+    - "is_shared == true"
+evidence:
+  - "Service connection: {{ name }} (owner project {{ owner_project }})"
+  - "Auth scheme: {{ auth_scheme }}"
+  - "Shared into projects: {{ shared_into }}"
+  - "Visible in projects: {{ visible_in_projects }}"
+  - "Scope level: {{ scope_level }}"
+remediation_hint: >
+  Do not share one WIF connection across trust tiers. Create separate WIF connections backed by
+  separate app registrations or managed identities per tier: a dev-scoped identity limited to
+  non-production subscriptions for dev projects, and a prod-scoped identity — gated by Approval
+  and Branch control checks — for prod. Distinct federated credentials per environment ensure a
+  malicious or compromised lower-trust project cannot mint tokens carrying the higher tier's RBAC.
