@@ -1,0 +1,37 @@
+id: cat-10/pool-run-as-root-self-hosted
+scenario_id: cat-10/05
+title: "Self-hosted agent pool with a run-as-root agent — any job on it inherits host privilege"
+subject: agent_pool
+severity: high
+confidence: medium
+description: >
+  A self-hosted agent pool contains at least one agent that permits
+  running jobs as root (AGENT_ALLOW_RUNASROOT). Every step of every job
+  scheduled onto that agent executes with the agent's run-as identity,
+  so a low-trust pipeline that can land a job on the pool inherits
+  root/host-level privilege — the enabling condition for host-resident
+  secret residue harvest, IMDS/Managed-Identity token theft, and
+  persistence on the machine. Microsoft recommends a restricted run-as
+  account (Network/Local Service) precisely because a job runs as
+  whatever the agent runs as. A self-hosted pool alone is informational;
+  the root run-as signal is what makes it a real privilege-escalation
+  primitive.
+
+where:
+  all_of:
+    - is_hosted == false
+    - agents.system_capabilities.AGENT_ALLOW_RUNASROOT ∋ 'true'
+
+evidence:
+  - "Self-hosted agent pool {{ name }} (id {{ id }}, {{ size }} agents)"
+  - "At least one agent advertises AGENT_ALLOW_RUNASROOT=true — jobs run with host/root privilege"
+  - "Any pipeline that can schedule onto this pool inherits that privilege"
+
+remediation_hint: >
+  Run the agent under a low-privilege dedicated account (Network Service
+  / Local Service on Windows, a non-sudo user on Linux) rather than
+  root. Do not set AGENT_ALLOW_RUNASROOT on shared pools. Isolate
+  privileged self-hosted pools to trusted pipelines only, add Approvals
+  and Checks (branch control, approval) on the pool resource, and use
+  ephemeral (scale-set / container) agents so host state does not
+  persist between jobs.

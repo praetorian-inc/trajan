@@ -1,0 +1,36 @@
+id: cat-10/pool-open-access-self-hosted
+scenario_id: cat-10/02
+title: "Self-hosted agent pool auto-provisioned into all projects — broad reach onto internal infrastructure"
+subject: agent_pool
+severity: medium
+confidence: medium
+description: >
+  A self-hosted agent pool is auto-provisioned org-wide, so a
+  corresponding queue exists in every project and any pipeline author in
+  any project can schedule a job onto the pool's persistent, internal
+  agents. Auto-provisioning is the reachability primitive the
+  host-resident attacks ride on (residue harvest, IMDS token theft,
+  persistence): it maximizes the attacker population that can land code
+  on the shared self-hosted host. A self-hosted pool restricted to one
+  project is far less exposed; org-wide auto-provisioning removes that
+  boundary.
+
+where:
+  all_of:
+    - is_hosted == false
+    - auto_provision == true
+    - size > 0
+
+evidence:
+  - "Self-hosted agent pool {{ name }} (id {{ id }}) has auto_provision=true"
+  - "A queue is provisioned in every project — any project's pipelines can reach the {{ size }} agents"
+  - "No org-wide reachability boundary before a job lands on the internal host"
+
+remediation_hint: >
+  Disable auto-provision on self-hosted pools; create the pool only in
+  the specific projects that need it. Lock down per-pool pipeline
+  permissions to the authorized pipelines only (this ACL lives on the
+  project agent pool, not the org pool), and add Approvals and Checks
+  (branch control gated to the release branch, approval with
+  requester-cannot-approve) on the pool resource so even authorized
+  pipelines pass a gate before scheduling.
