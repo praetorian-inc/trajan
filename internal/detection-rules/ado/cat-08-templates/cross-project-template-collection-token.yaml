@@ -1,0 +1,31 @@
+id: cat-08/cross-project-template-collection-token
+scenario_id: cat-08/06
+title: "Cross-project template extension runs with a collection-scoped token"
+subject: pipeline
+severity: critical
+confidence: medium
+description: >
+  The pipeline extends a template from another project AND its build
+  identity is collection-scoped — "Limit job authorization scope to
+  current project" is not in effect, so the effective System.AccessToken
+  reaches every project in the organization. The cross-project template
+  link is the vector; the collection-scoped token is the blast-radius
+  multiplier. Attacker-controlled code in the template can use the broad
+  token to read and write repos and pipeline resources org-wide, not just
+  in the consumer's project. The finding requires both the cross-project
+  edge and the unrestricted effective scope — either alone is lower risk.
+where:
+  all_of:
+    - "extends_source != null"
+    - "extends_source.is_cross_project == true"
+    - "effective_scope == 'collection'"
+evidence:
+  - "Pipeline {{ name }} ({{ project }}) extends a cross-project template from {{ extends_source.name }}"
+  - "Effective job-authorization scope is collection-wide (effective_scope={{ effective_scope }}, identity_scope={{ identity_scope }})"
+  - "Template ref: '{{ extends_source.ref }}' (ref_pinned={{ extends_source.ref_pinned }}) in project {{ extends_source.source_project }}"
+remediation_hint: >
+  Enable "Limit job authorization scope to current project" (and the
+  referenced-repos limit) at the org/project level so the token stops at
+  the project boundary. Independently, eliminate the cross-project template
+  edge or pin its ref to an immutable tag/SHA and lock Contribute on the
+  template repo. Both controls must hold to close the org-wide path.
