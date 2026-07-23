@@ -114,6 +114,136 @@ func CollectRefResolution(owner, actionRepo, ref string) string {
 		fmt.Sprintf("%s__%s@%s.json", owner, actionRepo, safeRef(ref)))
 }
 
+// ---- Azure DevOps collect paths ----
+//
+// adoKey sanitizes an ADO project/repo/host name for use as a path segment:
+// anything outside [A-Za-z0-9._-] becomes '-'. ADO names are already restricted,
+// so this only guards the rare space/slash.
+func adoKey(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-' {
+			b.WriteByte(c)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	if b.Len() == 0 {
+		return "_"
+	}
+	return b.String()
+}
+
+func adoCollect(parts ...string) string {
+	return path.Join(append([]string{dirCollect}, parts...)...)
+}
+
+// Org-scope surfaces (key = org).
+func CollectADOConnectionData(org string) string {
+	return adoCollect("connection-data", adoKey(org)+".json")
+}
+func CollectADOProjects(org string) string { return adoCollect("projects", adoKey(org)+".json") }
+func CollectADOSecurityNS(org string) string {
+	return adoCollect("security-namespaces", adoKey(org)+".json")
+}
+func CollectADOGraph(org string) string      { return adoCollect("graph", adoKey(org)+".json") }
+func CollectADOExtensions(org string) string { return adoCollect("extensions", adoKey(org)+".json") }
+func CollectADOServiceHooks(org string) string {
+	return adoCollect("service-hooks", adoKey(org)+".json")
+}
+func CollectADOFeeds(org string) string { return adoCollect("feeds", adoKey(org)+".json") }
+
+// Org agent pools (key = poolID).
+func CollectADOPool(poolID int64) string {
+	return adoCollect("pools", fmt.Sprintf("%d.json", poolID))
+}
+func CollectADOPoolAgents(poolID int64) string {
+	return adoCollect("pool-agents", fmt.Sprintf("%d.json", poolID))
+}
+func CollectADOElasticPool(poolID int64) string {
+	return adoCollect("elastic-pools", fmt.Sprintf("%d.json", poolID))
+}
+func CollectADOEndpointACL(project, connID string) string {
+	return adoCollect("acl-endpoint", adoKey(project), adoKey(connID)+".json")
+}
+
+// Project-scope surfaces (key = project).
+func CollectADOProject(project string) string { return adoCollect("project", adoKey(project)+".json") }
+func CollectADOGeneralSettings(project string) string {
+	return adoCollect("general-settings", adoKey(project)+".json")
+}
+func CollectADOProjectProps(project string) string {
+	return adoCollect("project-properties", adoKey(project)+".json")
+}
+func CollectADORepos(project string) string { return adoCollect("repos", adoKey(project)+".json") }
+func CollectADOPolicies(project string) string {
+	return adoCollect("policies", adoKey(project)+".json")
+}
+func CollectADOPolicyTypes(project string) string {
+	return adoCollect("policy-types", adoKey(project)+".json")
+}
+func CollectADOServiceConnections(project string) string {
+	return adoCollect("service-connections", adoKey(project)+".json")
+}
+func CollectADOVariableGroups(project string) string {
+	return adoCollect("variable-groups", adoKey(project)+".json")
+}
+func CollectADOSecureFiles(project string) string {
+	return adoCollect("secure-files", adoKey(project)+".json")
+}
+func CollectADOEnvironments(project string) string {
+	return adoCollect("environments", adoKey(project)+".json")
+}
+func CollectADODeploymentGroups(project string) string {
+	return adoCollect("deployment-groups", adoKey(project)+".json")
+}
+func CollectADOTaskGroups(project string) string {
+	return adoCollect("task-groups", adoKey(project)+".json")
+}
+func CollectADOAgentQueues(project string) string {
+	return adoCollect("agent-queues", adoKey(project)+".json")
+}
+func CollectADOBuildDefs(project string) string {
+	return adoCollect("build-definitions", adoKey(project)+".json")
+}
+func CollectADOPipelines(project string) string {
+	return adoCollect("pipelines", adoKey(project)+".json")
+}
+func CollectADOReleases(project string) string {
+	return adoCollect("releases", adoKey(project)+".json")
+}
+func CollectADOReleaseFull(project string, id int64) string {
+	return adoCollect("release-definition", adoKey(project), fmt.Sprintf("%d.json", id))
+}
+func CollectADOBuildACL(project string) string {
+	return adoCollect("acl-build", adoKey(project)+".json")
+}
+
+// Per-pipeline / per-resource / per-repo (nested under project).
+func CollectADOBuildDefFull(project string, id int64) string {
+	return adoCollect("build-definition", adoKey(project), fmt.Sprintf("%d.json", id))
+}
+func CollectADOPipelinePreview(project string, id int64) string {
+	return adoCollect("pipeline-preview", adoKey(project), fmt.Sprintf("%d.json", id))
+}
+func CollectADOPipelineYAML(project string, id int64, name string) string {
+	return adoCollect("pipeline-yaml", adoKey(project), fmt.Sprintf("%d__%s.json", id, adoKey(name)))
+}
+func CollectADOEnvironmentDetail(project string, envID int64) string {
+	return adoCollect("environment-detail", adoKey(project), fmt.Sprintf("%d.json", envID))
+}
+func CollectADOPipelinePerms(project, rtype, rid string) string {
+	return adoCollect("pipeline-permissions", adoKey(project), adoKey(rtype)+"__"+adoKey(rid)+".json")
+}
+func CollectADOChecks(project, rtype, rid string) string {
+	return adoCollect("checks", adoKey(project), adoKey(rtype)+"__"+adoKey(rid)+".json")
+}
+func CollectADORepoACL(project, repo string) string {
+	return adoCollect("acl-repo", adoKey(project), adoKey(repo)+".json")
+}
+
 func NormalizeJob(repo, workflow, jobID string) string {
 	return path.Join(dirNormalize, "jobs",
 		fmt.Sprintf("%s__%s__%s.json", repo, wfStem(workflow), jobID))
