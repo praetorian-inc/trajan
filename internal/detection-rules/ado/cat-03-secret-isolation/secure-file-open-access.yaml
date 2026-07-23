@@ -1,0 +1,33 @@
+id: cat-03/secure-file-open-access
+scenario_id: cat-03/05
+title: "Secure File Open access lets any pipeline download the signing key"
+subject: secure_file
+severity: high
+confidence: high
+description: >
+  A secure file (code-signing cert, keystore, SSH key, or credential bundle)
+  has "Grant access to all pipelines" (Open access) enabled —
+  pipeline_permissions.all_pipelines is true. Secure files are a protected
+  resource consumed via DownloadSecureFile@1, which decrypts the file to the
+  agent workspace. Open access hands a copy of that file to every pipeline in
+  the project: any Contributor authors a pipeline on a branch they control,
+  downloads the file, and exfiltrates the bytes (masking does not apply to
+  arbitrary binary content). Unlike a string secret, a secure file is often a
+  long-lived, hard-to-rotate cryptographic asset whose theft enables
+  supply-chain forgery.
+
+where:
+  all_of:
+    - "pipeline_permissions.all_pipelines == true"
+
+evidence:
+  - "Secure file: {{ project }} › {{ name }}"
+  - "Open access (all pipelines authorized): {{ pipeline_permissions.all_pipelines }}"
+
+remediation_hint: >
+  Disable "Grant access to all pipelines" on the secure file and authorize only
+  the specific pipelines that require it. Add a Branch control check so the file
+  is only downloadable during runs on protected branches. If the file has been
+  accessible to unintended pipelines, treat the credential as compromised and
+  rotate it — generate a new signing key or certificate, revoke the old one, and
+  update dependent systems before re-uploading.
