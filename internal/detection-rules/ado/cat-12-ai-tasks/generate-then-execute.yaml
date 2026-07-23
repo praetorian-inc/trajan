@@ -1,0 +1,29 @@
+id: cat-12/generate-then-execute
+scenario_id: cat-12/05
+title: "Agent-generated output executed in the same run without human review"
+subject: agent_injection
+severity: high
+confidence: high
+description: >
+  A pipeline invokes an AI agent to generate a build script, pipeline
+  fragment, or remediation patch shaped by attacker-controlled input, then
+  a later step executes that output in the same run. The generate→execute
+  coupling turns the model into an unsanitized code source: an injection in
+  the prompt flows straight into executed code with no review gate. This is
+  the `via == generate_then_execute` wiring of the agent-injection edge.
+
+where:
+  all_of:
+    - via == 'generate_then_execute'
+    - gate_state == 'absent'
+
+evidence:
+  - "Project {{ project }} pipeline {{ pipeline_id }} job {{ job }}: {{ vendor }} agent generates then executes"
+  - "Source: {{ source_kind }}; capabilities: {{ capabilities }}; gate_state: {{ gate_state }}"
+  - "No review gate between generation and execution (identity scope {{ identity_scope }})"
+
+remediation_hint: >
+  Never execute agent-generated output in the same run. If generation and
+  execution must be coupled, insert a human review gate (an environment
+  approval check) between the generate and execute stages, and store the
+  generated artifact for review before any privileged step consumes it.
