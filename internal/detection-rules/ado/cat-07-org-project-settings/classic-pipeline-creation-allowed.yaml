@@ -1,0 +1,36 @@
+id: cat-07/classic-pipeline-creation-allowed
+scenario_id: cat-07/06
+title: "Classic pipeline creation allowed org-wide bypasses YAML-only guardrails"
+subject: org
+severity: medium
+confidence: high
+description: >
+  The organization has not disabled creation of classic build and/or
+  classic release pipelines. Teams harden the YAML path with extends
+  templates, required reviews, and branch policies, but a Contributor with
+  pipeline-create rights can author a classic designer pipeline that
+  reaches the same service connections, variable groups, and agent pools
+  with none of the YAML-side controls applied. Classic release pipelines
+  additionally carry their own job-authorization-scope toggle that is
+  frequently left collection-scoped. The toggle is default-OFF for
+  organizations created before Sprint 226, so the whole fleet inherits the
+  classic escape hatch.
+
+where:
+  any_of:
+    - "disable_classic_pipeline_creation == false"
+    - "disable_classic_build_pipeline_creation == false"
+    - "disable_classic_release_creation == false"
+
+evidence:
+  - "Org {{ org }}: disable_classic_pipeline_creation = {{ disable_classic_pipeline_creation }}"
+  - "disable_classic_build_pipeline_creation = {{ disable_classic_build_pipeline_creation }}, disable_classic_release_creation = {{ disable_classic_release_creation }}"
+
+remediation_hint: >
+  In Organization settings > Pipelines > Settings > General, enable
+  "Disable creation of classic build pipelines" and "Disable creation of
+  classic release pipelines" so the setting applies to every project. If
+  classic pipelines must remain for legacy workloads, set "Limit job
+  authorization scope to current project for release pipelines" and apply
+  Approvals and Checks on every shared service connection and variable
+  group so classic-pipeline consumption is gated.

@@ -1,0 +1,31 @@
+id: cat-07/unrestricted-job-auth-scope
+title: "Job authorization scope not limited to current project org-wide"
+subject: org
+severity: high
+confidence: medium
+description: >
+  The organization has not limited the pipeline job authorization scope to
+  the current project (limit_job_auth_scope_to_current_project OFF), and/or
+  has not limited it for release pipelines
+  (limit_job_auth_scope_for_releases OFF). With these toggles off, a
+  pipeline's System.AccessToken is collection-scoped: it can reach repos,
+  secrets, and resources in every project in the organization, not just its
+  own. Any Contributor who can edit a pipeline in one project can pivot to
+  assets across the whole collection. This is the org-wide amplifier behind
+  the cross-project reach in the repo-token and service-connection scenarios.
+
+where:
+  any_of:
+    - "limit_job_auth_scope_to_current_project == false"
+    - "limit_job_auth_scope_for_releases == false"
+
+evidence:
+  - "Org {{ org }}: limit_job_auth_scope_to_current_project = {{ limit_job_auth_scope_to_current_project }}"
+  - "limit_job_auth_scope_for_releases = {{ limit_job_auth_scope_for_releases }}"
+
+remediation_hint: >
+  In Organization settings > Pipelines > Settings, enable "Limit job
+  authorization scope to current project for non-release pipelines" and the
+  equivalent for release pipelines, so a pipeline's token can only reach
+  resources in its own project. Enabling at the org level applies to all
+  projects.

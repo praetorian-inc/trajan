@@ -1,0 +1,27 @@
+id: cat-07/shell-args-sanitizing-off
+title: "Shell task argument sanitizing disabled at project level"
+subject: project
+severity: medium
+confidence: medium
+description: >
+  The project has not enabled sanitizing of shell task arguments
+  (enable_shell_tasks_args_sanitizing OFF). With sanitizing off, the
+  Bash / PowerShell / Command Line tasks pass task-input arguments to the
+  shell without escaping, so a value that reaches an "arguments" input
+  (from a settable variable, a freeform parameter, or an untrusted
+  predefined variable) can break out into arbitrary shell commands. This
+  is the project-level control plane weakness that turns argument sinks
+  across the project's pipelines into command execution.
+
+where:
+  all_of:
+    - "enable_shell_tasks_args_sanitizing == false"
+
+evidence:
+  - "Project {{ project }}: enable_shell_tasks_args_sanitizing = {{ enable_shell_tasks_args_sanitizing }}"
+
+remediation_hint: >
+  In Project settings > Pipelines > Settings (or org-wide in Organization
+  settings), enable sanitizing of shell task arguments so task-input
+  arguments are escaped before reaching the shell. Enabling at the org
+  level applies to all projects.
