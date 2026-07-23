@@ -1,0 +1,26 @@
+id: cat-02/queue-time-macro-injection
+scenario_id: cat-02/01
+title: "Unrestricted queue-time variable macro-expanded into a script body"
+subject: queue_time_injection
+severity: critical
+confidence: high
+description: >
+  A user who can queue the pipeline supplies an arbitrary, undeclared variable
+  at queue time and it is macro-expanded $(var) directly into a script body.
+  The user-controlled string is spliced onto the shell command line and executed
+  with the pipeline's identity and secrets — command injection without repo
+  write access. This is the ADO analog of GitHub script injection via the
+  queue-time variable channel. Confidence is downgraded when the org enforces
+  the queue-time limit, so key off the technique, not on that setting being off.
+where:
+  all_of:
+    - "via == 'unrestricted_macro'"
+    - "sink_type == 'macro_in_script'"
+evidence:
+  - "Pipeline {{ pipeline_id }} job {{ job }}: undeclared macro $({{ macro_name }}) expands into a {{ sink_location }} sink"
+  - "Via {{ via }}, confidence {{ confidence }} (enforce_settable_var={{ enforce_settable_var }})"
+  - "Source: any principal with {{ source_permission }} on the pipeline"
+remediation_hint: >
+  Enable "Limit variables that can be set at queue time" and do not macro-expand
+  user-controllable variables into script bodies. Map inputs through env: or use
+  runtime parameters with a values: allowlist instead.

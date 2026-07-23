@@ -1,0 +1,26 @@
+id: cat-02/settable-var-into-arguments
+scenario_id: cat-02/02
+title: "Queue-time variable flows into a shell task arguments input"
+subject: queue_time_injection
+severity: high
+confidence: low
+description: >
+  A queue-time variable is macro-expanded into the arguments input of a shell
+  task (Bash, PowerShell, CmdLine, Ssh, AzureFileCopy). The agent concatenates
+  the expanded string onto the native command line, so a queuer breaks out of
+  the intended argument position and injects shell metacharacters. This survives
+  the queue-time variable limit because the variable is one the queuer is allowed
+  to control; the only runtime guard is shell-tasks arguments validation.
+where:
+  all_of:
+    - "sink_type == 'macro_in_task_input'"
+    - "sink_location == 'task_input'"
+  none_of:
+    - "via == 'predefined_variable'"
+evidence:
+  - "Pipeline {{ pipeline_id }} job {{ job }}: variable $({{ macro_name }}) flows into a task_input arguments sink"
+  - "Via {{ via }}, args validation enabled={{ enable_args_validation }}, confidence {{ confidence }}"
+remediation_hint: >
+  Enable "Enable shell tasks arguments validation". Do not pass queue-time
+  variables into task arguments — map them via env: or constrain them with a
+  runtime parameter values: allowlist.

@@ -1,0 +1,27 @@
+id: cat-02/queue-input-selects-target
+scenario_id: cat-02/05
+title: "Queue-time input selects the agent pool, service connection, or task"
+subject: queue_time_injection
+severity: high
+confidence: high
+description: >
+  A free-form runtime parameter is template-expanded into a compile-time keyword
+  that selects the execution target — agent pool, service connection
+  (azureSubscription), container image, task, or checkout repository. The queuer
+  steers the run onto a higher-privileged or attacker-observable target without
+  injecting a single shell character: privilege escalation through target
+  redirection rather than command injection. These keywords resolve at compile
+  time, so they must be parameterized with ${{ }}, which is exactly the surface a
+  queuer controls.
+where:
+  all_of:
+    - "via == 'input_target_redirect'"
+    - "sink_type == 'parameter_in_compile_keyword'"
+evidence:
+  - "Pipeline {{ pipeline_id }} job {{ job }}: parameter {{ macro_name }} selects the {{ sink_location }} keyword"
+  - "Via {{ via }}, confidence {{ confidence }}, identity scope {{ identity_scope }}"
+remediation_hint: >
+  Constrain any parameter that selects pool, azureSubscription, container, task,
+  or checkout to a values: allowlist of approved targets. Use per-pipeline
+  authorization to limit which pools and service connections the pipeline can
+  reach.

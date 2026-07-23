@@ -1,0 +1,24 @@
+id: cat-02/freeform-parameter-injection
+scenario_id: cat-02/03
+title: "Free-form string runtime parameter template-expanded into a script sink"
+subject: queue_time_injection
+severity: high
+confidence: high
+description: >
+  A runtime parameter of type string with no values: allowlist accepts arbitrary
+  text from any user who can run the pipeline. When template-expanded
+  ${{ parameters.x }} into a script body it is spliced into the YAML at compile
+  time — before any shell or arguments validation can intervene — producing
+  command injection that bypasses all runtime guards. The queue-time variable
+  limit is irrelevant here because parameters are not variables.
+where:
+  all_of:
+    - "via == 'freeform_parameter'"
+    - "sink_type == 'parameter_in_script'"
+evidence:
+  - "Pipeline {{ pipeline_id }} job {{ job }}: free-form parameter {{ macro_name }} expands into a {{ sink_location }} sink"
+  - "Via {{ via }}, confidence {{ confidence }} — compile-time expansion bypasses arguments validation"
+remediation_hint: >
+  Add a values: allowlist to every string parameter that reaches a script body.
+  For parameters that must accept arbitrary text, pass them through env: rather
+  than template-expanding them into the script.
