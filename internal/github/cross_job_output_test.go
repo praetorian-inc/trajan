@@ -3,6 +3,8 @@ package github
 import (
 	"reflect"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/engine/detect"
 )
 
 // --- extractNeedsOutputRefs: the cross-job needs.<job>.outputs.<var> extractor ---
@@ -329,9 +331,9 @@ jobs:
 // --- chain rule via EvaluateChainRule on a job-output-flow chain ---
 
 // loadCrossJobRule loads the embedded cross-job-output chain rule by its id.
-func loadCrossJobRule(t *testing.T) *Rule {
+func loadCrossJobRule(t *testing.T) *detect.Rule {
 	t.Helper()
-	rules, err := LoadRules()
+	rules, err := detect.LoadRules("github")
 	if err != nil {
 		t.Fatalf("LoadRules: %v", err)
 	}
@@ -378,7 +380,7 @@ func TestCrossJobOutputRuleFiresOnExecAttackerLowTrust(t *testing.T) {
 
 	t.Run("low-trust-on-consumer", func(t *testing.T) {
 		edge := crossJobEdge(true, "exec", []string{"pull_request_target"}, []string{"push"})
-		matched := EvaluateChainRule(rule, jobOutputChain(edge), failOnErr)
+		matched := detect.EvaluateChainRule(rule, jobOutputChain(edge), failOnErr)
 		if len(matched) != 1 {
 			t.Fatalf("rule must fire on exec+attacker_influenced+low-trust consumer, got %d matches", len(matched))
 		}
@@ -387,7 +389,7 @@ func TestCrossJobOutputRuleFiresOnExecAttackerLowTrust(t *testing.T) {
 	t.Run("low-trust-on-producer", func(t *testing.T) {
 		// any_of: producer.triggers low-trust also satisfies the trigger clause.
 		edge := crossJobEdge(true, "exec", []string{"push"}, []string{"issue_comment"})
-		matched := EvaluateChainRule(rule, jobOutputChain(edge), failOnErr)
+		matched := detect.EvaluateChainRule(rule, jobOutputChain(edge), failOnErr)
 		if len(matched) != 1 {
 			t.Fatalf("rule must fire when producer carries the low-trust trigger, got %d matches", len(matched))
 		}
@@ -410,7 +412,7 @@ func TestCrossJobOutputRuleFiresOnStrategyMatrixEdge(t *testing.T) {
 	}
 
 	chain := map[string]any{"chain": "job-output-flow", "edges": []any{edges[0]}}
-	matched := EvaluateChainRule(rule, chain, failOnErr)
+	matched := detect.EvaluateChainRule(rule, chain, failOnErr)
 	if len(matched) != 1 {
 		t.Fatalf("rule must fire on derived strategy-matrix exec edge, got %d matches", len(matched))
 	}
@@ -442,7 +444,7 @@ func TestCrossJobOutputRuleDoesNotFire(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			matched := EvaluateChainRule(rule, jobOutputChain(c.edge), failOnErr)
+			matched := detect.EvaluateChainRule(rule, jobOutputChain(c.edge), failOnErr)
 			if len(matched) != 0 {
 				t.Fatalf("rule must NOT fire (%s), got %d matches", c.name, len(matched))
 			}

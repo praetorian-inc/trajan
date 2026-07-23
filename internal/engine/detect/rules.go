@@ -1,4 +1,4 @@
-package github
+package detect
 
 import (
 	"cmp"
@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -111,9 +109,11 @@ func (r *Rule) SubjectKind() string {
 	return r.Subject
 }
 
-func LoadRules() ([]Rule, error) {
+// LoadRules walks a platform's rule subtree (detection-rules/<subtree>) and
+// returns its parsed rules, sorted by path for deterministic ordering.
+func LoadRules(subtree string) ([]Rule, error) {
 	var files []string
-	err := fs.WalkDir(detectionrules.FS, "github", func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(detectionrules.FS, subtree, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -218,9 +218,9 @@ func iterChainItems(chainData map[string]any, forEach string) []map[string]any {
 }
 
 func SubjectHash(subject map[string]any) string {
-	sid := stringField(subject, "_id")
+	sid := StringField(subject, "_id")
 	if sid == "" {
-		sid = stringField(subject, "repo")
+		sid = StringField(subject, "repo")
 	}
 	if sid == "" {
 		b, _ := json.Marshal(subject) // sorted map keys make the hash deterministic across runs
@@ -229,7 +229,11 @@ func SubjectHash(subject map[string]any) string {
 			sid = sid[:80]
 		}
 	}
-	sum := sha256.Sum256([]byte(sid))
+	return hash12(sid)
+}
+
+func hash12(s string) string {
+	sum := sha256.Sum256([]byte(s))
 	return fmt.Sprintf("%x", sum)[:12]
 }
 
@@ -237,14 +241,14 @@ func SubjectHash(subject map[string]any) string {
 // scope (threaded from scan); it backfills finding.Org for subjects that don't
 // carry their own owner (job records don't), and is ignored when they do. runDir
 // resolves the collected YAML for the code snippet; pass "" to skip it.
-func BuildFinding(rule *Rule, subject map[string]any, kind, org, runDir string) finding.Finding {
+func BuildFinding(p Provider, rule *Rule, subject map[string]any, kind, org, runDir string) finding.Finding {
 	evidence := make([]string, 0, len(rule.Evidence))
 	for _, tmpl := range rule.Evidence {
 		evidence = append(evidence, renderEvidence(tmpl, subject))
 	}
 
 	if org == "" {
-		org = cmp.Or(stringField(subject, "org"), stringField(subject, "owner"))
+		org = cmp.Or(StringField(subject, "org"), StringField(subject, "owner"))
 	}
 
 	var remediation *finding.Remediation
@@ -254,7 +258,7 @@ func BuildFinding(rule *Rule, subject map[string]any, kind, org, runDir string) 
 
 	f := finding.Finding{
 		Producer:    "scan",
-		Provider:    "github",
+		Provider:    p.Name,
 		Title:       rule.Title,
 		Description: rule.Description,
 		Severity:    cmp.Or(rule.Severity, "info"),
@@ -265,11 +269,11 @@ func BuildFinding(rule *Rule, subject map[string]any, kind, org, runDir string) 
 			ScenarioID: rule.ScenarioID,
 			DSL:        buildRuleDSL(rule),
 		},
-		Subject:     finding.Subject{Kind: kind, ID: stringField(subject, "_id"), Display: subjectDisplay(kind, subject)},
+		Subject:     finding.Subject{Kind: kind, ID: StringField(subject, "_id"), Display: p.display(kind, subject)},
 		Org:         org,
-		Repo:        stringField(subject, "repo"),
-		File:        stringField(subject, "workflow_name"),
-		Code:        buildCode(runDir, subject),
+		Repo:        p.repo(subject),
+		File:        p.file(subject),
+		Code:        p.code(runDir, subject),
 		Evidence:    evidence,
 		Remediation: remediation,
 		Provenance:  buildProvenance(rule, subject),
@@ -294,22 +298,6 @@ func ruleURL(ruleFile string) string {
 		return ""
 	}
 	return RuleSourceBase + "/internal/detection-rules/" + ruleFile
-}
-
-// subjectDisplay is a pre-rendered label so the renderer never parses subject.id.
-func subjectDisplay(kind string, subject map[string]any) string {
-	if kind == "job" {
-		var parts []string
-		for _, k := range []string{"repo", "workflow_filename", "job_id"} {
-			if v := stringField(subject, k); v != "" {
-				parts = append(parts, v)
-			}
-		}
-		if len(parts) > 0 {
-			return strings.Join(parts, " › ")
-		}
-	}
-	return stringField(subject, "_id")
 }
 
 // buildProvenance carries the structured values that back the rendered evidence
@@ -352,67 +340,9 @@ func buildProvenance(rule *Rule, subject map[string]any) map[string]any {
 	return prov
 }
 
-// buildCode embeds the exact YAML window the subject points at, read from the
-// collected workflow, so the finding is self-contained. It is best-effort: a
-// subject without a code location, or an unreadable file, yields nil (code stays
-// null) — never a scan failure. code.sha (the commit) is left for a later
-// collector change; the collector stores a blob hash today, which we never emit.
-func buildCode(runDir string, subject map[string]any) *finding.Code {
-	prov, ok := subject["_provenance"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	wf := stringField(prov, "workflow_file")
-	lr := intPair(prov["yaml_line_range"])
-	if wf == "" || lr == nil || runDir == "" {
-		return nil
-	}
-	snippet, err := readSnippet(filepath.Join(runDir, wf), lr[0], lr[1])
-	if err != nil {
-		return nil
-	}
-	return &finding.Code{LineRange: lr, Snippet: snippet}
-}
-
-func readSnippet(path string, start, end int) (string, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	lines := strings.Split(string(b), "\n")
-	if start < 1 {
-		start = 1
-	}
-	if end > len(lines) {
-		end = len(lines)
-	}
-	if start > end {
-		return "", fmt.Errorf("invalid line range [%d,%d] for %s (%d lines)", start, end, path, len(lines))
-	}
-	return strings.Join(lines[start-1:end], "\n"), nil
-}
-
-// intPair coerces a [start,end] range from JSON (float64 elements) or native ints.
-func intPair(v any) []int {
-	list, ok := v.([]any)
-	if !ok || len(list) != 2 {
-		return nil
-	}
-	out := make([]int, 2)
-	for i, e := range list {
-		switch n := e.(type) {
-		case float64:
-			out[i] = int(n)
-		case int:
-			out[i] = n
-		default:
-			return nil
-		}
-	}
-	return out
-}
-
-func stringField(m map[string]any, key string) string {
+// StringField reads a string field from a normalized record, "" if absent or
+// non-string. Exported so platform Providers can read subject fields.
+func StringField(m map[string]any, key string) string {
 	if s, ok := m[key].(string); ok {
 		return s
 	}
