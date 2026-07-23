@@ -1,0 +1,32 @@
+id: cat-13/prependpath-binary-shadow-rce
+scenario_id: cat-13/02
+title: "Untrusted text echoed to stdout injects ##vso[task.prependpath] to shadow a later binary (RCE)"
+subject: logging_command_injection
+severity: critical
+confidence: high
+description: >
+  A step echoes attacker-controlled bytes (commit message, PR source branch,
+  a file from the checked-out PR, or a fetched HTTP body) to stdout. An
+  embedded ##vso[task.prependpath]<dir> prepends an attacker-controlled
+  directory to PATH for every subsequent step in the job. A later step that
+  calls a binary by bare name (git, az, kubectl, python, dotnet, npm)
+  resolves to the attacker's shim instead, executing arbitrary code with
+  System.AccessToken, mapped secrets, and any service-connection token
+  authenticated earlier in the job. Deterministic RCE with no required
+  misconfiguration — ##vso[...] parsing is unconditional (CVE-2023-21553).
+
+where:
+  all_of:
+    - "via == 'prependpath_shadow'"
+    - "untrusted_source in {commit_message, pr_source_branch, file_content, http_response}"
+
+evidence:
+  - "Pipeline {{ pipeline_id }} job {{ job }} ({{ project }}): untrusted {{ untrusted_source }} echoed at step {{ echo_step }}"
+  - "Injected ##vso[task.prependpath] shadows binary {{ target_resource }} at step {{ consumer_step }}, effect {{ effect }}"
+  - "confidence={{ confidence }} identity_scope={{ identity_scope }}"
+
+remediation_hint: >
+  Never echo attacker-controlled data to stdout. Invoke critical binaries by
+  absolute path in privileged steps, and pin PATH at the start of steps that
+  run after untrusted echoes. Redirect untrusted output to files rather than
+  printing it. Isolate untrusted-echo steps from post-authentication steps.
