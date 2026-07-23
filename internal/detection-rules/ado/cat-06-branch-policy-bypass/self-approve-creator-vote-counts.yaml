@@ -1,0 +1,31 @@
+id: cat-06/self-approve-creator-vote-counts
+scenario_id: cat-06/03
+title: "Reviewer policy allows self-approval — one person can author and merge"
+subject: branch_policy
+severity: high
+confidence: high
+description: >
+  A blocking minimum-reviewers policy has "Allow requestors to approve their
+  own changes" enabled (creator_vote_counts = true) while the minimum approver
+  count is 1 and "Prohibit the most recent pusher from approving" is off
+  (block_last_pusher_vote = false). A single author can open a PR, cast their
+  own Approve vote to satisfy the count, and complete the merge — no second
+  human, no bypass permission. The policy panel still reports "Require a
+  minimum number of reviewers: On," so the branch reads as protected while
+  being self-satisfiable by the PR author alone.
+where:
+  all_of:
+    - "policy_type == 'Minimum number of reviewers'"
+    - "is_blocking == true"
+    - "settings.creator_vote_counts == true"
+    - "settings.minimum_approver_count <= 1"
+    - "settings.block_last_pusher_vote == false"
+evidence:
+  - "Policy {{ config_id }} in {{ project }}: creator_vote_counts = {{ settings.creator_vote_counts }}, min approvers = {{ settings.minimum_approver_count }}"
+  - "Prohibit most recent pusher from approving: block_last_pusher_vote = {{ settings.block_last_pusher_vote }}"
+  - "Policy scope: {{ scope }}"
+remediation_hint: >
+  Disable "Allow requestors to approve their own changes" so the PR creator's
+  vote does not count toward the minimum, enable "Prohibit the most recent
+  pusher from approving" as a segregation-of-duties backstop, and raise the
+  minimum approver count to at least 2.

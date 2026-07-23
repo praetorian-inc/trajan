@@ -1,0 +1,32 @@
+id: cat-06/edit-policies-self-grant-then-weaken
+scenario_id: cat-06/07
+title: "Principal with Edit-policies can weaken branch protection then land code"
+subject: can_push_to
+severity: high
+confidence: high
+description: >
+  A principal reaches a protected branch through the edit_policies weakness:
+  they hold Edit policies (or Manage permissions) on the repository or branch,
+  which sits above every branch policy. A holder can disable the reviewer
+  count, downgrade build validation to Optional, or self-grant Bypass policies
+  when pushing, land the malicious change through the now-open gate, and
+  restore the policy afterward so the branch audits as protected at rest. The
+  transient weaken-then-restore is invisible without the audit stream; this
+  rule fires on the static grant that makes the attack possible, materialized
+  as the edit_policies variant on the CAN_PUSH_TO edge.
+where:
+  all_of:
+    - "has_blocking_policy == true"
+    - any_of:
+        - "via == 'edit_policies'"
+        - "all_via ∋ 'edit_policies'"
+evidence:
+  - "Principal {{ principal }} can reach {{ project }}/{{ repo }}@{{ branch }} via edit_policies"
+  - "All weakness variants on this edge: {{ all_via }}"
+  - "Branch has a blocking policy: {{ has_blocking_policy }} — the holder can weaken it before merging"
+remediation_hint: >
+  Restrict Edit policies and Manage permissions to project administrators only;
+  remove the grant from Contributors, Team Leads, and DevOps roles. Audit group
+  membership for inheritance paths that expose the permission to non-admin
+  identities, and enable audit-stream alerting on branch-policy modification
+  events to catch transient weakening.
