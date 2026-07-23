@@ -22,6 +22,7 @@ func init() {
 	AdoCmd.AddCommand(attackCmd)
 	AdoCmd.AddCommand(retrieveCmd)
 	AdoCmd.AddCommand(newCollectCmd())
+	AdoCmd.AddCommand(newNormalizeCmd())
 }
 
 func getToken(cmd *cobra.Command) string {

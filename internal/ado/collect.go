@@ -125,8 +125,26 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 			return e
 		})
 	}
-	collectList("service-connections", "core", APIVersionSEP, "/"+pe+"/_apis/serviceendpoint/endpoints",
-		engine.CollectADOServiceConnections(project), "service-connections", "endpoint")
+	// includeSharedServiceEndpoints surfaces connections shared INTO this project
+	// (not just owned), so each consuming project's per-connection authorization
+	// and checks get collected — normalize dedups the shared node.
+	softSurface(timer, lbl("service-connections"), func() error {
+		items, status, e := softList(ctx, cl, "core", APIVersionSEP, "/"+pe+"/_apis/serviceendpoint/endpoints",
+			url.Values{"includeSharedServiceEndpoints": []string{"true"}})
+		if e != nil {
+			return e
+		}
+		if e := writeListOrMark(cp, engine.CollectADOServiceConnections(project), "service-connections",
+			"/"+pe+"/_apis/serviceendpoint/endpoints", items, status); e != nil {
+			return e
+		}
+		for _, raw := range items {
+			if id := strField(raw, "id"); id != "" {
+				resources = append(resources, resourceRef{Type: "endpoint", ID: id, Name: strField(raw, "name")})
+			}
+		}
+		return nil
+	})
 	collectList("variable-groups", "core", APIVersion, "/"+pe+"/_apis/distributedtask/variablegroups",
 		engine.CollectADOVariableGroups(project), "variable-groups", "variablegroup")
 	collectList("secure-files", "core", APIVersion, "/"+pe+"/_apis/distributedtask/securefiles",

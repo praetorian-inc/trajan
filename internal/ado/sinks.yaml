@@ -1,0 +1,54 @@
+# ADO sink classifier table (analog of internal/github/sinks.yaml).
+#
+# The engine stamps taint facts onto each :Job as its steps are walked. Adding a
+# new sink pattern is a data edit here — no code change.
+#
+# exec_sinks:  regexes matched against a step's script body. Any match means the
+#              step builds/runs code from the checked-out tree (the cat-01
+#              executes_checked_out_code signal). First match wins; its name is
+#              recorded as the step's sink_class.
+# ai_task:     regexes matched against a task@version reference — a marketplace
+#              AI/LLM task (cat-12).
+# ai_cli:      regexes matched against a script body — an AI/LLM CLI invocation
+#              (cat-12), e.g. `claude -p "..."`.
+
+exec_sinks:
+  - name: npm_install
+    pattern: '\b(npm|pnpm|yarn)\s+(ci|i|install|add)\b'
+  - name: pip_install
+    pattern: '\bpip(3)?\s+install\b|\bpoetry\s+install\b|\buv\s+(pip|sync|run)\b'
+  - name: setup_py
+    pattern: '\bpython(3)?\s+setup\.py\s+(develop|install)\b'
+  - name: make
+    pattern: '(^|\s|;|&&)make(\s+|$)'
+  - name: cargo_build
+    pattern: '\bcargo\s+(build|run|test|install)\b'
+  - name: gradle_build
+    pattern: '(^|/)gradlew\s+|\bgradle\s+(build|test|run|assemble)\b'
+  - name: maven_build
+    pattern: '\bmvn\s+(compile|package|install|test|verify)\b'
+  - name: go_build
+    pattern: '\bgo\s+(build|run|test|install|generate)\b'
+  - name: dotnet_build
+    pattern: '\bdotnet\s+(build|run|test|publish|pack|restore)\b'
+  - name: docker_build
+    pattern: '\bdocker\s+(build|buildx\s+build)\b'
+  - name: local_script
+    pattern: '(^|\s|;|&&)\./[A-Za-z0-9_./-]+\.(sh|py|js|ts|rb|pl|ps1)\b'
+  - name: bash_local_script
+    pattern: '(^|\s|;|&&)(bash|sh)\s+\./'
+  - name: node_local_script
+    pattern: '(^|\s|;|&&)node\s+\./'
+  - name: python_local_script
+    pattern: '(^|\s|;|&&)python(3)?\s+\./'
+  - name: manage_py
+    pattern: '\bpython(3)?\s+manage\.py\b'
+  - name: task_runner
+    pattern: '\b(bundle\s+exec|rake|npx|tox|pytest|jest)\b'
+
+ai_task:
+  - pattern: '(?i)(openai|copilot|anthropic|claude|chatgpt|gpt-?[0-9]|\bllm\b|gemini|bedrock|cognitive)'
+  - pattern: '(?i)ai[-_ ]?(review|assist|agent|chat|bot|ops|complete|summar)'
+
+ai_cli:
+  - pattern: '(?i)(^|\s|;|&&|\||`|\()(claude|openai|llm|sgpt|aichat|ollama|chatgpt|q\s+chat)\b'
