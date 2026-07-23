@@ -1,0 +1,31 @@
+id: cat-09/self-approval-allowed
+scenario_id: cat-09/03
+title: "Approval check permits approvers to approve their own runs"
+subject: environment
+severity: high
+confidence: medium
+description: >
+  The environment's Approval check was configured without restricting
+  self-approval (requesterCannotBeApprover == false), so the same identity
+  that triggers a run can satisfy the gate. Combined with an approver group
+  where a single member's approval suffices, this collapses the four-eyes
+  control to one person: an attacker who can trigger or edit the deploy and
+  is also on the approver list authors the change and then approves their
+  own run. The Approval exists, so a "does prod have an approval?" audit
+  passes — the defect is a single toggle inside the check. A prod-scoped
+  Approval that restricts self-approval is the secure state and does not
+  fire.
+where:
+  all_of:
+    - "checks.type_name ∋ 'Approval'"
+    - "checks.settings.requesterCannotBeApprover ∋ false"
+evidence:
+  - "Environment {{ project }}/{{ name }} Approval permits self-approval"
+  - "requesterCannotBeApprover flags across checks: {{ checks.settings.requesterCannotBeApprover }}"
+  - "Minimum approvers: {{ checks.settings.minRequiredApprovers }}"
+remediation_hint: >
+  Edit the environment's Approval check and enable "requesters cannot approve
+  their own runs". Prefer a named approver group whose membership excludes
+  the identities that can trigger or edit the deploy pipeline, and require
+  more than one approver for production. Reconcile the approver set against
+  who holds trigger/edit rights so separation of duties is preserved.
