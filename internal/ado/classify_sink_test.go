@@ -78,8 +78,40 @@ func TestMatchesAI(t *testing.T) {
 	if !matchesAICLI(`claude -p "summarize $BODY" --allow-tool bash`) {
 		t.Error("claude CLI should match ai_cli")
 	}
+	if !matchesAICLI(`gemini -p "Generate a deploy script for $DESC" > gen.sh`) {
+		t.Error("gemini CLI should match ai_cli")
+	}
+	if !matchesAICLI(`codex exec "fix the failing test"`) {
+		t.Error("codex CLI should match ai_cli")
+	}
 	if matchesAICLI("make build") {
 		t.Error("make is not an AI CLI")
+	}
+}
+
+// generate_then_execute is distinguished by the AI redirecting output into a
+// script file, NOT by agentic tool_exec: `gemini ... > gen.sh` is
+// generate-then-execute; `claude ... --allow-tool bash` (direct/agentic) and a
+// non-script redirect are not.
+func TestWritesGeneratedScript(t *testing.T) {
+	yes := []string{
+		`gemini -p "Generate a bash deploy script for $DESC" > gen.sh`,
+		`claude -p "write the pipeline" >> build/run.ps1`,
+	}
+	no := []string{
+		`claude -p "review $BODY" --allow-tool bash`,
+		`gemini -p "summarize this PR" > summary.md`,
+		`echo hello`,
+	}
+	for _, s := range yes {
+		if !writesGeneratedScript(s) {
+			t.Errorf("writesGeneratedScript(%q) = false, want true", s)
+		}
+	}
+	for _, s := range no {
+		if writesGeneratedScript(s) {
+			t.Errorf("writesGeneratedScript(%q) = true, want false", s)
+		}
 	}
 }
 

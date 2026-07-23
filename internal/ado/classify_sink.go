@@ -222,6 +222,18 @@ func aiCapabilities(text string) []any {
 	return caps
 }
 
+// generatedScriptRe matches an AI CLI redirecting its output into a script-extension
+// file (e.g. `gemini -p "..." > gen.sh`) — the "generate" half of generate-then-execute.
+var generatedScriptRe = regexp.MustCompile(`(?i)>>?\s*['"]?[\w./-]+\.(sh|bash|zsh|py|ps1|psm1|rb|pl|js|cmd|bat)\b`)
+
+// writesGeneratedScript reports whether the script captures command output into a
+// script file. It is the distinguishing signal of the generate-then-execute pattern
+// (model output written to a file a later step runs), as opposed to direct or
+// agentic (tool_exec) AI use — which is why via must not be inferred from tool_exec.
+func writesGeneratedScript(script string) bool {
+	return generatedScriptRe.MatchString(script)
+}
+
 var bareBinaries = []string{
 	"git", "az", "kubectl", "python", "python3", "dotnet", "npm", "node",
 	"terraform", "gpg", "docker", "helm", "aws", "gcloud", "make", "bash",

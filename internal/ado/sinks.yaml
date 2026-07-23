@@ -51,4 +51,4 @@ ai_task:
   - pattern: '(?i)ai[-_ ]?(review|assist|agent|chat|bot|ops|complete|summar)'
 
 ai_cli:
-  - pattern: '(?i)(^|\s|;|&&|\||`|\()(claude|openai|llm|sgpt|aichat|ollama|chatgpt|q\s+chat)\b'
+  - pattern: '(?i)(^|\s|;|&&|\||`|\()(claude|openai|gemini|codex|llm|sgpt|aichat|ollama|chatgpt|q\s+chat)\b'

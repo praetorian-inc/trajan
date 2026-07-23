@@ -342,7 +342,7 @@ func deriveAgentInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j ma
 			conf = "high"
 		}
 		via := "direct"
-		if hasCap(caps, "tool_exec") {
+		if b, _ := sink["generated_script"].(bool); b {
 			via = "generate_then_execute"
 		}
 		rec := map[string]any{

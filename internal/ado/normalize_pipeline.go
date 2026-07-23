@@ -600,6 +600,7 @@ func (f *jobFacts) scanScriptBody(shell, body string, stepIdx int, task string, 
 		f.aiTaskSinks = append(f.aiTaskSinks, map[string]any{
 			"task_id": "cli", "vendor": aiVendor(body), "capabilities": aiCapabilities(body),
 			"inputs": map[string]any{}, "source": "script", "step_index": stepIdx,
+			"generated_script": writesGeneratedScript(body),
 		})
 	}
 	if strings.Contains(strings.ToLower(body), "system.accesstoken") {
