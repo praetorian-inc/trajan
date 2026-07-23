@@ -1,0 +1,31 @@
+id: cat-14/task-group-edit-affects-all
+scenario_id: cat-14/02
+title: "Classic build/release creation enabled (task-group fan-out surface exists)"
+subject: project
+severity: medium
+confidence: low
+description: >
+  POSTURE PROXY — task groups are a classic-pipeline construct and are DEFERRED
+  (no TaskGroup nodes are collected or normalized, and no permission ACL for
+  "Edit task group" is emitted), so the real edit-once-affects-all defect cannot
+  be observed. The intended detection flags a shared task group that a low-trust
+  group can Edit and that privileged classic build/release pipelines consume via
+  minor-version auto-pickup, giving one edit code execution under every
+  consumer's prod credentials. Since that data is unavailable, this rule reports
+  only the enabling posture: the project has NOT disabled classic build pipeline
+  creation (task groups only exist for classic build/release definitions), so the
+  task-group fan-out surface can still be created. This is an attack-surface
+  signal, not a confirmed editable shared task group.
+where:
+  all_of:
+    - "disable_classic_build_pipeline_creation == false"
+    - "disable_classic_pipeline_creation == false"
+evidence:
+  - "Project {{ project }}: disable_classic_build_pipeline_creation={{ disable_classic_build_pipeline_creation }}, disable_classic_pipeline_creation={{ disable_classic_pipeline_creation }}"
+remediation_hint: >
+  Enable "Disable creation of classic build and release pipelines" at the
+  organization and project level to remove task groups from the estate. Where
+  they must remain, restrict "Edit task group" to Build/Project Administrators,
+  pin consuming pipelines to a reviewed major version rather than a
+  minor-version wildcard, and prefer YAML templates with required-template
+  checks for shared-step reuse.

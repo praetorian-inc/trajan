@@ -1,0 +1,34 @@
+id: cat-14/classic-inherits-connection-weaker-guardrails
+scenario_id: cat-14/05
+title: "Classic release creation enabled (parallel weaker path to checked resources)"
+subject: project
+severity: medium
+confidence: low
+description: >
+  POSTURE PROXY — the classic-release subsystem is DEFERRED (classic release
+  definitions and their resource consumption are not collected or normalized),
+  so the guardrail asymmetry cannot be observed directly. The intended detection
+  flags a prod service connection or secret variable group protected by YAML
+  Approvals-and-Checks that is ALSO consumable by a classic release, where those
+  resource checks do not apply, letting a release Contributor blocked on the
+  YAML path reach the same credential under the weaker classic approval model.
+  The classic side of that asymmetry is unavailable, so this rule reports only
+  the enabling posture: the project has NOT disabled classic release pipeline
+  creation, so the parallel weaker path to checked resources can still be
+  created. This is an attack-surface signal, not a confirmed asymmetric-guardrail
+  resource.
+where:
+  all_of:
+    - "disable_classic_release_creation == false"
+    - "disable_classic_pipeline_creation == false"
+evidence:
+  - "Project {{ project }}: disable_classic_release_creation={{ disable_classic_release_creation }}, disable_classic_pipeline_creation={{ disable_classic_pipeline_creation }}"
+  - "Release job auth scope limited to current project: {{ limit_job_auth_scope_for_releases }}"
+remediation_hint: >
+  Enable "Disable creation of classic release pipelines" at the organization and
+  project level to close the parallel path that bypasses YAML resource checks.
+  Where classic must remain, ensure every classic release stage consuming a prod
+  credential carries pre-deployment approvals equivalent to the YAML-side checks,
+  and enable "Limit job authorization scope to current project for release
+  pipelines". Audit existing classic definitions for residual prod credential
+  usage after YAML migration.

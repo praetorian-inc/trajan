@@ -1,0 +1,32 @@
+id: cat-14/cross-project-artifact-prod-deploy
+scenario_id: cat-14/04
+title: "Classic release creation enabled with release auth scope not project-limited"
+subject: project
+severity: medium
+confidence: low
+description: >
+  POSTURE PROXY — the classic-release subsystem is DEFERRED (release artifact
+  links and stages are not collected or normalized), so a classic release that
+  consumes a cross-project artifact and deploys it with prod credentials cannot
+  be observed directly. The intended detection flags whoever controls an
+  upstream producer in another project shipping to prod without any permission
+  in the consuming project. Two real, general posture preconditions for that
+  path ARE observable: classic release creation is still allowed, and release
+  job authorization scope is NOT limited to the current project (so a classic
+  release can reach cross-project resources and artifact sources). This rule
+  reports that enabling posture. It is an attack-surface signal, not a confirmed
+  cross-project artifact deploy.
+where:
+  all_of:
+    - "disable_classic_release_creation == false"
+    - "limit_job_auth_scope_for_releases == false"
+evidence:
+  - "Project {{ project }}: disable_classic_release_creation={{ disable_classic_release_creation }}"
+  - "Release job auth scope limited to current project: {{ limit_job_auth_scope_for_releases }} (false = releases can reach cross-project resources)"
+remediation_hint: >
+  Enable "Limit job authorization scope to current project for release
+  pipelines" at both the organization and project level to prevent classic
+  releases from reaching cross-project artifacts and credentials. Enable
+  "Disable creation of classic release pipelines" where classic is not needed.
+  Pin artifact versions to specific builds rather than Default = Latest, and add
+  a pre-deployment approval that reviews artifact provenance on production stages.

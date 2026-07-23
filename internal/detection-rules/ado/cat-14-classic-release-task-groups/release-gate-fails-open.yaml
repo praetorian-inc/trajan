@@ -1,0 +1,31 @@
+id: cat-14/release-gate-fails-open
+scenario_id: cat-14/03
+title: "Classic release creation enabled (fail-open release gates possible)"
+subject: project
+severity: medium
+confidence: low
+description: >
+  POSTURE PROXY — the classic-release subsystem is DEFERRED (release gate
+  definitions are not collected or normalized), so the real gate configuration
+  cannot be observed. The intended detection flags a classic release production
+  stage that uses a pre-deployment gate (Invoke REST API/Azure Function, Query
+  work items/Azure Monitor) as the sole promotion control with empty/permissive
+  success criteria or an attacker-controllable endpoint and no human approval,
+  making the gate decorative. Since gate data is unavailable, this rule reports
+  only the enabling posture: the project has NOT disabled classic release
+  pipeline creation, so gate-only classic release stages can still be created.
+  This is an attack-surface signal, not a confirmed fail-open gate.
+where:
+  all_of:
+    - "disable_classic_release_creation == false"
+    - "disable_classic_pipeline_creation == false"
+evidence:
+  - "Project {{ project }}: disable_classic_release_creation={{ disable_classic_release_creation }}, disable_classic_pipeline_creation={{ disable_classic_pipeline_creation }}"
+  - "Release job auth scope limited to current project: {{ limit_job_auth_scope_for_releases }}"
+remediation_hint: >
+  Enable "Disable creation of classic release pipelines" at the organization and
+  project level. Where classic releases remain, never rely on a gate as the sole
+  promotion control — pair every production gate with a mandatory pre-deployment
+  human approval, define strict success criteria on Invoke REST API/Function
+  gates, and ensure gate endpoints are organization-owned and not writable by
+  release contributors.

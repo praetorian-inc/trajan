@@ -1,0 +1,32 @@
+id: cat-14/self-approval-classic-release-stage
+scenario_id: cat-14/01
+title: "Classic release creation enabled (self-approvable prod release stages possible)"
+subject: project
+severity: medium
+confidence: low
+description: >
+  POSTURE PROXY — the classic-release subsystem is DEFERRED (not collected or
+  normalized), so no ClassicRelease*/stage/approval nodes exist to inspect and
+  the real per-stage self-approval defect cannot be observed. The intended
+  detection flags a classic release production stage whose pre-deployment
+  approval is disabled, or lets the requestor approve their own deployment, so
+  a release Contributor authors and self-approves an unreviewed prod-credentialed
+  deploy. Since that data is unavailable, this rule reports only the enabling
+  posture: the project has NOT disabled classic release pipeline creation, so
+  classic release definitions — whose per-stage approval model is separate from
+  YAML Approvals-and-Checks — can still be created. This is an attack-surface
+  signal, not a confirmed self-approvable stage.
+where:
+  all_of:
+    - "disable_classic_release_creation == false"
+    - "disable_classic_pipeline_creation == false"
+evidence:
+  - "Project {{ project }}: disable_classic_release_creation={{ disable_classic_release_creation }}, disable_classic_pipeline_creation={{ disable_classic_pipeline_creation }}"
+  - "Release job auth scope limited to current project: {{ limit_job_auth_scope_for_releases }}"
+remediation_hint: >
+  Enable "Disable creation of classic release pipelines" at the organization and
+  project level to remove the classic release path entirely. Where classic
+  releases must remain, require a pre-deployment approval on every production
+  stage, check "The user requesting a release or deployment should not approve
+  it", and draw approvers from a team that excludes the release contributors who
+  author and queue releases.
