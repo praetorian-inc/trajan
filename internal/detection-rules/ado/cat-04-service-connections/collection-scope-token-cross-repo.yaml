@@ -1,0 +1,36 @@
+id: cat-04/collection-scope-token-cross-repo
+scenario_id: cat-04/04
+title: "Collection-scoped job authorization token reaches every repo in the org"
+subject: org
+severity: high
+confidence: high
+description: >
+  The organization-level "Limit job authorization scope to current project"
+  settings independently control the System.AccessToken scope for build pipelines
+  (limit_job_auth_scope_to_current_project) and release pipelines
+  (limit_job_auth_scope_for_releases). When either is off, jobs of the matching
+  pipeline type receive a collection-scoped token instead of a project-scoped one.
+  Any such pipeline whose steps can read System.AccessToken can call the ADO REST
+  API to read, clone, or write repositories in every other project in the
+  organization, turning one compromised or attacker-editable pipeline into a
+  collection-wide lateral-movement vector. Release pipelines are governed by a
+  separate toggle and are independently exploitable.
+
+where:
+  any_of:
+    - "limit_job_auth_scope_to_current_project == false"
+    - "limit_job_auth_scope_for_releases == false"
+
+evidence:
+  - "Organization: {{ org }}"
+  - "Limit job auth scope to current project (build): {{ limit_job_auth_scope_to_current_project }}"
+  - "Limit job auth scope for releases: {{ limit_job_auth_scope_for_releases }}"
+  - "Projects in collection: {{ projects_count }}"
+
+remediation_hint: >
+  Enable both "Limit job authorization scope to current project" toggles in
+  Organization Settings > Pipelines > Settings (one for build, one for release
+  pipelines), then enable the equivalent project-level settings so project
+  overrides cannot re-expand the scope. Migrate pipelines that legitimately need
+  cross-project access to explicit service connections or project-scoped service
+  accounts with least-privilege permissions.

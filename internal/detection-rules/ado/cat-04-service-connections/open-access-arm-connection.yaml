@@ -1,0 +1,38 @@
+id: cat-04/open-access-arm-connection
+scenario_id: cat-04/01
+title: "Open-access Azure connection with no Approvals & checks"
+subject: service_connection
+severity: high
+confidence: medium
+description: >
+  An Azure Resource Manager service connection has "Grant access permission to
+  all pipelines" enabled (pipeline_permissions.all_pipelines == true) and has no
+  Approvals & checks configured. Every pipeline in the project — including any new
+  one a Contributor creates and any change pushed to an existing pipeline's YAML
+  on a non-protected branch — is pre-authorized to use it without a per-pipeline
+  authorization step and without a Branch control or manual-approval gate. Because
+  an ARM connection authenticates as a service principal that commonly holds
+  subscription- or resource-group-scoped Contributor, attacker-authored YAML runs
+  as that cloud identity. Confidence is medium because the connection's true Azure
+  RBAC breadth is not observable from ADO metadata; the ADO-confirmable part is
+  the open, ungated reachability.
+
+where:
+  all_of:
+    - "type == 'azurerm'"
+    - "pipeline_permissions.all_pipelines == true"
+    - "checks == []"
+
+evidence:
+  - "Connection: {{ name }} ({{ type }}) in project {{ project }}"
+  - "Auth scheme: {{ auth_scheme }}"
+  - "Scope level: {{ scope_level }}"
+  - "All pipelines authorized: {{ pipeline_permissions.all_pipelines }}"
+  - "Checks defined: {{ checks }}"
+
+remediation_hint: >
+  Disable "Grant access permission to all pipelines" and authorize each pipeline
+  individually. Add a Branch control check restricting the connection to protected
+  branches (e.g. main, release/*) and, for production connections, a manual
+  approval. On the Azure side, tighten the service principal's RBAC to the
+  narrowest scope and role required rather than subscription-level Contributor.

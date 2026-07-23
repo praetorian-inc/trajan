@@ -1,0 +1,37 @@
+id: cat-04/no-checks-on-service-connection
+scenario_id: cat-04/02
+title: "Per-pipeline service connection with no Branch control / approval check"
+subject: service_connection
+severity: high
+confidence: medium
+description: >
+  A service connection uses per-pipeline authorization
+  (pipeline_permissions.all_pipelines == false, the recommended posture) but has
+  no Approvals & checks configured. Per-pipeline authorization binds the
+  connection to a pipeline definition, not to a branch: the same definition builds
+  whatever branch is queued, and its YAML is mutable on every non-protected
+  branch. Without a Branch control or manual-approval check, a Contributor who can
+  push to a feature branch of the authorized repo can edit the YAML to consume the
+  connection and queue it on that branch, running as the connection's identity.
+  The absence of an effective resource check is the vulnerability the "authorize
+  per pipeline" advice alone does not close. Confidence is medium: dev/test
+  connections legitimately carry no checks, and the connection's cloud blast
+  radius is not observable from ADO metadata.
+
+where:
+  all_of:
+    - "pipeline_permissions.all_pipelines == false"
+    - "checks == []"
+
+evidence:
+  - "Connection: {{ name }} ({{ type }}) in project {{ project }}"
+  - "Auth scheme: {{ auth_scheme }}"
+  - "All pipelines authorized: {{ pipeline_permissions.all_pipelines }}"
+  - "Checks defined: {{ checks }}"
+
+remediation_hint: >
+  Add a Branch control check to the connection restricting it to protected
+  branches (e.g. main, release/*), so a feature/PR branch cannot consume it. For
+  production connections also require a manual approval. Ensure the authorized
+  pipelines run on branches guarded by pull-request policies so attacker-authored
+  YAML cannot reach the runner on an unprotected branch.
