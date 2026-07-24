@@ -1,0 +1,23 @@
+id: cat-11/human-pat-as-cicd-variable
+scenario_id: cat-11/03
+title: "Human personal access token wired into a pipeline as a CI/CD variable"
+subject: credential
+severity: critical
+confidence: low
+description: >
+  An unprotected CI/CD variable whose key matches a PAT/token naming pattern
+  (`*PAT*`, `*_TOKEN`, `GITLAB_TOKEN`, `PRIVATE_TOKEN`) suggests a human personal access token is
+  wired into a pipeline a Developer can run. A human PAT inherits the token owner's entire
+  account — every project and group they belong to — so the Developer escalates from a
+  single-project role to the owner's account-wide access. A human PAT hidden in a variable is not
+  API-enumerable and the value is never returned, so this is a soft (low) signal.
+where:
+  all_of:
+    - kind == "personal_access_token"
+    - in_unprotected_variable == true
+    - key_pattern == "pat"
+evidence:
+  - "Unprotected CI/CD variable key matches a personal-access-token pattern ({{ key_pattern }}), suggesting a human PAT reachable by a Developer pipeline; the owner spans {{ backing_identity_breadth }}."
+remediation_hint: >
+  Replace the human PAT with a resource-scoped project/group access token or a job token, and
+  never store a personal access token as a CI/CD variable.
