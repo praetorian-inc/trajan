@@ -28,6 +28,9 @@ func newGitLabCmd() *cobra.Command {
 	gl.PersistentFlags().SortFlags = false
 	gl.PersistentFlags().IntVar(&cfg.Concurrency, "concurrency", 8, "max concurrent API workers")
 	gl.PersistentFlags().StringVar(&cfg.OutputDir, "output-dir", "./trajan-out", "run output directory")
+	gl.PersistentFlags().StringVar(&cfg.Token, "token", "", "GitLab token (else GITLAB_TOKEN/GL_TOKEN)")
+	gl.PersistentFlags().StringVar(&gitlab.FlagURL, "url", "https://gitlab.com", "GitLab base URL (self-hosted)")
+	gl.PersistentFlags().BoolVar(&gitlab.FlagInsecure, "insecure", false, "skip TLS verify (self-signed self-hosted)")
 
 	var path string
 	var neo4jURL, neo4jUser, neo4jPass string
