@@ -40,6 +40,46 @@ func TestParamNames(t *testing.T) {
 	}
 }
 
+// parameterRefs and runtimeVarRefs split the selector surface by queue-time
+// settability: a ${{ parameters }} selector is always settable, a $[ variables ]
+// runtime expression only when declared settable.
+func TestParameterVsRuntimeVarRefs(t *testing.T) {
+	s := `${{ parameters.tag }} $[ variables['containerImage'] ] ${{ parameters['pool'] }} $[ variables['env'] ]`
+	if got, want := parameterRefs(s), []string{"tag", "pool"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("parameterRefs = %v, want %v", got, want)
+	}
+	if got, want := runtimeVarRefs(s), []string{"containerImage", "env"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("runtimeVarRefs = %v, want %v", got, want)
+	}
+}
+
+// cat-02 compile-keyword redirect: a ${{ parameters }} selector is tagged as an
+// always-settable parameter (no source_kind), while a $[ variables['x'] ] runtime
+// expression is tagged runtime_var and carries its declared-settable state, so the
+// correlator can suppress it when the queue-time-settable limit is enforced.
+func TestScanCompileKeyword_SourceKind(t *testing.T) {
+	var f jobFacts
+	scanCompileKeyword(&f, "pool", "${{ parameters.poolName }}", -1, "", nil)
+	scanCompileKeyword(&f, "container", "$[ variables['containerImage'] ]", -1, "", map[string]bool{"containerImage": false})
+	scanCompileKeyword(&f, "container", "$[ variables['tag'] ]", -1, "", map[string]bool{"tag": true})
+
+	if len(f.paramSinks) != 3 {
+		t.Fatalf("want 3 param sinks, got %d: %v", len(f.paramSinks), f.paramSinks)
+	}
+	param := f.paramSinks[0].(map[string]any)
+	if param["param_name"] != "poolName" || param["source_kind"] != nil {
+		t.Errorf("parameter sink = %v, want poolName with no source_kind", param)
+	}
+	unsettable := f.paramSinks[1].(map[string]any)
+	if unsettable["param_name"] != "containerImage" || unsettable["source_kind"] != "runtime_var" || unsettable["is_declared_settable"] != false {
+		t.Errorf("runtime-var sink = %v, want containerImage/runtime_var/not-settable", unsettable)
+	}
+	settable := f.paramSinks[2].(map[string]any)
+	if settable["source_kind"] != "runtime_var" || settable["is_declared_settable"] != true {
+		t.Errorf("declared-settable runtime-var sink = %v", settable)
+	}
+}
+
 func TestClassifyExecSink(t *testing.T) {
 	if _, ok := classifyExecSink("npm ci && npm run build"); !ok {
 		t.Error("npm ci should be an exec sink")

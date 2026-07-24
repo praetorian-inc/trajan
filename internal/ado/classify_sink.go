@@ -139,6 +139,30 @@ func paramNames(s string) []string {
 	return out
 }
 
+// parameterRefs returns only `${{ parameters.x }}` / `${{ parameters['x'] }}` template
+// selectors. A runtime parameter is always settable at queue time, independent of the
+// "Limit variables that can be set at queue time" org setting — so a compile-keyword
+// redirect through one is unconditionally reachable by a queuer.
+func parameterRefs(s string) []string {
+	seen, out := map[string]bool{}, []string{}
+	for _, re := range []*regexp.Regexp{reParam, reParamIx} {
+		for _, m := range re.FindAllStringSubmatch(s, -1) {
+			if !seen[m[1]] {
+				seen[m[1]] = true
+				out = append(out, m[1])
+			}
+		}
+	}
+	return out
+}
+
+// runtimeVarRefs returns `$[ variables['x'] ]` runtime-expression variable names. Unlike
+// a parameter, a variable is queue-settable only when declared settable (or when the
+// queue-time limit is off), so a compile-keyword redirect through one is gated on that.
+func runtimeVarRefs(s string) []string {
+	return uniqueSubmatch(reRuntime.FindAllStringSubmatch(s, -1))
+}
+
 func uniqueSubmatch(matches [][]string) []string {
 	seen, out := map[string]bool{}, []string{}
 	for _, m := range matches {
@@ -336,6 +360,17 @@ func paramSinkRec(name, location, keyword, task string, stepIdx int) map[string]
 		"param_name": name, "location": location, "keyword": keyword,
 		"task_name": task, "step_index": stepIdx,
 	}
+}
+
+// settableVarKeywordSink is a compile-keyword redirect driven by a `$[ variables['x'] ]`
+// runtime expression rather than a template parameter. source_kind lets the queue-time
+// correlator gate it on queue-time settability (a variable is not settable under the
+// "Limit variables settable at queue time" limit unless declared settable).
+func settableVarKeywordSink(name, keyword, task string, stepIdx int, settable map[string]bool) map[string]any {
+	rec := paramSinkRec(name, "compile_keyword", keyword, task, stepIdx)
+	rec["source_kind"] = "runtime_var"
+	rec["is_declared_settable"] = settable[name]
+	return rec
 }
 
 func taskUsageRec(task string, stepIdx int) map[string]any {

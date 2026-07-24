@@ -411,8 +411,8 @@ func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, p
 	f := walkSteps(collectSteps(m), settable)
 	// compile-time keyword sinks: a runtime parameter / runtime-expression selecting
 	// pool or container steers the execution target/identity (cat-02 redirect).
-	scanCompileKeyword(&f, "pool", poolExpr(jobPool), -1, "")
-	scanCompileKeyword(&f, "container", yamlStr(m["container"]), -1, "")
+	scanCompileKeyword(&f, "pool", poolExpr(jobPool), -1, "", settable)
+	scanCompileKeyword(&f, "container", yamlStr(m["container"]), -1, "", settable)
 
 	rec := map[string]any{
 		"_id":                         fmt.Sprintf("%d/%s/%s", pipelineID, stage, job),
@@ -513,7 +513,7 @@ func walkSteps(steps []any, settable map[string]bool) jobFacts {
 				"repository": yamlStr(ck), "clean": sm["clean"], "fetch_depth": sm["fetchDepth"],
 				"persist_credentials": sm["persistCredentials"], "submodules": sm["submodules"], "step_index": i,
 			})
-			scanCompileKeyword(&f, "checkout", yamlStr(ck), i, "")
+			scanCompileKeyword(&f, "checkout", yamlStr(ck), i, "", settable)
 			continue
 		}
 		if cond := yamlStr(sm["condition"]); cond != "" {
@@ -634,12 +634,17 @@ func (f *jobFacts) scanTaskInput(val, inputName string, stepIdx int, task string
 		}
 		f.macroSinks = append(f.macroSinks, macroSinkRec(name, "task_input", task, stepIdx, settable))
 	}
-	for _, p := range paramNames(val) {
-		loc := "task_input"
-		if isCompileKeywordInput(inputName) {
-			loc = "compile_keyword" // param selects the identity/target (input_target_redirect)
+	if isCompileKeywordInput(inputName) { // input selects the identity/target (input_target_redirect)
+		for _, p := range parameterRefs(val) {
+			f.paramSinks = append(f.paramSinks, paramSinkRec(p, "compile_keyword", inputName, task, stepIdx))
 		}
-		f.paramSinks = append(f.paramSinks, paramSinkRec(p, loc, inputName, task, stepIdx))
+		for _, name := range runtimeVarRefs(val) {
+			f.paramSinks = append(f.paramSinks, settableVarKeywordSink(name, inputName, task, stepIdx, settable))
+		}
+		return
+	}
+	for _, p := range paramNames(val) {
+		f.paramSinks = append(f.paramSinks, paramSinkRec(p, "task_input", inputName, task, stepIdx))
 	}
 }
 
@@ -654,13 +659,17 @@ func (f *jobFacts) scanEnv(env map[string]any) {
 // scanCompileKeyword records parameter/runtime-expression expansion into a
 // compile-time keyword (pool/container/checkout) — the target-redirect surface.
 // `$(macro)` does not expand in compile keywords, so only ${{ }}/$[ ] and
-// predefined-untrusted references count.
-func scanCompileKeyword(f *jobFacts, keyword, val string, stepIdx int, task string) {
+// predefined-untrusted references count. A ${{ parameters }} selector is always
+// queue-settable; a $[ variables ] runtime expression is gated on settability.
+func scanCompileKeyword(f *jobFacts, keyword, val string, stepIdx int, task string, settable map[string]bool) {
 	if val == "" {
 		return
 	}
-	for _, p := range paramNames(val) {
+	for _, p := range parameterRefs(val) {
 		f.paramSinks = append(f.paramSinks, paramSinkRec(p, "compile_keyword", keyword, task, stepIdx))
+	}
+	for _, name := range runtimeVarRefs(val) {
+		f.paramSinks = append(f.paramSinks, settableVarKeywordSink(name, keyword, task, stepIdx, settable))
 	}
 }
 

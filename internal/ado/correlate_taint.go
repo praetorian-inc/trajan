@@ -233,6 +233,13 @@ func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, 
 				return err
 			}
 		case "compile_keyword":
+			// A $[ variables['x'] ] redirect is only reachable if the variable is
+			// queue-settable: under the "Limit variables settable at queue time" limit,
+			// only declared-settable variables can be overridden. A ${{ parameters }}
+			// selector (no source_kind) is always settable, so it fires unconditionally.
+			if entStr(ps["source_kind"]) == "runtime_var" && meta.enforceSettable && !entBool(ps["is_declared_settable"]) {
+				continue
+			}
 			if err := emitEdge("parameter_in_compile_keyword", name, "input_target_redirect", entStr(ps["keyword"]), "high", ps); err != nil {
 				return err
 			}
