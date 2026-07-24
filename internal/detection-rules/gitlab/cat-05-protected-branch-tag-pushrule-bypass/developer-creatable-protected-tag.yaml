@@ -1,0 +1,25 @@
+id: cat-05/developer-creatable-protected-tag
+scenario_id: cat-05/11
+title: "Developer in a protected tag's \"Allowed to create\" runs a privileged tag pipeline on a protected ref"
+subject: project
+severity: high
+confidence: high
+description: >
+  A protected-tag rule's `create_access_levels` includes the Developer role (access level 30) — or
+  a group/user entry — for a pattern matching the tag scheme used by privileged tag jobs, the
+  `.gitlab-ci.yml` has jobs gated on `$CI_COMMIT_TAG` / `only: tags` that consume a protected
+  variable, and a `protected: true` variable is in scope (protected variables apply to protected
+  tags). Because create permission also controls pipeline execution, a Developer creates a matching
+  tag, runs the release pipeline on a protected ref, and reads the tag-scoped protected variable.
+
+where:
+  all_of:
+    - developer_creatable_protected_tag == true
+    - protected_var_scoped_to_tag_pipeline == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} has a protected-tag rule granting Developer create for a pattern used by tag jobs, and a protected CI/CD variable is scoped to that tag pipeline."
+
+remediation_hint: >
+  Restrict the protected-tag rule's "Allowed to create" to Maintainers so lower-trust roles cannot
+  create tags that run privileged tag pipelines on a protected ref.
