@@ -1,0 +1,25 @@
+id: cat-12/saml-scim-default-membership-role-maintainer
+scenario_id: cat-12/10
+title: "SAML/SCIM default membership role of Maintainer/Owner auto-grants CI/CD administration to every provisioned identity"
+subject: group
+severity: high
+confidence: high
+description: >
+  A group has SAML SSO and/or SCIM provisioning active and its `default_membership_role` is set at
+  or above Maintainer. Every identity the IdP provisions therefore silently gains CI/CD-
+  administrative control — managing protected variables, protected refs, tokens, and runners —
+  with no invite or per-user review.
+
+where:
+  all_of:
+    - saml_provisioning_active == true
+    - any_of:
+        - default_membership_role == "maintainer"
+        - default_membership_role == "owner"
+
+evidence:
+  - "Group {{ _provenance.group_path }} provisions via SAML/SCIM with default_membership_role `{{ default_membership_role }}`, auto-granting CI/CD administration to every provisioned identity."
+
+remediation_hint: >
+  Lower the group's `default_membership_role` to Guest and elevate individual users deliberately,
+  so IdP provisioning does not confer un-reviewed CI/CD administrative control.

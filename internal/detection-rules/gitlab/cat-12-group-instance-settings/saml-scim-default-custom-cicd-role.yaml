@@ -1,0 +1,24 @@
+id: cat-12/saml-scim-default-custom-cicd-role
+scenario_id: cat-12/11
+title: "SAML/SCIM default membership role is a custom role carrying a CI/CD-admin ability"
+subject: group
+severity: high
+confidence: high
+description: >
+  A group has SAML SSO and/or SCIM provisioning active and its `default_membership_role`
+  references a custom member role whose enabled abilities include a CI/CD-administrative permission
+  (`admin_cicd_variables`, `manage_project_access_tokens`, runner management, etc.) on a low base
+  role. Every provisioned identity silently gains the layered Maintainer-class ability while a
+  role-number check sees only a low base, so the danger is invisible to naive review.
+
+where:
+  all_of:
+    - saml_provisioning_active == true
+    - default_role_custom_cicd_ability == true
+
+evidence:
+  - "Group {{ _provenance.group_path }} provisions via SAML/SCIM with a custom default role carrying a CI/CD-admin ability, granting it to every provisioned identity despite a low base role."
+
+remediation_hint: >
+  Set the group's provisioning default to a stock low-trust role, or strip CI/CD-administrative
+  abilities from any custom role used as the provisioning default.

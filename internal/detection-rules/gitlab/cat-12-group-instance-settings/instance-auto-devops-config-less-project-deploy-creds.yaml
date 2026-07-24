@@ -1,0 +1,26 @@
+id: cat-12/instance-auto-devops-config-less-project-deploy-creds
+scenario_id: cat-12/12
+title: "Instance-wide Auto DevOps runs an org-credentialed pipeline on any CI-config-less project"
+subject: project
+severity: high
+confidence: medium
+description: >
+  Auto DevOps is defaulted ON instance-wide, so a project with no `.gitlab-ci.yml` and a reachable
+  shared runner auto-runs GitLab's Auto DevOps template — wired to instance/group deploy, cluster,
+  and registry credentials. A low-trust actor who only pushes code (or creates a bare project) thus
+  gets it executed inside a privileged org-authored pipeline they never wrote. Whether the wired
+  deploy target is production-powerful is deferred, hence medium confidence.
+
+where:
+  all_of:
+    - auto_devops_enabled == true
+    - has_cicd_config == false
+    - has_reachable_runner == true
+    - auto_devops_deploy_creds_wired == true
+
+evidence:
+  - "Config-less project {{ _provenance.project_path }} inherits instance Auto DevOps with a reachable runner and wired deploy credentials, running pushed code in an org-privileged pipeline."
+
+remediation_hint: >
+  Disable the instance Auto DevOps default (or per-project), or require every project to author its
+  own reviewed `.gitlab-ci.yml` before deploy credentials are in scope.

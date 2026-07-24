@@ -1,0 +1,30 @@
+id: cat-12/auto-devops-deploy-kubernetes-agent
+scenario_id: cat-12/14
+title: "Auto DevOps deploy stage authenticates to a cluster, running config-less-project code beside a live kubeconfig"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A GitLab Agent for Kubernetes `ci_access` grant authorizes the scope an Auto DevOps run executes
+  under, and a config-less project with a reachable runner sits in that scope. The Auto DevOps
+  deploy stage then receives a cluster kubeconfig via the agent, so a code-only pusher's source runs
+  in the same org-owned pipeline that materializes cluster credentials. The cluster's service-
+  account RBAC behind the grant is deferred, hence medium confidence.
+  NOTE: joins the agent-ci-access chain (produced by correlate during normalize).
+
+chain_of:
+  join: agent-ci-access
+  for_each: grants
+  where:
+    all_of:
+      - agent.ci_access_targets != []
+      - project.auto_devops_enabled == true
+      - project.has_cicd_config == false
+      - project.has_reachable_runner == true
+
+evidence:
+  - "Agent `{{ agent._provenance.project_path }}` grants ci_access to the Auto DevOps scope of config-less project `{{ project._provenance.project_path }}`, whose pipeline runs pushed code beside a cluster kubeconfig."
+
+remediation_hint: >
+  Restrict the agent `ci_access` grant to trusted projects, or disable the Auto DevOps default so
+  config-less projects cannot auto-run a deploy stage holding cluster credentials.
