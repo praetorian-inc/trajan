@@ -1,0 +1,25 @@
+id: cat-08/any-user-open-creation-shared-runner
+scenario_id: cat-08/02
+title: "Open project/group creation plus instance runners on lets any authenticated user reach the shared runner pool"
+subject: instance
+severity: high
+confidence: low
+description: >
+  The instance leaves project creation open to any authenticated user and enables instance runners
+  for new projects by default, so any account with zero project membership can create a throwaway
+  project and land its first job on a self-managed shared runner pool that also services higher-trust
+  projects. Host isolation / ephemerality is the deferred half, so this is confidence low.
+
+where:
+  all_of:
+    - project_creation_unrestricted == true
+    - can_create_group == true
+    - shared_runners_enabled == true
+    - self_managed_shared_runner_serves_higher_trust == true
+
+evidence:
+  - "Instance allows open project/group creation with shared_runners_enabled={{ shared_runners_enabled }}, so any authenticated account self-provisions onto a self-managed shared runner serving higher-trust work."
+
+remediation_hint: >
+  Restrict project/group creation to trusted roles, disable instance runners for new projects by
+  default, and keep higher-trust work on dedicated protected-ref ephemeral runners.
