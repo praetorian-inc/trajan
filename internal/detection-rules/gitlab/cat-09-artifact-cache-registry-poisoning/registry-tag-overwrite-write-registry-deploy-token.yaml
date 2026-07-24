@@ -1,0 +1,29 @@
+id: cat-09/registry-tag-overwrite-write-registry-deploy-token
+scenario_id: cat-09/11
+title: "Mutable-tag overwrite performed with a broadly-reachable write_registry deploy token"
+subject: job
+severity: high
+confidence: medium
+description: >
+  A protected-ref deploy job pulls a registry image by a mutable tag with no covering protected
+  container tag rule, and a `write_registry` deploy token (group-level → usable across the group,
+  or the auto-exposed `gitlab-deploy-token` surfaced as `CI_DEPLOY_USER`/`CI_DEPLOY_PASSWORD`) is
+  reachable from a low-trust pipeline. The token is a standalone push credential, so a non-member
+  overwrites the tag the deploy consumes without project registry-push membership. Confidence is
+  medium because whether the tag was overwritten / current registry contents is deferred runtime
+  state.
+
+where:
+  all_of:
+    - image_from_registry_mutable_tag == true
+    - image_pinned_digest == false
+    - registry_tag_protection_covers_consumed_tag == false
+    - write_registry_token_reachable_low_trust == true
+    - protected_ref_gate == "strong"
+
+evidence:
+  - "Protected-ref deploy job pulls {{ image_ref }} by a mutable tag with no covering protected-tag rule, while a write_registry deploy token reachable from a low-trust pipeline can overwrite that tag."
+
+remediation_hint: >
+  Pin the deployed image by digest or add a Maintainer+ protected container tag rule, and stop
+  exposing `write_registry`/`gitlab-deploy-token` credentials to lower-trust branch pipelines.
