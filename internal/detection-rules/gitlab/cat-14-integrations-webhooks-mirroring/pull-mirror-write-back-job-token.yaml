@@ -1,0 +1,26 @@
+id: cat-14/pull-mirror-write-back-job-token
+scenario_id: cat-14/06
+title: "Pull-mirror auto-pipeline writes back into the repository via job-token push"
+subject: integration
+severity: critical
+confidence: high
+description: >
+  A pull mirror from an external upstream auto-runs a pipeline on every sync
+  (`mirror_trigger_builds`), and the project also permits the CI job token to push to the
+  repository (`ci_push_repository_for_job_token_allowed`). An external upstream committer who
+  controls the mirrored `.gitlab-ci.yml` can therefore authenticate with `CI_JOB_TOKEN` and
+  push attacker-authored commits back into the project — persisting code with no merge or review.
+
+where:
+  all_of:
+    - kind == "pull_mirror"
+    - mirror.trigger_pipelines == true
+    - mirror.upstream_untrusted_host == true
+    - mirror.job_token_push_allowed == true
+
+evidence:
+  - "Pull mirror from external upstream `{{ url }}` auto-triggers pipelines and the project permits job-token repository push, letting the upstream's CI config write commits back."
+
+remediation_hint: >
+  Disable `ci_push_repository_for_job_token_allowed`, or disable `mirror_trigger_builds` for
+  externally-sourced mirrors so an upstream's CI config cannot obtain repository write.

@@ -1,0 +1,25 @@
+id: cat-02/branch-name-controlled-include
+scenario_id: cat-02/05
+title: "Branch-name-controlled include steers the pipeline to attacker-chosen config"
+subject: job
+severity: high
+confidence: high
+description: >
+  An `include:` `ref`/`file`/`remote` string interpolates a user-controllable predefined variable
+  (`CI_COMMIT_REF_NAME`, `CI_COMMIT_TAG`, `CI_PROJECT_PATH`, …), so a lower-trust actor who names a
+  ref selects the config that runs — with variables or a usable job token in scope.
+
+where:
+  all_of:
+    - include_ref_interpolated == true
+    - any_of:
+        - triggers ∋ {merge_request_event}
+        - reads_cicd_variable == true
+        - outbound_job_token_broad == true
+
+evidence:
+  - "Pipeline builds an include path from a user-controllable variable, letting an attacker-named ref select the config."
+
+remediation_hint: >
+  Never interpolate user-controllable variables into an `include:` path; pin includes to fixed
+  refs/files.

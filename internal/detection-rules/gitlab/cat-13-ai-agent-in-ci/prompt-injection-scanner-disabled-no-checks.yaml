@@ -1,0 +1,31 @@
+id: cat-13/prompt-injection-scanner-disabled-no-checks
+scenario_id: cat-13/03
+title: "Duo prompt-injection scanner disabled (NO_CHECKS) on a secret-bearing autonomous flow reading untrusted content"
+subject: job
+severity: critical
+confidence: low
+description: >
+  A Duo flow runs as a `gitlab-duo` CI job that ingests attacker-reachable content (fork MR or
+  issue/comment) while its group prompt-injection guardrail is deliberately set to `NO_CHECKS` —
+  scanning is off entirely, worse than the `LOG_ONLY` default and leaving no log trail. The job
+  carries an unprotected CI/CD variable and/or a broad job token and the agent has write-capable
+  actions with no per-action approval, so a low-trust content author can steer it unfiltered.
+
+where:
+  all_of:
+    - is_duo_flow == true
+    - any_of:
+        - duo_flow_context_sources ∋ {fork_mr}
+        - duo_flow_context_sources ∋ {issue_comment}
+    - duo_group_features_enabled == true
+    - duo_guardrail_level == "NO_CHECKS"
+    - runner_tags ∋ {gitlab-duo}
+    - duo_flow_secrets_in_scope == true
+    - duo_flow_autonomous_write == true
+
+evidence:
+  - "Duo flow job `{{ _provenance.config_file }}` ingests untrusted content and runs on a `gitlab-duo` runner with secrets in scope, while its group guardrail is `{{ duo_guardrail_level }}` (scanning disabled) with write-capable autonomous actions."
+
+remediation_hint: >
+  Set the group prompt-injection protection level to `INTERRUPT` rather than `NO_CHECKS`, and
+  remove unprotected secrets and autonomous write actions from flows reading untrusted content.

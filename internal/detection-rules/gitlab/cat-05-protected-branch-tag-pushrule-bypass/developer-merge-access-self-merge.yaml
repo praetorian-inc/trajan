@@ -1,0 +1,25 @@
+id: cat-05/developer-merge-access-self-merge
+scenario_id: cat-05/02
+title: "Developer role in a protected branch's merge access self-merges to a CI-trusted ref"
+subject: project
+severity: high
+confidence: high
+description: >
+  A protected-branch rule on a CI-trusted ref lists the Developer role (access level 30) — or a
+  group/user entry — under "Allowed to merge", no approval rule blocks the author from satisfying
+  it alone, and a `protected: true` CI/CD variable is scoped to that ref. A Developer opens an MR
+  editing `.gitlab-ci.yml` into the protected branch and self-merges it; the merged pipeline runs
+  on a protected ref and receives the protected variable.
+
+where:
+  all_of:
+    - developer_mergeable_protected_branch == true
+    - author_can_self_merge == true
+    - protected_var_scoped_to_writable_ref == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} grants Developer merge access to a protected branch with no author-blocking approval rule, and a protected CI/CD variable is scoped to that ref."
+
+remediation_hint: >
+  Restrict the protected branch's "Allowed to merge" to Maintainers, or add a required-approval
+  rule that the MR author cannot satisfy alone.

@@ -1,0 +1,24 @@
+id: cat-15/environment-filter-wildcard
+scenario_id: cat-15/05
+title: "Kubernetes agent ci_access environments filter uses a wildcard, which any Developer-authored environment slug matches"
+subject: agent
+severity: high
+confidence: low
+description: >
+  The `ci_access.environments` filter contains a wildcard (`*` or a prefix wildcard such as
+  `review/*`). Because a job's `environment:` value is a free-text string the author writes,
+  a Developer names a matching slug on a non-protected-branch job and passes the filter. With no
+  `access_as:` impersonation and `protected_branches_only` false/absent, the forged-through job
+  receives the injected `$KUBECONFIG` as the agent's ServiceAccount.
+where:
+  all_of:
+    - environments_filter != []
+    - environments_filter_wildcard == true
+    - impersonation == null
+    - protected_branches_only != true
+    - grant_developer_authors_matching_env_job == true
+evidence:
+  - "Agent environments filter {{ environments_filter }} contains a wildcard with no impersonation or branch gate, so a Developer forges a matching environment slug to receive the agent's kubeconfig."
+remediation_hint: >
+  Replace wildcard entries in `ci_access.environments` with fixed names backed by protected
+  environments, and configure `access_as:` impersonation.

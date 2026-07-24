@@ -1,0 +1,24 @@
+id: cat-02/catalog-component-mutable-version
+scenario_id: cat-02/04
+title: "CI/CD Catalog component at a mutable version ships attacker code into consumer pipelines"
+subject: job
+severity: high
+confidence: medium
+description: >
+  The pipeline pulls an `include:component` at a mutable `@version` (`~latest`, a branch, a
+  partial semver, or a movable tag) from a third-party publisher outside the consumer's trust
+  boundary — so a new component release runs in the consumer's secret/token context.
+
+where:
+  all_of:
+    - mutable_component_version == true
+    - any_of:
+        - reads_protected_variable == true
+        - outbound_job_token_broad == true
+
+evidence:
+  - "Pipeline includes a third-party catalog component at a mutable @version, with protected variables or a broad job token in scope."
+
+remediation_hint: >
+  Pin components to a 40-hex commit SHA, and prefer components from your own group or a vetted
+  publisher.

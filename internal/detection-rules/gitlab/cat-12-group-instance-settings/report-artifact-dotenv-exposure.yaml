@@ -1,0 +1,25 @@
+id: cat-12/report-artifact-dotenv-exposure
+scenario_id: cat-12/05
+title: "Report artifacts (dotenv / security reports) left default-public expose exported variables and inventory to non-members"
+subject: job
+severity: medium
+confidence: low
+description: >
+  A job on a non-member-readable project (public or internal, with `public_pipelines` enabled)
+  produces an `artifacts:reports:*` output — notably `dotenv`, which carries exported CI
+  variables — without `artifacts:public: false` or an `artifacts:access` restriction, leaving the
+  report archive default-public and downloadable by non-members. Whether the report actually
+  carries a sensitive variable is deferred content state, hence low confidence.
+
+where:
+  all_of:
+    - produces_dotenv == true
+    - artifacts_access_unrestricted == true
+    - non_member_readable_pipelines == true
+
+evidence:
+  - "Job {{ _provenance.config_file }} emits an unrestricted dotenv report on a non-member-readable project, exposing exported variables to non-members."
+
+remediation_hint: >
+  Set `artifacts:public: false` or `artifacts:access: developer|maintainer|none` on report-
+  producing jobs, or restrict pipeline visibility.

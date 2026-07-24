@@ -1,0 +1,28 @@
+id: cat-09/public-internal-artifact-bare-job-token
+scenario_id: cat-09/08
+title: "Public/internal-project artifact fetched by bare job token, allowlist never applies"
+subject: job
+severity: high
+confidence: high
+description: >
+  A protected-ref consumer job fetches an artifact from a public/internal source project — via a
+  bare `CI_JOB_TOKEN` job-artifacts API call or `needs:project:…:artifacts:true` — at a mutable ref
+  a source-project Developer can push, then extracts/executes it with no integrity step. Because the
+  job-token inbound allowlist gates only private resources, public/internal artifacts are fetchable
+  with any job token and no allowlist entry, so the control teams rely on never applies to this path.
+
+where:
+  all_of:
+    - fetches_cross_project_artifact == true
+    - artifact_source_visibility in {public, internal}
+    - artifact_source_ref_mutable == true
+    - executes_fetched_artifact == true
+    - artifact_integrity_checked == false
+    - protected_ref_gate == "strong"
+
+evidence:
+  - "Protected-ref job fetches an artifact from a {{ artifact_source_visibility }} source project at a mutable ref with a bare job token (allowlist never applies) and executes it with no integrity check."
+
+remediation_hint: >
+  Verify a checksum/signature and pin to an immutable tag/SHA before executing a fetched artifact,
+  and do not treat the job-token allowlist as protection for public/internal source artifacts.

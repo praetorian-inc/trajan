@@ -1,0 +1,29 @@
+id: cat-08/unprotected-trusted-runner-untrusted-branch-jobs
+scenario_id: cat-08/04
+title: "Unprotected trusted/deploy runner executes non-protected-branch jobs"
+subject: runner
+severity: high
+confidence: medium
+description: >
+  A self-managed runner whose Protected flag is off is targeted both by jobs that only run on
+  protected refs (a trusted/deploy runner) and by jobs reachable from arbitrary branches — no
+  protected-ref separation exists on the host. A Developer steers a feature-branch job (by tag or via
+  run_untagged) onto the trusted runner and inherits its deploy context. Only the host credential
+  presence is deferred, so this is confidence medium.
+
+where:
+  all_of:
+    - self_managed == true
+    - ref_protected != true
+    - serves_protected_ref_only_jobs == true
+    - serves_untrusted_ref_jobs == true
+    - any_of:
+        - run_untagged == true
+        - untrusted_ref_job_matches_tags == true
+
+evidence:
+  - "Self-managed runner (ref_protected={{ ref_protected }}, run_untagged={{ run_untagged }}, tags={{ tags }}) is targeted by protected-ref-only jobs yet also picks up non-protected-branch jobs — no protected-ref separation on the trusted host."
+
+remediation_hint: >
+  Set the runner to protected-ref only (access_level=ref_protected) so deploy work is confined to
+  protected branches, and never share a credentialed deploy runner with feature-branch jobs.

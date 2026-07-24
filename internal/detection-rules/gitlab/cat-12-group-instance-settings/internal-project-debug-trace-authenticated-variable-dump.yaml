@@ -1,0 +1,24 @@
+id: cat-12/internal-project-debug-trace-authenticated-variable-dump
+scenario_id: cat-12/02
+title: "Internal project with CI debug tracing exposes every CI variable to any authenticated instance user"
+subject: project
+severity: high
+confidence: high
+description: >
+  An internal project leaves `public_pipelines` enabled — the default — so every authenticated
+  non-external instance user can read job traces, and a truthy `CI_DEBUG_TRACE` forces the Runner
+  to log every non-masked variable (including protected-but-unmasked ones) and any runtime-derived
+  secret into that internally readable trace.
+
+where:
+  all_of:
+    - visibility == "internal"
+    - public_pipelines == true
+    - ci_debug_trace_enabled == true
+
+evidence:
+  - "Internal project {{ _provenance.project_path }} has public_pipelines {{ public_pipelines }} and CI_DEBUG_TRACE enabled, dumping every non-masked variable into a trace readable by any authenticated instance user."
+
+remediation_hint: >
+  Remove `CI_DEBUG_TRACE`, or restrict pipeline visibility (`public_pipelines: false` / "Only
+  project members") so job traces are not readable by non-members.

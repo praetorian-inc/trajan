@@ -1,0 +1,26 @@
+id: cat-10/id-tokens-no-environment-scope
+scenario_id: cat-10/03
+title: "OIDC id_tokens job declares no environment, so the token carries no environment claim to bind on"
+subject: job
+severity: medium
+confidence: low
+description: >
+  An `id_tokens:` job declares no `environment:` keyword, so GitLab populates none of the
+  `environment`/`environment_protected` claims a relying party would use to scope trust to a
+  protected deployment. Reachable on a non-protected ref, it lets a Developer mint a token that a
+  loosely-written cloud/Vault policy accepts. Exploitability hinges on the deferred policy actually
+  binding on `environment`, so confidence is low.
+
+where:
+  all_of:
+    - mints_id_token == true
+    - deploys_environment != true
+    - runs_on_untrusted_ref == true
+    - protected_ref_gate != "strong"
+
+evidence:
+  - "id_tokens job (aud {{ id_token_aud }}) declares no environment and is reachable on an untrusted ref (gate {{ protected_ref_gate }}), so its token carries no environment claim to scope trust."
+
+remediation_hint: >
+  Add an `environment:` scoped to the protected deployment on the id_tokens job and have the cloud
+  trust policy require the `environment`/`environment_protected` claim.

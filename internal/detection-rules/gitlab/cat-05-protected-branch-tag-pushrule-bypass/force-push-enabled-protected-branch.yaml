@@ -1,0 +1,24 @@
+id: cat-05/force-push-enabled-protected-branch
+scenario_id: cat-05/07
+title: "Force push enabled on a protected branch lets a low-trust pusher rewrite the trusted ref tip"
+subject: project
+severity: high
+confidence: high
+description: >
+  A protected-branch rule on a CI-trusted ref has `allow_force_push: true` and lists a non-Maintainer
+  (Developer role, or a broad group/user entry) under "Allowed to push and merge", and the ref is
+  CI-trusted (a protected variable is scoped to it or it feeds a deploy pipeline). The low-trust
+  pusher can force-push a rewritten tip — substituting a commit no reviewer saw — that then executes
+  in the protected-ref pipeline.
+
+where:
+  all_of:
+    - force_push_by_low_trust_pusher == true
+    - ref_is_ci_trusted == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} has a protected branch with `allow_force_push: true` whose push list includes a non-Maintainer, on a CI-trusted ref."
+
+remediation_hint: >
+  Disable "Allowed to force push" on the protected branch rule, or restrict its push list to
+  Maintainers.

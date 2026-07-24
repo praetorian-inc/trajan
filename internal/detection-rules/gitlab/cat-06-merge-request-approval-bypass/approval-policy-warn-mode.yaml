@@ -1,0 +1,23 @@
+id: cat-06/approval-policy-warn-mode
+scenario_id: cat-06/10
+title: "MR approval policy in warn mode — violations are dismissable, not blocking"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  An enabled Ultimate approval policy relied on as the security gate runs in
+  `enforcement_type == "warn"`: a violation surfaces as a dismissable warning rather than a required
+  approval, so an author clicks "dismiss with a reason" and merges policy-violating code to the
+  protected target branch. The policy shows "active" on dashboards but is fundamentally advisory.
+
+where:
+  all_of:
+    - approval_policy.enabled == true
+    - approval_policy.enforcement_type == "warn"
+
+evidence:
+  - "An enabled approval policy runs in {{ approval_policy.enforcement_type }} mode, so its `require_approval` action is a self-dismissable warning rather than a blocking gate on the protected branch."
+
+remediation_hint: >
+  Switch the policy to the blocking enforcement mode so `require_approval` violations add a required
+  approval instead of a dismissable warning.

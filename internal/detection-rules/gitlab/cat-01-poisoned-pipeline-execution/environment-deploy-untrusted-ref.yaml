@@ -1,0 +1,23 @@
+id: cat-01/environment-deploy-untrusted-ref
+scenario_id: cat-01/11
+title: "Environment-scoped variables reach an attacker-nameable ref via a glob-gated deployment job"
+subject: job
+severity: high
+confidence: high
+description: >
+  A deployment job binds an `environment:` and an unprotected variable scoped to that environment
+  reaches it, yet the job's `rules:` gate on a broad glob rather than ref protection — so a
+  low-trust actor who creates a matching ref obtains the environment-scoped secret.
+
+where:
+  all_of:
+    - deploys_environment == true
+    - env_scoped_secret_reachable == true
+    - runs_on_untrusted_ref == true
+
+evidence:
+  - "Deployment job for environment `{{ environment_name }}` exposes an unprotected environment-scoped variable on an attacker-nameable ref."
+
+remediation_hint: >
+  Gate deployment jobs on a protected ref or a protected environment, and mark environment-scoped
+  secrets `protected`.

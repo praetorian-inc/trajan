@@ -1,0 +1,25 @@
+id: cat-02/project-include-mutable-cross-trust-ref
+scenario_id: cat-02/03
+title: "include:project at a mutable ref lets a lower-trust template author poison a higher-trust pipeline"
+subject: job
+severity: critical
+confidence: high
+description: >
+  The pipeline pulls config via `include:project` at a mutable ref (branch, `~latest`, absent,
+  or an unprotected tag) from a project in a different trust scope where a lower-trust member can
+  push the tracked ref — so that author's code runs in the consumer's protected/secret context.
+
+where:
+  all_of:
+    - mutable_cross_trust_project_include == true
+    - any_of:
+        - runs_on_protected_ref == true
+        - reads_protected_variable == true
+        - outbound_job_token_broad == true
+
+evidence:
+  - "Pipeline includes project CI config at a mutable cross-trust ref a lower-trust author can push, reaching a protected ref / protected variables / broad job token."
+
+remediation_hint: >
+  Pin `include:project` to a 40-hex commit SHA or a protected tag, and only include from projects
+  within your trust boundary.

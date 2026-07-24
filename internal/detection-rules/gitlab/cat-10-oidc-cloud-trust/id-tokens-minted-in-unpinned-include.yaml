@@ -1,0 +1,28 @@
+id: cat-10/id-tokens-minted-in-unpinned-include
+scenario_id: cat-10/04
+title: "OIDC id_tokens minted inside an unpinned / mutable include or CI component"
+subject: job
+severity: high
+confidence: medium
+description: >
+  The `id_tokens:` minting job (or the script consuming the token) is contributed by an
+  `include:`/component resolved from a mutable, cross-trust ref — a branch, `~latest`, a moving tag,
+  or an unpinned remote URL a lower-trust party controls. That party can redirect the `aud`,
+  exfiltrate the JWT, or swap the exchange, capturing the consuming project's real cloud identity
+  even on a fully-trusted protected run. Include-source writer trust and the cloud policy are
+  deferred, so confidence is medium.
+
+where:
+  all_of:
+    - mints_id_token == true
+    - any_of:
+        - mutable_cross_trust_project_include == true
+        - mutable_component_version == true
+        - remote_include_untrusted_host == true
+
+evidence:
+  - "id_tokens minting logic (aud {{ id_token_aud }}) is sourced from a mutable cross-trust include/component a lower-trust party can move, poisoning the token on any run."
+
+remediation_hint: >
+  Pin the include/component that carries the id_tokens job to a 40-hex commit SHA or immutable
+  version, and only source OIDC minting config from within your trust boundary.

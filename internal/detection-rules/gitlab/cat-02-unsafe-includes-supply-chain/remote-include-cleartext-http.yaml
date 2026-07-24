@@ -1,0 +1,24 @@
+id: cat-02/remote-include-cleartext-http
+scenario_id: cat-02/02
+title: "Cleartext (http) remote include with no integrity pin allows MITM CI-config injection"
+subject: job
+severity: high
+confidence: low
+description: >
+  The pipeline pulls CI config via an `include:remote:` over `http://` with no `integrity:` pin,
+  so an on-path attacker can rewrite the config in transit. Fires even for a first-party host,
+  since the transport itself is the weakness.
+
+where:
+  all_of:
+    - remote_include_cleartext == true
+    - any_of:
+        - runs_on_protected_ref == true
+        - reads_protected_variable == true
+        - outbound_job_token_broad == true
+
+evidence:
+  - "Pipeline includes remote CI config over cleartext http with no `integrity:` pin, reaching a protected ref / protected variables / broad job token."
+
+remediation_hint: >
+  Use `https://` and pin an `integrity:` hash on every remote include.

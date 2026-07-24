@@ -1,0 +1,24 @@
+id: cat-12/public-project-debug-trace-anonymous-variable-dump
+scenario_id: cat-12/01
+title: "Public project with CI debug tracing publishes every CI variable to anonymous readers"
+subject: project
+severity: high
+confidence: high
+description: >
+  A public project leaves `Project-based pipeline visibility` (`public_pipelines`) enabled — the
+  default — so anonymous internet users can read job traces, and a truthy `CI_DEBUG_TRACE` forces
+  the Runner to log every non-masked variable (including protected-but-unmasked ones) and any
+  runtime-derived secret into that world-readable trace.
+
+where:
+  all_of:
+    - visibility == "public"
+    - public_pipelines == true
+    - ci_debug_trace_enabled == true
+
+evidence:
+  - "Public project {{ _provenance.project_path }} has public_pipelines {{ public_pipelines }} and CI_DEBUG_TRACE enabled, dumping every non-masked variable into an anonymously readable job trace."
+
+remediation_hint: >
+  Remove `CI_DEBUG_TRACE`, or restrict pipeline visibility (`public_pipelines: false` / "Only
+  project members") so job traces are not readable by non-members.

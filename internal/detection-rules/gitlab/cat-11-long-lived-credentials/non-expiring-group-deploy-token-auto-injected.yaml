@@ -1,0 +1,25 @@
+id: cat-11/non-expiring-group-deploy-token-auto-injected
+scenario_id: cat-11/05
+title: "Non-expiring group deploy token auto-injected as `gitlab-deploy-token`"
+subject: credential
+severity: critical
+confidence: high
+description: >
+  A group-level deploy token named `gitlab-deploy-token` is auto-injected into every CI/CD job
+  as `CI_DEPLOY_USER`/`CI_DEPLOY_PASSWORD` with no variable wiring. It carries `write_registry`
+  (container-registry write) and has no expiry, so any Developer who runs any pipeline in the
+  group receives a standing, group-wide, never-expiring container-registry-write credential valid
+  across every project in the group. All signals are token metadata, so this is high confidence.
+where:
+  all_of:
+    - kind == "deploy_token"
+    - scope_level == "group"
+    - revoked != true
+    - non_expiring == true
+    - auto_injected == true
+    - scopes ∋ {write_registry}
+evidence:
+  - "Group deploy token `{{ name }}` is auto-injected ({{ auto_injected }}), never expires ({{ non_expiring }}), and carries {{ scopes }} across every project in the group."
+remediation_hint: >
+  Set an expiry on the deploy token, drop `write_registry` if only pull is needed, and avoid the
+  auto-injected `gitlab-deploy-token` name for a group-wide write credential.

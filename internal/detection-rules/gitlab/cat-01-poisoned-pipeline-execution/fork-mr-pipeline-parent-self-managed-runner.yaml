@@ -1,0 +1,26 @@
+id: cat-01/fork-mr-pipeline-parent-self-managed-runner
+scenario_id: cat-01/02
+title: "Fork MR pipeline in the parent project lands on a self-managed parent runner"
+subject: project
+severity: high
+confidence: medium
+description: >
+  Fork merge-request pipelines may run in the parent, and the parent has a self-managed
+  runner reachable by its pipelines. An unaudited fork MR pipeline executes attacker-controlled
+  config on the parent's own runner host (loot beyond the pipeline is the deferred host state).
+
+where:
+  all_of:
+    - fork_pipelines_run_in_parent == true
+    - has_self_managed_runner == true
+    - any_of:
+        - visibility == "public"
+        - visibility == "internal"
+        - forking_enabled == true
+
+evidence:
+  - "Fork MR pipelines run in the parent and the parent exposes a self-managed runner; an unaudited fork MR pipeline executes on the parent's runner host."
+
+remediation_hint: >
+  Disable fork-pipeline-in-parent, restrict self-managed runners to protected refs, and prefer
+  ephemeral runners so a poisoned job cannot persist on the host.

@@ -1,0 +1,24 @@
+id: cat-05/developer-push-access-protected-branch
+scenario_id: cat-05/01
+title: "Developer role in a protected branch's push access reads protected CI/CD variables"
+subject: project
+severity: high
+confidence: high
+description: >
+  A protected-branch rule on a CI-trusted ref lists the Developer role (access level 30) — or
+  a group/user entry — under "Allowed to push and merge", and a `protected: true` CI/CD variable
+  is scoped to that ref. A Developer pushes attacker-authored `.gitlab-ci.yml` straight onto the
+  trusted ref with no merge request; the branch pipeline runs on a protected ref and receives the
+  protected variable the Developer→Maintainer boundary was meant to withhold.
+
+where:
+  all_of:
+    - developer_pushable_protected_branch == true
+    - protected_var_scoped_to_writable_ref == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} has a protected branch whose push access includes Developer, and a protected CI/CD variable is scoped to that ref."
+
+remediation_hint: >
+  Remove the Developer role (and broad group/user entries) from the protected branch's "Allowed to
+  push and merge", restricting direct pushes to that ref to Maintainers.
