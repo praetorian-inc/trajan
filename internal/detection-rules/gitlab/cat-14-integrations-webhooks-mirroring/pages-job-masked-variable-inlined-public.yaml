@@ -1,0 +1,26 @@
+id: cat-14/pages-job-masked-variable-inlined-public
+scenario_id: cat-14/08
+title: "Public Pages job inlines a masked/protected CI/CD variable into the published bundle"
+subject: job
+severity: high
+confidence: low
+description: >
+  A single job both publishes the public Pages artifact (`pages:`, `artifacts:paths` including
+  `public`) and explicitly references a protected or masked CI/CD variable, on a project whose
+  Pages is served public. A front-end build routinely inlines such env references into the emitted
+  bundle — and masking only redacts logs, not the artifact — so the secret can be served on the
+  open internet to anonymous users.
+
+where:
+  all_of:
+    - publishes_pages == true
+    - artifact_paths ∋ {public}
+    - pages_references_secret_variable == true
+    - pages_public == true
+
+evidence:
+  - "Public Pages producer job references a protected/masked CI/CD variable and publishes `public/` (pages public {{ pages_public }})."
+
+remediation_hint: >
+  Separate secret-consuming build/deploy jobs from the public Pages producer, and never reference
+  protected/masked variables in a job that publishes `public/`.
