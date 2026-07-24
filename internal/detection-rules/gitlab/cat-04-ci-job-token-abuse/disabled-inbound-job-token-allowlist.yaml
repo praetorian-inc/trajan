@@ -1,0 +1,29 @@
+id: cat-04/disabled-inbound-job-token-allowlist
+scenario_id: cat-04/01
+title: "Disabled inbound job-token allowlist (\"All groups and projects\") reached by a privileged triggering identity"
+subject: chain
+severity: critical
+confidence: high
+description: >
+  The target's inbound `CI_JOB_TOKEN` allowlist is disabled ("All groups and projects"), so
+  layer A trusts every project. A source project whose CI is writable by a lower-trust member
+  makes a cross-project job-token call, and the pipeline runs under a triggering identity that
+  is a Developer+ member of the target — so the confused-deputy token reaches the target the
+  attacker holds no membership on.
+
+chain_of:
+  join: job-token-allowlist
+  for_each: edges
+  where:
+    all_of:
+      - target.job_token_allowlist.mode == "disabled"
+      - source.job_token_cross_project_use != "none"
+      - source.source_ci_writable_by_lower_trust == true
+      - triggerer.access_level >= 30
+
+evidence:
+  - "Target {{ target._provenance.project_path }} has inbound job-token allowlist mode {{ target.job_token_allowlist.mode }}; source {{ source._provenance.project_path }} makes a cross-project token call ({{ source.job_token_cross_project_use }}) under triggerer role {{ triggerer.access_level }}."
+
+remediation_hint: >
+  Enable the inbound job-token allowlist on the target and restrict it to the minimum set of
+  genuinely trusted projects rather than "All groups and projects".

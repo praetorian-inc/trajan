@@ -1,0 +1,23 @@
+id: cat-02/cicd-step-function-cross-trust-ref
+scenario_id: cat-02/08
+title: "CI/CD Step / Function referenced from a git ref a less-trusted party can write"
+subject: job
+severity: high
+confidence: high
+description: >
+  A `run:` step references a remote `step`/`func` at a mutable version, a lower-trust-writable
+  ref, or a third-party host — so that party's code executes in the consuming job with protected
+  variables or a broad job token in scope.
+
+where:
+  all_of:
+    - remote_step_untrusted_ref == true
+    - any_of:
+        - reads_protected_variable == true
+        - outbound_job_token_broad == true
+
+evidence:
+  - "A `run:` step/func resolves to a remote git ref a lower-trust party can write, with protected variables or a broad job token in scope."
+
+remediation_hint: >
+  Pin remote steps/functions to a 40-hex commit SHA from a trusted repo, or use a local step.

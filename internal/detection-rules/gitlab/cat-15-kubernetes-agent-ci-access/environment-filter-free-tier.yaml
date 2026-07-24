@@ -1,0 +1,23 @@
+id: cat-15/environment-filter-free-tier
+scenario_id: cat-15/07
+title: "Kubernetes agent ci_access environments filter on a Free-tier namespace, where protected environments do not exist so the filter is decorative"
+subject: agent
+severity: high
+confidence: low
+description: >
+  On a Free-tier namespace an operator adds an `environments:` filter to an agent's `ci_access`
+  grant, but protected environments — the only mechanism that makes an environment name require
+  deploy authorization — are Premium/Ultimate-only. Every filter name is therefore a free-text
+  label a Developer writes on a non-protected-branch job. With impersonation also unavailable on
+  Free, the passing job receives the injected `$KUBECONFIG` as the agent's ServiceAccount.
+where:
+  all_of:
+    - namespace_plan == "free"
+    - environments_filter != []
+    - protected_branches_only != true
+    - grant_developer_authors_matching_env_job == true
+evidence:
+  - "Agent environments filter {{ environments_filter }} is on a Free-tier namespace where no environment can be protected, so the filter is decorative and a Developer forges a matching name to receive the agent's kubeconfig."
+remediation_hint: >
+  Do not rely on `ci_access.environments` for scoping on Free; set `protected_branches_only: true`
+  and narrow the grant to a vetted project list, or upgrade to gain protected environments.

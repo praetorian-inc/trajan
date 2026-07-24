@@ -1,0 +1,24 @@
+id: cat-05/wildcard-shadow-grants-push
+scenario_id: cat-05/08
+title: "Overlapping wildcard rule grants push to a branch a stricter exact-name rule was meant to lock (most-permissive wins)"
+subject: project
+severity: high
+confidence: high
+description: >
+  Two or more protected-branch rules match one CI-trusted branch, and GitLab's most-permissive-wins
+  resolution means the effective (unioned) push access is broader than the narrowest matching rule —
+  a Developer or broad group appears in the effective push list for a branch the operator's strict
+  exact-name rule reserved for Maintainers. A `protected: true` CI/CD variable is scoped to the
+  shadowed branch. The Developer pushes to the "locked" branch and reads the protected variable.
+
+where:
+  all_of:
+    - push_access_shadowed_by_permissive_rule == true
+    - protected_var_scoped_to_writable_ref == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} has overlapping protected-branch rules whose most-permissive push access is broader than the narrowest matching rule, and a protected CI/CD variable is scoped to that ref."
+
+remediation_hint: >
+  Narrow or remove the overlapping wildcard rule so every matching rule's push access agrees with
+  the intended lock, since most-permissive resolution governs push.

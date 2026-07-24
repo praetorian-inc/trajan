@@ -1,0 +1,26 @@
+id: cat-06/codeowners-self-editable
+scenario_id: cat-06/15
+title: "CODEOWNERS ownership is removable within the same MR (`/CODEOWNERS` not self-owned)"
+subject: merge_request
+severity: high
+confidence: low
+description: >
+  CODEOWNERS owns trust-relevant paths under a required section and code-owner approval is enforced
+  on the protected branch (`code_owner_approval_required == true`), yet CODEOWNERS does not require an
+  owner's approval to change CODEOWNERS itself (`codeowners.self_owned_required == false`). An author
+  can rewrite the owner list in the same MR that changes an owned path, dropping the owner gate. The
+  immediacy of exploitation depends on the deferred platform behavior of which CODEOWNERS revision an
+  MR is evaluated against, so confidence is low.
+
+where:
+  all_of:
+    - codeowners.covers_cicd_config == true
+    - code_owner_approval_required == true
+    - codeowners.self_owned_required == false
+
+evidence:
+  - "CODEOWNERS gates trust-relevant paths with enforcement on ({{ code_owner_approval_required }}) but does not require owner approval to edit CODEOWNERS itself ({{ codeowners.self_owned_required }}), so an author can rewrite the owner list in the same MR."
+
+remediation_hint: >
+  Add a required (non-Optional) CODEOWNERS entry owning its own path (`/CODEOWNERS @owners`) so
+  changes to the reviewer-defining file demand owner approval.

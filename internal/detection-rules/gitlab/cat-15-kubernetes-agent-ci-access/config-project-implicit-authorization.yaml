@@ -1,0 +1,22 @@
+id: cat-15/config-project-implicit-authorization
+scenario_id: cat-15/03
+title: "Agent configuration project is implicitly authorized for ci_access, so any Developer who can push it reaches the cluster without appearing in any grant"
+subject: agent
+severity: high
+confidence: medium
+description: >
+  The project hosting `.gitlab/agents/<name>/config.yaml` is authorized to its own agent
+  implicitly — with `access_as: agent` and no `protected_branches_only` — whether or not it
+  appears in any grant list. When that configuration project has lower-trust Developer members
+  or a Developer-pushable non-protected branch, any of them receives the injected `$KUBECONFIG`
+  as the agent's ServiceAccount from an ordinary feature-branch job.
+where:
+  all_of:
+    - implicit_config_project == true
+    - impersonation == null
+    - config_project_developer_reachable == true
+evidence:
+  - "The agent configuration project ({{ config_path }}) is implicitly authorized with no impersonation and is reachable by lower-trust Developers, who receive the agent's kubeconfig."
+remediation_hint: >
+  Restrict the configuration project's membership and protected branches to cluster operators, or
+  host the agent config in a project whose only members operate the cluster.

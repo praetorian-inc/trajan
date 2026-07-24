@@ -1,0 +1,27 @@
+id: cat-06/approval-policy-misscoped-target
+scenario_id: cat-06/11
+title: "MR approval policy does not bind the reachable branch (misscoped / unprotected target)"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  An approval policy relied on as the security gate does not actually bind a CI-trusted target branch:
+  the branch is not in the protected-branches list (policies enforce only on protected branches), or
+  `policy_scope` excludes the project, or the policy is disabled. The dashboard shows the policy, but
+  the branch an author targets is unbound, so a Developer merges to a trusted ref with no required
+  security approval.
+
+where:
+  all_of:
+    - approval_policy.binds_trusted_target == false
+    - any_of:
+        - approval_policy.enabled == false
+        - approval_policy.scope_excludes_target == true
+        - target_branch_ci_trusted_unprotected == true
+
+evidence:
+  - "An approval policy does not bind a CI-trusted target branch ({{ approval_policy.binds_trusted_target }}) via unprotected target, excluded scope, or being disabled, so merges there require no security approval."
+
+remediation_hint: >
+  Add every CI-trusted branch to the protected-branches list and ensure the policy's `policy_scope`
+  and `branches:` cover it, with the policy enabled.

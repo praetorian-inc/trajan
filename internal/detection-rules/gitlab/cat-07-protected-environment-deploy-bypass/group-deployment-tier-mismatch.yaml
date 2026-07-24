@@ -1,0 +1,27 @@
+id: cat-07/group-deployment-tier-mismatch
+scenario_id: cat-07/07
+title: "Group-tier environment protection escaped via deployment_tier mismatch"
+subject: environment
+severity: high
+confidence: high
+description: >
+  A top-level group protects a specific deployment tier (e.g. `production`) so descendant
+  projects' matching environments inherit its deploy-access and approval rules. But tier
+  membership is derived from the job's self-declared `environment:deployment_tier:` (or guessed
+  from the name, defaulting to `other`). A Developer points a job at the real production target
+  while declaring a tier outside the protected set — or omitting it — so the environment falls
+  outside the group's tier-scoped protection with no covering project-level entry, yet still hits
+  production infrastructure.
+
+where:
+  all_of:
+    - protected == false
+    - group_tier_protection_escaped == true
+    - carries_deploy_context == true
+
+evidence:
+  - "Environment `{{ name }}` declares tier `{{ tier }}`, outside the group-protected tier set, and carries production deploy context with no covering project-level protection — escaping the group's tier-scoped gate."
+
+remediation_hint: >
+  Add a project-level Protected Environments entry for the real production environment, or enforce
+  that production deploy jobs declare the group-protected `deployment_tier`.

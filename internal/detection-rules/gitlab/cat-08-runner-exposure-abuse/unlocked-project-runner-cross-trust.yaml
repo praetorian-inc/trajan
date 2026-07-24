@@ -1,0 +1,31 @@
+id: cat-08/unlocked-project-runner-cross-trust
+scenario_id: cat-08/06
+title: "Unlocked project runner enabled on a sensitive and a low-trust project"
+subject: runner
+severity: high
+confidence: low
+description: >
+  An unlocked project runner originally attached to a sensitive project has been enabled on a
+  lower-trust project too, so its `projects` list straddles a trust boundary. A Developer in the
+  low-trust project lands a feature-branch job on the same host that serves the sensitive project,
+  reaching its residual state and execution context. Host isolation is the deferred half, so this is
+  confidence low.
+
+where:
+  all_of:
+    - runner_type == "project_type"
+    - locked == false
+    - self_managed == true
+    - ref_protected != true
+    - projects != []
+    - spans_trust_boundary == true
+    - any_of:
+        - run_untagged == true
+        - untrusted_ref_job_matches_tags == true
+
+evidence:
+  - "Unlocked self-managed project runner (locked={{ locked }}, ref_protected={{ ref_protected }}) is enabled on projects spanning a trust boundary ({{ projects }})."
+
+remediation_hint: >
+  Lock the project runner to its original project (locked=true) or dedicate it to one trust level,
+  and never re-enable a sensitive project's runner on a lower-trust project.

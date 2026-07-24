@@ -1,0 +1,26 @@
+id: cat-15/environment-filter-unprotected-named
+scenario_id: cat-15/06
+title: "Kubernetes agent ci_access environments filter names an environment that is not protected, so a Developer forges the name to reach the cluster"
+subject: agent
+severity: high
+confidence: low
+description: >
+  The `ci_access.environments` filter names a specific, non-wildcard environment the operator
+  relies on to scope cluster access, but that environment is not in the in-scope project's
+  protected-environments list — so declaring it carries no deploy-authorization check. A
+  Developer writes the trusted name on a non-protected-branch job and passes the filter; with no
+  `access_as:` impersonation the job receives the injected `$KUBECONFIG` as the agent's
+  ServiceAccount.
+where:
+  all_of:
+    - environments_filter != []
+    - environments_filter_wildcard != true
+    - environments_filter_unprotected == true
+    - impersonation == null
+    - protected_branches_only != true
+    - grant_developer_authors_matching_env_job == true
+evidence:
+  - "Agent environments filter {{ environments_filter }} names an environment absent from the in-scope project's protected-environments list, so a Developer forges the name to receive the agent's kubeconfig."
+remediation_hint: >
+  Mark the named environment protected with a Maintainer-only deployer list, or scope the grant
+  with `protected_branches_only: true` and `access_as:` impersonation.
