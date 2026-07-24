@@ -1,0 +1,25 @@
+id: cat-07/environment-scoped-variable-unprotected
+scenario_id: cat-07/05
+title: "Environment-scoped CI/CD variable trusted as a boundary but left unprotected"
+subject: job
+severity: high
+confidence: high
+description: >
+  A high-value CI/CD variable is scoped to a specific environment (`environment_scope != "*"`)
+  but left `protected == false` — the operator relied on environment scope, which only selects
+  which environment name receives the variable, as the boundary. A Developer who can push an
+  unprotected branch declares the matching `environment:name:` in a job and GitLab injects the
+  scoped variable, because scope, not protection, was the only gate. Scope was never authorization.
+
+where:
+  all_of:
+    - deploys_environment == true
+    - env_scoped_secret_reachable == true
+    - runs_on_untrusted_ref == true
+
+evidence:
+  - "Job binding environment `{{ environment_name }}` reads an environment-scoped but unprotected variable from an attacker-nameable ref, exposing the scoped credential to a lower-trust actor."
+
+remediation_hint: >
+  Mark environment-scoped credentials `protected` so they are only injected on protected refs, and
+  do not rely on environment scope as an actor/ref authorization boundary.

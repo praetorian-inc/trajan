@@ -1,0 +1,25 @@
+id: cat-07/triggerer-self-approve
+scenario_id: cat-07/01
+title: 'Deployment approval defeated by "Allow pipeline triggerer to approve"'
+subject: environment
+severity: high
+confidence: high
+description: >
+  A protected environment with a deployment-approval gate has the per-environment toggle
+  "Allow pipeline triggerer to approve deployment" turned on, so the person who starts the
+  deploy pipeline can approve their own pending deployment. When the required approval count
+  is satisfiable by that single self-approval, the two-person control collapses to a rubber
+  stamp and one actor ships to the protected environment with its scoped credentials.
+
+where:
+  all_of:
+    - protected == true
+    - allow_pipeline_trigger_approve_deployment == true
+    - deploy_approvals_required >= 1
+
+evidence:
+  - "Protected environment `{{ name }}` allows the pipeline triggerer to approve its own deployment while requiring only {{ deploy_approvals_required }} approval, defeating independent sign-off."
+
+remediation_hint: >
+  Disable "Allow pipeline triggerer to approve deployment" on the protected environment so the
+  deployer cannot satisfy the approval gate they triggered.
