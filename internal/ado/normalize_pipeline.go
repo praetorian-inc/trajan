@@ -116,6 +116,7 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 		pipe["pr_trigger"] = facts.prTrigger
 		pipe["enable_shell_tasks_args_sanitizing"] = enableShellSanitize
 		pipe["enforce_settable_var"] = enforceSettableVar
+		pipe["settings_observed"] = mBool(gs, "settings_observed")
 		// settable_variables: the YAML `settableVariables:` restriction (nil = all
 		// vars overridable; [] = none). The per-definition allowOverride names are
 		// the settable surface when the org/project limit is enforced (cat-02 gate).

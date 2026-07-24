@@ -40,15 +40,16 @@ func deriveTaintEdges(prior engine.PriorPhase, cp engine.CurrentPhase, timer *en
 }
 
 type pipeInfo struct {
-	identityScope   string
-	enforceSettable bool
-	enableSanitize  bool
-	settableVars    any  // nil=all overridable, []=none, list=restricted
-	ciTrigger       any  // nil=implicit, "none"=off, else filter
-	buildValidated  bool // a BUILD_VALIDATES policy targets this pipeline
-	freeformParams  map[string]bool
-	allowlistParams map[string]bool
-	name            string
+	identityScope    string
+	enforceSettable  bool
+	settingsObserved bool
+	enableSanitize   bool
+	settableVars     any  // nil=all overridable, []=none, list=restricted
+	ciTrigger        any  // nil=implicit, "none"=off, else filter
+	buildValidated   bool // a BUILD_VALIDATES policy targets this pipeline
+	freeformParams   map[string]bool
+	allowlistParams  map[string]bool
+	name             string
 }
 
 func pipeKey(project string, id int64) string { return fmt.Sprintf("%s/%d", project, id) }
@@ -57,14 +58,15 @@ func indexPipelines(pipelines []map[string]any) map[string]pipeInfo {
 	out := map[string]pipeInfo{}
 	for _, p := range pipelines {
 		info := pipeInfo{
-			identityScope:   mStr(p, "identity_scope"),
-			enforceSettable: mBool(p, "enforce_settable_var"),
-			enableSanitize:  mBool(p, "enable_shell_tasks_args_sanitizing"),
-			settableVars:    mGet(p, "settable_variables"),
-			ciTrigger:       mGet(p, "ci_trigger"),
-			name:            mStr(p, "name"),
-			freeformParams:  map[string]bool{},
-			allowlistParams: map[string]bool{},
+			identityScope:    mStr(p, "identity_scope"),
+			enforceSettable:  mBool(p, "enforce_settable_var"),
+			settingsObserved: mBool(p, "settings_observed"),
+			enableSanitize:   mBool(p, "enable_shell_tasks_args_sanitizing"),
+			settableVars:     mGet(p, "settable_variables"),
+			ciTrigger:        mGet(p, "ci_trigger"),
+			name:             mStr(p, "name"),
+			freeformParams:   map[string]bool{},
+			allowlistParams:  map[string]bool{},
 		}
 		for _, raw := range mList(p, "parameters") {
 			pm := entMap(raw)
@@ -163,6 +165,19 @@ func vgGateState(vg map[string]any) (strength, state, confidence string) {
 
 // ---- QUEUE_TIME_INJECTION (source -> Job) --------------------------------
 
+// runtimeVarRedirectReachable reports whether a $[ variables['x'] ] expansion into a
+// compile-time keyword can actually be steered by a queuer. A variable declared settable
+// at queue time is reachable regardless of the "Limit variables settable at queue time"
+// toggle; otherwise it is reachable only when that limit is observed to be off. When the
+// general settings were not observed we fail closed — we do not assert a redirect path we
+// cannot confirm (an unconfirmed control must not manufacture a finding).
+func runtimeVarRedirectReachable(ps map[string]any, meta pipeInfo) bool {
+	if entBool(ps["is_declared_settable"]) {
+		return true
+	}
+	return meta.settingsObserved && !meta.enforceSettable
+}
+
 func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j map[string]any, meta pipeInfo, grants grantIndex) error {
 	project := mStr(j, "project")
 	sources := grants.principalsWith(project, buildNSKey, "QueueBuilds")
@@ -233,11 +248,10 @@ func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, 
 				return err
 			}
 		case "compile_keyword":
-			// A $[ variables['x'] ] redirect is only reachable if the variable is
-			// queue-settable: under the "Limit variables settable at queue time" limit,
-			// only declared-settable variables can be overridden. A ${{ parameters }}
-			// selector (no source_kind) is always settable, so it fires unconditionally.
-			if entStr(ps["source_kind"]) == "runtime_var" && meta.enforceSettable && !entBool(ps["is_declared_settable"]) {
+			// A ${{ parameters }} selector (no source_kind) is always queue-settable and
+			// fires unconditionally. A $[ variables['x'] ] redirect fires only when the
+			// variable is confirmed queue-settable (see runtimeVarRedirectReachable).
+			if entStr(ps["source_kind"]) == "runtime_var" && !runtimeVarRedirectReachable(ps, meta) {
 				continue
 			}
 			if err := emitEdge("parameter_in_compile_keyword", name, "input_target_redirect", entStr(ps["keyword"]), "high", ps); err != nil {
