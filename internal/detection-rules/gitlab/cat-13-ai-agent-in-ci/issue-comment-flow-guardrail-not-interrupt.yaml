@@ -1,0 +1,30 @@
+id: cat-13/issue-comment-flow-guardrail-not-interrupt
+scenario_id: cat-13/02
+title: "Duo flow runs in CI on issue/comment text with prompt-injection guardrail not set to Interrupt and secrets in scope"
+subject: job
+severity: critical
+confidence: low
+description: >
+  A Duo flow runs as a `gitlab-duo` CI job whose context includes attacker-authored issue or
+  comment text while its group prompt-injection guardrail is detect-only (`LOG_ONLY`), the job
+  carries an unprotected CI/CD variable and/or a broad job token, and the agent has write-capable
+  actions with no per-action approval — so any user who can file an issue or comment, a far wider
+  population than those with push access, can steer the agent to exfiltrate secrets or act as its
+  service account.
+
+where:
+  all_of:
+    - is_duo_flow == true
+    - duo_flow_context_sources ∋ {issue_comment}
+    - duo_group_features_enabled == true
+    - duo_guardrail_level == "LOG_ONLY"
+    - runner_tags ∋ {gitlab-duo}
+    - duo_flow_secrets_in_scope == true
+    - duo_flow_autonomous_write == true
+
+evidence:
+  - "Duo flow job `{{ _provenance.config_file }}` ingests issue/comment text, runs on a `gitlab-duo` runner with secrets in scope, and its group guardrail is `{{ duo_guardrail_level }}` (not Interrupt) with write-capable autonomous actions."
+
+remediation_hint: >
+  Set the group prompt-injection protection level to `INTERRUPT`, remove unprotected secrets from
+  the flow job, and require per-action human approval before the agent acts on issue/comment context.
