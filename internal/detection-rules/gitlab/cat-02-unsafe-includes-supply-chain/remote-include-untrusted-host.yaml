@@ -1,0 +1,26 @@
+id: cat-02/remote-include-untrusted-host
+scenario_id: cat-02/01
+title: "Unpinned remote include to an external host executes attacker-served CI config"
+subject: job
+severity: high
+confidence: medium
+description: >
+  The pipeline pulls CI config via `include:remote:` from a host that is not the GitLab
+  instance or a first-party domain, with no `integrity:` pin — so whoever controls that host
+  serves the config into a pipeline that reaches a protected ref, protected variables, or a
+  broad job token.
+
+where:
+  all_of:
+    - remote_include_untrusted_host == true
+    - any_of:
+        - runs_on_protected_ref == true
+        - reads_protected_variable == true
+        - outbound_job_token_broad == true
+
+evidence:
+  - "Pipeline includes remote CI config from an untrusted host with no `integrity:` pin, reaching a protected ref / protected variables / broad job token."
+
+remediation_hint: >
+  Pin the include to a first-party host and an `integrity:` hash, or vendor the config into the
+  project.

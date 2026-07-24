@@ -1,0 +1,22 @@
+id: cat-02/bare-ref-include-shadowed-by-tag
+scenario_id: cat-02/09
+title: "Bare ref in an include or trigger is shadowed by a lower-trust same-named tag"
+subject: job
+severity: high
+confidence: medium
+description: >
+  An `include:`/`trigger:` `ref:` is a bare name (neither `refs/heads|tags/...` nor a 40-hex SHA)
+  that matches a protected branch but not a protected tag in the referenced project, whose members
+  include Developers — so a Developer creates a same-named tag that GitLab's ambiguous-ref
+  resolution may select over the branch.
+
+where:
+  all_of:
+    - include_bare_ref_shadowable == true
+
+evidence:
+  - "A bare include/trigger ref matches a protected branch but not a protected tag in a referenced project with Developer members, allowing a shadowing tag."
+
+remediation_hint: >
+  Use a fully-qualified ref (`refs/heads/<branch>`) or a 40-hex SHA, or protect the tag namespace
+  on the referenced project.
