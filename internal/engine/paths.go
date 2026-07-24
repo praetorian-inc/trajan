@@ -252,6 +252,37 @@ func CollectGLUserMemberships(id int64) string {
 	return glCollect("user-memberships", fmt.Sprintf("%d.json", id))
 }
 
+// ---- GitLab normalize paths ----
+//
+// Node records key by glKey(subjectKey); jobs by project + workflow stem + job
+// name; chains one file per join. NormalizeGLChain is the GitLab analog of the
+// GitHub unexported chainPath.
+func glNormalize(parts ...string) string {
+	return path.Join(append([]string{dirNormalize}, parts...)...)
+}
+
+func NormalizeGLProject(p string) string      { return glNormalize("projects", glKey(p)+".json") }
+func NormalizeGLGroup(g string) string        { return glNormalize("groups", glKey(g)+".json") }
+func NormalizeGLInstance() string             { return glNormalize("instance", "instance.json") }
+func NormalizeGLMergeRequest(p string) string { return glNormalize("merge-requests", glKey(p)+".json") }
+func NormalizeGLEnvironment(p, env string) string {
+	return glNormalize("environments", glKey(p), glKey(env)+".json")
+}
+func NormalizeGLRunner(id int64) string { return glNormalize("runners", fmt.Sprintf("%d.json", id)) }
+func NormalizeGLAgent(p, name string) string {
+	return glNormalize("agents", glKey(p), glKey(name)+".json")
+}
+func NormalizeGLCredential(kind, key string) string {
+	return glNormalize("credentials", kind, glKey(key)+".json")
+}
+func NormalizeGLIntegration(p, kind, key string) string {
+	return glNormalize("integrations", glKey(p), kind+"-"+glKey(key)+".json")
+}
+func NormalizeGLJob(p, workflow, jobName string) string {
+	return glNormalize("jobs", fmt.Sprintf("%s__%s__%s.json", glKey(p), wfStem(workflow), glKey(jobName)))
+}
+func NormalizeGLChain(join string) string { return glNormalize("chains", join+".json") }
+
 func NormalizeJob(repo, workflow, jobID string) string {
 	return path.Join(dirNormalize, "jobs",
 		fmt.Sprintf("%s__%s__%s.json", repo, wfStem(workflow), jobID))

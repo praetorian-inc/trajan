@@ -14,10 +14,6 @@ type ScanOptions struct {
 	GroupOnly bool
 }
 
-func Normalize(ctx context.Context, runDir string) error {
-	return engine.ErrNotImplemented
-}
-
 func Scan(ctx context.Context, runDir string, opts ScanOptions) error {
 	return engine.ErrNotImplemented
 }
