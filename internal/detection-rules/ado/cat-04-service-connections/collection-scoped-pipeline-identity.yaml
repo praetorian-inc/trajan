@@ -6,7 +6,7 @@ severity: high
 confidence: medium
 description: >
   A pipeline's realized job-authorization scope is the whole collection
-  (effective_scope == 'collection') rather than its own project. Its
+  (identity_scope == 'collection') rather than its own project. Its
   System.AccessToken is therefore a collection-scoped credential: any step that
   can read it reaches the ADO REST API across every project. If the collection
   Build Service identity has also been granted collection-level administration
@@ -22,7 +22,7 @@ description: >
 
 where:
   all_of:
-    - "effective_scope == 'collection'"
+    - "identity_scope == 'collection'"
 
 evidence:
   - "Pipeline: {{ name }} ({{ id }}) in project {{ project }}"

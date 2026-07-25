@@ -18,7 +18,7 @@ where:
   all_of:
     - "extends_source != null"
     - "extends_source.is_cross_project == true"
-    - "effective_scope == 'collection'"
+    - "identity_scope == 'collection'"
 evidence:
   - "Pipeline {{ name }} ({{ project }}) extends a cross-project template from {{ extends_source.name }}"
   - "Effective job-authorization scope is collection-wide (effective_scope={{ effective_scope }}, identity_scope={{ identity_scope }})"
