@@ -99,6 +99,23 @@ func TestUntrustedEcho(t *testing.T) {
 		{`cat ./build-info.txt`, "file_content", true},
 		{`curl https://api.example/x`, "http_response", true},
 		{`echo "safe: $(Build.BuildId)"`, "", false},
+
+		{`cat CHANGELOG.md`, "file_content", true},
+		{`cat notes/release.md`, "file_content", true},
+		{`PRTEXT="$(cat pr.txt)"`, "file_content", true},
+		{`Get-Content CHANGELOG.md`, "file_content", true},
+		{`echo hi && cat report.json`, "file_content", true},
+		{`cat $FILE`, "file_content", true},
+
+		{`git gc --prune=now`, "", false},
+		{`type node`, "", false},
+		{`type -p python3`, "", false},
+		{`# cat the changelog into the build log`, "", false},
+		{`cat | head -5`, "", false},
+		{`concat foo.txt`, "", false},
+
+		{`curl -s https://example.com/notes.md`, "http_response", true},
+		{`echo "##vso[task.setvariable variable=x]1"`, "literal_vso", true},
 	}
 	for _, c := range cases {
 		got, ok := untrustedEcho(c.body)

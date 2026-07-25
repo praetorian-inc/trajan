@@ -99,8 +99,10 @@ var (
 	reParamIx = regexp.MustCompile(`\$\{\{\s*parameters\[\s*'([^']+)'`)
 	reRuntime = regexp.MustCompile(`\$\[\s*variables\[?\s*'?([A-Za-z0-9_.]+)`)
 	reVsoLit  = regexp.MustCompile(`##vso\[`)
-	reCat     = regexp.MustCompile(`(?i)(^|\s|;|&&|\|)(cat|type|Get-Content|gc)\s+[./\\$]`)
-	reHTTP    = regexp.MustCompile(`(?i)(^|\s|;|&&|\|)(curl|wget|Invoke-WebRequest|Invoke-RestMethod|iwr)\b`)
+	// The argument must be filename-shaped, not merely start with a path character:
+	// accepting any bare word would match `git gc --prune` and the `type node` builtin.
+	reCat  = regexp.MustCompile(`(?i)(^|\s|;|&&|\||\()(cat|type|Get-Content|gc)\s+(\$|[^\s|&;<>]*[./\\])`)
+	reHTTP = regexp.MustCompile(`(?i)(^|\s|;|&&|\|)(curl|wget|Invoke-WebRequest|Invoke-RestMethod|iwr)\b`)
 )
 
 // macroKind classifies a `$(name)` variable reference. "system" macros are not an

@@ -9,14 +9,8 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// One script step routinely calls several shadowable binaries — `npm ci` and
-// `git rev-parse` in the same `bash:` block is the ordinary shape. Each is a
-// separate hijack target, so each has to survive as its own edge; keying the
-// record on the consumer step alone made them overwrite each other and the job
-// kept one finding naming whichever binary was emitted last.
-//
-// Ground truth is Trajan-Demo-3's mobile-app-release job: the bundle step calls
-// npm and git after the release-notes echo, and both are shadowable.
+// One step can call several shadowable binaries; each is a separate hijack
+// target and must survive as its own edge.
 func TestLoggingInjectionKeepsEveryConsumerAtOneStep(t *testing.T) {
 	dir := t.TempDir()
 	cp := engine.CurrentPhase{RunDir: dir}
