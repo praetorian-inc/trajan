@@ -1,6 +1,66 @@
 package ado
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
+)
+
+// One script step routinely calls several shadowable binaries — `npm ci` and
+// `git rev-parse` in the same `bash:` block is the ordinary shape. Each is a
+// separate hijack target, so each has to survive as its own edge; keying the
+// record on the consumer step alone made them overwrite each other and the job
+// kept one finding naming whichever binary was emitted last.
+//
+// Ground truth is Trajan-Demo-3's mobile-app-release job: the bundle step calls
+// npm and git after the release-notes echo, and both are shadowable.
+func TestLoggingInjectionKeepsEveryConsumerAtOneStep(t *testing.T) {
+	dir := t.TempDir()
+	cp := engine.CurrentPhase{RunDir: dir}
+	timer := &engine.PhaseTimer{}
+
+	job := map[string]any{
+		"project": "Mobile-Release", "pipeline_id": int64(2), "job": "build_and_publish",
+		"vso_echo_sources": []any{
+			map[string]any{"untrusted_source": "file_content", "step_index": int64(1)},
+		},
+		"bare_binary_calls": []any{
+			map[string]any{"bin": "npm", "step_index": int64(2)},
+			map[string]any{"bin": "git", "step_index": int64(2)},
+		},
+	}
+	if err := deriveLoggingInjection(cp, timer, job, pipeInfo{identityScope: "project"}, grantIndex{}); err != nil {
+		t.Fatalf("deriveLoggingInjection: %v", err)
+	}
+
+	written, err := filepath.Glob(filepath.Join(dir, "10-normalize", "edges", "*", "*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(written) != 2 {
+		t.Fatalf("npm and git at the same step must emit 2 edges, got %d", len(written))
+	}
+	bins := map[string]bool{}
+	for _, p := range written {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var rec map[string]any
+		if err := json.Unmarshal(b, &rec); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+		bins[entStr(rec["target_resource"])] = true
+	}
+	for _, want := range []string{"npm", "git"} {
+		if !bins[want] {
+			t.Errorf("no edge names %q as the shadowed binary (got %v)", want, bins)
+		}
+	}
+}
 
 // A $[ variables ] compile-keyword redirect is a real attack path only when the variable
 // is confirmed queue-settable. Declared-settable is settable regardless of the limit;

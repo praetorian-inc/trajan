@@ -282,7 +282,12 @@ func deriveLoggingInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j 
 			"identity_scope": meta.identityScope, "confidence": confidence,
 			"target": jobID(j), "context": "azure_repos",
 		}
-		key := fmt.Sprintf("%s__%s__%d__%v", jobKeyOf(j), adoSafe(via), echoStep, consumer["step_index"])
+		// The resource belongs in the key: one step can hold several consumers of the
+		// same kind (`npm ci` and `git rev-parse` in one script, two connections on one
+		// task), and keying only on the step index made them overwrite each other — the
+		// job kept a single finding naming whichever resource was emitted last.
+		key := fmt.Sprintf("%s__%s__%d__%v__%s", jobKeyOf(j), adoSafe(via), echoStep,
+			consumer["step_index"], adoSafe(entStr(consumer["resource"])))
 		return emit(cp, timer, engine.NormalizeADOEdges("logging-command-injection", key), rec)
 	}
 
