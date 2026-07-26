@@ -1,0 +1,24 @@
+id: cat-08/non-ephemeral-runner-state-reuse
+scenario_id: cat-08/05
+title: "Non-ephemeral runner reuses on-disk state across a trust boundary"
+subject: job
+severity: high
+confidence: low
+description: >
+  A job uses a reuse-dependent checkout strategy (`GIT_STRATEGY` fetch/none, or a persisted
+  cache/submodule path) and runs on a self-managed shared runner that also services higher-trust
+  jobs and is not protected-ref restricted. An earlier attacker job can plant on-disk state
+  (`.git/hooks`, poisoned vendored deps, cache) that a later higher-trust job on the same host
+  executes. Host filesystem reuse / ephemerality is the deferred half, so this is confidence low.
+
+where:
+  all_of:
+    - reuses_ondisk_checkout == true
+    - runs_on_cross_trust_shared_runner == true
+
+evidence:
+  - "Job reuses on-disk checkout state (GIT_STRATEGY fetch/none or persisted cache/submodules) on a self-managed shared runner that also runs higher-trust jobs, so planted state crosses the trust boundary."
+
+remediation_hint: >
+  Force a clean clone into a wiped directory (avoid GIT_STRATEGY fetch/none on shared runners) and
+  run cross-trust workloads on ephemeral per-job executors so on-disk state cannot persist.

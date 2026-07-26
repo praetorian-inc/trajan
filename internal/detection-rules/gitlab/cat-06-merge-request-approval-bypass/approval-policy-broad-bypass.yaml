@@ -1,0 +1,24 @@
+id: cat-06/approval-policy-broad-bypass
+scenario_id: cat-06/12
+title: "MR approval policy exempts a broadly-held actor via bypass_settings"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  An enabled approval policy with a `require_approval` action carries a `bypass_settings` block that
+  exempts a broadly-held or lower-trust actor — the Developer role, a large group, a shared token or
+  service account, or a permissive branch pattern like `*`. The policy appears to require security
+  approval for everyone but waives it for a large population, so an exempted Developer merges
+  policy-violating code to the protected target branch.
+
+where:
+  all_of:
+    - approval_policy.enabled == true
+    - approval_policy.bypass_actor_broad == true
+
+evidence:
+  - "An enabled approval policy exempts a broadly-held actor via bypass_settings ({{ approval_policy.bypass_actor_broad }}), so lower-trust authors skip the required security approval on the protected branch."
+
+remediation_hint: >
+  Narrow `bypass_settings` to a single break-glass identity, and remove role/group/branch-pattern
+  exemptions that cover a broad population.

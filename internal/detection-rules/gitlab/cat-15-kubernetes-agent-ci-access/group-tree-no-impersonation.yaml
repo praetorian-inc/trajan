@@ -1,0 +1,24 @@
+id: cat-15/group-tree-no-impersonation
+scenario_id: cat-15/01
+title: "Kubernetes agent ci_access authorizes a whole group tree with no impersonation, giving any in-scope Developer a cluster kubeconfig"
+subject: agent
+severity: high
+confidence: medium
+description: >
+  A Kubernetes agent's `ci_access.groups` grant authorizes the named group and — because
+  subgroups auto-include — its entire subtree, while no `access_as:` impersonation is set,
+  so authorized jobs run as the agent's ServiceAccount. With `protected_branches_only`
+  false/absent and no `environments:` filter, any in-scope Developer pushes a non-protected
+  branch and their job receives the injected `$KUBECONFIG`.
+where:
+  all_of:
+    - ci_access_scope == "group"
+    - impersonation == null
+    - protected_branches_only != true
+    - environments_filter == []
+    - grant_has_lower_trust_developer == true
+evidence:
+  - "Agent grant is group-scoped ({{ ci_access_targets }}) with no impersonation and no branch/environment gate, so a lower-trust Developer in the authorized subtree receives the agent's kubeconfig."
+remediation_hint: >
+  Narrow the grant to a vetted `ci_access.projects` list, set `protected_branches_only: true`,
+  and configure `access_as:` impersonation so jobs do not run as the agent ServiceAccount.

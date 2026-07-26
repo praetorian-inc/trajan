@@ -1,0 +1,34 @@
+id: cat-04/cross-project-git-push-via-job-token
+scenario_id: cat-04/06
+title: "Cross-project Git push via CI_JOB_TOKEN with both write toggles enabled"
+subject: chain
+severity: critical
+confidence: high
+description: >
+  Both target write toggles are on — "Allow Git push requests to the repository" and "Allow
+  cross-project Git push requests from allowlisted projects" — and the allowlist trusts the
+  source. The source CI performs a cross-project `git push` with `gitlab-ci-token:$CI_JOB_TOKEN`.
+  Under a Developer+ triggerer with writable source CI, the deputy token pushes commits into the
+  target repository (firing no target pipeline, evading its CI/review gates).
+
+chain_of:
+  join: job-token-allowlist
+  for_each: edges
+  where:
+    all_of:
+      - target.job_token_push_allowed == true
+      - target.job_token_cross_project_push_allowed == true
+      - target.job_token_allowlist.trusts_source == true
+      - source.job_token_cross_project_use == "git_push"
+      - triggerer.access_level >= 30
+      - source.source_ci_writable_by_lower_trust == true
+      - any_of:
+          - target.developer_writable_protected_branch == true
+          - target.has_developer_pushable_unprotected_ref == true
+
+evidence:
+  - "Target {{ target._provenance.project_path }} has both job-token push toggles on (push {{ target.job_token_push_allowed }}, cross-project {{ target.job_token_cross_project_push_allowed }}) and a destination ref the triggering identity can push (protected-writable {{ target.developer_writable_protected_branch }}, unprotected-pushable {{ target.has_developer_pushable_unprotected_ref }}); source {{ source._provenance.project_path }} pushes cross-project under triggerer role {{ triggerer.access_level }}."
+
+remediation_hint: >
+  Disable "Allow Git push requests to the repository" and the cross-project push toggle on the
+  target, and narrow the allowlist entry's fine-grained permissions so it cannot push.

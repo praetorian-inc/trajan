@@ -1,0 +1,28 @@
+id: cat-01/shell-injection-mr-metadata
+scenario_id: cat-01/04
+title: "Shell injection from merge-request metadata interpolated unquoted into a job script"
+subject: job
+severity: high
+confidence: high
+description: >
+  A job interpolates attacker-supplied MR metadata (`$CI_MERGE_REQUEST_TITLE` /
+  `_DESCRIPTION` / `_LABELS` / `_SOURCE_BRANCH_NAME`) unquoted into its script and runs on
+  `merge_request_event`, so an MR author reaches it before review — with secrets or a
+  self-managed runner in scope.
+
+where:
+  all_of:
+    - script_uses_untrusted_input == true
+    - attacker_input_fields ∋ {mr_metadata}
+    - triggers ∋ {merge_request_event}
+    - any_of:
+        - reads_cicd_variable == true
+        - mints_id_token == true
+        - targets_self_managed_runner == true
+
+evidence:
+  - "Job interpolates unquoted MR metadata ({{ attacker_input_fields }}) on merge_request_event with secrets or a self-managed runner in scope."
+
+remediation_hint: >
+  Never interpolate MR metadata into a shell; bind it to a quoted environment variable and
+  validate it. Gate secret-bearing jobs on protected refs.

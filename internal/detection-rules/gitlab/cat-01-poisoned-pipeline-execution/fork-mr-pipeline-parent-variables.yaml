@@ -1,0 +1,29 @@
+id: cat-01/fork-mr-pipeline-parent-variables
+scenario_id: cat-01/01
+title: "Fork MR pipeline in the parent project exposes parent CI/CD variables and job token"
+subject: project
+severity: critical
+confidence: high
+description: >
+  Fork merge-request pipelines may run in the parent project
+  (`ci_allow_fork_pipelines_to_run_in_parent_project`), and the project accepts MRs from
+  untrusted forks. A maintainer running an unaudited fork MR pipeline executes the fork
+  branch's `.gitlab-ci.yml` in the parent with the parent's project/group CI/CD variables
+  and a parent-scoped `CI_JOB_TOKEN` in scope — before any review or merge.
+
+where:
+  all_of:
+    - fork_pipelines_run_in_parent == true
+    - cicd_variables != []
+    - has_reachable_runner == true
+    - any_of:
+        - visibility == "public"
+        - visibility == "internal"
+        - forking_enabled == true
+
+evidence:
+  - "Fork MR pipelines run in the parent, the project accepts fork MRs (visibility {{ visibility }}, forking {{ forking_enabled }}), and parent CI/CD variables plus runners are in scope."
+
+remediation_hint: >
+  Disable `ci_allow_fork_pipelines_to_run_in_parent_project`, or require an explicit review
+  gate before running a fork MR pipeline, and mark sensitive variables `protected`.

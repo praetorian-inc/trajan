@@ -1,0 +1,24 @@
+id: cat-06/codeowners-optional-section
+scenario_id: cat-06/08
+title: "Trust-relevant paths owned only under an Optional CODEOWNERS section (never blocks a merge)"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  CODEOWNERS declares owners for trust-relevant paths only under an Optional (`^`-prefixed) section,
+  whose code-owner approvals are never required even when "Require approval from Code Owners" is
+  enabled on the protected branch. The paths appear owned and enforcement may even be on, yet no owner
+  approval is ever demanded — so an author merges changes to `.gitlab-ci.yml` or deploy configs
+  unreviewed by the declared owner.
+
+where:
+  all_of:
+    - codeowners.covers_cicd_config == true
+    - trust_relevant_path_optional_only == true
+
+evidence:
+  - "Trust-relevant paths are owned only under an Optional (^) CODEOWNERS section ({{ trust_relevant_path_optional_only }}), so their owner approval is structurally never required even with enforcement on."
+
+remediation_hint: >
+  Move trust-relevant path ownership out of the Optional (`^`-prefixed) section into a required
+  CODEOWNERS section so owner approval is actually demanded.

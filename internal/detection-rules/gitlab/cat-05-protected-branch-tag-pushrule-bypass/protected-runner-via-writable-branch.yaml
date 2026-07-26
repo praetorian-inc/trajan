@@ -1,0 +1,24 @@
+id: cat-05/protected-runner-via-writable-branch
+scenario_id: cat-05/04
+title: "Developer-writable protected branch reaches a protected runner (code execution on the runner)"
+subject: project
+severity: high
+confidence: medium
+description: >
+  A protected-branch rule on a CI-trusted ref grants push or merge to the Developer role (access
+  level 30) — or a group/user entry — and a protected (`ref_protected`) self-managed runner is
+  reachable by that ref's pipelines. A Developer lands attacker-authored `.gitlab-ci.yml` on the
+  protected ref and obtains job execution on a runner reserved for protected-ref pipelines. What
+  that execution reaches on the host (cat-08) is deferred, hence medium confidence.
+
+where:
+  all_of:
+    - developer_writable_protected_branch == true
+    - has_protected_self_managed_runner == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} grants Developer push or merge to a protected branch, and a protected self-managed runner is reachable by that ref's pipelines."
+
+remediation_hint: >
+  Restrict the protected branch's push and merge access to Maintainers, or stop routing protected
+  self-managed runners to refs that lower-trust roles can write.

@@ -1,0 +1,24 @@
+id: cat-12/private-project-public-pipelines-guest-log-read
+scenario_id: cat-12/03
+title: "Private project with public pipelines lets a Guest read job logs and artifacts"
+subject: project
+severity: medium
+confidence: high
+description: >
+  A private project leaves `public_pipelines` enabled — the default — while holding at least one
+  Guest member. On a private project that setting grants Guests read of job logs, the artifacts
+  browser, and the CI/CD menu, a Reporter-equivalent CI read the Guest role is designed to
+  withhold. Disabling `public_pipelines` restricts that surface to Reporter+.
+
+where:
+  all_of:
+    - visibility == "private"
+    - public_pipelines == true
+    - has_guest_member == true
+
+evidence:
+  - "Private project {{ _provenance.project_path }} has public_pipelines {{ public_pipelines }} with a Guest member, granting Guests read of job logs and artifacts."
+
+remediation_hint: >
+  Disable `public_pipelines` on the private project so pipeline output is restricted to Reporter+
+  members rather than exposed to Guests.

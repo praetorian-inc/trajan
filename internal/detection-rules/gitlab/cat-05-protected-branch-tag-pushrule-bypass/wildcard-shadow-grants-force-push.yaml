@@ -1,0 +1,24 @@
+id: cat-05/wildcard-shadow-grants-force-push
+scenario_id: cat-05/10
+title: "Overlapping wildcard rule grants force push a stricter exact-name rule denied (most-permissive wins)"
+subject: project
+severity: high
+confidence: high
+description: >
+  Two or more protected-branch rules match one CI-trusted branch; the narrowest matching rule sets
+  `allow_force_push: false` but a broader matching rule sets `allow_force_push: true`, so
+  most-permissive-wins effectively grants force push. A non-Maintainer (Developer, or broad group)
+  is in the effective (unioned) push list, and the ref is CI-trusted. The low-trust actor force-pushes
+  a rewritten tip that runs on the protected ref and feeds the ref's deploy automation.
+
+where:
+  all_of:
+    - force_push_shadowed_by_permissive_rule == true
+    - ref_is_ci_trusted == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} has overlapping protected-branch rules where a broader rule enables force push the narrowest denies, a non-Maintainer is in the effective push list, and the ref is CI-trusted."
+
+remediation_hint: >
+  Set `allow_force_push: false` on every rule matching the branch, and narrow the overlapping
+  wildcard's push list, since force push resolves most-permissive-wins.

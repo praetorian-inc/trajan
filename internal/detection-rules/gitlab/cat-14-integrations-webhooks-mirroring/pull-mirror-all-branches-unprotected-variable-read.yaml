@@ -1,0 +1,27 @@
+id: cat-14/pull-mirror-all-branches-unprotected-variable-read
+scenario_id: cat-14/07
+title: "Pull-mirror auto-pipeline on all branches reads unprotected variables from any mirrored ref"
+subject: integration
+severity: high
+confidence: high
+description: >
+  A pull mirror from an external upstream auto-runs a pipeline on every sync
+  (`mirror_trigger_builds`) and mirrors all branches (`only_mirror_protected_branches` off), so
+  any upstream branch can trigger a pipeline. Even off a protected ref that pipeline sees the
+  project's unprotected (and masked) CI/CD variables — masking only redacts logs — so an external
+  upstream committer gains code execution on an arbitrary ref and reads those secrets.
+
+where:
+  all_of:
+    - kind == "pull_mirror"
+    - mirror.trigger_pipelines == true
+    - mirror.upstream_untrusted_host == true
+    - mirror.all_branches == true
+    - mirror.reaches_unprotected_variable == true
+
+evidence:
+  - "Pull mirror from external upstream `{{ url }}` auto-triggers pipelines on all mirrored branches with an unprotected CI/CD variable in scope."
+
+remediation_hint: >
+  Restrict mirroring to protected branches (`only_mirror_protected_branches`), disable
+  `mirror_trigger_builds` for external upstreams, and mark sensitive variables `protected`.

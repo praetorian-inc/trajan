@@ -1,0 +1,26 @@
+id: cat-11/non-expiring-project-deploy-token-in-variable
+scenario_id: cat-11/06
+title: "Non-expiring, container-registry-write project deploy token in an unprotected variable"
+subject: credential
+severity: high
+confidence: medium
+description: >
+  A project deploy token carries `write_registry` (container-image write) and has no expiry, and
+  its value sits in an unprotected CI/CD variable whose key matches a deploy-token/credential
+  pattern. Any Developer who runs a pipeline on any branch reads it, capturing a standing,
+  never-expiring container-registry-write credential not tied to their account that outlives
+  their membership. The variable value confirming reachability is never returned by the API, so
+  this is medium.
+where:
+  all_of:
+    - kind == "deploy_token"
+    - scope_level == "project"
+    - revoked != true
+    - non_expiring == true
+    - in_unprotected_variable == true
+    - scopes ∋ {write_registry}
+evidence:
+  - "Project deploy token `{{ name }}` never expires ({{ non_expiring }}), carries {{ scopes }}, and co-exists with an unprotected CI/CD variable reachable by a Developer pipeline."
+remediation_hint: >
+  Set an expiry on the deploy token, drop `write_registry` if only pull is needed, and store its
+  password only in a `protected` variable used from protected refs.

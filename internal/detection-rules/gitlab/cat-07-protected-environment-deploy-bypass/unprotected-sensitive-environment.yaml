@@ -1,0 +1,25 @@
+id: cat-07/unprotected-sensitive-environment
+scenario_id: cat-07/03
+title: "Sensitive environment carrying deploy context is not in Protected Environments"
+subject: environment
+severity: high
+confidence: high
+description: >
+  An environment that carries real deploy context — an environment-scoped deploy credential, an
+  id_tokens/OIDC deploy identity, or a production/staging deployment tier — is absent from
+  Protected Environments, so no deploy-access restriction applies. Because the environment a job
+  targets is self-declared in `.gitlab-ci.yml`, any Developer can author a job that names it and
+  deploy, inheriting the bound deploy context and crossing the deployer boundary the operator
+  believed Protected Environments enforced.
+
+where:
+  all_of:
+    - protected == false
+    - carries_deploy_context == true
+
+evidence:
+  - "Environment `{{ name }}` (tier `{{ tier }}`) carries deploy context but is absent from Protected Environments, so any Developer can deploy to it."
+
+remediation_hint: >
+  Add the sensitive environment to Protected Environments and restrict its deploy-access levels to
+  the intended production-deployer set.

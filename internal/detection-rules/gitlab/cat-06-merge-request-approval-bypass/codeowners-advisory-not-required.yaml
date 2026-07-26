@@ -1,0 +1,23 @@
+id: cat-06/codeowners-advisory-not-required
+scenario_id: cat-06/07
+title: "CODEOWNERS names owners for trust-relevant paths but code-owner approval is not required"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  CODEOWNERS assigns owners to trust-relevant paths (`.gitlab-ci.yml`, deploy paths, `/CODEOWNERS`) —
+  evidence the org relies on them to gate changes — but "Require approval from Code Owners" is off on
+  the protected target branch (`code_owner_approval_required == false`), so the assignment is purely
+  advisory. An author changes an owned trust-relevant path and merges with no owner sign-off.
+
+where:
+  all_of:
+    - codeowners.covers_cicd_config == true
+    - code_owner_approval_required == false
+
+evidence:
+  - "CODEOWNERS owns trust-relevant paths ({{ codeowners.covers_cicd_config }}) but code-owner approval is not required ({{ code_owner_approval_required }}) on the protected branch, so owner assignments never block a merge."
+
+remediation_hint: >
+  Enable "Require approval from Code Owners" (`code_owner_approval_required = true`) on the protected
+  target branch so declared owners actually gate changes to their paths.

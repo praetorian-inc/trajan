@@ -1,0 +1,26 @@
+id: cat-12/group-auto-devops-inherited-deploy-vars
+scenario_id: cat-12/13
+title: "Group-scoped Auto DevOps with inherited deploy variables runs org-credentialed pipelines on config-less projects"
+subject: project
+severity: high
+confidence: medium
+description: >
+  A group defaults its descendant projects to Auto DevOps and carries inherited deploy variables
+  (`KUBE_*` / `AUTO_DEVOPS_*` or a group-wired registry). A config-less descendant project with a
+  reachable runner then auto-runs the Auto DevOps template with those group credentials in scope,
+  so a code-only pusher's source executes inside a group-privileged pipeline. Whether the inherited
+  credentials reach a production-powerful target is deferred, hence medium confidence.
+
+where:
+  all_of:
+    - auto_devops_enabled == true
+    - has_cicd_config == false
+    - has_reachable_runner == true
+    - group_inherited_deploy_vars == true
+
+evidence:
+  - "Config-less project {{ _provenance.project_path }} inherits group Auto DevOps plus group deploy variables and a reachable runner, running pushed code in a group-privileged pipeline."
+
+remediation_hint: >
+  Disable the group Auto DevOps default or scope the inherited deploy variables to trusted
+  projects, so config-less descendants do not auto-run with group credentials.

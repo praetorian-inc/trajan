@@ -1,0 +1,23 @@
+id: cat-01/oidc-id-tokens-untrusted-ref
+scenario_id: cat-01/10
+title: "OIDC id_tokens job fires on an attacker-nameable ref (glob gate, not ref protection)"
+subject: job
+severity: high
+confidence: low
+description: >
+  A job that mints an OIDC `id_tokens:` is reachable on an attacker-nameable ref because its
+  `rules:` gate on a broad glob rather than a protected-ref check. A low-trust actor mints the
+  token; exploitability hinges on the deferred cloud/Vault trust policy behind it.
+
+where:
+  all_of:
+    - mints_id_token == true
+    - runs_on_untrusted_ref == true
+    - protected_ref_gate != "strong"
+
+evidence:
+  - "id_tokens job is reachable on an attacker-nameable ref (ref gate {{ protected_ref_gate }}); a low-trust actor can mint the OIDC token."
+
+remediation_hint: >
+  Gate id_tokens jobs on a protected-ref check ($CI_COMMIT_REF_PROTECTED) or a protected
+  environment, and bind the cloud trust policy to the ref or environment claim.

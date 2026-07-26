@@ -1,0 +1,23 @@
+id: cat-12/saml-scim-default-membership-role-developer
+scenario_id: cat-12/09
+title: "SAML/SCIM default membership role of Developer auto-grants CI execution to every provisioned identity"
+subject: group
+severity: high
+confidence: high
+description: >
+  A group has SAML SSO and/or SCIM provisioning active and its `default_membership_role` is set to
+  Developer instead of the Guest default. Every identity the IdP provisions therefore silently
+  gains Developer-class CI capability — pipeline execution, non-protected-branch push, project-
+  runner creation — with no invite or per-user review.
+
+where:
+  all_of:
+    - saml_provisioning_active == true
+    - default_membership_role == "developer"
+
+evidence:
+  - "Group {{ _provenance.group_path }} provisions via SAML/SCIM with default_membership_role `{{ default_membership_role }}`, auto-granting Developer CI capability to every provisioned identity."
+
+remediation_hint: >
+  Lower the group's `default_membership_role` to Guest and elevate individual users deliberately,
+  so IdP provisioning does not confer un-reviewed CI/CD write access.

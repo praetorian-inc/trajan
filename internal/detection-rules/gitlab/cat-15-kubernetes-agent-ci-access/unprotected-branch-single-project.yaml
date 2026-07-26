@@ -1,0 +1,23 @@
+id: cat-15/unprotected-branch-single-project
+scenario_id: cat-15/02
+title: "Kubernetes agent ci_access grant leaves protected_branches_only false, so a Developer's throwaway branch reaches the cluster"
+subject: agent
+severity: high
+confidence: low
+description: >
+  A narrow, single-project `ci_access` grant leaves `protected_branches_only` at its false
+  default, so every pipeline in the authorized project — including a Developer's non-protected
+  feature branch — receives the injected `$KUBECONFIG`. With no `access_as:` impersonation the
+  job runs as the agent's ServiceAccount, defeating the operator's belief that only the
+  protected deploy branch reaches the cluster.
+where:
+  all_of:
+    - ci_access_scope == "project"
+    - protected_branches_only != true
+    - impersonation == null
+    - grant_developer_pushable_unprotected_branch == true
+evidence:
+  - "Single-project agent grant ({{ ci_access_targets }}) has protected_branches_only false and no impersonation, so a Developer pushing a non-protected branch receives the agent's kubeconfig."
+remediation_hint: >
+  Set `protected_branches_only: true` on the grant so only protected-ref pipelines receive the
+  kubeconfig, and configure `access_as:` impersonation.

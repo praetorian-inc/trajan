@@ -1,0 +1,25 @@
+id: cat-06/approval-policy-fail-open
+scenario_id: cat-06/09
+title: "MR approval policy fails open (fallback_behavior: fail_open) when its named scanner never runs"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  An enabled Ultimate approval policy has a `scan_finding` rule naming a scanner, a `require_approval`
+  action, and `fallback_behavior == "fail_open"` (a deliberate change from the safe `fail_closed`
+  default). The named scanner has no job/include in the target project's resolved pipeline, so the
+  rule can never evaluate and fail-open waives the required approval on every MR to the protected
+  branch — a silent no-op gate that still shows "active".
+
+where:
+  all_of:
+    - approval_policy.enabled == true
+    - approval_policy.fallback_behavior == "fail_open"
+    - approval_policy.named_scanner_absent == true
+
+evidence:
+  - "An enabled approval policy fails open ({{ approval_policy.fallback_behavior }}) and its named scanner is absent from the resolved pipeline ({{ approval_policy.named_scanner_absent }}), so the unevaluable rule waives the required approval."
+
+remediation_hint: >
+  Set `fallback_behavior: fail_closed` so an unevaluable rule blocks the merge, and wire the named
+  scanner into the target project's pipeline.

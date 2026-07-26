@@ -1,0 +1,23 @@
+id: cat-15/protected-branch-developer-pushable
+scenario_id: cat-15/08
+title: "Kubernetes agent ci_access has protected_branches_only enabled, but the in-scope project's protected branch is Developer-pushable, so the branch gate authorizes the very actor it should exclude"
+subject: agent
+severity: high
+confidence: low
+description: >
+  The agent grant sets `protected_branches_only: true` — the safe value — but the in-scope
+  project's protected-ref access rules include the Developer level: a protected branch a Developer
+  may push, a wildcard protected pattern a Developer may create matching branches under, or a
+  protected tag a Developer may create. The Developer lands a pipeline on a gate-satisfying ref
+  and, with no `access_as:` impersonation, receives the injected `$KUBECONFIG` as the agent's
+  ServiceAccount.
+where:
+  all_of:
+    - protected_branches_only == true
+    - impersonation == null
+    - grant_protected_ref_developer_writable == true
+evidence:
+  - "Agent grant relies on protected_branches_only but the in-scope project has a protected branch or tag writable by the Developer level, so a Developer lands a protected-ref pipeline and receives the agent's kubeconfig."
+remediation_hint: >
+  Restrict the in-scope project's protected-branch push/merge and protected-tag create access to
+  Maintainers, and configure `access_as:` impersonation.

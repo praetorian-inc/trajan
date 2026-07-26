@@ -1,0 +1,26 @@
+id: cat-01/merged-results-pipeline-protected-resources
+scenario_id: cat-01/09
+title: "Merged-results / merge-train pipeline exposes protected variables/runners to a Developer's pre-merge code"
+subject: job
+severity: high
+confidence: high
+description: >
+  With `protect_merge_request_pipelines` disabled and merged-results / merge-train pipelines
+  enabled, a Developer's pre-merge code runs against the merged-results commit with the project's
+  protected variables or a protected runner in scope.
+
+where:
+  all_of:
+    - runs_on_merged_result == true
+    - mr_pipelines_unprotected == true
+    - developer_controls_mr_branches == true
+    - any_of:
+        - reads_protected_variable == true
+        - targets_protected_runner == true
+
+evidence:
+  - "Merged-results pipeline runs a Developer's pre-merge code with protected resources in scope while MR-pipeline protection is off."
+
+remediation_hint: >
+  Keep `protect_merge_request_pipelines` enabled; restrict who can open MRs that build against
+  protected refs.

@@ -1,0 +1,26 @@
+id: cat-05/group-lowered-default-branch-protection
+scenario_id: cat-05/06
+title: "Group default_branch_protection_defaults lowered to Partially protected makes inherited default branches Developer-writable"
+subject: project
+severity: high
+confidence: high
+description: >
+  A group's `default_branch_protection_defaults` was lowered by an Owner so `allowed_to_push`
+  includes Developer (access level 30) with `allow_force_push: false`. A project under the group
+  inherits a default branch that is still a protected ref but Developer-writable, with no stricter
+  project override, and a `protected: true` CI/CD variable scoped to it. A Developer pushes
+  unreviewed commits directly to the default branch and its pipeline reads the protected variable;
+  the root cause is a group-governance setting inherited at project creation.
+
+where:
+  all_of:
+    - inherited_default_branch_developer_pushable == true
+    - inherited_protection_source == "group"
+    - protected_var_scoped_to_writable_ref == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} inherits a group Partially-protected default branch (Developer push, still protected) with no stricter override, and a protected CI/CD variable is scoped to it."
+
+remediation_hint: >
+  Restore the group's `default_branch_protection_defaults` to Fully protected, or add a stricter
+  project-level protected-branch rule on the default branch.

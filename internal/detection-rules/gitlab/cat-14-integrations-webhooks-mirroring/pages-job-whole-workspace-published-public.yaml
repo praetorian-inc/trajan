@@ -1,0 +1,25 @@
+id: cat-14/pages-job-whole-workspace-published-public
+scenario_id: cat-14/11
+title: "Public Pages job publishes the whole workspace, sweeping secret files into the public site"
+subject: job
+severity: high
+confidence: medium
+description: >
+  The public Pages producer job (`pages:`) publishes a broad `artifacts:paths` — the whole
+  workspace (`.`), the repository root, or a directory that is not a dedicated build-output dir —
+  on a project whose Pages is served public. The published tree then includes whatever is checked
+  out (`.env`, `config/` credentials, downloaded secure files, `.git`), all served to the internet
+  regardless of what the build intended.
+
+where:
+  all_of:
+    - publishes_pages == true
+    - artifact_paths_broad == true
+    - pages_public == true
+
+evidence:
+  - "Public Pages producer job publishes a workspace-wide artifact path ({{ artifact_paths }}) with Pages served public ({{ pages_public }})."
+
+remediation_hint: >
+  Publish only a dedicated, build-generated site output directory from the Pages job — never the
+  whole workspace or repository root.

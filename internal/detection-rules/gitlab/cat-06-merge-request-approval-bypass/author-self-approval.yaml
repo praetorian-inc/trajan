@@ -1,0 +1,24 @@
+id: cat-06/author-self-approval
+scenario_id: cat-06/01
+title: "MR author approves their own merge request (\"Prevent approval by author\" disabled)"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  "Prevent approval by merge request author" is off (`author_approval_allowed == true`, a deliberate
+  change from the secure default), a required approval rule gates a protected target branch, and the
+  author sits inside a broad eligible-approver set — so the author clears their own single-approval
+  gate and merges unreviewed code (including a malicious `.gitlab-ci.yml`) to the trusted ref.
+
+where:
+  all_of:
+    - author_approval_allowed == true
+    - approvals_required >= 1
+    - approver_set_broad == true
+
+evidence:
+  - "Author self-approval is permitted ({{ author_approval_allowed }}) and a broad-approver rule requiring {{ approvals_required }} approval(s) gates a protected branch, so the author clears their own gate."
+
+remediation_hint: >
+  Re-enable "Prevent approval by merge request author" (`merge_requests_author_approval = false`) and
+  scope the approval rule's eligible approvers to a set that excludes likely authors.

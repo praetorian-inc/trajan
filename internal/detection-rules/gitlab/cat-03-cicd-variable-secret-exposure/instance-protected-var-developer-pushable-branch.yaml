@@ -1,0 +1,29 @@
+id: cat-03/instance-protected-var-developer-pushable-branch
+scenario_id: cat-03/04
+title: "Instance-level protected variable reached via a Developer-pushable protected branch in any project"
+subject: chain
+severity: high
+confidence: high
+description: >
+  An instance-scope CI/CD variable marked `protected == true` inherits into every project on the
+  instance. Any project whose protected-branch rule lists the Developer level (30) under *Allowed
+  to push and merge* becomes a landing pad: a Developer pushes an attacker-authored
+  `.gitlab-ci.yml` onto that protected ref and GitLab injects the instance secret, crossing the
+  instance→project boundary. The finding is the cross-scope pairing, not either half alone.
+
+chain_of:
+  join: protected-var-reachability
+  for_each: reachable_vars
+  where:
+    all_of:
+      - var.scope_level == "instance"
+      - var.protected == true
+      - branch.push_access_levels ∋ {30}
+      - member.access_level == 30
+
+evidence:
+  - "Instance protected variable `{{ var.key }}` inherits into project `{{ branch._provenance.project_path }}` whose protected branch `{{ branch.pattern }}` allows Developer push (members max role {{ member.access_level }})."
+
+remediation_hint: >
+  Restrict *Allowed to push and merge* on the project's protected-branch rule to Maintainer+, or
+  avoid distributing high-trust secrets as instance-inherited protected variables.

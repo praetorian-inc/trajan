@@ -1,0 +1,32 @@
+id: cat-03/group-protected-var-developer-creatable-tag
+scenario_id: cat-03/05
+title: "Group-inherited protected variable reached via a Developer-creatable protected tag in a descendant project"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A group (or ancestor-subgroup) CI/CD variable marked `protected == true` inherits into a
+  descendant whose protected-*tag* rule lists the Developer level (30) under *Allowed to create*,
+  or uses a broad wildcard pattern (`*`, `v*`) a Developer can satisfy. A protected-tag pipeline
+  runs as a trusted ref, so a Developer who creates a matching tag pointing at an attacker-authored
+  `.gitlab-ci.yml` receives the inherited group secret — sidestepping protected-branch controls
+  entirely. The finding is the cross-scope pairing; the loose tag rule alone is cat-05's lane.
+
+chain_of:
+  join: protected-var-reachability
+  for_each: reachable_vars
+  where:
+    all_of:
+      - var.scope_level == "group"
+      - var.protected == true
+      - any_of:
+          - tag.create_access_levels ∋ {30}
+          - tag.pattern matches "^(\\*|v\\*)$"
+      - member.access_level == 30
+
+evidence:
+  - "Group protected variable `{{ var.key }}` inherits into descendant `{{ tag._provenance.project_path }}` whose protected tag `{{ tag.pattern }}` is Developer-creatable (members max role {{ member.access_level }})."
+
+remediation_hint: >
+  Restrict *Allowed to create* on the descendant's protected-tag rule to Maintainer+ and replace
+  broad wildcard patterns with specific ones, or scope the group secret to trusted projects.

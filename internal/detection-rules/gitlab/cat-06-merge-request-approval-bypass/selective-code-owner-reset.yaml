@@ -1,0 +1,26 @@
+id: cat-06/selective-code-owner-reset
+scenario_id: cat-06/05
+title: "Only Code-Owner approvals reset on push, regular approvals persist (selective_code_owner_removals)"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  Selective code-owner removal is on (`selective_code_owner_removal == true`, accepted only with
+  `reset_approvals_on_push == false`), a required regular-approval rule gates a protected target
+  branch, and CODEOWNERS leaves trust-relevant paths uncovered. A post-approval commit that touches
+  only non-owned paths triggers no code-owner reset, so the persisting regular approvals carry
+  unreviewed code onto the trusted branch.
+
+where:
+  all_of:
+    - selective_code_owner_removal == true
+    - reset_approvals_on_push == false
+    - approvals_required >= 1
+    - codeowners.covers_cicd_config == false
+
+evidence:
+  - "Selective code-owner reset ({{ selective_code_owner_removal }}) keeps regular approvals while CODEOWNERS leaves trust-relevant paths ({{ codeowners.covers_cicd_config }}) uncovered, so a post-approval commit on those paths merges unreviewed."
+
+remediation_hint: >
+  Disable selective code-owner removal (full reset on push) or extend CODEOWNERS to own every
+  trust-relevant path so no non-owned lane exists for a post-approval payload.

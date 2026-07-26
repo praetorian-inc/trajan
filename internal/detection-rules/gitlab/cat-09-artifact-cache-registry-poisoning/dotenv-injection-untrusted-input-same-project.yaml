@@ -1,0 +1,33 @@
+id: cat-09/dotenv-injection-untrusted-input-same-project
+scenario_id: cat-09/02
+title: "dotenv variable injection where a trusted-ref producer's exported content is derived from untrusted input"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A same-project producer job on a trusted ref builds its `artifacts:reports:dotenv` content from
+  untrusted input fetched at runtime from a lower-trust source (an artifact/ref/submodule a
+  Developer can write without a review gate). A later-stage consumer inherits the dotenv with
+  default inheritance and uses the inherited value in an execution sink while running in a
+  higher-trust context. The producer runs on a trusted ref, so its attacker-derived bytes are
+  treated as trusted and injected into the consumer.
+
+chain_of:
+  join: dotenv-flow
+  for_each: edges
+  where:
+    all_of:
+      - producer.produces_dotenv == true
+      - producer.runs_on_protected_ref == true
+      - producer.dotenv_content_from_untrusted_source == true
+      - consumer.consumes_dotenv == true
+      - consumer.dotenv_inheritance_unnarrowed == true
+      - consumer.inherited_var_in_exec_sink == true
+      - consumer.runs_on_protected_ref == true
+
+evidence:
+  - "Trusted-ref producer {{ producer._provenance.project_path }} derives its dotenv content from an untrusted lower-trust source; consumer inherits it and uses the value in an execution sink without narrowing inheritance."
+
+remediation_hint: >
+  Build dotenv content only from trusted in-repo steps behind a review gate, or narrow the
+  consumer with `dependencies: []` / `inherit: {variables: false}` and validate inherited values.

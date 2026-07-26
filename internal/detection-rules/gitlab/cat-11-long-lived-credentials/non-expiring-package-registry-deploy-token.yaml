@@ -1,0 +1,25 @@
+id: cat-11/non-expiring-package-registry-deploy-token
+scenario_id: cat-11/07
+title: "Non-expiring `write_package_registry` deploy token reachable from a pipeline"
+subject: credential
+severity: high
+confidence: high
+description: >
+  A deploy token carries `write_package_registry` (npm/PyPI/Maven/Generic publish) and has no
+  expiry, and is named `gitlab-deploy-token` so it is auto-injected into every CI/CD job as
+  `CI_DEPLOY_USER`/`CI_DEPLOY_PASSWORD` with no variable wiring. Any Developer who runs a pipeline
+  gains a standing, never-expiring package-publish credential; for a group token it writes into
+  package namespaces they are not a member of. Reachability is inferable from the token name, so
+  this is high confidence.
+where:
+  all_of:
+    - kind == "deploy_token"
+    - revoked != true
+    - non_expiring == true
+    - auto_injected == true
+    - scopes ∋ {write_package_registry}
+evidence:
+  - "Deploy token `{{ name }}` is auto-injected ({{ auto_injected }}), never expires ({{ non_expiring }}), and carries {{ scopes }} package-publish access."
+remediation_hint: >
+  Set an expiry on the deploy token, drop `write_package_registry` if only read is needed, and
+  avoid the auto-injected `gitlab-deploy-token` name for a package-publish credential.

@@ -1,0 +1,28 @@
+id: cat-10/id-tokens-mintable-from-untrusted-ref
+scenario_id: cat-10/02
+title: "OIDC id_tokens job mintable from an untrusted ref (fork-MR-in-parent / non-protected branch), token carries the trusted project identity"
+subject: job
+severity: high
+confidence: high
+description: >
+  An `id_tokens:` minting job is reachable by a low-trust actor in the trusted project's context —
+  either a fork MR run in the parent project (executing the fork's attacker-controlled
+  `.gitlab-ci.yml`) or a Developer feature branch with no protected-ref gating. Either way the
+  minted token carries the parent project's `project_id`/`project_path`, which cloud/Vault policies
+  overwhelmingly bind on. The minting config lives off the reviewed default branch.
+
+where:
+  all_of:
+    - mints_id_token == true
+    - any_of:
+        - runs_fork_mr_in_parent == true
+        - all_of:
+            - runs_on_untrusted_ref == true
+            - protected_ref_gate != "strong"
+
+evidence:
+  - "id_tokens job is mintable by a low-trust actor (fork-in-parent {{ runs_fork_mr_in_parent }}, untrusted ref {{ runs_on_untrusted_ref }}); the token names the trusted project via id_token_aud {{ id_token_aud }}."
+
+remediation_hint: >
+  Disable `ci_allow_fork_pipelines_to_run_in_parent_project` and gate id_tokens jobs to a protected
+  ref, so only trusted pipelines can mint a token in the project's identity.

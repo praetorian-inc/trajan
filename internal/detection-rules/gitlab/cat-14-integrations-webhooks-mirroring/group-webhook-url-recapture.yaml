@@ -1,0 +1,29 @@
+id: cat-14/group-webhook-url-recapture
+scenario_id: cat-14/04
+title: "Group webhook credential recaptured by a group Owner re-pointing the delivery URL"
+subject: integration
+severity: high
+confidence: medium
+description: >
+  A group webhook — firing across every project in the group — carries write-only credential
+  material (a secret token in `X-Gitlab-Token` and/or masked custom headers) yet its delivery
+  `url` is editable by a group Owner who is not the operator that set the credential. That Owner
+  re-points the group webhook at a listener they control, fires a qualifying event from any
+  project in the group, and captures the credential in plaintext.
+
+where:
+  all_of:
+    - kind == "webhook"
+    - url_mutable == true
+    - firable_event_trigger == true
+    - editor_below_credential_trust == true
+    - any_of:
+        - token_present == true
+        - custom_headers != []
+
+evidence:
+  - "Group webhook carries write-only credential material (token {{ token_present }}, headers {{ custom_headers }}) with a mutable URL and a firable event trigger, editable by an Owner other than the credential-setter."
+
+remediation_hint: >
+  Prefer an HMAC signing token over a reusable secret, and restrict who can edit group-webhook
+  destinations to the operator that owns the downstream credential.
