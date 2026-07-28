@@ -25,7 +25,6 @@ func newAdoCmd() *cobra.Command {
 	ado.PersistentFlags().SortFlags = false
 	ado.PersistentFlags().IntVar(&cfg.Concurrency, "concurrency", 8, "max concurrent API workers")
 	ado.PersistentFlags().StringVar(&cfg.OutputDir, "output-dir", "./trajan-out", "run output directory")
-	ado.PersistentFlags().String("azure-bearer-token", "", "Azure Entra ID bearer token (or set AZURE_BEARER_TOKEN)")
 
 	var path string
 	var orgDetectionsOnly bool
@@ -124,6 +123,11 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 	reportCmd.Flags().StringVar(&reportMinSev, "min-severity", "info", "drop findings below this severity")
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
 	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: stdout for json/jsonl, run dir for md/html)")
+
+	// Entra ID bearer auth is only wired into these three; the phased commands are PAT-only.
+	for _, c := range []*cobra.Command{scanCmd, attackCmd, retrieveCmd} {
+		c.Flags().String("azure-bearer-token", "", "Azure Entra ID bearer token (or set AZURE_BEARER_TOKEN)")
+	}
 
 	// The phased scan takes over "ado scan"; the legacy scanner stays reachable here.
 	scanCmd.Use = "scan-legacy"
