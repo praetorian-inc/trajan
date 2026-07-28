@@ -3,27 +3,18 @@ package detect
 import "github.com/praetorian-inc/trajan/internal/finding"
 
 // Provider supplies the per-platform specifics the shared detection engine needs.
-// The engine (rule DSL, getPath, evaluation, finding construction) is generic;
-// each platform (github, ado, …) contributes a Provider so one engine serves all.
+// Every func field is optional; the accessors below define the nil behavior.
 type Provider struct {
-	// Name is the finding.Provider label ("github" | "ado" | …).
-	Name string
-	// RuleSubtree is the detection-rules/<subtree> the rule loader walks.
+	Name        string
 	RuleSubtree string
-	// SubjectDirs maps a rule subject kind to its 10-normalize record directory
-	// (e.g. github "job" -> "jobs"; ado "pipeline" -> "pipelines").
+	// Rule subject kind -> 10-normalize record directory (ado "pipeline" -> "pipelines").
 	SubjectDirs map[string]string
-	// Display renders the finding's subject label; nil falls back to subject._id.
-	Display func(kind string, subject map[string]any) string
-	// Code embeds the source snippet a finding points at; nil emits no code.
-	Code func(runDir string, subject map[string]any) *finding.Code
-	// Repo / File extract those finding fields; nil leaves them empty.
-	Repo func(subject map[string]any) string
-	File func(subject map[string]any) string
-	// SubjectKey returns a stable, unique identity string for a subject, used to
-	// name the finding file. nil falls back to SubjectHash (_id/repo/json). A
-	// platform whose subjects lack a natural _id (e.g. ADO's derived-edge records)
-	// supplies this so distinct subjects don't collide to one finding.
+	Display     func(kind string, subject map[string]any) string
+	Code        func(runDir string, subject map[string]any) *finding.Code
+	Repo        func(subject map[string]any) string
+	File        func(subject map[string]any) string
+	// Names the finding file. A platform whose subjects lack a natural _id (ADO's
+	// derived-edge records) supplies this so distinct subjects don't collide to one.
 	SubjectKey func(subject map[string]any) string
 }
 

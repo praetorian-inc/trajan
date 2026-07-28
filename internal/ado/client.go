@@ -35,7 +35,6 @@ var hostBase = map[string]string{
 	"almsearch": "https://almsearch.dev.azure.com",
 }
 
-// ADO is the surface collectors depend on; Client is the production impl.
 type ADO interface {
 	Get(ctx context.Context, host, api, path string, params url.Values, allow404 bool) (json.RawMessage, http.Header, error)
 	GetRaw(ctx context.Context, host, api, path string, params url.Values) ([]byte, http.Header, error)
@@ -127,7 +126,6 @@ func readAllClose(resp *http.Response) []byte {
 	return b
 }
 
-// sleepForRateLimit honors Retry-After on 429; returns true if it slept.
 func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response) bool {
 	if resp.StatusCode != http.StatusTooManyRequests {
 		return false
@@ -200,8 +198,6 @@ func (c *Client) Get(ctx context.Context, host, api, path string, params url.Val
 	return json.RawMessage(b), hdr, nil
 }
 
-// GetRaw fetches text content (e.g. pipeline YAML via git items with
-// Accept: text/plain).
 func (c *Client) GetRaw(ctx context.Context, host, api, path string, params url.Values) ([]byte, http.Header, error) {
 	u, err := c.buildURL(host, path, params, api)
 	if err != nil {

@@ -104,7 +104,7 @@ func softList(ctx context.Context, cl ADO, host, api, p string, params url.Value
 	return items, 0, nil
 }
 
-// rawArray ensures a nil slice marshals as [] (rules key on it).
+// Rules key on these lists, so a nil slice must still marshal as [].
 func rawArray(items []json.RawMessage) []json.RawMessage {
 	if items == nil {
 		return []json.RawMessage{}
@@ -124,7 +124,6 @@ func numField(raw json.RawMessage, key string) int64 {
 	return n
 }
 
-// collectIDs extracts numeric "id" fields from a list of raw items.
 func collectIDs(items []json.RawMessage) []int64 {
 	var out []int64
 	for _, raw := range items {
@@ -171,8 +170,6 @@ type resourceRef struct {
 	ID   string
 	Name string
 }
-
-// ================= ORG =================
 
 func collectProjects(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) ([]projectRef, error) {
 	items, status, err := softList(ctx, cl, "core", APIVersion, "/_apis/projects", nil)
@@ -372,8 +369,6 @@ func collectFeeds(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 	return envelope(cp, engine.CollectADOFeeds(org), "feeds", "/_apis/packaging/feeds", bundles)
 }
 
-// ================= PROJECT list surfaces =================
-
 func collectProjectDetail(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string) error {
 	raw, status, err := softGet(ctx, cl, "core", APIVersion,
 		"/_apis/projects/"+url.PathEscape(project), url.Values{"includeCapabilities": []string{"true"}})
@@ -480,8 +475,6 @@ func collectRepoACL(ctx context.Context, cl ADO, cp engine.CurrentPhase, project
 		"/_apis/accesscontrollists/"+gitNS, raw, status)
 }
 
-// ================= PER-RESOURCE (checks + pipeline permissions) =================
-
 func collectPipelinePermissions(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string, r resourceRef) error {
 	p := fmt.Sprintf("/%s/_apis/pipelines/pipelinepermissions/%s/%s", url.PathEscape(project), r.Type, url.PathEscape(r.ID))
 	raw, status, err := softGet(ctx, cl, "core", APIVersionPreview, p, nil)
@@ -505,8 +498,6 @@ func collectChecks(ctx context.Context, cl ADO, cp engine.CurrentPhase, project 
 	return envelope(cp, engine.CollectADOChecks(project, r.Type, r.ID), "checks", p, rawArray(items))
 }
 
-// ================= PER-ENV =================
-
 func collectEnvironmentDetail(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string, envID int64) error {
 	p := fmt.Sprintf("/%s/_apis/distributedtask/environments/%d", url.PathEscape(project), envID)
 	raw, status, err := softGet(ctx, cl, "core", APIVersion, p, url.Values{"expands": []string{"resourceReferences"}})
@@ -515,8 +506,6 @@ func collectEnvironmentDetail(ctx context.Context, cl ADO, cp engine.CurrentPhas
 	}
 	return writeOrMark(cp, engine.CollectADOEnvironmentDetail(project, envID), "environment-detail", p, raw, status)
 }
-
-// ================= PER-PIPELINE (build def full + preview) =================
 
 // collectBuildDefFull returns the full definition so the caller can drive YAML +
 // template-closure collection.

@@ -688,7 +688,6 @@ func normalizePool(v any) map[string]any {
 	return map[string]any{}
 }
 
-// variableGroups returns the names in a `variables:` block's `- group:` entries.
 func variableGroups(v any) []string {
 	var out []string
 	list, ok := v.([]any)
@@ -716,8 +715,6 @@ func jobEnvironment(m map[string]any) string {
 	}
 	return ""
 }
-
-// ---- small YAML helpers ----
 
 func yamlStr(v any) string {
 	s, _ := v.(string)

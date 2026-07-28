@@ -56,7 +56,6 @@ func normalizeEntities(ctx context.Context, prior engine.PriorPhase, cp engine.C
 	return nil
 }
 
-// generalSettings returns a project's effective build/pipeline settings object.
 func generalSettings(prior engine.PriorPhase, project string) map[string]any {
 	return entLoadData(prior, engine.CollectADOGeneralSettings(project))
 }
@@ -192,7 +191,6 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string,
 	return nil
 }
 
-// foldChecks projects the collected check configs onto a resource node.
 func foldChecks(prior engine.PriorPhase, project, rtype, id string) []any {
 	out := []any{}
 	for _, raw := range entLoadList(prior, engine.CollectADOChecks(project, rtype, id)) {
@@ -642,7 +640,6 @@ func policySettings(s map[string]any) map[string]any {
 	}
 }
 
-// policyTypeNames resolves policy type GUID -> display name from policy-types.
 func policyTypeNames(prior engine.PriorPhase, project string) map[string]string {
 	out := map[string]string{}
 	for _, raw := range entLoadList(prior, engine.CollectADOPolicyTypes(project)) {

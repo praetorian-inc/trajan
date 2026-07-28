@@ -32,13 +32,9 @@ func renderEvidence(template string, subject any) string {
 // a record (secret name, app slug, collaborator login, …), in preference order.
 var salientKeys = []string{"name", "login", "slug", "app_slug", "id", "uses", "_id"}
 
-// humanValue renders an evidence value for display, recursively, so no Go
-// map[...]/[...] syntax ever reaches the output. Scalars keep toStringValue's
-// Python-str semantics (True/False/None); a record renders as its salient
-// identifier when it has one, else as sorted key=value pairs; a list renders as
-// bracketed, comma-joined elements. Trajan-internal keys (the "_"-prefixed
-// provenance/metadata like _chain/_provenance) are dropped — they belong in
-// provenance, not a sentence. The full structured value is preserved there.
+// Renders recursively so no Go map[...]/[...] syntax reaches the output. The
+// "_"-prefixed internal keys are dropped here because they belong in provenance,
+// which keeps the full structured value, not in a sentence.
 func humanValue(v any) string {
 	switch t := v.(type) {
 	case map[string]any:

@@ -23,9 +23,6 @@ type ScanOptions struct {
 	OrgOnly bool
 }
 
-// Scan runs the shared detection engine for a platform: it loads that provider's
-// rule subtree, evaluates each rule against the matching 10-normalize records,
-// and writes findings to 20-scan.
 func Scan(ctx context.Context, runDir string, p Provider, opts ScanOptions) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {

@@ -61,8 +61,7 @@ func Normalize(ctx context.Context, runDir string) error {
 	return normErr
 }
 
-// emit writes one normalized record and counts it. Normalize is sequential, so
-// no locking is needed on the timer.
+// Normalize is sequential, so the timer needs no locking.
 func emit(cp engine.CurrentPhase, timer *engine.PhaseTimer, rel string, rec any) error {
 	if err := cp.Write(rel, rec); err != nil {
 		return err
@@ -71,8 +70,7 @@ func emit(cp engine.CurrentPhase, timer *engine.PhaseTimer, rel string, rec any)
 	return nil
 }
 
-// projects reads the collected project roster (id + true name; per-project
-// surface files are keyed by the sanitized name).
+// Per-project surface files are keyed by the sanitized name, not the true name.
 func projects(prior engine.PriorPhase, org string) []projectMeta {
 	var out []projectMeta
 	for _, raw := range entLoadList(prior, engine.CollectADOProjects(org)) {

@@ -132,8 +132,6 @@ type repoResource struct {
 	ref  string
 }
 
-// parseTemplateRefs walks a pipeline/template YAML for every `template:` and
-// `extends.template` string reference, and the `resources.repositories` alias map.
 func parseTemplateRefs(content string) ([]templateRef, map[string]repoResource) {
 	var root any
 	if err := yaml.Unmarshal([]byte(content), &root); err != nil {

@@ -38,7 +38,6 @@ func TestPipelineIDUnion(t *testing.T) {
 	}
 }
 
-// panicADO fails the test if the collector makes any HTTP call.
 type panicADO struct{ t *testing.T }
 
 func (p panicADO) Get(context.Context, string, string, string, url.Values, bool) (json.RawMessage, http.Header, error) {
@@ -71,7 +70,6 @@ func TestCollectPipelineYAML_SkipsClassic(t *testing.T) {
 	}
 }
 
-// getADO serves a single canned body for any Get.
 type getADO struct{ body json.RawMessage }
 
 func (g getADO) Get(context.Context, string, string, string, url.Values, bool) (json.RawMessage, http.Header, error) {

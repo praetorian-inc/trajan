@@ -25,9 +25,7 @@ type Scope struct {
 	Slug    string
 }
 
-// ParseScope accepts "<org>", "<org>/<project>", "<org>/<project>/<repo>", or a
-// dev.azure.com URL. An empty locator yields the zero Scope so the caller can
-// fall back to ORG_NAME.
+// An empty locator yields the zero Scope so the caller can fall back to ORG_NAME.
 func ParseScope(arg string) (Scope, error) {
 	s := strings.TrimSpace(arg)
 	s = strings.TrimPrefix(strings.TrimPrefix(s, "https://"), "http://")

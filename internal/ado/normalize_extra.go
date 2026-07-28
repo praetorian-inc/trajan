@@ -10,9 +10,8 @@ import (
 // inject steps into every pipeline run — the org-wide code-injection surface.
 const pipelineDecoratorContribution = "ms.azure-pipelines.pipeline-decorator"
 
-// normalizeExtensions emits an :Extension node per installed extension and, when
-// an extension contributes a pipeline decorator, a :PipelineDecorator node + an
-// INSTALLS edge (schema §; cat-07/03, cat-12/04).
+// A pipeline-decorator contribution additionally emits a :PipelineDecorator node
+// and an INSTALLS edge (cat-07/03, cat-12/04).
 func normalizeExtensions(prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) error {
 	// The installedextensions surface stores the raw {count,value} envelope.
 	data := entLoadData(prior, engine.CollectADOExtensions(org))
@@ -68,9 +67,7 @@ func normalizeExtensions(prior engine.PriorPhase, cp engine.CurrentPhase, org st
 	return nil
 }
 
-// normalizeSecureFiles emits a :SecureFile node per collected secure file with its
-// folded checks + pipeline permissions (schema §; cat-03/05). Empty in estates
-// with no secure files.
+// Folds each secure file's checks + pipeline permissions onto the node (cat-03/05).
 func normalizeSecureFiles(prior engine.PriorPhase, cp engine.CurrentPhase, org string, p projectMeta, timer *engine.PhaseTimer) error {
 	for _, raw := range entLoadList(prior, engine.CollectADOSecureFiles(p.Name)) {
 		f := entMap(raw)
@@ -92,8 +89,6 @@ func normalizeSecureFiles(prior engine.PriorPhase, cp engine.CurrentPhase, org s
 	return nil
 }
 
-// normalizeServiceHooks emits a :ServiceHookSubscription node per subscription
-// (schema §; cat-07/10). Empty in estates with no hooks.
 func normalizeServiceHooks(prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) error {
 	for _, raw := range entLoadList(prior, engine.CollectADOServiceHooks(org)) {
 		s := entMap(raw)

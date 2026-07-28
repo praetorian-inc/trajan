@@ -7,12 +7,8 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// Normalize-side helpers, ported from the GitHub stack (platform-agnostic): safe
-// navigation over the collected {_meta,data} envelopes, and reading the
-// normalized corpus back as generic maps for the correlate pass.
-
-// entLoadData returns the "data" object of a collected envelope, or nil for a
-// missing file / null data (so callers skip the surface).
+// Safe navigation over the collected {_meta,data} envelopes. A nil return means
+// a missing file or null data, which callers treat as "skip this surface".
 func entLoadData(prior engine.PriorPhase, rel string) map[string]any {
 	var env map[string]any
 	if err := engine.ReadJSON(prior.Abs(rel), &env); err != nil {
@@ -21,8 +17,7 @@ func entLoadData(prior engine.PriorPhase, rel string) map[string]any {
 	return entMap(env["data"])
 }
 
-// entLoadList returns the "data" of a list-surface envelope as []any (the ADO
-// list endpoints store the value array directly under data).
+// The ADO list endpoints store the value array directly under "data".
 func entLoadList(prior engine.PriorPhase, rel string) []any {
 	var env map[string]any
 	if err := engine.ReadJSON(prior.Abs(rel), &env); err != nil {
@@ -31,9 +26,8 @@ func entLoadList(prior engine.PriorPhase, rel string) []any {
 	return entList(env["data"])
 }
 
-// entDataOf returns the "data" object of a collected envelope (nil for a
-// non-object body such as a bare list surface — callers reading those use
-// entLoadList instead).
+// Returns nil for a non-object body such as a bare list surface; those callers
+// use entLoadList instead.
 func entDataOf(b []byte) map[string]any {
 	var env map[string]any
 	if err := json.Unmarshal(b, &env); err != nil {
@@ -109,8 +103,6 @@ func entInt64(v any) int64 {
 	}
 	return 0
 }
-
-// ---- correlate read-side (normalized corpus as maps) ----
 
 func loadRecords(prior engine.PriorPhase, dir string) ([]map[string]any, error) {
 	files, err := prior.IterJSON(dir)

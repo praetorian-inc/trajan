@@ -121,7 +121,6 @@ func macroKind(name string) string {
 	return "user"
 }
 
-// macroNames returns the distinct `$(var)` names in a string (order-stable).
 func macroNames(s string) []string {
 	return uniqueSubmatch(reMacro.FindAllStringSubmatch(s, -1))
 }
@@ -176,8 +175,6 @@ func uniqueSubmatch(matches [][]string) []string {
 	return out
 }
 
-// classifyExecSink returns the first exec-sink name matching the script body and
-// whether the body executes checked-out code.
 func classifyExecSink(script string) (string, bool) {
 	for _, e := range loadSinks().Exec {
 		if e.compiled.MatchString(script) {
@@ -222,7 +219,6 @@ func aiVendor(s string) string {
 	return "custom_llm"
 }
 
-// aiCapabilities infers the AI task/CLI's agentic reach from its script/inputs.
 func aiCapabilities(text string) []any {
 	l := strings.ToLower(text)
 	var caps []any
@@ -273,8 +269,8 @@ var bareBinaryRes = sync.OnceValue(func() map[string]*regexp.Regexp {
 	return m
 })
 
-// bareBinaryCalls returns the recognized binaries a script invokes by bare name
-// (not an absolute/relative path) — the cat-13 prependpath-shadow sink surface.
+// Bare-name calls only: an absolute or relative path is not PATH-resolved, so it
+// is not a prependpath-shadow sink (cat-13).
 func bareBinaryCalls(script string) []string {
 	var out []string
 	res := bareBinaryRes()
@@ -300,8 +296,7 @@ var credWritingTasks = map[string]string{
 
 var reCondVar = regexp.MustCompile(`variables\[\s*'([^']+)'\s*\]|variables\.([A-Za-z0-9_.]+)`)
 
-// conditionVars returns the variable names a step `condition:` reads — the
-// setvariable control-flip consumer surface (cat-13).
+// The setvariable control-flip consumer surface (cat-13).
 func conditionVars(cond string) []string {
 	var out []string
 	for _, m := range reCondVar.FindAllStringSubmatch(cond, -1) {
@@ -314,8 +309,7 @@ func conditionVars(cond string) []string {
 	return out
 }
 
-// untrustedEcho reports whether a script body prints attacker-controlled data to
-// stdout (the cat-13 logging-injection source), and what kind.
+// The cat-13 logging-injection source: attacker-controlled data reaching stdout.
 func untrustedEcho(body string) (string, bool) {
 	for _, name := range macroNames(body) {
 		if src, ok := untrustedPredefined[strings.ToLower(name)]; ok {

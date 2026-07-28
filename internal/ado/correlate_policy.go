@@ -207,8 +207,6 @@ func deriveCanBypass(cp engine.CurrentPhase, timer *engine.PhaseTimer, hasPolicy
 	return nil
 }
 
-// ---- repo-scoped grant index (Git-namespace ACLs per repository) ----------
-
 type repoGrantIndex struct {
 	byRepoAction map[string]map[string][]map[string]any
 }

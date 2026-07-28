@@ -83,8 +83,6 @@ func indexPipelines(pipelines []map[string]any) map[string]pipeInfo {
 	return out
 }
 
-// ---- READS (Job -> SecretVariable) ---------------------------------------
-
 func deriveReads(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, jobs []map[string]any) (map[string]bool, error) {
 	readsByJob := map[string]bool{}
 	secretsByGroup := map[int64][]map[string]any{}
@@ -162,8 +160,6 @@ func vgGateState(vg map[string]any) (strength, state, confidence string) {
 	}
 	return "none", "absent", "high"
 }
-
-// ---- QUEUE_TIME_INJECTION (source -> Job) --------------------------------
 
 // runtimeVarRedirectReachable reports whether a $[ variables['x'] ] expansion into a
 // compile-time keyword can actually be steered by a queuer. A variable declared settable
@@ -262,8 +258,6 @@ func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, 
 	return nil
 }
 
-// ---- LOGGING_COMMAND_INJECTION (source -> Job) ---------------------------
-
 func deriveLoggingInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j map[string]any, meta pipeInfo, grants grantIndex) error {
 	echoes := mList(j, "vso_echo_sources")
 	if len(echoes) == 0 {
@@ -348,8 +342,6 @@ func loggingConfidence(src string) string {
 	return "high"
 }
 
-// ---- AGENT_INJECTION (source -> Job) -------------------------------------
-
 func deriveAgentInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j map[string]any, meta pipeInfo, grants grantIndex) error {
 	ai := mList(j, "ai_task_sinks")
 	if len(ai) == 0 {
@@ -384,8 +376,6 @@ func deriveAgentInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j ma
 	}
 	return nil
 }
-
-// ---- PIPELINE_POISONING (source -> Job) ----------------------------------
 
 func derivePipelinePoisoning(cp engine.CurrentPhase, timer *engine.PhaseTimer, j map[string]any, meta pipeInfo, grants grantIndex, reads bool) error {
 	// Necessary conjuncts (schema §5): an execution trigger runs the repo's YAML,
@@ -425,7 +415,7 @@ func derivePipelinePoisoning(cp engine.CurrentPhase, timer *engine.PhaseTimer, j
 	return emit(cp, timer, engine.NormalizeADOEdges("pipeline-poisoning", jobKeyOf(j)), rec)
 }
 
-// poisonTrigger resolves the strongest execution trigger a Contributor can drive.
+// Strongest wins: the trigger list is ordered by how little the attacker must do.
 func poisonTrigger(meta pipeInfo) (trigger, via string) {
 	switch {
 	case meta.buildValidated:
@@ -438,8 +428,6 @@ func poisonTrigger(meta pipeInfo) (trigger, via string) {
 		return "manual_queue", "branch_queue"
 	}
 }
-
-// ---- source-principal resolution -----------------------------------------
 
 const (
 	gitNSKey      = "git"
@@ -517,8 +505,6 @@ func (g grantIndex) principalsWith(project, ns string, actions ...string) []any 
 	}
 	return out
 }
-
-// ---- small helpers -------------------------------------------------------
 
 func jobID(j map[string]any) string { return mStr(j, "_id") }
 

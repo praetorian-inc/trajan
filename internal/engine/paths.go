@@ -116,8 +116,6 @@ func CollectRefResolution(owner, actionRepo, ref string) string {
 		fmt.Sprintf("%s__%s@%s.json", owner, actionRepo, safeRef(ref)))
 }
 
-// ---- Azure DevOps collect paths ----
-//
 // adoKey sanitizes an ADO project/repo/host name for use as a path segment:
 // anything outside [A-Za-z0-9._-] becomes '-'. ADO names are already restricted,
 // so this only guards the rare space/slash.
@@ -249,7 +247,6 @@ func CollectADORepoACL(project, repo string) string {
 	return adoCollect("acl-repo", adoKey(project), adoKey(repo)+".json")
 }
 
-// ---- Azure DevOps normalize paths ----
 func adoNorm(parts ...string) string {
 	return path.Join(append([]string{dirNormalize}, parts...)...)
 }
