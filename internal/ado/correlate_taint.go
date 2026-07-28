@@ -531,12 +531,3 @@ func isEmptyList(v any) bool {
 	l, ok := v.([]any)
 	return ok && len(l) == 0
 }
-
-func hasCap(caps []any, want string) bool {
-	for _, c := range caps {
-		if s, _ := c.(string); s == want {
-			return true
-		}
-	}
-	return false
-}

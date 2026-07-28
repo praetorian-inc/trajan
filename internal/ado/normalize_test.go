@@ -35,7 +35,7 @@ func TestServiceConnectionDedup(t *testing.T) {
 	if err := normalizeServiceConnectionsShared(prior, cp, "org", projs, normTimer()); err != nil {
 		t.Fatal(err)
 	}
-	files, _ := filepath.Glob(filepath.Join(dir, "10-normalize/service-connections/*.json"))
+	files, _ := filepath.Glob(filepath.Join(dir, "10-normalize", "service-connections", "*.json"))
 	if len(files) != 1 {
 		t.Fatalf("want 1 deduped node, got %d: %v", len(files), files)
 	}
@@ -84,7 +84,7 @@ func TestVariableGroupDedup(t *testing.T) {
 	if err := normalizeVariableGroupsShared(prior, cp, "org", projs, normTimer()); err != nil {
 		t.Fatal(err)
 	}
-	files, _ := filepath.Glob(filepath.Join(dir, "10-normalize/variable-groups/*.json"))
+	files, _ := filepath.Glob(filepath.Join(dir, "10-normalize", "variable-groups", "*.json"))
 	if len(files) != 1 {
 		t.Fatalf("want 1 deduped VG node, got %d: %v", len(files), files)
 	}
@@ -103,7 +103,7 @@ func TestVariableGroupDedup(t *testing.T) {
 		t.Errorf("shared_into = %v, want [ConsumerB]", rec["shared_into"])
 	}
 	// the secret variable folds out to its own node + DEFINES edge
-	if _, err := filepath.Glob(filepath.Join(dir, "10-normalize/secret-variables/*.json")); err != nil {
+	if _, err := filepath.Glob(filepath.Join(dir, "10-normalize", "secret-variables", "*.json")); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -150,7 +150,7 @@ func TestTargetsRunsOnResolution(t *testing.T) {
 	if err := deriveJobResourceEdges(prior, cp, normTimer(), jobs); err != nil {
 		t.Fatal(err)
 	}
-	tf, _ := filepath.Glob(filepath.Join(dir, "10-normalize/edges/targets/*.json"))
+	tf, _ := filepath.Glob(filepath.Join(dir, "10-normalize", "edges", "targets", "*.json"))
 	if len(tf) != 1 {
 		t.Fatalf("want 1 targets edge, got %d", len(tf))
 	}

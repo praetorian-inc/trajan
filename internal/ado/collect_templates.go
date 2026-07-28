@@ -118,8 +118,8 @@ func fetchItem(ctx context.Context, cl ADO, project, repoID, filePath, version, 
 	return raw, strField(raw, "content"), 0, nil
 }
 
-func itemPath(project, repoID, path, version string) string {
-	return fmt.Sprintf("/%s/_apis/git/repositories/%s/items?path=%s&version=%s", project, repoID, normalizePath(path), version)
+func itemPath(project, repoID, filePath, version string) string {
+	return fmt.Sprintf("/%s/_apis/git/repositories/%s/items?path=%s&version=%s", project, repoID, normalizePath(filePath), version)
 }
 
 type templateRef struct {

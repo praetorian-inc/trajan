@@ -456,9 +456,9 @@ func collectSteps(m map[string]any) []any {
 		return s
 	}
 	var out []any
-	strat := entMap(m["strategy"])
+	strategy := entMap(m["strategy"])
 	for _, kind := range []string{"runOnce", "rolling", "canary"} {
-		phase := entMap(strat[kind])
+		phase := entMap(strategy[kind])
 		for _, hook := range []string{"preDeploy", "deploy", "routeTraffic", "postRouteTraffic"} {
 			if s, ok := entMap(phase[hook])["steps"].([]any); ok {
 				out = append(out, s...)

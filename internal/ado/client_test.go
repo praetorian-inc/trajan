@@ -125,7 +125,8 @@ func TestRetryOn429(t *testing.T) {
 		t.Fatalf("expected success after retry, got %v", err)
 	}
 	var m map[string]any
-	if json.Unmarshal(raw, &m); m["ok"] != true {
+	_ = json.Unmarshal(raw, &m)
+	if m["ok"] != true {
 		t.Fatalf("unexpected body: %s", raw)
 	}
 	if calls.Load() != 2 {

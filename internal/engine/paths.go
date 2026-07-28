@@ -306,6 +306,7 @@ func NormalizeADOPolicy(project, repo, policyType string) string {
 func NormalizeADOPrincipal(kind, descriptor string) string {
 	return adoNorm("principals", adoKey(kind), adoKey(descriptor)+".json")
 }
+
 // NormalizeADOEdges hashes the composite key into a fixed-length, collision-free
 // stem. Callers build keys by joining components with "__", but adoKey folds "_"
 // to "-", which would both flatten that delimiter and overflow the 255-byte path
