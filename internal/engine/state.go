@@ -77,10 +77,8 @@ func (s *State) RecordPhase(rec PhaseRecord) {
 	s.Phases = append(s.Phases, rec)
 }
 
-// PhaseDone announces a phase that finished without a fatal error. Soft
-// failures are surfaced here rather than left in _meta.json: a rule that never
-// fires because its input was unreadable makes the finding count look complete
-// when it is not.
+// Soft failures are announced, not just recorded: a rule that never fires
+// because its input was unreadable makes the finding count look complete.
 func PhaseDone(rec PhaseRecord, attrs ...any) {
 	name := phaseLabel(rec.Phase)
 	slog.Info(name+" complete", attrs...)
@@ -93,11 +91,11 @@ func PhaseDone(rec PhaseRecord, attrs ...any) {
 	}
 }
 
-// A numbered phase is named for the directory it writes ("20-scan"), which is
-// the on-disk contract; the ordinal is noise in a sentence.
+// A phase is named for the directory it writes ("20-scan"); the ordinal is
+// the on-disk contract, not something to say out loud.
 func phaseLabel(phase string) string {
 	num, name, ok := strings.Cut(phase, "-")
-	if !ok || strings.TrimLeft(num, "0123456789") != "" {
+	if !ok || num == "" || strings.TrimLeft(num, "0123456789") != "" {
 		return phase
 	}
 	return name

@@ -1,7 +1,6 @@
-// Package ui renders trajan's console output as either a humanized default or,
-// under --debug, stock slog text. Ordinary status lines are written with
-// log/slog and humanized by the handler in slog.go; this file holds the shapes
-// slog cannot express — list items, severity counts, and an error with a remedy.
+// Package ui renders console output as a humanized default or, under --debug,
+// stock slog text. Status lines are ordinary slog calls humanized by the handler
+// in slog.go; this file holds only what slog cannot express.
 package ui
 
 import (
@@ -20,8 +19,7 @@ const (
 	Debug
 )
 
-// ANSI indices 0-15 only, never hex: these resolve through the user's own
-// terminal theme rather than overriding it.
+// Indices 0-15 only, never hex: these resolve through the reader's own theme.
 const (
 	red     = 9
 	yellow  = 11
@@ -40,8 +38,7 @@ type Printer struct {
 
 func New(t Tier, color bool, w io.Writer) *Printer {
 	p := &Printer{tier: t, color: color && t == Human, w: w}
-	// Debug keeps the stock TextHandler so --debug stays parseable by anything
-	// that reads slog; Human gets the humanizing handler in slog.go.
+	// Debug keeps the stock TextHandler so its output stays machine-parseable.
 	if t == Debug {
 		p.log = slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	} else {
@@ -52,15 +49,13 @@ func New(t Tier, color bool, w io.Writer) *Printer {
 
 var std = New(Human, false, os.Stderr)
 
-// Init installs the process-wide printer and points slog at it, so an ordinary
-// slog.Info anywhere in the tree comes out in the selected tier.
+// Points slog at the printer, so an ordinary slog.Info anywhere in the tree
+// comes out in the selected tier.
 func Init(t Tier, color bool) {
 	std = New(t, color, os.Stderr)
 	slog.SetDefault(std.log)
 }
 
-// ColorEnabled reports whether stderr is a terminal and the user has not opted
-// out through NO_COLOR.
 func ColorEnabled() bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return false
@@ -98,16 +93,30 @@ func severityColor(s string) int {
 
 func (p *Printer) raw(s string) { fmt.Fprintln(p.w, s) }
 
-// Item is an indented member of the list its preceding line introduced.
+// Project names and error bodies arrive from the remote side; dropping the ESC
+// disarms any sequence they carry. --debug is safe already, TextHandler escapes.
+func clean(s string) string {
+	if strings.IndexFunc(s, isControl) < 0 {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if isControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+func isControl(r rune) bool { return r < 0x20 || r == 0x7f }
+
 func (p *Printer) Item(s string) {
 	if p.tier == Human {
-		p.raw("  " + s)
+		p.raw("  " + clean(s))
 		return
 	}
 	p.log.Info(s)
 }
 
-// Error prints the failure and, on the next line, what to do about it.
 func (p *Printer) Error(msg, remedy string) {
 	if p.tier != Human {
 		if remedy == "" {
@@ -117,14 +126,13 @@ func (p *Printer) Error(msg, remedy string) {
 		p.log.Error(msg, "remedy", remedy)
 		return
 	}
-	p.raw(p.c(red, "error:") + " " + msg)
+	p.raw(p.c(red, "error:") + " " + clean(msg))
 	if remedy != "" {
-		p.raw(p.c(dim, remedy))
+		p.raw(p.c(dim, clean(remedy)))
 	}
 }
 
-// Severities renders per-severity counts on one line, each word in its own
-// color. Zero counts are dropped: an absent severity is not news.
+// Zero counts are dropped: an absent severity is not news.
 func (p *Printer) Severities(counts map[string]int) {
 	order := []string{"critical", "high", "medium", "low", "info"}
 	if p.tier != Human {

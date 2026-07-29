@@ -256,8 +256,7 @@ func appendErr(timer *engine.PhaseTimer, msg string) {
 	errMu.Lock()
 	timer.Errors = append(timer.Errors, msg)
 	errMu.Unlock()
-	// Debug, not Warn: the phase reports these as one aggregate when it ends,
-	// and interleaving them with collection would bury it.
+	// Debug, not Warn: PhaseDone reports these as one aggregate at the end.
 	slog.Debug("collect surface degraded", "detail", msg)
 }
 

@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -13,10 +14,6 @@ func render(t *testing.T, tier Tier, color bool, fn func(*Printer)) string {
 	return b.String()
 }
 
-// The humanized line is the whole point of the default tier: a count reads as
-// "32 findings", not "findings=32", and an underscored key becomes the words it
-// stands for so the same attribute reads as prose here and as key=value under
-// --debug.
 func TestHumanAttrs(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -50,8 +47,6 @@ func TestLevelPrefixes(t *testing.T) {
 	}
 }
 
-// A zero count is not news: an absent severity should leave no trace rather than
-// printing "critical 0".
 func TestSeveritiesDropsZeros(t *testing.T) {
 	got := render(t, Human, false, func(p *Printer) {
 		p.Severities(map[string]int{"critical": 0, "high": 2, "low": 1})
@@ -65,8 +60,6 @@ func TestSeveritiesDropsZeros(t *testing.T) {
 	}
 }
 
-// The handler must not drop attrs attached with slog.With, or a logger built
-// once and reused loses its context.
 func TestWithAttrs(t *testing.T) {
 	var b bytes.Buffer
 	p := New(Human, false, &b)
@@ -76,7 +69,6 @@ func TestWithAttrs(t *testing.T) {
 	}
 }
 
-// Color must encode meaning without changing what the line says.
 func TestColorLeavesTextIntact(t *testing.T) {
 	plain := render(t, Human, false, func(p *Printer) { p.Severities(map[string]int{"critical": 1}) })
 	colored := render(t, Human, true, func(p *Printer) { p.Severities(map[string]int{"critical": 1}) })
@@ -100,4 +92,26 @@ func stripANSI(s string) string {
 		out = append(out, s[i])
 	}
 	return string(out)
+}
+
+// A remote-supplied value must not be able to forge or erase console output.
+func TestControlCharactersAreStripped(t *testing.T) {
+	evil := "proj\x1b[2K\rSAFE\x07"
+	got := render(t, Human, false, func(p *Printer) { p.log.Info("collect degraded", "detail", evil) })
+	if strings.ContainsAny(got, "\x1b\r\x07") {
+		t.Errorf("escape survived: %q", got)
+	}
+	// Dropping the ESC disarms the sequence; the "[2K" left behind is inert.
+	if got != "collect degraded: proj[2KSAFE\n" {
+		t.Errorf("got %q", got)
+	}
+
+	got = render(t, Human, false, func(p *Printer) { p.Item(evil) })
+	if strings.ContainsAny(got, "\x1b\r\x07") {
+		t.Errorf("escape survived in Item: %q", got)
+	}
+	got = render(t, Human, false, func(p *Printer) { p.Error("bad \x1b[31mproject", "fix \x1b[0mit") })
+	if strings.Count(got, "\x1b") != 0 {
+		t.Errorf("escape survived in Error: %q", got)
+	}
 }

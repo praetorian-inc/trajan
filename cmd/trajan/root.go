@@ -44,8 +44,6 @@ func Execute(ctx context.Context) {
 	if err == nil {
 		return
 	}
-	// An interrupt is a choice, not a failure: the phase already saved what it
-	// finished, so say what happened and use the shell's conventional code.
 	if errors.Is(err, context.Canceled) {
 		slog.Warn("interrupted")
 		os.Exit(130)
@@ -54,8 +52,6 @@ func Execute(ctx context.Context) {
 	os.Exit(1)
 }
 
-// remedyFor turns the engine's phase sentinels into the next command to run.
-// The sentinel text says what went wrong; this says what to do about it.
 func remedyFor(err error) string {
 	switch {
 	case errors.Is(err, engine.ErrNoRunDir):
@@ -71,16 +67,13 @@ func init() {
 	cobra.OnInitialize(initUI)
 	rootCmd.SilenceUsage = true
 	rootCmd.SilenceErrors = true
-	// Without this, cobra locates the subcommand by skipping args it thinks are
-	// flag values; an unknown flag before the command name swallows the command
-	// and the failure surfaces as `unknown command "scan"`. Traversing parses
-	// each level's flags on the way down, so the unknown flag is named instead.
+	// Cobra otherwise finds the subcommand by skipping args it takes for flag
+	// values, so an unknown flag ahead of it swallows the command name.
 	rootCmd.TraverseChildren = true
 	rootCmd.PersistentFlags().SortFlags = false
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "raw slog records instead of humanized output")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable color (also honors NO_COLOR)")
-	// --verbose predates --debug and is what the pkg/ platforms still read; it
-	// stays wired so existing invocations keep working, but --debug is the name.
+	// Superseded by --debug, but the pkg/ platforms still read it.
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	_ = rootCmd.PersistentFlags().MarkHidden("verbose")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "console", "output format (console, json, sarif, html)")
@@ -125,8 +118,6 @@ func initUI() {
 	tier := ui.Human
 	if debug || verbose {
 		tier = ui.Debug
-		// The pkg/ platforms gate their own detail on --verbose, so --debug has
-		// to set it for those two knobs to mean one thing.
 		_ = rootCmd.PersistentFlags().Set("verbose", "true")
 	}
 	ui.Init(tier, !noColor && ui.ColorEnabled())

@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -170,8 +171,6 @@ func TestPhaseTimer(t *testing.T) {
 	}
 }
 
-// A phase is named for the directory it writes, and only a numeric ordinal is a
-// prefix — a name that merely contains a hyphen must survive intact.
 func TestPhaseLabel(t *testing.T) {
 	for in, want := range map[string]string{
 		"00-collect":   "collect",
@@ -180,6 +179,7 @@ func TestPhaseLabel(t *testing.T) {
 		"push":         "push",
 		"whoami":       "whoami",
 		"pre-scan":     "pre-scan",
+		"-scan":        "-scan",
 		"":             "",
 	} {
 		if got := phaseLabel(in); got != want {
@@ -188,8 +188,8 @@ func TestPhaseLabel(t *testing.T) {
 	}
 }
 
-// A phase that skipped optional surfaces must say so. Silence here is the
-// dangerous case: the finding count reads as complete when rules never ran.
+// Silence is the dangerous case: the finding count reads as complete when
+// rules never ran.
 func TestPhaseDoneSurfacesSoftFailures(t *testing.T) {
 	got := captureStderr(t, func() {
 		ui.Init(ui.Human, false)
@@ -217,16 +217,23 @@ func TestPhaseDoneQuietWhenClean(t *testing.T) {
 	}
 }
 
+// ui.Init binds the printer and slog's default to os.Stderr as it is then, so
+// restoring the file alone leaves later tests logging into a closed pipe.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	orig := os.Stderr
+	orig, origLog := os.Stderr, slog.Default()
 	os.Stderr = w
+	defer func() {
+		os.Stderr = orig
+		ui.Init(ui.Human, false)
+		slog.SetDefault(origLog)
+	}()
+
 	fn()
-	os.Stderr = orig
 	w.Close()
 	b, err := io.ReadAll(r)
 	if err != nil {

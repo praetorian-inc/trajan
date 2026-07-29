@@ -180,9 +180,8 @@ func renderJSON(findings []finding.Finding) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// emit writes data into the run dir, which is where the rest of the run already
-// lives. Out=="-" forces stdout for piping; any other non-empty Out is a
-// destination directory.
+// Out=="-" forces stdout for piping; anything else is a destination directory,
+// defaulting to the run dir where the rest of the run already lives.
 func emit(runDir string, opts Options, filename string, data []byte) error {
 	if opts.Out == "-" {
 		_, err := os.Stdout.Write(data)
