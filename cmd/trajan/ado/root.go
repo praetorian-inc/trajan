@@ -122,7 +122,7 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
 	reportCmd.Flags().StringVar(&reportMinSev, "min-severity", "info", "drop findings below this severity")
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
-	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: stdout for json/jsonl, run dir for md/html)")
+	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: the run dir)")
 
 	// Entra ID bearer auth is only wired into these three; the phased commands are PAT-only.
 	for _, c := range []*cobra.Command{scanCmd, attackCmd, retrieveCmd} {

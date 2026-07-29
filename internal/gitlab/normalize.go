@@ -61,11 +61,16 @@ func Normalize(ctx context.Context, runDir string) error {
 		normErr = correlate(ctx, prior, cp, org, timer)
 	}
 
-	state.RecordPhase(timer.Stop(normErr))
+	rec := timer.Stop(normErr)
+	state.RecordPhase(rec)
 	if err := state.Save(runDir); err != nil {
 		return err
 	}
-	return normErr
+	if normErr != nil {
+		return normErr
+	}
+	engine.PhaseDone(rec)
+	return nil
 }
 
 // emit writes one normalized record and counts it. Normalize is sequential, so

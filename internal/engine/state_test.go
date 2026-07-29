@@ -2,8 +2,12 @@ package engine
 
 import (
 	"errors"
+	"io"
+	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 func TestCheckPhase(t *testing.T) {
@@ -164,4 +168,69 @@ func TestPhaseTimer(t *testing.T) {
 	if len(rec2.Errors) != 1 || rec2.Errors[0] != "boom" {
 		t.Errorf("Errors = %v, want [boom]", rec2.Errors)
 	}
+}
+
+// A phase is named for the directory it writes, and only a numeric ordinal is a
+// prefix — a name that merely contains a hyphen must survive intact.
+func TestPhaseLabel(t *testing.T) {
+	for in, want := range map[string]string{
+		"00-collect":   "collect",
+		"10-normalize": "normalize",
+		"20-scan":      "scan",
+		"push":         "push",
+		"whoami":       "whoami",
+		"pre-scan":     "pre-scan",
+		"":             "",
+	} {
+		if got := phaseLabel(in); got != want {
+			t.Errorf("phaseLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A phase that skipped optional surfaces must say so. Silence here is the
+// dangerous case: the finding count reads as complete when rules never ran.
+func TestPhaseDoneSurfacesSoftFailures(t *testing.T) {
+	got := captureStderr(t, func() {
+		ui.Init(ui.Human, false)
+		PhaseDone(PhaseRecord{
+			Phase:  "00-collect",
+			Errors: []string{"secure-files Platform-Deploy: 403", "general-settings: 403"},
+		})
+	})
+	want := "collect complete\n" +
+		"warning: collect degraded: 2 skipped\n" +
+		"  secure-files Platform-Deploy: 403\n" +
+		"  general-settings: 403\n"
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestPhaseDoneQuietWhenClean(t *testing.T) {
+	got := captureStderr(t, func() {
+		ui.Init(ui.Human, false)
+		PhaseDone(PhaseRecord{Phase: "20-scan", Errors: []string{}}, "findings", 32)
+	})
+	if got != "scan complete: 32 findings\n" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	fn()
+	os.Stderr = orig
+	w.Close()
+	b, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }

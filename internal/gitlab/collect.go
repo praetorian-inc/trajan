@@ -61,7 +61,11 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if err := state.Save(runDir); err != nil {
 		return runDir, err
 	}
-	return runDir, collectErr
+	if collectErr != nil {
+		return runDir, collectErr
+	}
+	engine.PhaseDone(rec)
+	return runDir, nil
 }
 
 type projectRef struct {

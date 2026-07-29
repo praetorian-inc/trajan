@@ -1,15 +1,16 @@
 package detect
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 // RuleFires includes rules that fired zero times.
@@ -33,14 +34,19 @@ func Scan(ctx context.Context, runDir string, p Provider, opts ScanOptions) erro
 	}
 
 	timer := engine.StartPhaseTimer(engine.PhaseScan, "scan")
-	scanErr := runScan(ctx, runDir, state.Org, p, opts, timer)
+	bySeverity, scanErr := runScan(ctx, runDir, state.Org, p, opts, timer)
 
 	rec := timer.Stop(scanErr)
 	state.RecordPhase(rec)
 	if err := state.Save(runDir); err != nil {
 		return err
 	}
-	return scanErr
+	if scanErr != nil {
+		return scanErr
+	}
+	engine.PhaseDone(rec, "findings", rec.OutputFiles)
+	ui.Severities(bySeverity)
+	return nil
 }
 
 // OrgOnlyRules filters on SubjectKind, not folder, so it holds even though
@@ -49,17 +55,17 @@ func OrgOnlyRules(rules []Rule) []Rule {
 	return slices.DeleteFunc(rules, func(r Rule) bool { return r.SubjectKind() != "org" })
 }
 
-func runScan(ctx context.Context, runDir, org string, p Provider, opts ScanOptions, timer *engine.PhaseTimer) error {
+func runScan(ctx context.Context, runDir, org string, p Provider, opts ScanOptions, timer *engine.PhaseTimer) (map[string]int, error) {
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
 
 	if err := os.RemoveAll(filepath.Join(runDir, "20-scan")); err != nil {
-		return fmt.Errorf("clear 20-scan: %w", err)
+		return nil, fmt.Errorf("clear 20-scan: %w", err)
 	}
 
 	rules, err := LoadRules(p.RuleSubtree)
 	if err != nil {
-		return fmt.Errorf("load rules: %w", err)
+		return nil, fmt.Errorf("load rules: %w", err)
 	}
 	if opts.OrgOnly {
 		rules = OrgOnlyRules(rules)
@@ -77,7 +83,7 @@ func runScan(ctx context.Context, runDir, org string, p Provider, opts ScanOptio
 		}
 		subs, err := loadSubjects(prior, p, kind)
 		if err != nil {
-			return fmt.Errorf("load %s subjects: %w", kind, err)
+			return nil, fmt.Errorf("load %s subjects: %w", kind, err)
 		}
 		subjectsByKind[kind] = subs
 	}
@@ -85,6 +91,7 @@ func runScan(ctx context.Context, runDir, org string, p Provider, opts ScanOptio
 	onError := func(e error) { timer.Errors = append(timer.Errors, e.Error()) }
 
 	ruleFires := make(map[string]int, len(rules))
+	bySeverity := map[string]int{}
 	total := 0
 	for i := range rules {
 		rule := &rules[i]
@@ -111,8 +118,9 @@ func runScan(ctx context.Context, runDir, org string, p Provider, opts ScanOptio
 		}
 		ruleFires[rule.ID] = fires
 		total += fires
+		bySeverity[cmp.Or(rule.Severity, "info")] += fires
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -121,12 +129,10 @@ func runScan(ctx context.Context, runDir, org string, p Provider, opts ScanOptio
 		TotalFindings: total,
 		RuleFires:     ruleFires,
 	}); err != nil {
-		return fmt.Errorf("write summary: %w", err)
+		return nil, fmt.Errorf("write summary: %w", err)
 	}
 	timer.OutputFiles = total
-
-	slog.Info("scan complete", "rules", len(rules), "findings", total, "errors", len(timer.Errors))
-	return nil
+	return bySeverity, nil
 }
 
 // A malformed record is a normalize contract violation and aborts the phase.

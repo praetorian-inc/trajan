@@ -1,11 +1,15 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"errors"
 	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/ui"
 
 	ado "github.com/praetorian-inc/trajan/cmd/trajan/ado"
 	bbcmd "github.com/praetorian-inc/trajan/cmd/trajan/bitbucket"
@@ -18,6 +22,8 @@ import (
 var (
 	// Global flags
 	verbose bool
+	debug   bool
+	noColor bool
 	output  string
 	token   string
 
@@ -33,20 +39,50 @@ var rootCmd = &cobra.Command{
 }
 
 // Execute runs the root command
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+func Execute(ctx context.Context) {
+	err := rootCmd.ExecuteContext(ctx)
+	if err == nil {
+		return
 	}
+	// An interrupt is a choice, not a failure: the phase already saved what it
+	// finished, so say what happened and use the shell's conventional code.
+	if errors.Is(err, context.Canceled) {
+		slog.Warn("interrupted")
+		os.Exit(130)
+	}
+	ui.Error(err.Error(), remedyFor(err))
+	os.Exit(1)
+}
+
+// remedyFor turns the engine's phase sentinels into the next command to run.
+// The sentinel text says what went wrong; this says what to do about it.
+func remedyFor(err error) string {
+	switch {
+	case errors.Is(err, engine.ErrNoRunDir):
+		return "run the collect phase first, or pass --path to an existing run directory"
+	case errors.Is(err, engine.ErrPhaseBackStep):
+		return "run the missing phase first, or start over with collect"
+	}
+	return ""
 }
 
 func init() {
 	cobra.EnableCommandSorting = false
-	cobra.OnInitialize(initLogging)
+	cobra.OnInitialize(initUI)
 	rootCmd.SilenceUsage = true
 	rootCmd.SilenceErrors = true
+	// Without this, cobra locates the subcommand by skipping args it thinks are
+	// flag values; an unknown flag before the command name swallows the command
+	// and the failure surfaces as `unknown command "scan"`. Traversing parses
+	// each level's flags on the way down, so the unknown flag is named instead.
+	rootCmd.TraverseChildren = true
 	rootCmd.PersistentFlags().SortFlags = false
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "raw slog records instead of humanized output")
+	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable color (also honors NO_COLOR)")
+	// --verbose predates --debug and is what the pkg/ platforms still read; it
+	// stays wired so existing invocations keep working, but --debug is the name.
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	_ = rootCmd.PersistentFlags().MarkHidden("verbose")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "console", "output format (console, json, sarif, html)")
 	rootCmd.PersistentFlags().StringVar(&token, "token", "", "API token (or set GH_TOKEN/GITHUB_TOKEN env var)")
 	rootCmd.PersistentFlags().StringVar(&httpProxy, "proxy", "", "HTTP proxy URL (e.g., http://proxy:8080)")
@@ -85,11 +121,13 @@ func init() {
 	rootCmd.SetCompletionCommandGroupID("utilities")
 }
 
-func initLogging() {
-	level := slog.LevelInfo
-	if verbose {
-		level = slog.LevelDebug
+func initUI() {
+	tier := ui.Human
+	if debug || verbose {
+		tier = ui.Debug
+		// The pkg/ platforms gate their own detail on --verbose, so --debug has
+		// to set it for those two knobs to mean one thing.
+		_ = rootCmd.PersistentFlags().Set("verbose", "true")
 	}
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
-	slog.SetDefault(slog.New(handler))
+	ui.Init(tier, !noColor && ui.ColorEnabled())
 }
