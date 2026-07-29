@@ -1,0 +1,25 @@
+id: cat-06/pipeline-must-succeed-skipped-bypass
+scenario_id: cat-06/13
+title: "\"Pipelines must succeed\" bypassed by a skipped/empty pipeline (skipped counts as success)"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  "Pipelines must succeed" is relied on as the merge gate (`only_merge_if_pipeline_succeeds == true`)
+  while "Skipped pipelines are considered successful" is also on
+  (`allow_merge_on_skipped_pipeline == true`), and the required security/test jobs are gated behind
+  author-controllable `rules:`/`workflow:` so an MR can yield no jobs. An empty/skipped pipeline
+  satisfies the gate with zero CI having run, and unvetted code merges to the protected branch.
+
+where:
+  all_of:
+    - only_merge_if_pipeline_succeeds == true
+    - allow_merge_on_skipped_pipeline == true
+    - required_jobs_evadable == true
+
+evidence:
+  - "\"Pipelines must succeed\" ({{ only_merge_if_pipeline_succeeds }}) is satisfied by a skipped pipeline ({{ allow_merge_on_skipped_pipeline }}) while required jobs are author-evadable ({{ required_jobs_evadable }}), so a no-op pipeline merges unvetted code."
+
+remediation_hint: >
+  Disable "Skipped pipelines are considered successful" (`allow_merge_on_skipped_pipeline = false`)
+  so a skipped/empty pipeline does not satisfy the must-succeed gate.

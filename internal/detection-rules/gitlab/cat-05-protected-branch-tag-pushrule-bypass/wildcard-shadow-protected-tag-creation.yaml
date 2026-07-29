@@ -1,0 +1,25 @@
+id: cat-05/wildcard-shadow-protected-tag-creation
+scenario_id: cat-05/12
+title: "Overlapping wildcard protected-tag rule grants a Developer create access a stricter rule denied (most-permissive wins)"
+subject: project
+severity: high
+confidence: high
+description: >
+  Two or more protected-tag rules match a release tag pattern used by tag jobs, and most-permissive
+  resolution means the effective (unioned) `create_access_levels` is broader than the narrowest
+  matching rule — a Developer or broad group can create tags the operator's strict rule reserved for
+  Maintainers. The `.gitlab-ci.yml` has `$CI_COMMIT_TAG` / `only: tags` jobs on the shadowed pattern
+  consuming a `protected: true` variable. The Developer creates a matching tag, runs the release
+  pipeline on a protected ref, and reads the tag-scoped protected variable.
+
+where:
+  all_of:
+    - create_access_shadowed_by_permissive_tag_rule == true
+    - protected_var_scoped_to_tag_pipeline == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} has overlapping protected-tag rules whose most-permissive create access is broader than the narrowest matching rule, joined with tag jobs consuming a protected CI/CD variable."
+
+remediation_hint: >
+  Narrow or remove the overlapping wildcard protected-tag rule so every matching rule's create
+  access agrees with the intended lock, since most-permissive resolution governs tag creation.

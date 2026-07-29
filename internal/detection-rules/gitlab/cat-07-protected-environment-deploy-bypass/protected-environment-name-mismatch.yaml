@@ -1,0 +1,25 @@
+id: cat-07/protected-environment-name-mismatch
+scenario_id: cat-07/04
+title: "Protected Environments entry does not match the name the deploy job declares"
+subject: environment
+severity: high
+confidence: high
+description: >
+  Project-level Protected Environments match environment names exactly — no wildcard or prefix
+  matching. A deploy job declares a name that is a near-neighbor of a protected name (case-only
+  difference, a `/<suffix>`, or a common alias such as `prod`↔`production`) but has no exact-match
+  protected entry, so it runs entirely outside the protection. A Developer who cannot deploy to
+  the protected name simply declares the near-miss name and reaches the same real infrastructure.
+
+where:
+  all_of:
+    - protected == false
+    - near_miss_protected_name == true
+    - carries_deploy_context == true
+
+evidence:
+  - "Environment `{{ name }}` is a near-neighbor of a protected environment name yet has no exact-match Protected Environments entry, leaving its deploy target unprotected."
+
+remediation_hint: >
+  Add the exact declared environment name to Protected Environments (or normalize deploy jobs to
+  the protected name) so the near-miss variant cannot escape deploy-access restriction.

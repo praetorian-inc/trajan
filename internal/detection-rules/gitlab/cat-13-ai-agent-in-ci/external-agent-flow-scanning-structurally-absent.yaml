@@ -1,0 +1,29 @@
+id: cat-13/external-agent-flow-scanning-structurally-absent
+scenario_id: cat-13/06
+title: "Duo CI flow wired to an external agent (third-party model provider) whose output GitLab does not scan, with secrets and write actions in scope"
+subject: job
+severity: critical
+confidence: low
+description: >
+  A Duo flow is wired through `.gitlab/duo/flows/*.yaml` to an external agent (third-party model
+  provider) whose endpoint is outside the org trust boundary. GitLab documents that prompt scanning
+  is not available for external agents, so the `INTERRUPT` guardrail is structurally absent over
+  that channel regardless of its level. The job carries an unprotected CI/CD variable and/or a
+  broad job token and the agent has write-capable autonomous actions, making every response an
+  unfiltered injection channel controlled by a non-member.
+
+where:
+  all_of:
+    - is_duo_flow == true
+    - duo_external_agent_untrusted_host == true
+    - duo_group_features_enabled == true
+    - runner_tags ∋ {gitlab-duo}
+    - duo_flow_secrets_in_scope == true
+    - duo_flow_autonomous_write == true
+
+evidence:
+  - "Duo flow job `{{ _provenance.config_file }}` is wired to an out-of-trust external agent (unscanned by GitLab), runs on a `gitlab-duo` runner with secrets in scope, and has write-capable autonomous actions."
+
+remediation_hint: >
+  Do not attach untrusted external agents to secret-bearing autonomous flows; isolate returned
+  output as untrusted and remove secrets and write actions from the flow's CI job.

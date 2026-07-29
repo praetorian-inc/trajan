@@ -1,0 +1,33 @@
+id: cat-12/pr-text-prompt-injection
+scenario_id: cat-12/01
+title: "Untrusted input reaches an AI agent step holding a privileged capability with no review gate"
+subject: agent_injection
+severity: high
+confidence: high
+description: >
+  An AI-agent pipeline step ingests attacker-controlled text — a PR
+  title/description, work-item field, commit message, or changed-file
+  content — into the agent prompt, and the agent is granted a dangerous
+  capability: tool/shell execution, network egress, an ID token, or the
+  ability to auto-commit / auto-open PRs. No approval gate stands between
+  the untrusted input and that capability, so a Contributor's text becomes
+  the agent's instructions and runs before any human reviews it. This is
+  the base injection primitive underlying the AI-task category.
+
+where:
+  all_of:
+    - technique == 'prompt_injection'
+    - gate_state == 'absent'
+    - capabilities ∋ {tool_exec, egress, id_token, auto_commit, auto_pr}
+
+evidence:
+  - "Project {{ project }} pipeline {{ pipeline_id }} job {{ job }}: {{ vendor }} agent ingests {{ source_kind }}"
+  - "Injection wiring: via={{ via }}, capabilities={{ capabilities }}, gate_state={{ gate_state }}"
+  - "Identity scope: {{ identity_scope }}; confidence: {{ confidence }}"
+
+remediation_hint: >
+  Never interpolate raw PR/work-item/file text into agent prompts. Strip
+  instruction-like content, and put a human approval gate (an environment
+  check) between the untrusted input and any privileged agent action.
+  Remove write/exec/egress tools from agents that process untrusted text,
+  and scope the job authorization to the current project.

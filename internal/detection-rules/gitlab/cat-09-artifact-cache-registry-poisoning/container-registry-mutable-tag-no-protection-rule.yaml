@@ -1,0 +1,28 @@
+id: cat-09/container-registry-mutable-tag-no-protection-rule
+scenario_id: cat-09/09
+title: "Container-registry mutable-tag poisoning with no protected-tag rule"
+subject: job
+severity: high
+confidence: medium
+description: >
+  A protected-ref deploy job pulls a registry image by a mutable tag (`latest`, `staging`, an
+  environment name) rather than an immutable `@sha256:` digest, while no protected container tag
+  rule covers that tag pattern. Because Developer+ can push/overwrite tags by default, a low-trust
+  actor overwrites the image behind the tag between build and deploy and the trusted pipeline runs
+  it with production credentials. Confidence is medium because whether the tag was actually
+  overwritten / current registry contents is deferred runtime state.
+
+where:
+  all_of:
+    - image_from_registry_mutable_tag == true
+    - image_pinned_digest == false
+    - registry_tag_protection_covers_consumed_tag == false
+    - registry_push_reachable_by_developer == true
+    - protected_ref_gate == "strong"
+
+evidence:
+  - "Protected-ref deploy job pulls image {{ image_ref }} by a mutable tag with no covering protected-tag rule; Developer+ can overwrite the tag before deploy."
+
+remediation_hint: >
+  Pin the deployed image by `@sha256:` digest, or create a protected container tag rule covering
+  the consumed tag with a minimum push/delete role of Maintainer+.

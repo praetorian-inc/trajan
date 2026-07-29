@@ -1,0 +1,37 @@
+id: cat-11/feed-broad-write-permissions
+scenario_id: cat-11/05
+title: "Artifacts feed grants package-write/save (Collaborator/Contributor) to non-admin identities"
+subject: feed
+severity: medium
+confidence: medium
+description: >
+  An Azure Artifacts feed grants a write-capable role — Collaborator
+  (Feed and Upstream Reader: can save from upstream, the default Build
+  Service role) or Contributor (can publish and promote packages) — to
+  identities below the feed-administrator tier. Any holder of such a role
+  can introduce a package version into the feed (publish, or save a chosen
+  public version from an upstream) that every float-version consumer then
+  trusts and executes. Because saved/published versions are immutable, one
+  malicious publish or save permanently poisons the feed. The general
+  defect is a package-write capability on a shared feed held by more than
+  the trusted-publisher set. Feed administrators are expected; a
+  Collaborator/Contributor grant widens who can poison the feed.
+
+where:
+  any_of:
+    - "permissions.role ∋ 'collaborator'"
+    - "permissions.role ∋ 'contributor'"
+
+evidence:
+  - "Feed {{ name }} (scope {{ scope }}) grants write-capable roles: {{ permissions.role }}"
+  - "Granted identities: {{ permissions.identityDescriptor }}"
+  - "Collaborator can save-from-upstream; Contributor can publish and promote — both introduce immutable, trusted package versions"
+
+remediation_hint: >
+  Restrict Collaborator and Contributor feed roles to the minimum set of
+  trusted build/publisher identities. Prefer dedicated locked-down feeds
+  for production-consumed packages. Review the default Build Service
+  Collaborator grant — it lets any pipeline the attacker can influence
+  save a malicious public version from an upstream. Consumers should pin
+  versions and verify hashes so a newly published version cannot silently
+  substitute a trusted one.

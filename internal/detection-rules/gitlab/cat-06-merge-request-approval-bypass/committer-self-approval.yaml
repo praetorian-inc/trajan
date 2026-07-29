@@ -1,0 +1,25 @@
+id: cat-06/committer-self-approval
+scenario_id: cat-06/02
+title: "MR committer approves an MR they added commits to (\"Prevent approvals by users who add commits\" off)"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  "Prevent approvals by users who add commits" is at its permissive default
+  (`committer_approval_disabled == false`), a required approval rule gates a protected target branch,
+  and a committer sits inside a broad eligible-approver set — so a committing identity (a second
+  account, a bot, or a colluding co-Developer) clears the single-approval gate with no party
+  independent of the change. Absent commit-identity push rules make the control further evadable.
+
+where:
+  all_of:
+    - committer_approval_disabled == false
+    - approvals_required >= 1
+    - approver_set_broad == true
+
+evidence:
+  - "Committer approval is permitted ({{ committer_approval_disabled }}) on a broad-approver rule requiring {{ approvals_required }} approval(s) for a protected branch; push rules: {{ push_rules }}."
+
+remediation_hint: >
+  Enable "Prevent approvals by users who add commits" and enforce `commit_committer_check` plus
+  `reject_unsigned_commits` so committers cannot approve under unverified identities.

@@ -1,0 +1,26 @@
+id: cat-05/instance-lowered-default-branch-protection
+scenario_id: cat-05/05
+title: "Instance default-branch protection lowered to Partially protected makes inherited default branches Developer-writable"
+subject: project
+severity: high
+confidence: high
+description: >
+  A self-managed instance's default-branch protection was lowered to Partially protected, so a
+  project's inherited default branch has a protected-branch rule whose push access includes
+  Developer (access level 30) with `allow_force_push: false` — still a protected ref — and no
+  stricter project override. A `protected: true` CI/CD variable is scoped to the default branch. A
+  Developer pushes unreviewed commits directly to it and its pipeline reads the protected variable;
+  the root cause is a single instance-governance setting projects inherit at creation.
+
+where:
+  all_of:
+    - inherited_default_branch_developer_pushable == true
+    - inherited_protection_source == "instance"
+    - protected_var_scoped_to_writable_ref == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} inherits an instance Partially-protected default branch (Developer push, still protected) with no stricter override, and a protected CI/CD variable is scoped to it."
+
+remediation_hint: >
+  Restore the instance default-branch protection to Fully protected, or add a stricter
+  project-level protected-branch rule so Developers cannot push to the default branch.

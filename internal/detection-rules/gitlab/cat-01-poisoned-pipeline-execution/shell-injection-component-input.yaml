@@ -1,0 +1,26 @@
+id: cat-01/shell-injection-component-input
+scenario_id: cat-01/07
+title: "Shell injection from an unconstrained CI component/template input"
+subject: job
+severity: high
+confidence: high
+description: >
+  A job interpolates an unconstrained `$[[ inputs.<name> ]]` — the matching `spec:inputs`
+  declares no `regex`, no `options`, and no constraining type — into its script, and the input
+  is settable by a lower-trust caller, with secrets or a self-managed runner in scope.
+
+where:
+  all_of:
+    - script_uses_untrusted_input == true
+    - attacker_input_fields ∋ {component_input}
+    - any_of:
+        - reads_cicd_variable == true
+        - mints_id_token == true
+        - targets_self_managed_runner == true
+
+evidence:
+  - "Component/template job interpolates an unconstrained input ($[[ inputs.* ]]) into a shell with secrets or a self-managed runner in scope."
+
+remediation_hint: >
+  Constrain component inputs with `spec:inputs` `regex` / `options` / a typed value, and never
+  interpolate a raw input into a shell.

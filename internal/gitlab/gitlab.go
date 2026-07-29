@@ -6,21 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-
-	"github.com/praetorian-inc/trajan/internal/engine"
 )
-
-type ScanOptions struct {
-	GroupOnly bool
-}
-
-func Normalize(ctx context.Context, runDir string) error {
-	return engine.ErrNotImplemented
-}
-
-func Scan(ctx context.Context, runDir string, opts ScanOptions) error {
-	return engine.ErrNotImplemented
-}
 
 // WhoAmI resolves the token/endpoint, then prints the authenticated identity,
 // detected token type, scopes, admin flag, accessible groups, and a rate-limit

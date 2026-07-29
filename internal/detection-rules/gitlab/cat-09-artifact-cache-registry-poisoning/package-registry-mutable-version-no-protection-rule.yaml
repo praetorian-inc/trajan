@@ -1,0 +1,29 @@
+id: cat-09/package-registry-mutable-version-no-protection-rule
+scenario_id: cat-09/10
+title: "Package-registry mutable-version poisoning with no package protection rule"
+subject: job
+severity: high
+confidence: medium
+description: >
+  A protected-ref job installs a package from the GitLab package registry at a mutable range (a
+  floating/`latest`/`*`/caret/tilde version, unpinned) with no exact-version + checksum
+  verification, while no package protection rule limits that name to Maintainer+. Because Developer+
+  can publish/overwrite versions by default, a low-trust actor publishes a poisoned version whose
+  install-time hooks run in the trusted context. Confidence is medium because whether the registry
+  holds a poisoned version / an install hook fires is deferred runtime state.
+
+where:
+  all_of:
+    - installs_gitlab_registry_package == true
+    - package_version_mutable_range == true
+    - package_version_checksum_verified == false
+    - package_protection_covers_consumed_name == false
+    - package_publish_reachable_by_developer == true
+    - protected_ref_gate == "strong"
+
+evidence:
+  - "Protected-ref job installs a GitLab package-registry package at a mutable range with no pinned version+checksum and no covering package protection rule; Developer+ can overwrite the name."
+
+remediation_hint: >
+  Pin an exact package version and verify its checksum, or create a package protection rule
+  limiting the consumed name/pattern to a minimum push role of Maintainer+.

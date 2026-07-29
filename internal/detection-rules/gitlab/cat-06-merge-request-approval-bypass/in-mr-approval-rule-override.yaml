@@ -1,0 +1,24 @@
+id: cat-06/in-mr-approval-rule-override
+scenario_id: cat-06/06
+title: "MR author edits the approval rule from inside their own MR (rule overriding not prevented)"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  "Prevent editing approval rules in merge requests" is at its permissive default
+  (`author_controls_approver_count == true`) while a required project approval rule is the effective
+  gate for a protected target branch. The author lowers the required count or swaps the approvers on
+  their own MR, so the review gate they are subject to no longer forces an independent party.
+
+where:
+  all_of:
+    - author_controls_approver_count == true
+    - approvals_required >= 1
+
+evidence:
+  - "Authors may edit approval rules in their own MR ({{ author_controls_approver_count }}) on a gate requiring {{ approvals_required }} approval(s) for a protected branch, so the author rewrites the requirement they are subject to."
+
+remediation_hint: >
+  Enable "Prevent editing approval rules in merge requests"
+  (`disable_overriding_approvers_per_merge_request = true`), or enforce the rule via an Ultimate
+  approval policy that locks it.

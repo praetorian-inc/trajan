@@ -1,0 +1,26 @@
+id: cat-08/group-runner-inherited-low-trust-subgroup
+scenario_id: cat-08/03
+title: "Group runner recursively inherited into a low-trust subgroup project"
+subject: runner
+severity: high
+confidence: low
+description: >
+  A self-managed group runner is inherited recursively by every descendant project, so a low-trust
+  subgroup project silently gains entitlement alongside the group's higher-trust projects. A Developer
+  in the low-trust subgroup project lands a feature-branch job on the group-runner host that also runs
+  trusted jobs. Host isolation / ephemerality is the deferred half, so this is confidence low.
+
+where:
+  all_of:
+    - runner_type == "group_type"
+    - self_managed == true
+    - ref_protected != true
+    - run_untagged == true
+    - spans_trust_boundary == true
+
+evidence:
+  - "Self-managed group runner {{ runner_type }} (ref_protected={{ ref_protected }}, run_untagged={{ run_untagged }}) is inherited by both a low-trust subgroup project and higher-trust descendant projects ({{ projects }})."
+
+remediation_hint: >
+  Restrict the group runner to protected refs, register dedicated runners for trusted projects, and
+  avoid registering broadly-inherited group runners for a handful of trusted deploy projects.

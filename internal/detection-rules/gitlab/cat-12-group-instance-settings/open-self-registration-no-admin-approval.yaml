@@ -1,0 +1,26 @@
+id: cat-12/open-self-registration-no-admin-approval
+scenario_id: cat-12/16
+title: "Open self-registration with no admin approval admits untrusted users onto a self-managed instance"
+subject: instance
+severity: high
+confidence: medium
+description: >
+  A self-managed instance leaves `signup_enabled` on and `require_admin_approval_after_user_signup`
+  off while hosting internal/private organisational content, so any anonymous party who reaches the
+  sign-up form mints an active account with no invitation or review. That account reads every
+  internal-visibility project and can self-provision projects onto shared runners. The exploit value
+  is realised only in composition with those findings, hence medium confidence. Not applicable to
+  GitLab.com.
+
+where:
+  all_of:
+    - signup_enabled == true
+    - require_admin_approval_after_signup == false
+    - closed_audience_instance == true
+
+evidence:
+  - "Self-managed instance has open sign-up (signup_enabled {{ signup_enabled }}) with no admin approval on a closed-audience instance, admitting untrusted accounts with no review."
+
+remediation_hint: >
+  Disable open sign-up or enable "Require admin approval for new sign-ups" on a private-audience
+  instance, and restrict sign-up to organisation email domains.

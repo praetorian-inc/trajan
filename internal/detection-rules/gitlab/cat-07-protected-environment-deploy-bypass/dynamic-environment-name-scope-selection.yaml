@@ -1,0 +1,27 @@
+id: cat-07/dynamic-environment-name-scope-selection
+scenario_id: cat-07/06
+title: "Runtime-chosen environment name lets a Developer select which scope injects"
+subject: job
+severity: high
+confidence: high
+description: >
+  A deploy/build job builds its `environment:name:` from a variable interpolation
+  (`$TARGET_ENV`, `review/$CI_COMMIT_REF_SLUG`, …) whose input a Developer controls. Because
+  environment scope decides which scoped variable is injected for a given name, and the name is
+  attacker-influenced, the Developer selects which scoped credential they receive by choosing the
+  name at run time. No exact-match Protected Environments entry can cover a run-time-computed name,
+  so exact-match protection cannot gate it either.
+
+where:
+  all_of:
+    - deploys_environment == true
+    - environment_name_interpolated == true
+    - env_scoped_secret_reachable == true
+    - runs_on_untrusted_ref == true
+
+evidence:
+  - "Job binds a run-time-interpolated environment name `{{ environment_name }}` and can reach an environment-scoped credential from an attacker-nameable ref, letting a Developer select which scoped secret is injected."
+
+remediation_hint: >
+  Fix the environment name to a static, protected value (or restrict the interpolation input to a
+  protected variable), and mark scoped credentials `protected`.

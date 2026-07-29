@@ -1,0 +1,24 @@
+id: cat-05/no-one-push-defeated-by-branch-creation
+scenario_id: cat-05/09
+title: "\"No one can push\" defeated by branch creation via an overlapping merge-access wildcard rule"
+subject: project
+severity: high
+confidence: high
+description: >
+  A protected pattern has push access = No one (empty `push_access_levels`), but a matching rule
+  grants merge access to the Developer role (access level 30) — or a group/user entry — and GitLab
+  lets a user allowed to merge create a matching branch. A `protected: true` CI/CD variable is
+  scoped to the pattern. The Developer creates a fresh branch matching the "No-one-push" pattern; it
+  is protected from creation, so its first pipeline runs on a protected ref and reads the variable.
+
+where:
+  all_of:
+    - no_one_push_creatable_via_merge == true
+    - protected_var_scoped_to_writable_ref == true
+
+evidence:
+  - "Project {{ _provenance.project_path }} has a push=No-one protected pattern with an overlapping merge-access rule granting Developer, and a protected CI/CD variable is scoped to that pattern."
+
+remediation_hint: >
+  Restrict the overlapping rule's merge access to Maintainers so lower-trust roles cannot create a
+  branch matching a push=No-one pattern.

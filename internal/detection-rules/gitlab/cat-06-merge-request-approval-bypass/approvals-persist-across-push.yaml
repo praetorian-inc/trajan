@@ -1,0 +1,23 @@
+id: cat-06/approvals-persist-across-push
+scenario_id: cat-06/04
+title: "Approvals persist across post-approval commits (\"Keep approvals\" — reset-on-push disabled)"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  Reset-on-push is set to "Keep approvals" (`reset_approvals_on_push == false`, an operator change
+  from the secure default) while a required approval rule gates a protected target branch. A benign
+  diff is approved, then unreviewed commits are appended to the still-open MR and ride the persisting
+  approvals into the trusted branch — merging code no reviewer saw behind a green "Approved" badge.
+
+where:
+  all_of:
+    - reset_approvals_on_push == false
+    - approvals_required >= 1
+
+evidence:
+  - "Approvals are kept across post-approval commits ({{ reset_approvals_on_push }}) on a gate requiring {{ approvals_required }} approval(s) for a protected branch, so appended commits merge unreviewed."
+
+remediation_hint: >
+  Set "When commits are added" to remove all approvals on push (`reset_approvals_on_push = true`) so
+  every approval binds to the exact reviewed diff.

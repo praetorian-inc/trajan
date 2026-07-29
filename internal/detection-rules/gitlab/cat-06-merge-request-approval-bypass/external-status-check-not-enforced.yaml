@@ -1,0 +1,24 @@
+id: cat-06/external-status-check-not-enforced
+scenario_id: cat-06/14
+title: "External status check configured but not enforced (\"Status checks must succeed\" off)"
+subject: merge_request
+severity: high
+confidence: high
+description: >
+  One or more external status checks are configured (evidence the org relies on them as a merge gate)
+  while "Status checks must succeed" is off (`only_merge_if_status_checks_pass == false`). A
+  `pending` or `failed` check is therefore advisory and never blocks — so a Developer merges past a
+  non-`passed` external gate onto the protected, CI-trusted branch.
+
+where:
+  all_of:
+    - external_status_checks != []
+    - only_merge_if_status_checks_pass == false
+
+evidence:
+  - "{{ external_status_checks }} external status check(s) are configured but enforcement is off ({{ only_merge_if_status_checks_pass }}), so a pending/failed check does not block a merge to the protected branch."
+
+remediation_hint: >
+  Enable "Status checks must succeed"
+  (`only_allow_merge_if_all_status_checks_passed = true`) so configured checks block until they
+  report `passed`.

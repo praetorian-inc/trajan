@@ -1,0 +1,28 @@
+id: cat-11/over-scoped-project-access-token
+scenario_id: cat-11/01
+title: "Over-scoped project access token reachable from a Developer-runnable pipeline"
+subject: credential
+severity: critical
+confidence: medium
+description: >
+  A project access token is minted with the full `api` scope (or `write_repository` /
+  `write_registry`) and a Maintainer/Owner role (`access_level >= 40`), far beyond a narrow
+  automation need, and its value sits in an unprotected CI/CD variable a Developer-pushable
+  pipeline can read. A Developer captures a standing Maintainer/Owner-equivalent bot credential
+  and gains full read/write API control the Developer role was designed to withhold. The
+  variable value confirming reachability is never returned by the API, so this is medium.
+where:
+  all_of:
+    - kind == "project_access_token"
+    - revoked != true
+    - access_level >= 40
+    - in_unprotected_variable == true
+    - any_of:
+        - scopes ∋ {api}
+        - scopes ∋ {write_repository}
+        - scopes ∋ {write_registry}
+evidence:
+  - "Project access token with scopes {{ scopes }} and role {{ access_level }} co-exists with an unprotected CI/CD variable reachable by a Developer pipeline."
+remediation_hint: >
+  Re-mint the automation token with the narrowest scope and role it actually needs
+  (e.g. `read_repository`), and store it only in a `protected` variable used from protected refs.

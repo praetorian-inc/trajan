@@ -1,0 +1,30 @@
+id: cat-03/group-protected-var-developer-pushable-branch
+scenario_id: cat-03/03
+title: "Group-inherited protected variable reached via a Developer-pushable protected branch in a descendant project"
+subject: chain
+severity: high
+confidence: high
+description: >
+  A group (or ancestor-subgroup) CI/CD variable marked `protected == true` inherits into a
+  descendant project whose protected-branch rule lists the Developer level (30) under *Allowed to
+  push and merge*. A Developer pushes an attacker-authored `.gitlab-ci.yml` directly onto that
+  protected ref — no review — and GitLab injects the group secret, crossing the group→project
+  boundary. The finding is the cross-scope pairing; the protected variable alone is hygiene and
+  the loose branch rule alone is cat-05's lane.
+
+chain_of:
+  join: protected-var-reachability
+  for_each: reachable_vars
+  where:
+    all_of:
+      - var.scope_level == "group"
+      - var.protected == true
+      - branch.push_access_levels ∋ {30}
+      - member.access_level == 30
+
+evidence:
+  - "Group protected variable `{{ var.key }}` inherits into descendant `{{ branch._provenance.project_path }}` whose protected branch `{{ branch.pattern }}` allows Developer push (members max role {{ member.access_level }})."
+
+remediation_hint: >
+  Restrict *Allowed to push and merge* on the descendant's protected-branch rule to Maintainer+,
+  or scope the group secret to trusted projects instead of relying on inherited protection.

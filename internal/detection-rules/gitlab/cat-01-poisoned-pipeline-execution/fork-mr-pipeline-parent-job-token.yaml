@@ -1,0 +1,29 @@
+id: cat-01/fork-mr-pipeline-parent-job-token
+scenario_id: cat-01/03
+title: "Fork MR pipeline in the parent obtains a parent-scoped CI_JOB_TOKEN reaching allowlisted projects"
+subject: project
+severity: high
+confidence: high
+description: >
+  Fork MR pipelines may run in the parent, and the parent's inbound `CI_JOB_TOKEN` scope is
+  broad — disabled, or an allowlist reaching beyond its own trust boundary. A fork MR pipeline
+  wields a parent-scoped job token against every project that trusts the parent.
+
+where:
+  all_of:
+    - fork_pipelines_run_in_parent == true
+    - any_of:
+        - visibility == "public"
+        - visibility == "internal"
+        - forking_enabled == true
+    - any_of:
+        - inbound_job_token_scope_enabled == false
+        - job_token_allowlist.mode == "open"
+        - job_token_allowlist.mode == "group_scoped"
+
+evidence:
+  - "Fork MR pipelines run in the parent and inbound job-token scope is broad (enabled {{ inbound_job_token_scope_enabled }}, allowlist mode {{ job_token_allowlist.mode }}); a fork MR gets a parent-scoped CI_JOB_TOKEN reaching allowlisted projects."
+
+remediation_hint: >
+  Disable fork-pipeline-in-parent; enable inbound job-token scope and narrow the allowlist to
+  the minimum set of genuinely trusted projects.

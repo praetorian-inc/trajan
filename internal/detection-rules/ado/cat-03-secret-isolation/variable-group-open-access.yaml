@@ -1,0 +1,31 @@
+id: cat-03/variable-group-open-access
+scenario_id: cat-03/01
+title: "Variable group Open access exposes secrets to every pipeline"
+subject: variable_group
+severity: high
+confidence: high
+description: >
+  A variable group that contains secret variables has "Grant access to all
+  pipelines" (Open access) enabled — pipeline_permissions.all_pipelines is true.
+  Pipeline permissions are the only per-pipeline control isolating the secrets,
+  and Open access disables it project-wide: any pipeline in the project,
+  including one authored on an attacker-controlled feature branch, can reference
+  the group and read every secret in it. A Contributor who can create or push a
+  pipeline exfiltrates production credentials with no authorization prompt.
+
+where:
+  all_of:
+    - "pipeline_permissions.all_pipelines == true"
+    - "secret_variable_names != []"
+
+evidence:
+  - "Variable group: {{ project }} › {{ name }}"
+  - "Secret variables: {{ secret_variable_names }}"
+  - "Open access (all pipelines authorized): {{ pipeline_permissions.all_pipelines }}"
+
+remediation_hint: >
+  Disable "Grant access to all pipelines" on the variable group and enumerate
+  only the specific pipelines that legitimately need these secrets under
+  Pipeline permissions. Add a Branch control check on the variable group so
+  secrets are only injected when the consuming pipeline runs on a protected
+  branch. Rotate any secrets that may have been consumed by unintended pipelines.

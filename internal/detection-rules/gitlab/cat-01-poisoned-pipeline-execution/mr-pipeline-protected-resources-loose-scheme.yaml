@@ -1,0 +1,26 @@
+id: cat-01/mr-pipeline-protected-resources-loose-scheme
+scenario_id: cat-01/08
+title: "MR pipeline grants protected variables/runners to a Developer via a loose protected-branch scheme"
+subject: job
+severity: high
+confidence: high
+description: >
+  With `protect_merge_request_pipelines` disabled and a protected-branch scheme loose enough
+  that a Developer controls both the MR source and target, a `merge_request_event` job receives
+  the project's protected variables or a protected runner from a Developer's pre-review code.
+
+where:
+  all_of:
+    - triggers ∋ {merge_request_event}
+    - mr_pipelines_unprotected == true
+    - developer_controls_mr_branches == true
+    - any_of:
+        - reads_protected_variable == true
+        - targets_protected_runner == true
+
+evidence:
+  - "merge_request_event job receives protected resources (protected variable {{ reads_protected_variable }}, protected runner {{ targets_protected_runner }}) because MR-pipeline protection is off and a Developer controls both MR branches."
+
+remediation_hint: >
+  Keep `protect_merge_request_pipelines` enabled and tighten protected-branch push/merge access
+  so a Developer cannot control both MR endpoints.

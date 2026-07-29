@@ -1,0 +1,25 @@
+id: cat-12/webhook-integration-local-network-egress-ssrf
+scenario_id: cat-12/15
+title: "Instance allows webhook/integration requests to the local network, giving Maintainers an SSRF primitive"
+subject: instance
+severity: high
+confidence: medium
+description: >
+  The instance enables `allow_local_requests_from_webhooks` while leaving the local-address
+  allowlist empty or broad, so any project Maintainer's routine ability to set a webhook or
+  integration URL becomes a server-side request-forgery primitive: the GitLab server issues
+  attacker-directed requests to loopback, RFC1918 internal services, and cloud metadata endpoints.
+  Whether a valuable internal service or metadata endpoint is actually reachable is deferred, hence
+  medium confidence.
+
+where:
+  all_of:
+    - allow_local_requests_from_webhooks == true
+    - outbound_local_requests_allowlist_effective != true
+
+evidence:
+  - "Instance permits local-network egress from webhooks/integrations (allow_local_requests_from_webhooks {{ allow_local_requests_from_webhooks }}) with no confining allowlist, giving any Maintainer an SSRF primitive."
+
+remediation_hint: >
+  Disable "Allow requests to the local network from webhooks and integrations", or set a tight
+  local-address allowlist confining which internal hosts hooks may reach.

@@ -1,0 +1,37 @@
+id: cat-03/keyvault-linked-group-broad-access
+scenario_id: cat-03/03
+title: "Key Vault-linked variable group is open to every pipeline"
+subject: variable_group
+severity: high
+confidence: medium
+description: >
+  A Key Vault-linked variable group (is_linked_to_keyvault) has "Grant access
+  to all pipelines" enabled. A KV-linked group maps only selected secret names;
+  the values are fetched live at runtime by the backing Azure Resource Manager
+  service connection, whose identity typically holds vault-scoped Get/List. When
+  the group is open to every pipeline, any pipeline in the project can borrow
+  that identity and — via an AzureCLI/Key Vault task on the same connection —
+  enumerate and read every secret in the vault, not just the mapped names. The
+  mapped-secret list is a UI convenience, not a boundary. Confidence is medium
+  because the exploitable breadth ultimately depends on the connection's Azure
+  RBAC scope, which is not collectable from ADO alone.
+
+where:
+  all_of:
+    - "is_linked_to_keyvault == true"
+    - "pipeline_permissions.all_pipelines == true"
+
+evidence:
+  - "Key Vault-linked variable group: {{ project }} › {{ name }}"
+  - "Backing Key Vault: {{ keyvault_name }}"
+  - "Mapped secrets: {{ secret_variable_names }}"
+  - "Open access (all pipelines authorized): {{ pipeline_permissions.all_pipelines }}"
+
+remediation_hint: >
+  Disable Open access on the variable group and authorize only the specific
+  pipelines that need the mapped secrets. Narrow the backing service
+  connection's Azure RBAC assignment from vault scope to individual
+  secret-level permissions, granting Get only on the specific secrets the group
+  surfaces. Add a Branch control check so the group is only consumable from
+  protected branches. Review the vault for additional secrets that should not
+  be reachable from CI pipelines.

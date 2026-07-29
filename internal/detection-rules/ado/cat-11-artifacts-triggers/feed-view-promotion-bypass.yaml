@@ -1,0 +1,41 @@
+id: cat-11/feed-view-promotion-bypass
+scenario_id: cat-11/08
+title: "Feed release view is not an approval gate — promotion/publish is a Contributor-level action"
+subject: feed
+severity: high
+confidence: medium
+description: >
+  A feed exposes a release-type view (@Release / @Prerelease) that
+  consumers treat as the curated, blessed channel — but promoting a
+  package to a view is a Feed Contributor/Publisher action, not a separate
+  approval workflow, and saving from upstream into @Local is a Collaborator
+  action. So the channel teams trust as "reviewed" can be populated and
+  promoted by any explicitly-granted writer below the trusted-curator set,
+  with no review. The general defect: a release view (a false trust signal)
+  combined with a write-capable identity below the administrator tier
+  (collaborator = save-from-upstream / Build Service default, or
+  contributor = publish + promote). @Release is a visibility filter, not a
+  security boundary.
+
+where:
+  all_of:
+    - "views.type ∋ 'release'"
+    - any_of:
+        - "permissions.role ∋ 'collaborator'"
+        - "permissions.role ∋ 'contributor'"
+
+evidence:
+  - "Feed {{ name }} exposes release-type view(s): {{ views.name }}"
+  - "View types present: {{ views.type }}"
+  - "Feed permission roles granted: {{ permissions.role }}"
+  - "A Collaborator/Contributor identity can save-then-promote to a release view — promotion is a permission, not an approval gate"
+
+remediation_hint: >
+  Do not treat feed views as security boundaries — they are visibility
+  filters, not approval gates. Restrict Feed Contributor/Publisher and
+  Collaborator membership to trusted publishers only; keep it narrower than
+  the set of consumers who trust @Release. If view-scoped access is needed,
+  explicitly populate the view's Specific-people list rather than relying on
+  inherited feed permissions (an empty Specific-people view silently
+  inherits the broader feed ACL). Consider a separate locked-down feed for
+  production-consumed packages with a distinct Contributor set.

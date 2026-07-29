@@ -1,0 +1,30 @@
+id: cat-12/group-shared-runners-inherited-subgroups
+scenario_id: cat-12/07
+title: "Group runners inherited to all subgroups let any self-service subgroup project run code on the group's shared compute"
+subject: chain
+severity: high
+confidence: medium
+description: >
+  A group-scoped runner is inherited recursively by every descendant project and accepts untagged,
+  non-protected jobs, while the group permits non-Owner subgroup/project creation. Any user who can
+  create a project under the group lands an untagged job on the group's shared runner without
+  membership in an existing project. The runner's host isolation is the deferred half, hence
+  medium confidence.
+  NOTE: joins the group runner to its owning group's creation-governance posture.
+
+chain_of:
+  join: group-runner-reachability
+  for_each: reachable_runners
+  where:
+    all_of:
+      - runner.runner_type == "group_type"
+      - runner.run_untagged == true
+      - runner.ref_protected != true
+      - group.group_open_project_creation == true
+
+evidence:
+  - "Group runner `{{ runner._provenance.scope }}` accepts untagged non-protected jobs and is inherited to descendants of `{{ group._provenance.group_path }}` that any user can self-create under a permissive project-creation policy."
+
+remediation_hint: >
+  Require tags / `ref_protected` on the group runner, or raise `project_creation_role` /
+  `subgroup_creation_level` so untrusted users cannot self-create projects onto it.

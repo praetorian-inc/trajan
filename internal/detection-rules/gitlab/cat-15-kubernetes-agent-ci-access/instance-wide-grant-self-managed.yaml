@@ -1,0 +1,23 @@
+id: cat-15/instance-wide-grant-self-managed
+scenario_id: cat-15/04
+title: "Kubernetes agent ci_access grants instance scope on a self-managed instance, authorizing every project's pipelines to the cluster"
+subject: agent
+severity: high
+confidence: medium
+description: >
+  A `ci_access.instance` grant on a self-managed instance authorizes every project on the
+  instance to reach the cluster, not a chosen group or project. With the enabling admin setting
+  on, no `access_as:` impersonation, and `protected_branches_only` false/absent, any authenticated
+  user who can run a pipeline anywhere receives the injected `$KUBECONFIG` as the agent's
+  ServiceAccount — including tenants with no relationship to the cluster.
+where:
+  all_of:
+    - ci_access_scope == "instance"
+    - instance_agent_authorization_enabled == true
+    - impersonation == null
+    - protected_branches_only != true
+evidence:
+  - "Agent grant is instance-scoped with instance-level authorization enabled and no impersonation, so any pipeline on the instance receives the agent's kubeconfig."
+remediation_hint: >
+  Replace the `ci_access.instance` grant with a scoped `ci_access.projects`/`groups` list, or
+  disable instance-level agent authorization in admin settings.

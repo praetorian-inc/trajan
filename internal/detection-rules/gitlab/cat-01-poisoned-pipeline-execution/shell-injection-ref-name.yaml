@@ -1,0 +1,27 @@
+id: cat-01/shell-injection-ref-name
+scenario_id: cat-01/05
+title: "Shell injection from a branch or tag name interpolated unquoted into a job script"
+subject: job
+severity: high
+confidence: high
+description: >
+  A job interpolates `$CI_COMMIT_REF_NAME` / `$CI_COMMIT_BRANCH` / `$CI_COMMIT_TAG` unquoted
+  into its script and is reachable by a lower-trust actor who can create a matching ref, with
+  secrets or a self-managed runner in scope.
+
+where:
+  all_of:
+    - script_uses_untrusted_input == true
+    - attacker_input_fields ∋ {ref_name}
+    - runs_on_untrusted_ref == true
+    - any_of:
+        - reads_cicd_variable == true
+        - mints_id_token == true
+        - targets_self_managed_runner == true
+
+evidence:
+  - "Job interpolates an unquoted ref name ({{ attacker_input_fields }}) and is reachable on an attacker-nameable ref with secrets or a self-managed runner in scope."
+
+remediation_hint: >
+  Do not interpolate ref names into a shell; use quoted variables. Restrict secret-bearing jobs
+  to protected refs.

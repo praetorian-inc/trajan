@@ -1,0 +1,28 @@
+id: cat-08/shared-instance-runner-low-trust-coresidency
+scenario_id: cat-08/01
+title: "Self-managed instance runner shared across a trust boundary gives a low-trust Developer co-residency"
+subject: runner
+severity: high
+confidence: low
+description: >
+  A self-managed instance runner (shared by scope, not restricted to protected refs, picks up
+  untagged jobs) is entitled to both a low-trust project and a higher-trust one. A Developer's
+  feature-branch job in the low-trust project lands on the same host that executes the higher-trust
+  project's jobs — co-residency the attacker never held. Host isolation / ephemerality is the
+  deferred half, so this is confidence low.
+
+where:
+  all_of:
+    - runner_type == "instance_type"
+    - is_shared == true
+    - self_managed == true
+    - ref_protected != true
+    - run_untagged == true
+    - spans_trust_boundary == true
+
+evidence:
+  - "Self-managed instance runner {{ runner_type }} (is_shared={{ is_shared }}, ref_protected={{ ref_protected }}, run_untagged={{ run_untagged }}) services both a low-trust and a higher-trust project ({{ projects }})."
+
+remediation_hint: >
+  Restrict the shared runner to protected refs, isolate higher-trust projects onto dedicated
+  ephemeral runners, and prefer per-job clean VM executors over persistent shared hosts.

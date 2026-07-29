@@ -1,0 +1,26 @@
+id: cat-14/pages-job-secure-file-published-public
+scenario_id: cat-14/09
+title: "Public Pages job downloads a secure file that lands in the published bundle"
+subject: job
+severity: high
+confidence: low
+description: >
+  A single job both publishes the public Pages artifact (`pages:`, `artifacts:paths` including
+  `public`) and downloads a project secure file (via `download-secure-files` / a `.secure_files/`
+  path), on a project whose Pages is served public. The signing material sits in the workspace
+  alongside the publish directory, so a broad copy or overlapping publish path sweeps it into
+  `public/` and serves it on the open internet.
+
+where:
+  all_of:
+    - publishes_pages == true
+    - artifact_paths ∋ {public}
+    - downloads_secure_file == true
+    - pages_public == true
+
+evidence:
+  - "Public Pages producer job downloads a project secure file and publishes `public/` (pages public {{ pages_public }})."
+
+remediation_hint: >
+  Keep secure-file downloads out of the Pages producer job, and publish only a dedicated
+  build-output directory rather than the workspace that holds the secure file.

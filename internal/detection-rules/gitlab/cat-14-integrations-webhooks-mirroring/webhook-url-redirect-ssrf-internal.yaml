@@ -1,0 +1,26 @@
+id: cat-14/webhook-url-redirect-ssrf-internal
+scenario_id: cat-14/03
+title: "Webhook re-pointed to an internal/metadata endpoint via local-network requests allowed (self-managed)"
+subject: integration
+severity: high
+confidence: medium
+description: >
+  The instance permits webhook/integration requests to the local network, so a webhook whose
+  delivery `url` is editable by a Maintainer becomes an SSRF primitive: the Maintainer re-points
+  the URL at an internal service or the `169.254.169.254` metadata endpoint and fires a qualifying
+  event, and GitLab issues the request from its trusted egress — reaching targets the Maintainer
+  cannot route to directly (and delivering any attached credential there).
+
+where:
+  all_of:
+    - kind == "webhook"
+    - allows_local_network == true
+    - url_mutable == true
+    - firable_event_trigger == true
+
+evidence:
+  - "Webhook with a mutable URL and a firable event trigger can reach the local network ({{ allows_local_network }}) and is editable by a role below the instance admin who set the network policy."
+
+remediation_hint: >
+  Keep `allow_local_requests_from_web_hooks_and_services` off (or tightly allowlist internal
+  receivers), and restrict who can edit webhook delivery URLs to a trusted operator.

@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/engine/detect"
 )
 
 func TestBlockMarshalJSON(t *testing.T) {
-	scalar, err := json.Marshal(Block{Predicate: "a == b"})
+	scalar, err := json.Marshal(detect.Block{Predicate: "a == b"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -16,7 +18,7 @@ func TestBlockMarshalJSON(t *testing.T) {
 		t.Errorf("scalar block: want %q, got %s", "a == b", scalar)
 	}
 
-	combo, err := json.Marshal(Block{IsCombo: true, AllOf: []Block{{Predicate: "x"}, {Predicate: "y"}}})
+	combo, err := json.Marshal(detect.Block{IsCombo: true, AllOf: []detect.Block{{Predicate: "x"}, {Predicate: "y"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,10 +28,10 @@ func TestBlockMarshalJSON(t *testing.T) {
 }
 
 func TestBuildFindingOrgBackfillAndProvenance(t *testing.T) {
-	rule := &Rule{
+	rule := &detect.Rule{
 		ID: "cat-x/y", Title: "T", Severity: "high", Confidence: "high",
 		Subject:  "job",
-		Where:    &Block{Predicate: "foo != null"},
+		Where:    &detect.Block{Predicate: "foo != null"},
 		Evidence: []string{"value is {{ foo }}"},
 	}
 	subj := map[string]any{
@@ -38,7 +40,7 @@ func TestBuildFindingOrgBackfillAndProvenance(t *testing.T) {
 		"_provenance": map[string]any{"workflow_file": "wf.yml"},
 	}
 
-	f := BuildFinding(rule, subj, "job", "myorg", "")
+	f := detect.BuildFinding(provider, rule, subj, "job", "myorg", "")
 
 	if f.Org != "myorg" {
 		t.Errorf("org should backfill from the run scope when the subject lacks one, got %q", f.Org)
@@ -58,14 +60,14 @@ func TestBuildFindingOrgBackfillAndProvenance(t *testing.T) {
 }
 
 func TestBuildFindingSubjectOwnerWins(t *testing.T) {
-	rule := &Rule{ID: "cat-x/y", Subject: "org"}
+	rule := &detect.Rule{ID: "cat-x/y", Subject: "org"}
 	subj := map[string]any{"_id": "acme", "owner": "acme"}
-	f := BuildFinding(rule, subj, "org", "passed-org", "")
+	f := detect.BuildFinding(provider, rule, subj, "org", "passed-org", "")
 	if f.Org != "passed-org" {
 		t.Errorf("a non-empty run scope should win; got %q", f.Org)
 	}
 
-	f2 := BuildFinding(rule, subj, "org", "", "")
+	f2 := detect.BuildFinding(provider, rule, subj, "org", "", "")
 	if f2.Org != "acme" {
 		t.Errorf("with no run scope, org should come from the subject owner; got %q", f2.Org)
 	}

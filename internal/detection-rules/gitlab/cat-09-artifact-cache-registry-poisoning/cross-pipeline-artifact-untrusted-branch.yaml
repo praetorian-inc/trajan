@@ -1,0 +1,27 @@
+id: cat-09/cross-pipeline-artifact-untrusted-branch
+scenario_id: cat-09/07
+title: "Upstream-pipeline artifact from an untrusted branch consumed via needs:pipeline:job"
+subject: job
+severity: high
+confidence: high
+description: >
+  A protected-ref consumer job pulls an artifact from another same-project pipeline via
+  `needs:pipeline:job:` (with `artifacts: true`). Because the referenced upstream pipeline is not
+  constrained to protected refs, a Developer's unprotected-branch pipeline can be the source, so
+  its artifact is attacker-controlled. The consumer extracts/executes those bytes with no integrity
+  step, giving the low-trust branch pusher code execution in the protected context.
+
+where:
+  all_of:
+    - consumes_cross_pipeline_artifact == true
+    - upstream_pipeline_untrusted_ref_reachable == true
+    - executes_fetched_artifact == true
+    - artifact_integrity_checked == false
+    - protected_ref_gate == "strong"
+
+evidence:
+  - "Protected-ref job consumes an artifact via needs:pipeline:job from an upstream pipeline reachable on an untrusted branch and executes it with no integrity check."
+
+remediation_hint: >
+  Constrain the referenced upstream pipeline to protected refs, and verify a checksum/signature
+  before extracting or executing any cross-pipeline artifact.
