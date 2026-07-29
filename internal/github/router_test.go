@@ -279,16 +279,16 @@ func TestClassifyGetSurfaces(t *testing.T) {
 		"/repos/o/p/commits/v1":                        surfaceRefResolve,
 		// rulesets / environments / teams / outside collaborators / branch
 		// protection are not graphql-mappable -> rest floor (D2.3 fidelity gate).
-		"/orgs/o/rulesets":               surfaceRESTFloor,
-		"/repos/o/p/rulesets":            surfaceRESTFloor,
-		"/repos/o/p/environments/prod":   surfaceRESTFloor,
-		"/orgs/o":                        surfaceRESTFloor,
-		"/orgs/o/teams":                  surfaceRESTFloor,
-		"/orgs/o/outside_collaborators":  surfaceRESTFloor,
-		"/orgs/o/actions/secrets":        surfaceRESTFloor,
-		"/orgs/o/hooks":                  surfaceRESTFloor,
-		"/repos/o/p/collaborators":       surfaceRESTFloor,
-		"/repos/o/p/actions/secrets":     surfaceRESTFloor,
+		"/orgs/o/rulesets":              surfaceRESTFloor,
+		"/repos/o/p/rulesets":           surfaceRESTFloor,
+		"/repos/o/p/environments/prod":  surfaceRESTFloor,
+		"/orgs/o":                       surfaceRESTFloor,
+		"/orgs/o/teams":                 surfaceRESTFloor,
+		"/orgs/o/outside_collaborators": surfaceRESTFloor,
+		"/orgs/o/actions/secrets":       surfaceRESTFloor,
+		"/orgs/o/hooks":                 surfaceRESTFloor,
+		"/repos/o/p/collaborators":      surfaceRESTFloor,
+		"/repos/o/p/actions/secrets":    surfaceRESTFloor,
 		// deploy keys stay on the rest floor: graphql cannot reproduce the REST
 		// numeric `id` the deploy-key-reuse correlator reads.
 		"/repos/o/p/keys": surfaceRESTFloor,

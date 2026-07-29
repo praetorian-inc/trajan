@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', apply);
 `
 
 func renderHTML(meta reportMeta, findings []finding.Finding) []byte {
-	ruleCounts := countBy(findings, func(f finding.Finding) string { return ruleID(f) })
+	ruleCounts := countBy(findings, ruleID)
 
 	var b strings.Builder
 	b.WriteString("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n")
@@ -352,7 +352,7 @@ func writeFindingHTML(b *strings.Builder, f finding.Finding) {
 func ruleLineHTML(r *finding.Rule) string {
 	id := "<code>" + he(r.ID) + "</code>"
 	if r.URL != "" {
-		id = fmt.Sprintf("<a href=\"%s\">%s</a>", he(r.URL), id)
+		id = "<a href=\"" + he(r.URL) + "\">" + id + "</a>"
 	}
 	line := "Rule: " + id
 	if r.ScenarioID != "" {

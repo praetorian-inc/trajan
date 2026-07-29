@@ -191,11 +191,11 @@ func findExpressionSpans(text string) [][2]int {
 		j := i + 3
 		closed := false
 		for j < n-1 {
-			switch {
-			case text[j:j+2] == "{{":
+			switch text[j : j+2] {
+			case "{{":
 				depth++
 				j += 2
-			case text[j:j+2] == "}}":
+			case "}}":
 				depth--
 				j += 2
 				if depth == 0 {

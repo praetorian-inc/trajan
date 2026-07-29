@@ -526,15 +526,16 @@ func deriveCacheKeyspace(jobs []map[string]any) map[string]any {
 		for _, c := range mList(job, opKey) {
 			var key, scope string
 			var restore any
-			if cm, ok := c.(map[string]any); ok {
-				key, _ = (mGet(cm, "key_template")).(string)
+			switch cv := c.(type) {
+			case map[string]any:
+				key, _ = (mGet(cv, "key_template")).(string)
 				if key == "" {
-					key, _ = mGet(cm, "key").(string)
+					key, _ = mGet(cv, "key").(string)
 				}
-				scope, _ = mGet(cm, "scope").(string)
-				restore = mGet(cm, "restore_keys")
-			} else if s, ok := c.(string); ok {
-				key = s
+				scope, _ = mGet(cv, "scope").(string)
+				restore = mGet(cv, "restore_keys")
+			case string:
+				key = cv
 			}
 			prefix := literalPrefix(key)
 			if prefix == "" && strings.HasPrefix(scope, "scope-prefix:") {
@@ -573,7 +574,7 @@ func deriveCacheKeyspace(jobs []map[string]any) map[string]any {
 		order := []string{}
 		add := func(entries []map[string]any) {
 			for _, e := range entries {
-				jb := e["job"].(map[string]any)
+				jb, _ := e["job"].(map[string]any)
 				id, _ := jb["_id"].(string)
 				if _, seen := allJobs[id]; !seen {
 					order = append(order, id)
@@ -705,7 +706,7 @@ func deriveBranchCoverage(repos, rulesets []map[string]any) (map[string]any, []m
 				repoConds := mMap(conds, "repository_name")
 				rInc := asStrings(mGet(repoConds, "include"))
 				rExc := asStrings(mGet(repoConds, "exclude"))
-				if len(rInc) > 0 && !(slices.Contains(rInc, "~ALL") || refPatternMatches(repoName, rInc)) {
+				if len(rInc) > 0 && !slices.Contains(rInc, "~ALL") && !refPatternMatches(repoName, rInc) {
 					continue
 				}
 				if len(rExc) > 0 && refPatternMatches(repoName, rExc) {

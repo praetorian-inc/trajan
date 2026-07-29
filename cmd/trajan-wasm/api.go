@@ -1283,7 +1283,6 @@ func githubUnsupported(operation string) interface{} {
 	return promiseConstructor.New(handler)
 }
 
-
 type ProgressCallback func(percent int, message string)
 
 func getProgressCallback(options js.Value) ProgressCallback {

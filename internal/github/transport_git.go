@@ -102,8 +102,8 @@ func (g *gitTransport) ensureClone(ctx context.Context, owner, repo string) (str
 
 	c.once.Do(func() {
 		dir := path.Join(g.base, owner+"__"+repo)
-		url := g.repoURL(owner, repo)
-		if _, err := g.run(ctx, "", "clone", "--depth", "1", "--no-single-branch", "--no-tags", url, dir); err != nil {
+		cloneURL := g.repoURL(owner, repo)
+		if _, err := g.run(ctx, "", "clone", "--depth", "1", "--no-single-branch", "--no-tags", cloneURL, dir); err != nil {
 			c.err = notServable(key)
 			return
 		}
@@ -239,7 +239,8 @@ func isFullSHA(ref string) bool {
 		return false
 	}
 	for _, c := range ref {
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+		isHex := c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+		if !isHex {
 			return false
 		}
 	}

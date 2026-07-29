@@ -8,8 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/praetorian-inc/trajan/internal/engine"
 	yaml "go.yaml.in/yaml/v4"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
 type usesKind struct {
