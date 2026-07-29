@@ -492,10 +492,11 @@ func collectChecks(ctx context.Context, cl ADO, cp engine.CurrentPhase, project 
 		"$expand":      []string{"settings"},
 	}
 	items, status, err := softList(ctx, cl, "core", APIVersionPreview, p, params)
-	if err != nil || status != 0 {
+	if err != nil {
 		return err
 	}
-	return envelope(cp, engine.CollectADOChecks(project, r.Type, r.ID), "checks", p, rawArray(items))
+	// An unreadable check must not read downstream as "no gate configured".
+	return writeListOrMark(cp, engine.CollectADOChecks(project, r.Type, r.ID), "checks", p, items, status)
 }
 
 func collectEnvironmentDetail(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string, envID int64) error {

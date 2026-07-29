@@ -14,7 +14,7 @@ import (
 // and PIPELINE_POISONING (cat-01 injection half). The step-level sinks/sources
 // these key on are already collapsed onto each :Job by walkSteps.
 func deriveTaintEdges(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, jobs, pipelines []map[string]any) error {
-	pipeMeta := indexPipelines(pipelines)
+	pipeMeta := indexPipelines(pipelines, loadBuildValidated(prior))
 	grants := loadGrants(prior)
 
 	readsByJob, err := deriveReads(prior, cp, timer, jobs)
@@ -54,9 +54,26 @@ type pipeInfo struct {
 
 func pipeKey(project string, id int64) string { return fmt.Sprintf("%s/%d", project, id) }
 
-func indexPipelines(pipelines []map[string]any) map[string]pipeInfo {
+// derivePolicyAttribution runs earlier in the same pass, so its BUILD_VALIDATES
+// edges are already on disk.
+func loadBuildValidated(prior engine.PriorPhase) map[string]bool {
+	out := map[string]bool{}
+	edges, err := loadRecords(prior, "10-normalize/edges/build-validates")
+	if err != nil {
+		return out
+	}
+	for _, e := range edges {
+		if id := mInt64(e, "build_definition_id"); id != 0 {
+			out[pipeKey(mStr(e, "project"), id)] = true
+		}
+	}
+	return out
+}
+
+func indexPipelines(pipelines []map[string]any, validated map[string]bool) map[string]pipeInfo {
 	out := map[string]pipeInfo{}
 	for _, p := range pipelines {
+		key := pipeKey(mStr(p, "project"), mInt64(p, "id"))
 		info := pipeInfo{
 			identityScope:    mStr(p, "identity_scope"),
 			enforceSettable:  mBool(p, "enforce_settable_var"),
@@ -64,6 +81,7 @@ func indexPipelines(pipelines []map[string]any) map[string]pipeInfo {
 			enableSanitize:   mBool(p, "enable_shell_tasks_args_sanitizing"),
 			settableVars:     mGet(p, "settable_variables"),
 			ciTrigger:        mGet(p, "ci_trigger"),
+			buildValidated:   validated[key],
 			name:             mStr(p, "name"),
 			freeformParams:   map[string]bool{},
 			allowlistParams:  map[string]bool{},
@@ -78,7 +96,7 @@ func indexPipelines(pipelines []map[string]any) map[string]pipeInfo {
 				info.allowlistParams[name] = true
 			}
 		}
-		out[pipeKey(mStr(p, "project"), mInt64(p, "id"))] = info
+		out[key] = info
 	}
 	return out
 }
@@ -187,12 +205,16 @@ func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, 
 			"project": project, "pipeline_id": mInt64(j, "pipeline_id"), "job": mStr(j, "job"),
 			"source": "queue_build_principal", "source_permission": "QueueBuilds", "source_principals": sources,
 			"sink_type": sinkType, "macro_name": name, "sink_location": location, "via": via,
+			"step_index":           ms["step_index"],
 			"enforce_settable_var": meta.enforceSettable, "enable_args_validation": meta.enableSanitize,
 			"is_declared_settable": entBool(ms["is_declared_settable"]), "settable_variables": meta.settableVars,
 			"identity_scope": meta.identityScope, "confidence": confidence,
 			"target": target, "context": "azure_repos",
 		}
-		key := fmt.Sprintf("%s__%s__%s", jobKeyOf(j), adoSafe(via), adoSafe(name))
+		// Step and location are part of the key: one job can reference the same name
+		// from several steps and sink kinds, and they must not overwrite each other.
+		key := fmt.Sprintf("%s__%s__%s__%v__%s", jobKeyOf(j), adoSafe(via), adoSafe(name),
+			ms["step_index"], adoSafe(location))
 		return emit(cp, timer, engine.NormalizeADOEdges("queue-time-injection", key), rec)
 	}
 

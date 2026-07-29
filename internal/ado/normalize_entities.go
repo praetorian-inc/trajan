@@ -11,8 +11,8 @@ import (
 // normalizeEntities emits one structural record per node from the API-JSON
 // surfaces. Resource-scoped properties (checks, pipeline authorization, secrets)
 // fold onto their owning node. Per-item failures are recorded and skipped.
-func normalizeEntities(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) error {
-	projs := projects(prior, org)
+func normalizeEntities(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org, onlyProject string, timer *engine.PhaseTimer) error {
+	projs := projects(prior, org, onlyProject)
 
 	if err := normalizeOrg(prior, cp, org, projs, timer); err != nil {
 		return err
@@ -191,6 +191,17 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string,
 	return nil
 }
 
+// checksObserved reports whether the checks surface was actually readable. A
+// soft-failed one must not read downstream as "no gate configured".
+func checksObserved(prior engine.PriorPhase, project, rtype, id string) bool {
+	var env map[string]any
+	if err := engine.ReadJSON(prior.Abs(engine.CollectADOChecks(project, rtype, id)), &env); err != nil {
+		return false
+	}
+	_, unobserved := entMap(env["data"])["_unobserved"]
+	return !unobserved
+}
+
 func foldChecks(prior engine.PriorPhase, project, rtype, id string) []any {
 	out := []any{}
 	for _, raw := range entLoadList(prior, engine.CollectADOChecks(project, rtype, id)) {
@@ -283,6 +294,7 @@ func normalizeServiceConnectionsShared(prior engine.PriorPhase, cp engine.Curren
 			a.copies[p.Name] = e
 			a.perProj[p.Name] = map[string]any{
 				"checks":               foldChecks(prior, p.Name, "endpoint", id),
+				"checks_observed":      checksObserved(prior, p.Name, "endpoint", id),
 				"pipeline_permissions": foldAuthorization(prior, p.Name, "endpoint", id),
 			}
 		}
@@ -391,6 +403,7 @@ func normalizeVariableGroupsShared(prior engine.PriorPhase, cp engine.CurrentPha
 			idStr := fmt.Sprintf("%d", gid)
 			a.perProj[p.Name] = map[string]any{
 				"checks":               foldChecks(prior, p.Name, "variablegroup", idStr),
+				"checks_observed":      checksObserved(prior, p.Name, "variablegroup", idStr),
 				"pipeline_permissions": foldAuthorization(prior, p.Name, "variablegroup", idStr),
 			}
 		}
@@ -570,6 +583,7 @@ func normalizeAgentQueues(prior engine.PriorPhase, cp engine.CurrentPhase, org s
 			"is_hosted":            entBool(pool["isHosted"]),
 			"pool_type":            entStr(pool["poolType"]),
 			"checks":               foldChecks(prior, p.Name, "queue", idStr),
+			"checks_observed":      checksObserved(prior, p.Name, "queue", idStr),
 			"pipeline_permissions": foldAuthorization(prior, p.Name, "queue", idStr),
 			"_provenance":          prov(engine.CollectADOAgentQueues(p.Name)),
 		}
@@ -608,6 +622,7 @@ func normalizeEnvironments(prior engine.PriorPhase, cp engine.CurrentPhase, org 
 			"created_by":           entStr(entGetIn(detail, "createdBy", "displayName")),
 			"last_modified_on":     entStr(detail["lastModifiedOn"]),
 			"checks":               foldChecks(prior, p.Name, "environment", idStr),
+			"checks_observed":      checksObserved(prior, p.Name, "environment", idStr),
 			"pipeline_permissions": foldAuthorization(prior, p.Name, "environment", idStr),
 			"_provenance":          prov(engine.CollectADOEnvironments(p.Name)),
 		}

@@ -254,7 +254,7 @@ func TestDerivePolicyAttribution(t *testing.T) {
 	}
 	policies := []map[string]any{
 		{"project": "P", "config_id": float64(1), "policy_type": "Build", "is_blocking": true,
-			"settings": map[string]any{"buildDefinitionId": float64(247)},
+			"settings": map[string]any{"build_definition_id": float64(247)},
 			"scope":    []any{map[string]any{"repositoryId": "repo-A", "refName": "refs/heads/main", "matchKind": "Exact"}}},
 		{"project": "P", "config_id": float64(2), "policy_type": "Minimum number of reviewers",
 			"scope": []any{map[string]any{"repositoryId": nil, "refName": "refs/heads/main", "matchKind": "Exact"}}},

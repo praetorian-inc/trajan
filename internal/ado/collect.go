@@ -84,6 +84,9 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl ADO, cp engine.Curre
 	}
 	if scope.Project != "" {
 		projects = filterProjects(projects, scope.Project)
+		if len(projects) == 0 {
+			return fmt.Errorf("project %q not found in organization %s", scope.Project, org)
+		}
 	}
 	timer.InputFiles = len(projects)
 

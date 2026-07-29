@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
@@ -41,11 +42,16 @@ func Normalize(ctx context.Context, runDir string) error {
 		return fmt.Errorf("org not set in %s; run collect first", engine.RunMeta())
 	}
 
+	scope, err := ParseScope(state.Scope)
+	if err != nil {
+		return fmt.Errorf("scope %q in %s: %w", state.Scope, engine.RunMeta(), err)
+	}
+
 	timer := engine.StartPhaseTimer(engine.PhaseNormalize, "normalize")
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
 
-	normErr := normalizeEntities(ctx, prior, cp, org, timer)
+	normErr := normalizeEntities(ctx, prior, cp, org, scope.Project, timer)
 	if normErr == nil {
 		normErr = normalizePipelines(ctx, prior, cp, timer)
 	}
@@ -71,13 +77,21 @@ func emit(cp engine.CurrentPhase, timer *engine.PhaseTimer, rel string, rec any)
 }
 
 // Per-project surface files are keyed by the sanitized name, not the true name.
-func projects(prior engine.PriorPhase, org string) []projectMeta {
+// collect writes the whole org roster but only fans out to the scoped project,
+// so a scoped run must re-apply that filter here or it emits project subjects
+// whose detail was never collected.
+func projects(prior engine.PriorPhase, org, only string) []projectMeta {
 	var out []projectMeta
 	for _, raw := range entLoadList(prior, engine.CollectADOProjects(org)) {
 		m := entMap(raw)
-		if id, name := entStr(m["id"]), entStr(m["name"]); id != "" && name != "" {
-			out = append(out, projectMeta{ID: id, Name: name})
+		id, name := entStr(m["id"]), entStr(m["name"])
+		if id == "" || name == "" {
+			continue
 		}
+		if only != "" && !strings.EqualFold(name, only) {
+			continue
+		}
+		out = append(out, projectMeta{ID: id, Name: name})
 	}
 	return out
 }

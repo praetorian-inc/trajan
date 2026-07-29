@@ -168,7 +168,7 @@ func derivePolicyAttribution(cp engine.CurrentPhase, timer *engine.PhaseTimer, p
 				if err := emit(cp, timer, engine.NormalizeADOEdges("has-policy", key), rec); err != nil {
 					return err
 				}
-				if bdID := mInt64(mMap(pol, "settings"), "buildDefinitionId"); bdID != 0 {
+				if bdID := mInt64(mMap(pol, "settings"), "build_definition_id"); bdID != 0 {
 					bv := map[string]any{
 						"kind":                "BUILD_VALIDATES",
 						"project":             project,
