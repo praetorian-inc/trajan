@@ -1,0 +1,30 @@
+id: cat-12/indirect-injection-agentic-rce
+scenario_id: cat-12/03
+title: "Injected AI agent holds tool/shell execution — indirect-injection RCE on the build host"
+subject: agent_injection
+severity: high
+confidence: high
+description: >
+  The agent processes attacker-controlled input and is granted tool/shell
+  execution (tool_exec) over the build agent. A poisoned PR file, work-item
+  field, or PR text carries an injection that makes the agent run attacker
+  commands on the host — full RCE with the run's token, mapped secrets, and
+  network position — with no approval gate in between. tool_exec is the
+  capability that converts prompt injection into arbitrary code execution.
+
+where:
+  all_of:
+    - technique == 'prompt_injection'
+    - gate_state == 'absent'
+    - capabilities ∋ 'tool_exec'
+
+evidence:
+  - "Project {{ project }} pipeline {{ pipeline_id }} job {{ job }}: {{ vendor }} agent has tool_exec on {{ source_kind }}"
+  - "Capabilities: {{ capabilities }}; via={{ via }}; gate_state={{ gate_state }}"
+  - "tool_exec + attacker-controlled prompt = RCE with the run's identity ({{ identity_scope }})"
+
+remediation_hint: >
+  Do not grant agents shell/exec tools when they process untrusted input.
+  If agentic tool-use is required, run it in a sandboxed container with no
+  secrets, no service connections, and a project-scoped token, and gate any
+  generated action behind a human approval check.

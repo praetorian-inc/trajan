@@ -1,0 +1,29 @@
+id: cat-06/stale-approval-votes-not-reset-on-push
+scenario_id: cat-06/05
+title: "Reviewer policy does not reset votes on a new push — approve-then-swap (TOCTOU)"
+subject: branch_policy
+severity: high
+confidence: high
+description: >
+  A blocking minimum-reviewers policy has "Reset all approval votes when there
+  are new changes" disabled (reset_on_source_push = false). An attacker opens a
+  clean PR, gets it approved, then pushes the malicious payload to the same PR
+  and completes the merge with the now-stale approval — the reviewer never saw
+  the code that shipped. The branch still audits as protected (blocking policy,
+  reviewers required), but the approval no longer binds the merged content.
+  This is the policy-side, generally-detectable half of the approve-then-swap
+  attack; the transient push itself only shows in the audit stream.
+where:
+  all_of:
+    - "policy_type == 'Minimum number of reviewers'"
+    - "is_blocking == true"
+    - "settings.reset_on_source_push == false"
+evidence:
+  - "Policy {{ config_id }} in {{ project }}: reset_on_source_push = {{ settings.reset_on_source_push }}"
+  - "Min approvers = {{ settings.minimum_approver_count }}, creator_vote_counts = {{ settings.creator_vote_counts }}"
+  - "Policy scope: {{ scope }}"
+remediation_hint: >
+  Enable "Reset all approval votes when there are new changes" so that any push
+  after approval invalidates prior votes and forces re-review of the exact
+  content that will merge. Pair with "Require at least one approval on every
+  iteration" where available.

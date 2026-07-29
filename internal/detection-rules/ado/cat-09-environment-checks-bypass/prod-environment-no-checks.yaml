@@ -1,0 +1,36 @@
+id: cat-09/prod-environment-no-checks
+scenario_id: cat-09/01
+title: "Production environment has no approval gate — deploys run ungated"
+subject: environment
+severity: high
+confidence: medium
+description: >
+  A production-looking deployment environment carries no Approval check (or
+  every check on it is disabled), so any deployment job that targets it runs
+  with no human gate. Because checks live on the environment resource and
+  never in YAML, a Contributor who can edit the pipeline — or land a change
+  on the triggering branch — ships arbitrary code to prod under the deploy's
+  service-connection privileges. The environment looks correct in the
+  pipeline YAML; the defect is the absence (or disablement) of a check
+  object, which no YAML lint surfaces. The prod-like name scopes this to
+  environments that plausibly front production privilege — an ungated dev
+  environment is an intended, non-finding state.
+where:
+  all_of:
+    - "name matches '(?i)(prod|release|deploy|live|staging)'"
+    - any_of:
+        - "checks == []"
+        - none_of:
+            - "checks.type_name ∋ 'Approval'"
+        - none_of:
+            - "checks.is_disabled ∋ false"
+evidence:
+  - "Environment {{ project }}/{{ name }} has no enabled Approval check"
+  - "Checks present: {{ checks.type_name }} (disabled flags: {{ checks.is_disabled }})"
+remediation_hint: >
+  Add an enabled Approval check on the production environment with
+  "requesters cannot approve their own runs" enabled, plus a Branch control
+  check scoped to the protected release branch. Confirm the checks are
+  enabled, not present-but-disabled. Gate every resource the deploy stage
+  consumes (service connection, variable group, secure file, agent pool),
+  since a stage's gate is the union of checks across all consumed resources.

@@ -1,0 +1,31 @@
+id: cat-08/template-source-unpinned-ref
+scenario_id: cat-08/01
+title: "Pipeline extends a template from an unpinned (mutable) ref"
+subject: pipeline
+severity: high
+confidence: medium
+description: >
+  The pipeline extends its outer structure from a template whose source
+  repository is referenced without an immutable pin (no ref, or a mutable
+  branch/force-movable tag). Azure resolves such a source to the live
+  branch tip (refs/heads/main when ref is omitted) at pipeline start, so
+  whoever can land a commit on that branch controls the YAML that compiles
+  and runs inside the consumer with its secrets, service connections, and
+  System.AccessToken. extends templates are sold as the secure pattern,
+  but the trust boundary is write access to the template repo, and an
+  unpinned ref makes it a floating supply-chain dependency. Pinning to a
+  tag or 40-char SHA freezes the template; the missing pin is the defect.
+where:
+  all_of:
+    - "extends_source != null"
+    - "extends_source.ref_pinned == false"
+evidence:
+  - "Pipeline {{ name }} ({{ project }}) extends a template from {{ extends_source.name }}"
+  - "Template ref: '{{ extends_source.ref }}' — unpinned (ref_pinned={{ extends_source.ref_pinned }}), resolves to the live branch tip"
+  - "Source repo {{ extends_source.repository }} in project {{ extends_source.source_project }} (cross_project={{ extends_source.is_cross_project }})"
+remediation_hint: >
+  Pin the template source to an immutable reference — a refs/tags/<tag>
+  or a 40-character commit SHA — instead of omitting ref or naming a
+  branch. If a branch must be used, protect it with required reviewers and
+  build validation, and restrict Contribute on the template repo to a
+  trusted maintainer group so the consumed tip cannot be silently changed.

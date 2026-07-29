@@ -1,0 +1,33 @@
+id: cat-06/bypass-policies-when-pushing-silent
+scenario_id: cat-06/01
+title: "Principal can land code on a policy-protected branch via a bypass weakness"
+subject: can_push_to
+severity: high
+confidence: high
+description: >
+  A principal holds the "Bypass policies when pushing" ACL on a branch that
+  carries a blocking branch policy, so their push lands directly with no PR, no
+  review, and no opt-in or warning. The branch-policies page shows the branch as
+  protected (has_blocking_policy = true), so a policy-on/off audit reads it as
+  safe, but the CAN_PUSH_TO join proves this principal bypasses the gate anyway.
+  When that branch triggers a privileged pipeline the principal lands unreviewed
+  code that runs with production credentials. Sibling weaknesses (self-approve,
+  stale approval, editable policies) are covered by their own rules; this rule
+  isolates the direct bypass-on-push grant.
+where:
+  all_of:
+    - "has_blocking_policy == true"
+    - any_of:
+        - "via == 'bypass_policies'"
+        - "all_via ∋ 'bypass_policies'"
+evidence:
+  - "Principal {{ principal }} can reach {{ project }}/{{ repo }}@{{ branch }} via {{ via }}"
+  - "All weakness variants on this edge: {{ all_via }}"
+  - "Branch shows a blocking policy (has_blocking_policy = {{ has_blocking_policy }}) yet the push lands anyway"
+remediation_hint: >
+  Remove Bypass-policies-when-pushing and Edit-policies from all non-admin
+  identities and broad groups (Contributors, Build Administrators). Disable
+  "Allow requestors to approve their own changes" and enable vote reset on
+  source push so approvals cannot be reused. Audit group inheritance for the
+  path that grants each principal the weakness, and alert on direct pushes to
+  protected branches.
