@@ -55,18 +55,18 @@ func evaluateBlock(block *Block, subject any) (bool, error) {
 		}
 	}
 	if result && block.AnyOf != nil {
-		any := false
+		matched := false
 		for i := range block.AnyOf {
 			ok, err := evaluateBlock(&block.AnyOf[i], subject)
 			if err != nil {
 				return false, err
 			}
 			if ok {
-				any = true
+				matched = true
 				break
 			}
 		}
-		result = result && any
+		result = result && matched
 	}
 	if result && block.NoneOf != nil {
 		none := true

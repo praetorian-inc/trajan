@@ -538,7 +538,7 @@ func orgRepoGate(c rulesetConditions, repoName string, repoID int64, repoProps m
 	switch {
 	case c.RepositoryName != nil:
 		rn := c.RepositoryName
-		if len(rn.Include) > 0 && !(slices.Contains(rn.Include, "~ALL") || refMatchAny(repoName, "", rn.Include)) {
+		if len(rn.Include) > 0 && !slices.Contains(rn.Include, "~ALL") && !refMatchAny(repoName, "", rn.Include) {
 			return false
 		}
 		if len(rn.Exclude) > 0 && refMatchAny(repoName, "", rn.Exclude) {

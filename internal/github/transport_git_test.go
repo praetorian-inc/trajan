@@ -192,7 +192,7 @@ func TestGitBlobSHAEqualsContentsSHA(t *testing.T) {
 	}
 
 	// independent oracle: git hash-object on the same file content
-	cmd := exec.Command("git", "hash-object", filepath.Join(repo, ".github/workflows/ci.yml"))
+	cmd := exec.Command("git", "hash-object", filepath.Join(repo, ".github", "workflows", "ci.yml"))
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatal(err)

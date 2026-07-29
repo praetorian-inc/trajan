@@ -22,7 +22,6 @@ type fakeGitLab struct {
 	graphql  map[string]json.RawMessage // keyed by exact query string
 	softPath map[string]int             // path -> soft status to raise
 	gqlErr   map[string]error           // query -> transport error
-	paths    []string                   // observed GET/list paths, in call order
 }
 
 func newFake() *fakeGitLab {
@@ -43,7 +42,6 @@ func (f *fakeGitLab) softErr(p string) error {
 }
 
 func (f *fakeGitLab) Get(_ context.Context, p string, _ url.Values, allow404 bool) (json.RawMessage, http.Header, error) {
-	f.paths = append(f.paths, p)
 	if err := f.softErr(p); err != nil {
 		return nil, nil, err
 	}
@@ -57,7 +55,6 @@ func (f *fakeGitLab) Get(_ context.Context, p string, _ url.Values, allow404 boo
 }
 
 func (f *fakeGitLab) GetRaw(_ context.Context, p string, _ url.Values) ([]byte, http.Header, error) {
-	f.paths = append(f.paths, p)
 	if err := f.softErr(p); err != nil {
 		return nil, nil, err
 	}
@@ -68,7 +65,6 @@ func (f *fakeGitLab) GetRaw(_ context.Context, p string, _ url.Values) ([]byte, 
 }
 
 func (f *fakeGitLab) Paginate(_ context.Context, p string, _ url.Values) ([]json.RawMessage, error) {
-	f.paths = append(f.paths, p)
 	if err := f.softErr(p); err != nil {
 		return nil, err
 	}

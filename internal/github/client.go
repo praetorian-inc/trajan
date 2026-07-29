@@ -163,11 +163,11 @@ func (c *Client) GetRaw(ctx context.Context, pathOrURL string, params url.Values
 		if err != nil {
 			return nil, nil, err
 		}
-		switch {
-		case resp.StatusCode == 200:
+		switch resp.StatusCode {
+		case 200:
 			b := readAllClose(resp)
 			return b, resp.Header, nil
-		case resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504:
+		case 502, 503, 504:
 			lastStatus, lastBody = resp.StatusCode, readAllClose(resp)
 			sleepFn(ctx, 2)
 			continue

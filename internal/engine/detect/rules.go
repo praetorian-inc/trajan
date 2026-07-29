@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
+	yaml "go.yaml.in/yaml/v4"
+
 	detectionrules "github.com/praetorian-inc/trajan/internal/detection-rules"
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/finding"
-	yaml "go.yaml.in/yaml/v4"
 )
 
 // RuleSourceBase is the "<repo>/blob/<ref>" prefix that turns an embedded rule
