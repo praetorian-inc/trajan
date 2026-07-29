@@ -10,8 +10,13 @@ coverage.out
 coverage*.out
 coverage.html
 
-# Docs
-docs/
+# Docs — ignored except the GitLab normalized-field contract, a tracked repo
+# artifact (the forward contract between normalize and the detection rules).
+# Re-include each ancestor before the file, and re-exclude the sibling local docs.
+docs/*
+!docs/gitlab/
+docs/gitlab/*
+!docs/gitlab/gitlab-normalized-fields.md
 
 # IDE
 .vscode/
@@ -24,9 +29,6 @@ docs/
 
 # Claude outputs
 .claude/
-
-# Research and planning docs
-docs/
 
 # WASM browser build artifacts
 browser/trajan.wasm
