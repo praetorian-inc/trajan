@@ -76,6 +76,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if collectErr != nil {
 		return runDir, collectErr
 	}
+	engine.PhaseDone(rec)
 	return runDir, nil
 }
 
@@ -255,7 +256,8 @@ func appendErr(timer *engine.PhaseTimer, msg string) {
 	errMu.Lock()
 	timer.Errors = append(timer.Errors, msg)
 	errMu.Unlock()
-	slog.Warn("collect surface degraded", "detail", msg)
+	// Debug, not Warn: PhaseDone reports these as one aggregate at the end.
+	slog.Debug("collect surface degraded", "detail", msg)
 }
 
 func scopeString(s Scope) string {
