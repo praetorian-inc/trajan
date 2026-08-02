@@ -152,6 +152,9 @@ func collectOneRepo(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	for _, e := range selErrs {
 		appendErr(timer, e)
 	}
+	softSurface(timer, repo+"/branches", func() error {
+		return collectBranchInventory(cp, org, repo, def, selected, len(selErrs) > 0)
+	})
 	for _, b := range selected {
 		stats, err := collectRepoWorkflows(ctx, gh, cp, tc, org, repo, b, false)
 		if err != nil {
@@ -292,6 +295,28 @@ func decodeUTF8Replace(b []byte) string {
 		return string(b)
 	}
 	return strings.ToValidUTF8(string(b), "�")
+}
+
+// The branch list is otherwise consumed in-memory by workflow collection and
+// never lands on disk, leaving normalize with only the repo's default_branch.
+func collectBranchInventory(cp engine.CurrentPhase, org, repo, def string,
+	nonDefault []string, degraded bool) error {
+	branches := make([]string, 0, len(nonDefault)+1)
+	if def != "" {
+		branches = append(branches, def)
+	}
+	branches = append(branches, nonDefault...)
+
+	data := map[string]any{
+		"repo":           repo,
+		"default_branch": def,
+		"branches":       branches,
+	}
+	if degraded {
+		data["_unavailable"] = true
+	}
+	return envelope(cp, engine.CollectBranches(repo), "00_collect_branches.py",
+		fmt.Sprintf("/repos/%s/%s/branches", org, repo), data)
 }
 
 func selectNonDefaultBranches(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
