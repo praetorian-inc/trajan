@@ -2,6 +2,7 @@ id: cat-01/issue-comment-checkout
 scenario_id: cat-01/10
 title: "issue_comment chatops checks out PR ref and executes it"
 subject: job
+graph: attack(PWN_REQUEST)
 severity: critical
 confidence: high
 description: >

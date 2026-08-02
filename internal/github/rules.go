@@ -15,6 +15,7 @@ import (
 	detectionrules "github.com/praetorian-inc/trajan/internal/detection-rules"
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/finding"
+	"github.com/praetorian-inc/trajan/internal/graph"
 	yaml "go.yaml.in/yaml/v4"
 )
 
@@ -97,8 +98,10 @@ type Rule struct {
 	ChainOf         *ChainOf `yaml:"chain_of"`
 	Evidence        []string `yaml:"evidence"`
 	RemediationHint string   `yaml:"remediation_hint"`
+	Graph           string   `yaml:"graph"`
 
-	RuleFile string `yaml:"-"`
+	GraphTarget graph.Target `yaml:"-"`
+	RuleFile    string       `yaml:"-"`
 }
 
 func (r *Rule) SubjectKind() string {
@@ -140,6 +143,11 @@ func LoadRules() ([]Rule, error) {
 		if r.ID == "" || (r.Where == nil && r.ChainOf == nil) {
 			continue
 		}
+		target, err := graph.ParseTarget(r.Graph)
+		if err != nil {
+			return nil, fmt.Errorf("rule %s (%s): %w", r.ID, p, err)
+		}
+		r.GraphTarget = target
 		r.RuleFile = p
 		rules = append(rules, r)
 	}

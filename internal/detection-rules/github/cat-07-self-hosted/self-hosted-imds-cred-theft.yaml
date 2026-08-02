@@ -2,6 +2,7 @@ id: cat-07/self-hosted-imds-cred-theft
 scenario_id: cat-07/04
 title: "Self-hosted runner workflow calls metadata service URLs"
 subject: job
+graph: edge(RUNS_ON, Job, Runner)
 severity: high
 confidence: medium
 description: >

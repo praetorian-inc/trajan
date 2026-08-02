@@ -13,14 +13,18 @@ import (
 )
 
 var subjectDirs = map[string]string{
-	"job":         "jobs",
-	"repo":        "repos",
-	"org":         "org",
-	"app":         "apps",
-	"env":         "environments",
-	"environment": "environments",
-	"ruleset":     "rulesets",
-	"deploy_key":  "deploy-keys",
+	"job":          "jobs",
+	"repo":         "repos",
+	"org":          "org",
+	"app":          "apps",
+	"env":          "environments",
+	"environment":  "environments",
+	"ruleset":      "rulesets",
+	"deploy_key":   "deploy-keys",
+	"principal":    "principals",
+	"runner":       "runners",
+	"runner_group": "runner-groups",
+	"secret":       "secrets",
 }
 
 // RuleFires includes rules that fired zero times.

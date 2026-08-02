@@ -2,6 +2,7 @@ id: cat-01/prt-docker-build
 scenario_id: cat-01/05
 title: "PRT checkout + docker build + registry login (image-tag exfil)"
 subject: job
+graph: attack(PWN_REQUEST)
 severity: critical
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-05/workflow-run-reusable-laundering
 scenario_id: cat-05/09
 title: "workflow_run downstream calls reusable workflow with PR-derived inputs"
 subject: chain
+graph: edge(CALLS, Job, Workflow)
 severity: high
 confidence: medium
 description: >

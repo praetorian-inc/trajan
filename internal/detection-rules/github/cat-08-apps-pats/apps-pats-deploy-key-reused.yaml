@@ -2,6 +2,7 @@ id: cat-08/apps-pats-deploy-key-reused
 scenario_id: cat-08/05
 title: "Deploy key reused across multiple repos with write access"
 subject: chain
+graph: node(DeployKey)
 severity: high
 confidence: high
 description: >

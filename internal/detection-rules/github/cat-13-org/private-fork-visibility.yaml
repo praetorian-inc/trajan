@@ -2,6 +2,7 @@ id: cat-04/private-fork-visibility
 scenario_id: cat-04/07
 title: "Org permits forking of private repositories"
 subject: org
+graph: node(Organization)
 severity: medium
 confidence: high
 description: >

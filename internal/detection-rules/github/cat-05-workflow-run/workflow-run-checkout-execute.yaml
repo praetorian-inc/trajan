@@ -2,6 +2,7 @@ id: cat-05/workflow-run-checkout-execute
 scenario_id: cat-05/02
 title: "workflow_run downstream checks out PR head_sha and executes it"
 subject: chain
+graph: attack(PWN_REQUEST)
 severity: critical
 confidence: high
 description: >

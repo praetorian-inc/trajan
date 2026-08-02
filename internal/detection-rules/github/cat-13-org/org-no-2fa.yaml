@@ -2,6 +2,7 @@ id: cat-04/org-no-2fa
 scenario_id: cat-04/08
 title: "Org does not enforce two-factor authentication"
 subject: org
+graph: node(Organization)
 severity: high
 confidence: high
 description: >

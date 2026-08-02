@@ -2,6 +2,7 @@ id: cat-04/actions-approve-prs
 scenario_id: cat-04/03
 title: "Repo allows Actions to approve PRs (per-repo)"
 subject: repo
+graph: node(Repository)
 severity: high
 confidence: high
 description: >

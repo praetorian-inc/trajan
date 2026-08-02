@@ -2,6 +2,7 @@ id: cat-04/org-actions-approve
 scenario_id: cat-04/03
 title: "Org allows Actions to approve PRs"
 subject: org
+graph: node(Organization)
 severity: high
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-10/ai-agents-dispatch-prompt-input
 scenario_id: cat-10/09
 title: "Agent prompt comes from workflow_dispatch input"
 subject: job
+graph: node(Job)
 severity: medium
 confidence: medium
 description: >

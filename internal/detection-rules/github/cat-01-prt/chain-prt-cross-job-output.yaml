@@ -2,6 +2,7 @@ id: cat-01/chain-prt-cross-job-output
 scenario_id: cat-01/11
 title: "Attacker-influenced job output flows into a cross-job run/with sink"
 subject: chain
+graph: attack(EXPRESSION_INJECTION)
 severity: high
 confidence: high
 description: >

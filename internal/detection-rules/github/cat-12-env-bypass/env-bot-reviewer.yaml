@@ -2,6 +2,7 @@ id: cat-12/env-bypass-bot-reviewer
 scenario_id: cat-12/02
 title: "Environment's required reviewer is a bot/App or service account"
 subject: environment
+graph: edge(REQUIRES_REVIEW_BY, Environment, User)
 severity: high
 confidence: medium
 description: >

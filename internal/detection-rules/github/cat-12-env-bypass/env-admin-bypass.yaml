@@ -2,6 +2,7 @@ id: cat-12/env-bypass-admin-bypass
 scenario_id: cat-12/03
 title: "Environment admins can bypass protection rules"
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: high
 description: >

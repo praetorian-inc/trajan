@@ -2,6 +2,7 @@ id: cat-01/prt-checkout-execute
 scenario_id: cat-01/01
 title: "pull_request_target checks out PR head and executes it"
 subject: job
+graph: attack(PWN_REQUEST)
 severity: critical
 confidence: high
 description: >

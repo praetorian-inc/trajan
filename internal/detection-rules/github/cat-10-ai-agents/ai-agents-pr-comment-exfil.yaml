@@ -2,6 +2,7 @@ id: cat-10/ai-agents-pr-comment-exfil
 scenario_id: cat-10/05
 title: "Agent posts to PR comments AND reads secrets in same job"
 subject: job
+graph: edge(READS, Job, Secret)
 severity: high
 confidence: medium
 description: >

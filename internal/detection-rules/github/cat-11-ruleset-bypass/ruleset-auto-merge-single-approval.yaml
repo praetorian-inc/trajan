@@ -2,15 +2,17 @@ id: cat-11/ruleset-auto-merge-single-approval
 scenario_id: cat-11/07
 title: "Single approval suffices and no required status checks gate the merge"
 subject: chain
+graph: node(Branch)
 severity: high
 confidence: medium
 description: >
-  The default branch's active ruleset requires only one approving review and has
-  no required status checks. Combined with auto-merge, a single compromised or
+  An active ruleset on this branch requires only one approving review and no
+  status checks gate the merge. Combined with auto-merge, a single compromised or
   inattentive reviewer green-lights an immediate merge.
-  The effective approval count aggregates across active rulesets as the MAX
-  (strictest) — so == 1 means no ruleset requires more than one approval, i.e.
-  one approval is truly sufficient.
+  The single_approval_required gap aggregates approval counts across active
+  rulesets AND legacy branch protection as the MAX (strictest), so it means no
+  control requires more than one approval — one approval is truly sufficient.
+  no_status_checks likewise accounts for legacy required status checks.
   NOTE: joins the effective-ruleset chain (produced by correlate during
   normalize); the auto-merge repo setting itself is not yet collected, so this
   ports the approval + status-check portion only.
@@ -22,13 +24,12 @@ chain_of:
     all_of:
       - active_ruleset_count >= 1
       - requires_pull_request_active == true
-      - effective_required_approving_review_count == 1
-    none_of:
-      - requires_required_status_checks == true
+      - gaps ∋ single_approval_required
+      - gaps ∋ no_status_checks
 
 evidence:
   - "Repo {{ repo }} branch `{{ branch }}`: 1 approval suffices and no required status checks gate the merge."
 
 remediation_hint: >
-  Require >=2 approving reviews on production branches, OR require status checks
-  that cannot be self-issued.
+  Require >=2 approving reviews on this branch, OR require status checks that
+  cannot be self-issued.
