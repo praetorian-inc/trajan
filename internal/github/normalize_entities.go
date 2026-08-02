@@ -399,6 +399,7 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 		rec := RepoFact{
 			ID:            repoName,
 			Repo:          repoName,
+			RepoID:        repoInfo["id"],
 			Owner:         entObj(repoInfo, "owner")["login"],
 			Visibility:    repoInfo["visibility"],
 			Archived:      entOrDefault(repoInfo["archived"], false),

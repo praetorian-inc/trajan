@@ -114,6 +114,7 @@ type RepoLegacyBPSummary struct {
 type RepoFact struct {
 	ID            string `json:"_id"`
 	Repo          string `json:"repo"`
+	RepoID        any    `json:"repo_id"`
 	Owner         any    `json:"owner"`
 	Visibility    any    `json:"visibility"`
 	Archived      any    `json:"archived"`

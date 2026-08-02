@@ -684,6 +684,8 @@ func deriveBranchCoverage(repos, rulesets []map[string]any, branchesByRepo map[s
 		if repoName == "" {
 			repoName = mStr(repo, "_id")
 		}
+		repoIDf, _ := numericValue(mGet(repo, "repo_id"))
+		repoID := int64(repoIDf)
 		def := mStr(repo, "default_branch")
 		if def == "" {
 			def = "main"
@@ -723,16 +725,8 @@ func deriveBranchCoverage(repos, rulesets []map[string]any, branchesByRepo map[s
 				if len(refExcludes) > 0 && refMatchAny(branch, def, refExcludes) {
 					continue
 				}
-				if mStr(rs, "scope") == "org" {
-					repoConds := mMap(conds, "repository_name")
-					rInc := asStrings(mGet(repoConds, "include"))
-					rExc := asStrings(mGet(repoConds, "exclude"))
-					if len(rInc) > 0 && !(slices.Contains(rInc, "~ALL") || refMatchAny(repoName, "", rInc)) {
-						continue
-					}
-					if len(rExc) > 0 && refMatchAny(repoName, "", rExc) {
-						continue
-					}
+				if mStr(rs, "scope") == "org" && !orgRepoGate(decodeConditions(conds), repoName, repoID, nil) {
+					continue
 				}
 				applicable = append(applicable, map[string]any{
 					"ruleset_id":                      mGet(rs, "ruleset_id"),
@@ -810,6 +804,17 @@ func anyApplicable(items []map[string]any, pred func(map[string]any) bool) bool 
 		}
 	}
 	return false
+}
+
+// correlate sees conditions as a decoded map while orgRepoGate takes the typed
+// shape collect parses; round-tripping keeps one implementation of the gate
+// rather than a second, subtly different copy.
+func decodeConditions(conds map[string]any) rulesetConditions {
+	var out rulesetConditions
+	if b, err := json.Marshal(conds); err == nil {
+		_ = json.Unmarshal(b, &out)
+	}
+	return out
 }
 
 // A run collected before 00-collect/branches existed yields an empty map, and
