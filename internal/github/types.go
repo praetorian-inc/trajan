@@ -43,10 +43,14 @@ type JobOutput struct {
 	Provenance                      *SourceProvenance `json:"_provenance"`
 }
 
+// Scope and ScopeKey are both null when no collected inventory defines the name.
+// ScopeKey is the engine.CollectSecrets key ("<org>", "<repo>", "<repo>__<env>"),
+// which is what identifies the secret; Scope is the precedence level that won.
 type SecretRef struct {
-	Name      string `json:"name"`
-	Scope     string `json:"scope"`
-	StepIndex int    `json:"step_index"` // -1 for job-env-level refs
+	Name      string  `json:"name"`
+	Scope     *string `json:"scope"` // "environment", "repo" or "org"
+	ScopeKey  *string `json:"scope_key"`
+	StepIndex int     `json:"step_index"` // -1 for job-env-level refs
 }
 
 type EnvironmentRef struct {
@@ -109,6 +113,7 @@ type Job struct {
 	AttackerContextFieldsReferencedExec    []string `json:"attacker_context_fields_referenced_exec"`
 	AttackerContextFieldsReferencedBinding []string `json:"attacker_context_fields_referenced_binding"`
 
+	Needs                  []string         `json:"needs"`
 	NeedsOutputRefsExec    []NeedsOutputRef `json:"needs_output_refs_exec"`
 	NeedsOutputRefsBinding []NeedsOutputRef `json:"needs_output_refs_binding"`
 	NeedsOutputRefs        []NeedsOutputRef `json:"needs_output_refs"`

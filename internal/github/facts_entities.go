@@ -104,6 +104,11 @@ type RepoLegacyBPSummary struct {
 	RequiredStatusChecks bool `json:"required_status_checks"`
 	RestrictionsPresent  bool `json:"restrictions_present"`
 	LockBranch           any  `json:"lock_branch"`
+
+	RequiredPullRequestReviews bool `json:"required_pull_request_reviews"`
+	DismissStaleReviews        any  `json:"dismiss_stale_reviews"`
+	RequireCodeOwnerReviews    any  `json:"require_code_owner_reviews"`
+	RequireLastPushApproval    any  `json:"require_last_push_approval"`
 }
 
 type RepoFact struct {
