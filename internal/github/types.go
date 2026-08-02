@@ -91,6 +91,11 @@ type ArtifactRef struct {
 	Name *string `json:"name"`
 }
 
+type CloudRoleRef struct {
+	Provider   string `json:"provider"`
+	Identifier string `json:"identifier"`
+}
+
 // Field order mirrors the on-disk key order. Slice fields must be initialized
 // non-nil by the normalizer so empties serialize as "[]" (not null).
 type Job struct {
@@ -150,10 +155,11 @@ type Job struct {
 	OIDCAudience    *string `json:"oidc_audience"`     // always null
 	OIDCSubTemplate *string `json:"oidc_sub_template"` // "repo:<owner>/<repo>:ref:<ref>" when minting
 
-	CacheWrites    []CacheRef    `json:"cache_writes"`
-	CacheReads     []CacheRef    `json:"cache_reads"`
-	ArtifactWrites []ArtifactRef `json:"artifact_writes"`
-	ArtifactReads  []ArtifactRef `json:"artifact_reads"`
+	CloudRoles     []CloudRoleRef `json:"cloud_roles"`
+	CacheWrites    []CacheRef     `json:"cache_writes"`
+	CacheReads     []CacheRef     `json:"cache_reads"`
+	ArtifactWrites []ArtifactRef  `json:"artifact_writes"`
+	ArtifactReads  []ArtifactRef  `json:"artifact_reads"`
 
 	// Agent surface inlined flat to match the on-disk schema.
 	AgentActionClass        *string  `json:"agent_action_class"`

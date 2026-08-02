@@ -308,6 +308,7 @@ func normalizeJob(in jobInputs) (Job, bool) {
 	sinksSeen := []string{}
 	executesCheckedOut := false
 	checkoutOfPR := false
+	cloudRoles := []CloudRoleRef{}
 	cacheWrites := []CacheRef{}
 	cacheReads := []CacheRef{}
 	artifactWrites := []ArtifactRef{}
@@ -382,6 +383,7 @@ func normalizeJob(in jobInputs) (Job, bool) {
 			cw, cr := extractCacheOps(step)
 			cacheWrites = append(cacheWrites, cw...)
 			cacheReads = append(cacheReads, cr...)
+			cloudRoles = append(cloudRoles, extractCloudRoles(step)...)
 			aw, ar := extractArtifactOps(step)
 			artifactWrites = append(artifactWrites, aw...)
 			artifactReads = append(artifactReads, ar...)
@@ -540,6 +542,7 @@ func normalizeJob(in jobInputs) (Job, bool) {
 		OIDCAudience:    nil,
 		OIDCSubTemplate: oidcSub,
 
+		CloudRoles:     cloudRoles,
 		CacheWrites:    cacheWrites,
 		CacheReads:     cacheReads,
 		ArtifactWrites: artifactWrites,
@@ -909,6 +912,35 @@ func restoreKeyLines(value any) []string {
 	default:
 		return nil
 	}
+}
+
+// The identifier is whatever the action names as the assumable identity; only
+// a literal is useful, since an expression resolves at run time to something
+// no collected fact records.
+var cloudLogins = []struct{ prefix, provider, key string }{
+	{"aws-actions/configure-aws-credentials", "aws", "role-to-assume"},
+	{"azure/login", "azure", "client-id"},
+	{"google-github-actions/auth", "gcp", "workload_identity_provider"},
+}
+
+func extractCloudRoles(step map[string]any) []CloudRoleRef {
+	uses, _ := step["uses"].(string)
+	if uses == "" {
+		return nil
+	}
+	with, _ := step["with"].(map[string]any)
+	var out []CloudRoleRef
+	for _, cl := range cloudLogins {
+		if !strings.HasPrefix(strings.ToLower(uses), cl.prefix) {
+			continue
+		}
+		id, _ := with[cl.key].(string)
+		if id == "" || strings.Contains(id, "${{") {
+			continue
+		}
+		out = append(out, CloudRoleRef{Provider: cl.provider, Identifier: id})
+	}
+	return out
 }
 
 func extractArtifactOps(step map[string]any) ([]ArtifactRef, []ArtifactRef) {

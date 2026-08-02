@@ -157,6 +157,7 @@ func buildEdges(ctx context.Context, c *corpus, n *nodeSet) (*edgeSet, error) {
 		emitProtectedBy, emitCanBypass, emitCanLandCode, emitCanApprove,
 		emitUsesAction, emitSecretReads, emitArtifactIO, emitCacheIO, emitNeeds,
 		emitCalls, emitTriggers, emitTargets, emitDefines, emitDeployableFrom,
+		emitCanAssume,
 		emitUnbuildable,
 	} {
 		if err := ctx.Err(); err != nil {
@@ -209,6 +210,21 @@ func envEndpoint(c *corpus, repo, name string) endpoint {
 
 func rulesetEndpoint(f map[string]any, idField string) endpoint {
 	return nd(Ruleset, "scope", str(f["scope"]), "id", decimal(f[idField]))
+}
+
+func emitCanAssume(c *corpus, _ *nodeSet, s *edgeSet) {
+	for _, r := range c.dirs["jobs"] {
+		for _, cr := range list(r.fields["cloud_roles"]) {
+			m := obj(cr)
+			id := str(m["identifier"])
+			if id == "" {
+				s.miss(CanAssume, 1)
+				continue
+			}
+			s.add(CanAssume, jobEndpoint(c, r.fields), nd(CloudRole, "identifier", id),
+				source(r.rel))
+		}
+	}
 }
 
 func emitContains(c *corpus, _ *nodeSet, s *edgeSet) {

@@ -262,7 +262,7 @@ func buildNodes(ctx context.Context, c *corpus) (*nodeSet, error) {
 		emitOrganizations, emitRepositories, emitUsers, emitTeams, emitApps,
 		emitDeployKeys, emitRunnerGroups, emitRulesets, emitEnvironments,
 		emitSecrets, emitBranches, emitWorkflows, emitJobs, emitArtifacts,
-		emitCaches, emitActions,
+		emitCaches, emitActions, emitCloudRoles,
 	} {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -395,6 +395,20 @@ func emitBranches(c *corpus, s *nodeSet) {
 				"repo": c.full(str(e["repo"])),
 				"name": str(e["branch"]),
 			}, recordProps(Branch, e), c.chainSource(src[0], src[1]))
+		}
+	}
+}
+
+func emitCloudRoles(c *corpus, s *nodeSet) {
+	for _, r := range c.dirs["jobs"] {
+		for _, cr := range list(r.fields["cloud_roles"]) {
+			m := obj(cr)
+			id := str(m["identifier"])
+			if id == "" {
+				continue
+			}
+			s.upsert(CloudRole, map[string]string{"identifier": id},
+				map[string]any{"provider": m["provider"]}, r.rel)
 		}
 	}
 }
