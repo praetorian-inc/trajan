@@ -190,11 +190,11 @@ func normalizePrincipals(prior engine.PriorPhase, cp engine.CurrentPhase, org st
 				onError(fmt.Errorf("principals: team %s repo without a name in %s", key, source))
 				continue
 			}
-			role := entStr(rm["permission"])
+			role := cmp.Or(entStr(rm["permission"]), entStr(rm["role_name"]))
 			perms := entObj(rm, "permissions")
 			grants = append(grants, PrincipalRepoGrant{
 				Repo:        repo,
-				Permission:  entStrPtr(rm["permission"]),
+				Permission:  entStrPtr(cmp.Or(rm["permission"], rm["role_name"])),
 				Permissions: perms,
 				CanPush:     principalCanPush(role, perms),
 				IsAdmin:     principalIsAdmin(role, perms),

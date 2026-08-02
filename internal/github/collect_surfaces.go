@@ -899,8 +899,12 @@ func collectTeam(ctx context.Context, gh GitHub, org, slug string, summary json.
 	rs := make([]map[string]any, 0, len(repoItems))
 	for _, r := range repoItems {
 		rs = append(rs, map[string]any{
-			"name":       rawOrNull(objField(r, "name")),
-			"permission": rawOrNull(objField(r, "permission")),
+			"name": rawOrNull(objField(r, "name")),
+			// /orgs/{org}/teams/{slug}/repos answers with permissions{} and role_name;
+			// the scalar "permission" it does not return.
+			"permission":  rawOrNull(objField(r, "permission")),
+			"permissions": rawOrNull(objField(r, "permissions")),
+			"role_name":   rawOrNull(objField(r, "role_name")),
 		})
 	}
 	return spliceRaw(summary, map[string]any{"slug": slug, "members": mem, "repos": rs})
