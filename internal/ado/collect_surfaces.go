@@ -51,7 +51,7 @@ func envelope(cp engine.CurrentPhase, rel, collector, sourcePath string, data an
 
 // writeOrMark writes the collected data, or a {"_unobserved":<status>} marker
 // when the surface soft-failed (401/403/404) — so downstream can tell "no access"
-// from "never collected" (CLAUDE.md: 403/404 → skip AND mark).
+// from "never collected" (AGENTS.md: 403/404 → skip AND mark).
 func writeOrMark(cp engine.CurrentPhase, rel, collector, sourcePath string, raw json.RawMessage, status int) error {
 	if status != 0 {
 		return envelope(cp, rel, collector, sourcePath, map[string]any{"_unobserved": status})
@@ -61,7 +61,7 @@ func writeOrMark(cp engine.CurrentPhase, rel, collector, sourcePath string, raw 
 
 // listOrMark returns the list (never nil) on success, or a {"_unobserved":<status>}
 // marker when it soft-failed (401/403/404) — so downstream can tell "no access"
-// from "genuinely empty" (CLAUDE.md: 403/404 → skip AND mark). Used for both
+// from "genuinely empty" (AGENTS.md: 403/404 → skip AND mark). Used for both
 // top-level list surfaces and embedded sub-lists (feed views/permissions).
 func listOrMark(items []json.RawMessage, status int) any {
 	if status != 0 {
