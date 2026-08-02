@@ -44,6 +44,7 @@ var (
 	PhaseCollect   = Phase{1, dirCollect}
 	PhaseNormalize = Phase{PhaseUnnumbered, dirNormalize}
 	PhaseScan      = Phase{2, dirScan}
+	PhaseGraph     = Phase{PhaseUnnumbered, "graph"}
 	PhasePush      = Phase{3, "push"}
 	PhaseAnalyze   = Phase{PhaseUnnumbered, "analyze"}
 	PhaseAttack    = Phase{PhaseUnnumbered, "attack"}

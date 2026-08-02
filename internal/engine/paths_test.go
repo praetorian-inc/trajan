@@ -124,8 +124,8 @@ func TestBranchSlug(t *testing.T) {
 		{"refs/heads/feature/x", "feature__x"},
 	}
 	for _, tt := range tests {
-		if got := branchSlug(tt.in); got != tt.want {
-			t.Errorf("branchSlug(%q) = %q, want %q", tt.in, got, tt.want)
+		if got := BranchSlug(tt.in); got != tt.want {
+			t.Errorf("BranchSlug(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }
