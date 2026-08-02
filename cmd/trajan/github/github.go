@@ -93,6 +93,28 @@ func newGitHubCmd() *cobra.Command {
 			})
 		},
 	}
+	graphCmd := &cobra.Command{
+		Use:   "graph",
+		Short: "Build importable graph nodes/edges from normalized facts and findings",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			runDir, err := engine.ResolveRunDir(cfg, "gh", path)
+			if err != nil {
+				return err
+			}
+			// internal/github imports internal/graph, so the rule -> target index
+			// is built here rather than inside graph.Build.
+			rules, err := github.LoadRules()
+			if err != nil {
+				return err
+			}
+			targets := make(map[string]graph.Target, len(rules))
+			for _, r := range rules {
+				targets[r.ID] = r.GraphTarget
+			}
+			return graph.Build(cmd.Context(), cfg, runDir, targets)
+		},
+	}
 	push := &cobra.Command{
 		Use:   "push",
 		Short: "Push facts + findings into the graph",
@@ -143,7 +165,7 @@ func newGitHubCmd() *cobra.Command {
 
 	scan.Flags().BoolVar(&orgDetectionsOnly, "org-detections-only", false, "evaluate only org-subject (org-level) rules")
 
-	for _, c := range []*cobra.Command{normalize, scan, reportCmd, push, analyze, attack} {
+	for _, c := range []*cobra.Command{normalize, scan, reportCmd, graphCmd, push, analyze, attack} {
 		c.Flags().StringVarP(&path, "path", "p", "", "run directory (default: latest)")
 	}
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
@@ -157,6 +179,6 @@ func newGitHubCmd() *cobra.Command {
 	analyze.Flags().BoolVarP(&noGraph, "no-graph", "G", false, "analyze in-memory (no Neo4j)")
 	analyze.Flags().BoolVarP(&detailed, "detailed", "d", false, "expand output")
 
-	gh.AddCommand(whoami, collect, normalize, scan, reportCmd, push, analyze, attack, run)
+	gh.AddCommand(whoami, collect, normalize, scan, reportCmd, graphCmd, push, analyze, attack, run)
 	return gh
 }
