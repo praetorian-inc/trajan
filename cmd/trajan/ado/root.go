@@ -39,6 +39,18 @@ func newAdoCmd() *cobra.Command {
 		return adopkg.Collect(cmd.Context(), cfg, locator)
 	}
 
+	var whoamiOrg string
+	whoami := &cobra.Command{
+		Use:   "whoami",
+		Short: "Resolve the token and print the authenticated identity and reachable surfaces",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			token, _ := cmd.Flags().GetString("token")
+			return adopkg.WhoAmI(cmd.Context(), whoamiOrg, token)
+		},
+	}
+	whoami.Flags().StringVar(&whoamiOrg, "org", "", "Azure DevOps organization (default: ORG_NAME)")
+
 	collect := &cobra.Command{
 		Use:   "collect [locator]",
 		Short: "Collect raw Azure DevOps configuration for an org/project",
@@ -132,7 +144,7 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 	// The phased scan takes over "ado scan"; the legacy scanner stays reachable here.
 	scanCmd.Use = "scan-legacy"
 
-	ado.AddCommand(enumerateCmd, collect, normalize, scan, reportCmd, run, attackCmd, retrieveCmd, scanCmd)
+	ado.AddCommand(whoami, enumerateCmd, collect, normalize, scan, reportCmd, run, attackCmd, retrieveCmd, scanCmd)
 	return ado
 }
 
