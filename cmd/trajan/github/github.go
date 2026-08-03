@@ -33,6 +33,7 @@ func newGitHubCmd() *cobra.Command {
 
 	var path string
 	var neo4jURL, neo4jUser, neo4jPass string
+	var neo4jReset bool
 	var writeBack, noGraph, detailed bool
 	var orgDetectionsOnly bool
 	var reportFormat, reportMinSev, reportMinConf, reportOut string
@@ -126,7 +127,7 @@ func newGitHubCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return graph.Push(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser, neo4jPass)
+			return graph.Push(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser, neo4jPass, neo4jReset)
 		},
 	}
 	analyze := &cobra.Command{
@@ -177,6 +178,7 @@ func newGitHubCmd() *cobra.Command {
 	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j Bolt URL")
 	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")
 	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "", "Neo4j password")
+	push.Flags().BoolVar(&neo4jReset, "reset", false, "delete every node in the database before pushing")
 	analyze.Flags().BoolVarP(&writeBack, "write-back", "w", false, "persist analysis results")
 	analyze.Flags().BoolVarP(&noGraph, "no-graph", "G", false, "analyze in-memory (no Neo4j)")
 	analyze.Flags().BoolVarP(&detailed, "detailed", "d", false, "expand output")
