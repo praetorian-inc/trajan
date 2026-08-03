@@ -197,8 +197,10 @@ type Perms struct {
 func (Repo) Kind() HandleKind { return KindRepo }
 
 // WritableRepo is the in-repo write-collaborator target: RepoScoped and
-// WritableRef, but produced only by repo.writable after it reads Perms.Push, so
-// a bare Repo can never bind a write port.
+// WritableRef, but produced only where write access was established rather than
+// assumed — repo.writable reads Perms.Push, repo.create reads it off the response
+// to the call that made the repository — so a bare Repo can never bind a write
+// port.
 type WritableRepo struct {
 	sealed
 	RepoLoc

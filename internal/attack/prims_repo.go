@@ -28,6 +28,17 @@ func init() {
 	}, repoFork)
 
 	Register(Spec{
+		Name: "repo.create",
+		Summary: "Create a private repository the run owns, to establish what a credential reaches through an " +
+			"organization it is only a member of — a runner group whose visibility is all, most of all. Needs " +
+			"administration:write on the organization and its members_can_create_private_repositories setting, " +
+			"which this reads before the call.",
+		Caps:       []Capability{CapAdministration},
+		Mutating:   true,
+		Reversible: true,
+	}, repoCreate)
+
+	Register(Spec{
 		Name:        "repo.delete",
 		Summary:     "Delete a repository this run created — the inverse of repo.fork.",
 		Ports:       []Port{Accepts[RepoScoped]("repo", true)},
@@ -195,6 +206,134 @@ func refResolves(ctx context.Context, c github.GitHub, owner, name, branch strin
 		return false, err
 	}
 	return body.Object.SHA != "", nil
+}
+
+type repoCreateParams struct {
+	Owner string `yaml:"owner"`
+	Repo  string `yaml:"repo"`
+}
+
+// repoCreate names its repository in owner:/repo: rather than binding an Org
+// handle, so the name is plan text: computeOrigin then reads the same concrete
+// origin it reads off repo.resolve and Validate refuses an out-of-scope creation
+// offline, where a name derived from a bound handle would be opaque until the call.
+//
+// It produces WritableRepo rather than a Repo a repo.writable step then confirms.
+// The confirming read is what repo.writable exists for on a repository the plan did
+// not create; here the creating call's own response carries Perms.Push, so the read
+// would be redundant under --execute and unavailable without it — a dry run skips a
+// read that depends on a mutation it only rendered, which would leave every commit
+// below unrendered and the sequence half-documented.
+//
+// The repository is private unconditionally. A verification run must not add
+// public attack surface to the organization it is measuring, and nothing needs a
+// public one.
+func repoCreate(ctx context.Context, s *Session, p repoCreateParams, _ Inputs) (WritableRepo, error) {
+	if p.Owner == "" || p.Repo == "" {
+		return WritableRepo{}, errors.New("owner and repo are required")
+	}
+	target := p.Owner + "/" + p.Repo
+	created := WritableRepo{RepoLoc: RepoLoc{Owner: p.Owner, Repo: p.Repo}, DefaultBranch: "main"}
+
+	client, err := s.Client()
+	if err != nil && s.Execute {
+		return WritableRepo{}, err
+	}
+	if client != nil {
+		if err := repoNameIsFree(ctx, s, client, p.Owner, p.Repo); err != nil {
+			return WritableRepo{}, err
+		}
+		if err := orgAllowsPrivateRepos(ctx, s, client, p.Owner); err != nil {
+			return WritableRepo{}, err
+		}
+	}
+
+	raw, _, err := s.Mutate(ctx, Mutation{
+		Method: http.MethodPost,
+		Path:   "/orgs/" + p.Owner + "/repos",
+		Body: map[string]any{
+			"name":    p.Repo,
+			"private": true,
+			// A repository created with no commits has no default-branch ref, so every
+			// write port downstream would bind a ref that does not resolve.
+			"auto_init":   true,
+			"description": "created by trajan for verification plan " + s.Plan.ID,
+		},
+		Target: target,
+		Note:   "creates the repository " + target,
+		Inverse: []UndoStep{{
+			Method: http.MethodDelete,
+			Path:   "/repos/" + target,
+			Note: "deletes the repository this run created; it needs delete_repo or administration:write and is " +
+				"refused for a credential holding neither, which is reported as a failed reversal rather than " +
+				"assumed here",
+		}},
+	})
+	if err != nil {
+		return WritableRepo{}, err
+	}
+	if !s.Execute {
+		return created, nil
+	}
+
+	var body repoBody
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return WritableRepo{}, err
+	}
+	if !body.Permissions.Push {
+		return WritableRepo{}, fmt.Errorf("%s was created but its response reports no push permission for %q, so nothing may bind it as a writable ref", target, s.ActingName())
+	}
+	created.DefaultBranch = cmp.Or(body.DefaultBranch, created.DefaultBranch)
+	return created, nil
+}
+
+// repoNameIsFree refuses a name that already resolves instead of reusing it. The
+// inverse this primitive writes to the ledger is a delete, so adopting an existing
+// repository would arm an undo against something the run did not create — the one
+// mistake here that cannot be walked back.
+func repoNameIsFree(ctx context.Context, s *Session, c github.GitHub, owner, name string) error {
+	if _, status, err := readRepo(ctx, c, owner, name); err == nil {
+		return fmt.Errorf("%s/%s already exists, and repo.create does not adopt a repository: the inverse it records is a delete, which must never point at something this run did not create. Remove a leftover of an earlier run, or name a different repository", owner, name)
+	} else if status != http.StatusNotFound {
+		return s.SoftRead(err, "read the repository name to create")
+	}
+	return nil
+}
+
+// orgAllowsPrivateRepos refuses locally when the organization is known to forbid
+// the creation, so a member credential does not spend a 403 in the customer's audit
+// trail to learn it. The settings are visible to owners, and a member reading its own
+// organization gets a profile without them, so unreadable is a note and not a
+// refusal: a negative nothing measured must not be reported as one that was.
+func orgAllowsPrivateRepos(ctx context.Context, s *Session, c github.GitHub, org string) error {
+	// Two settings, both required: the first is the organization-wide switch, the
+	// second narrows it by visibility, and reading only one leaves a configuration
+	// where the guard passes and the call is refused anyway.
+	var body struct {
+		Any     *bool `json:"members_can_create_repositories"`
+		Private *bool `json:"members_can_create_private_repositories"`
+	}
+	raw, _, err := c.Get(ctx, "/orgs/"+org, nil, false)
+	if err == nil {
+		err = json.Unmarshal(raw, &body)
+	}
+	off := ""
+	switch {
+	case body.Any != nil && !*body.Any:
+		off = "members_can_create_repositories"
+	case body.Private != nil && !*body.Private:
+		off = "members_can_create_private_repositories"
+	}
+
+	switch {
+	case err != nil:
+		s.Note(fmt.Sprintf("organization %s is unreadable as this identity (%s), so whether it permits members to create private repositories was not established and the call below is what decides it", org, apiMessage(err)))
+	case off != "":
+		return fmt.Errorf("%s has %s off, so POST /orgs/%s/repos would be refused; an owner changes the setting, or the plan acts as an identity that holds administration:write on the organization", org, off, org)
+	case body.Any == nil && body.Private == nil:
+		s.Note(fmt.Sprintf("the repository-creation settings are absent from the profile of %s this identity reads — they are visible to owners — so the call below is what decides it", org))
+	}
+	return nil
 }
 
 type repoDeleteParams struct{}
