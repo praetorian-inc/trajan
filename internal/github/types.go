@@ -136,7 +136,7 @@ type Job struct {
 	Environment                  *EnvironmentRef `json:"environment"`
 	EnvironmentChosenDynamically bool            `json:"environment_chosen_dynamically"`
 
-	InlinedFrom any `json:"_inlined_from"` // always null: recursive inlining not implemented
+	InlinedFrom any `json:"_inlined_from"` // always null; rules key on the presence of the key
 
 	CallsReusableWorkflows    []ReusableCall      `json:"calls_reusable_workflows"`
 	LocalCompositeActionsUsed []LocalCompositeRef `json:"local_composite_actions_used"`

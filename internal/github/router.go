@@ -13,7 +13,7 @@ import (
 
 // router implements GitHub by dispatching each call to the highest-preference
 // transport capable of serving its surface, falling through to the REST floor on
-// failure (D2.1/D2.4).
+// failure.
 type router struct {
 	transports map[transportKind]transport
 	forceREST  bool
@@ -50,7 +50,7 @@ func closeRouter(gh GitHub) {
 	}
 }
 
-// sourceAPIFor reports the provenance of the preferred transport for s (D2.6); it
+// sourceAPIFor reports the provenance of the preferred transport for s. It
 // ignores per-call fall-through, which only affects this cosmetic field.
 func (r *router) sourceAPIFor(s surface) string {
 	cands := r.candidates(s)
