@@ -1,0 +1,22 @@
+id: t-00/canary-noop
+summary: Prove that execution occurred in this context and touch nothing else.
+flavor: workflow_steps
+
+params:
+  - { name: marker, type: string, required: true, doc: "the run-unique high-entropy token the harvest correlates on" }
+  - { name: emit_context, type: bool, default: true, doc: "also emit the already-public run coordinates" }
+
+# String and list values interpolate PRE-QUOTED for this flavor, so write
+# << .Params.x >> bare and never inside quotes of your own. Numbers and booleans
+# interpolate raw and compare as themselves, so << if .Params.emit_context >>
+# and << if eq .Params.mode "x" >> both behave.
+body: |
+  - name: trajan canary
+    shell: bash
+    run: |
+      echo trajan-marker=<< .Params.marker >>
+      <<- if .Params.emit_context >>
+      echo "trajan-event=${GITHUB_EVENT_NAME} trajan-ref=${GITHUB_REF}"
+      echo "trajan-run=${GITHUB_RUN_ID} trajan-attempt=${GITHUB_RUN_ATTEMPT} trajan-job=${GITHUB_JOB}"
+      <<- end >>
+      echo trajan-marker-end=<< .Params.marker >>

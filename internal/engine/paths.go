@@ -12,6 +12,7 @@ const (
 	dirCollect   = "00-collect"
 	dirNormalize = "10-normalize"
 	dirScan      = "20-scan"
+	dirAttack    = "30-attack"
 )
 
 func CollectOrg(org string) string { return path.Join(dirCollect, "org", org+".json") }
@@ -505,6 +506,36 @@ func NormalizeJobBranch(repo, ref string, isDefault bool, workflow, jobID string
 func Finding(ruleID, subjectHash string) string {
 	return path.Join(dirScan, "findings", ruleID+"__"+subjectHash+".json")
 }
+
+// AttackRoot is the phase directory every plan's own directory sits under.
+func AttackRoot() string { return dirAttack }
+
+// AttackDir is one plan's directory. A plan id carries the template's path
+// ("github/pwn-request"), so safePath folds the slash and one plan stays one
+// directory.
+func AttackDir(planID string) string { return path.Join(dirAttack, safePath(planID)) }
+
+func AttackPlan(planID string) string { return path.Join(AttackDir(planID), "_plan.json") }
+
+func AttackLedger(planID string) string { return path.Join(AttackDir(planID), "_ledger.jsonl") }
+
+func AttackDryRun(planID string) string { return path.Join(AttackDir(planID), "dry-run.json") }
+
+func AttackSteps(planID string) string { return path.Join(AttackDir(planID), "steps") }
+
+func AttackStep(planID string, seq int, stepID string) string {
+	return path.Join(AttackSteps(planID), fmt.Sprintf("%03d-%s.json", seq, stepID))
+}
+
+func AttackLoot(planID, name string) string {
+	return path.Join(AttackDir(planID), "loot", name)
+}
+
+func AttackFinding(planID, fingerprint string) string {
+	return path.Join(AttackDir(planID), "findings", fingerprint+".json")
+}
+
+func AttackCleanup(planID string) string { return path.Join(AttackDir(planID), "cleanup.json") }
 
 func ScanSummary() string { return path.Join(dirScan, "_summary.json") }
 

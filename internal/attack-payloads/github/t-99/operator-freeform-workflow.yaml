@@ -1,0 +1,30 @@
+id: t-99/operator-freeform-workflow
+summary: Operator-supplied workflow steps, wrapped in the corpus marker envelope so the result is still a finding rather than a log someone has to read by hand.
+flavor: workflow_steps
+
+params:
+  - { name: marker, type: string, required: true, doc: "required exactly as for a preset: the assembled finding has no other way to locate the result" }
+  - { name: body, type: file, required: true, doc: "the operator's steps, supplied as a file and interpolated verbatim — this is the one value in the corpus that must NOT be quoted at render time" }
+
+# The escape hatch, inside the mechanism rather than around it. The body is not
+# inspected, rewritten or sanitised — attempting that would be both ineffective and
+# dishonest about what the mechanism guarantees. What is imposed is the envelope:
+# trajan-marker before the operator's steps and trajan-marker-end after them, the
+# second with if: always() so it appears even when the operator's content fails.
+# That is what separates "never ran", "ran and failed" and "ran to completion"
+# in the harvest — the three the operator most needs told apart.
+#
+# The guarantee is bounded and should be stated in those words: the same marker,
+# the same evidence handling, the same accounting and the same composition rules as
+# a preset. It does not and cannot guarantee that the operator's content is safe,
+# and the finding carries its provenance so a customer can tell reviewed corpus
+# content from operator content.
+body: |
+  - name: trajan freeform preamble
+    shell: bash
+    run: echo trajan-marker=<< .Params.marker >>
+  << .Params.body >>
+  - name: trajan freeform epilogue
+    if: always()
+    shell: bash
+    run: echo trajan-marker-end=<< .Params.marker >>

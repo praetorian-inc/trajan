@@ -1,0 +1,92 @@
+id: t-10/egress-reachability-workflow
+summary: Establish whether this job can reach the network at all, and by which channel — the precondition for every exfiltration claim in the report.
+flavor: workflow_steps
+
+params:
+  - { name: marker, type: string, required: true, doc: "the run-unique high-entropy token the harvest correlates on; it is also the entire beacon content" }
+  - { name: method, type: string, default: dns, doc: "dns | http_get | http_post — ordered least to most capable, so a failure at one and a success at another is itself the finding" }
+
+# Emits trajan-egress-method, trajan-proxy-configured, trajan-egress-endpoint and
+# trajan-egress-result, plus trajan-egress-status / trajan-curl-exit for the http
+# methods and trajan-egress-dns-name / trajan-egress-tool for dns. A successful
+# beacon supports "egress to an operator-controlled host succeeded" and nothing
+# stronger — no data was exfiltrated, because the beacon carries the chain marker
+# and there is no parameter that could make it carry anything else.
+#
+# The endpoint is the plan-level collector, so the beacon and run.harvest(source:
+# oob) cannot drift onto different hosts. It has no default: with no collector
+# configured the step exits non-zero with a marker, because a beacon to nowhere is
+# not a negative result about the customer's egress.
+#
+# For the http methods the local line is the primary evidence. For dns it is not:
+# a local resolution failure and a query that reached the operator's authoritative
+# server look identical from the runner, so the collector-side observation decides,
+# and the local line only reports whether the resolver answered at all.
+body: |
+  - name: trajan egress reachability
+    shell: bash
+    env:
+      TRJ_ENDPOINT: << .Collector >>
+    run: |
+      marker=<< .Params.marker >>
+      method=<< .Params.method >>
+      echo "trajan-marker=$marker"
+      echo "trajan-egress-method=$method trajan-proxy-configured=$([ -n "${HTTPS_PROXY:-${https_proxy:-}}" ] && echo true || echo false)"
+      if [ -z "${TRJ_ENDPOINT:-}" ]; then
+        echo trajan-error=collector-not-configured
+        exit 1
+      fi
+      echo "trajan-egress-endpoint=$TRJ_ENDPOINT"
+      case $method in
+        dns)
+          case $TRJ_ENDPOINT in
+            *://*|*/*) echo trajan-error=collector-not-a-dns-domain; exit 1 ;;
+          esac
+          host=$marker.$TRJ_ENDPOINT
+          echo "trajan-egress-dns-name=$host"
+          resolve=0
+          if command -v getent >/dev/null 2>&1; then
+            tool=getent
+            getent hosts "$host" >/dev/null 2>&1 || resolve=$?
+          elif command -v nslookup >/dev/null 2>&1; then
+            tool=nslookup
+            nslookup "$host" >/dev/null 2>&1 || resolve=$?
+          else
+            echo trajan-error=no-dns-resolver-available
+            exit 1
+          fi
+          if [ "$resolve" -eq 0 ]; then
+            echo "trajan-egress-result=resolved trajan-egress-tool=$tool"
+          else
+            echo "trajan-egress-result=not-resolved trajan-egress-tool=$tool trajan-egress-exit=$resolve"
+          fi
+          ;;
+        http_get|http_post)
+          case $TRJ_ENDPOINT in
+            *://*) ;;
+            *) echo trajan-error=collector-not-a-url; exit 1 ;;
+          esac
+          command -v curl >/dev/null 2>&1 || { echo trajan-error=curl-unavailable; exit 1; }
+          beacon=0
+          if [ "$method" = http_get ]; then
+            status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 --get --data-urlencode "m=$marker" "$TRJ_ENDPOINT") || beacon=$?
+          else
+            status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 -X POST --data-urlencode "m=$marker" "$TRJ_ENDPOINT") || beacon=$?
+          fi
+          case $beacon in
+            0)     result=reached ;;
+            5)     result=proxy-resolution-failure ;;
+            6)     result=resolution-failure ;;
+            7)     result=connection-refused ;;
+            28)    result=timeout ;;
+            35|60) result=tls-interception-or-cert-failure ;;
+            *)     result=other ;;
+          esac
+          echo "trajan-egress-result=$result trajan-egress-status=${status:-none} trajan-curl-exit=$beacon"
+          ;;
+        *)
+          echo "trajan-error=unknown-method trajan-egress-method=$method"
+          exit 1
+          ;;
+      esac
+      echo "trajan-marker-end=$marker"

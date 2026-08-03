@@ -117,14 +117,7 @@ func newGitHubCmd() *cobra.Command {
 			return graph.Analyze(cmd.Context(), cfg, runDir, writeBack, noGraph, detailed)
 		},
 	}
-	attack := &cobra.Command{
-		Use:   "attack",
-		Short: "Active exploitation (reserved)",
-		Args:  cobra.NoArgs,
-		RunE: func(*cobra.Command, []string) error {
-			return engine.ErrNotImplemented
-		},
-	}
+	attack := newAttackCmd(cfg)
 	run := &cobra.Command{
 		Use:   "run <locator>",
 		Short: "Wrapper: collect, normalize, scan in one process",
@@ -143,7 +136,7 @@ func newGitHubCmd() *cobra.Command {
 
 	scan.Flags().BoolVar(&orgDetectionsOnly, "org-detections-only", false, "evaluate only org-subject (org-level) rules")
 
-	for _, c := range []*cobra.Command{normalize, scan, reportCmd, push, analyze, attack} {
+	for _, c := range []*cobra.Command{normalize, scan, reportCmd, push, analyze} {
 		c.Flags().StringVarP(&path, "path", "p", "", "run directory (default: latest)")
 	}
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")

