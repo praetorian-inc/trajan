@@ -10,6 +10,9 @@ import (
 
 // Capability is a coarse permission a primitive needs; Session compares it
 // against an identity's scopes as an advisory preflight, never a hard gate.
+// Every member is a write grant, so a read a primitive also needs cannot be
+// declared here and belongs in its Summary, which is then the only channel the
+// operator has to it — repo.fork's contents:read is the one such requirement.
 type Capability string
 
 const (

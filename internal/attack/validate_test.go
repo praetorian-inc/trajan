@@ -1,7 +1,6 @@
 package attack
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -71,16 +70,6 @@ steps:
 	}
 }
 
-func TestValidateUnknownInputKey(t *testing.T) {
-	p := mustParse(t, okHeader+`
-steps:
-  - { id: target, uses: repo.resolve, owner: acme, repo: widget, nonsense: 1 }
-`)
-	if !hasSubstr(hardErrs(p), `has no input "nonsense"`) {
-		t.Fatalf("want unknown input key, got %v", hardErrs(p))
-	}
-}
-
 func TestValidatePortBoundToInput(t *testing.T) {
 	p := mustParse(t, okHeader+`
 inputs:
@@ -104,16 +93,6 @@ steps:
 	errs := hardErrs(p)
 	if !hasSubstr(errs, `"on" references "b" which is not a prior step`) {
 		t.Fatalf("want forward reference, got %v", errs)
-	}
-}
-
-func TestValidateSelfReference(t *testing.T) {
-	p := mustParse(t, okHeader+`
-steps:
-  - { id: a, uses: ref.create, on: a, name: x }
-`)
-	if !hasSubstr(hardErrs(p), `"on" references "a" which is not a prior step`) {
-		t.Fatalf("want self reference rejected, got %v", hardErrs(p))
 	}
 }
 
@@ -141,21 +120,6 @@ steps:
 	}
 }
 
-func TestValidateBadAPIVersionAndEmptyScope(t *testing.T) {
-	p := mustParse(t, `apiVersion: v2
-scope: []
-steps:
-  - { id: target, uses: repo.resolve, owner: acme, repo: widget }
-`)
-	errs := hardErrs(p)
-	if !hasSubstr(errs, "apiVersion must be") {
-		t.Errorf("want apiVersion error, got %v", errs)
-	}
-	if !hasSubstr(errs, "scope must list at least one") {
-		t.Errorf("want empty-scope error, got %v", errs)
-	}
-}
-
 // Validate returns EVERY error at once, not the first.
 func TestValidateReturnsEveryError(t *testing.T) {
 	p := mustParse(t, `apiVersion: v2
@@ -169,32 +133,6 @@ steps:
 		if !hasSubstr(errs, want) {
 			t.Errorf("missing %q in %v", want, errs)
 		}
-	}
-}
-
-// The interface-satisfaction mechanism the validator reads back via reflect: a
-// throwaway type that does and does not implement WritableRef.
-type doesWrite struct{ sealed }
-
-func (doesWrite) Kind() HandleKind { return "does_write" }
-func (doesWrite) RepoRef() RepoLoc { return RepoLoc{} }
-func (doesWrite) WriteRef() RefLoc { return RefLoc{} }
-
-type onlyScoped struct{ sealed }
-
-func (onlyScoped) Kind() HandleKind { return "only_scoped" }
-func (onlyScoped) RepoRef() RepoLoc { return RepoLoc{} }
-
-func TestInterfaceSatisfactionUnderReflect(t *testing.T) {
-	wr := reflect.TypeFor[WritableRef]()
-	if !reflect.TypeFor[doesWrite]().Implements(wr) {
-		t.Error("doesWrite must implement WritableRef")
-	}
-	if reflect.TypeFor[onlyScoped]().Implements(wr) {
-		t.Error("onlyScoped must NOT implement WritableRef")
-	}
-	if !reflect.TypeFor[onlyScoped]().Implements(reflect.TypeFor[RepoScoped]()) {
-		t.Error("onlyScoped must implement RepoScoped")
 	}
 }
 

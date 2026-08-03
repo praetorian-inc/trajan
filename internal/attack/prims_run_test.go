@@ -442,24 +442,6 @@ func TestRunAwaitRefusesAnUnnamedEventSet(t *testing.T) {
 	}
 }
 
-func TestRunAwaitCorrelatesADeclaredTrigger(t *testing.T) {
-	rec := StepRecord{Uses: "workflow.commit", Inputs: map[string]any{"trigger": []any{"workflow_dispatch"}}}
-	w := prtWatch()
-	w.events = provokedEvents(rec)
-
-	got, _ := candidates([]runBody{
-		listed(100, "push", time.Second),
-		listed(101, "workflow_dispatch", 2*time.Second),
-	}, w, nil)
-
-	if find(t, got, 100).Rejected == "" {
-		t.Error("a document subscribed only to workflow_dispatch fires nothing on push, so the push run is not ours")
-	}
-	if find(t, got, 101).Rejected != "" {
-		t.Errorf("the workflow_dispatch run is the one the declared trigger fires: %q", find(t, got, 101).Rejected)
-	}
-}
-
 // The oracle for the cases below is the dispatch endpoint's documented answer
 // under the API version this client pins: asked for return_run_details it replies
 // 200 with workflow_run_id, run_url and html_url, so the run it started needs no

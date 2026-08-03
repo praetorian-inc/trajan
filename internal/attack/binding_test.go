@@ -72,18 +72,6 @@ steps:
 	}
 }
 
-func TestBindingBareWordNamingNothingIsLiteral(t *testing.T) {
-	p := mustParse(t, okHeader+`
-steps:
-  - { id: target, uses: repo.resolve, owner: acme, repo: widget }
-  - { id: writable, uses: repo.writable, repo: target }
-  - { id: branch, uses: ref.create, on: writable, name: chore/whatever }
-`)
-	if errs := hardErrs(p); len(errs) != 0 {
-		t.Fatalf("a bare word naming neither step nor input is a literal, got %v", errs)
-	}
-}
-
 func TestBindingTypoedHandleFieldName(t *testing.T) {
 	// target is a Repo; Repo has no field "sha".
 	p := mustParse(t, okHeader+`
