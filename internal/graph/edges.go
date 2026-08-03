@@ -993,9 +993,9 @@ func scopedRepos(c *corpus, f map[string]any) []string {
 
 func emitRunnerGroupAccess(c *corpus, _ *nodeSet, s *edgeSet) {
 	for _, r := range c.dirs["runner-groups"] {
-		from := nd(RunnerGroup, "org", str(r.fields["org"]), "id", decimal(r.fields["group_id"]))
+		to := nd(RunnerGroup, "org", str(r.fields["org"]), "id", decimal(r.fields["group_id"]))
 		for _, repo := range scopedRepos(c, r.fields) {
-			s.add(CanAccess, from, repoEndpoint(c, repo), map[string]any{
+			s.add(CanAccess, repoEndpoint(c, repo), to, map[string]any{
 				"visibility": str(r.fields["visibility"]),
 				"_source":    []any{r.rel},
 			})

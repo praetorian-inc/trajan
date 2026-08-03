@@ -587,10 +587,10 @@ var gapRegister = []gapEntry{{
 	Reason:      "built from org secret visibility now that orgSecretSummaries keeps the repository names: \"all\" reaches every live repo, \"private\" every non-public one, \"selected\" exactly the named list; an archived repo is excluded from all three because it runs no workflow. The edge carries visibility so a consumer can tell the cases apart. The \"selected\" case is the one no query could reproduce from the node: an empty selected list means the secret is reachable by nothing, which a fan-out from Secret.visibility would get exactly backwards. The cost is real — 7 org secrets over 145 repos is 864 edges in ghektestorg (archived repos excluded) — and it is paid so the two cases live in one relation.",
 	UpstreamFix: "none. normalize_secrets.go could still write org-scope secrets as records rather than leaving them to be recovered from org.org_actions_secrets[]; see the Organization secrets row.",
 }, {
-	Subject:     "CAN_ACCESS{RunnerGroup,Repository}",
+	Subject:     "CAN_ACCESS{Repository,RunnerGroup}",
 	Kind:        "edge",
 	Status:      "built",
-	Reason:      "built from the group's visibility on the same rule as the secret pair. It is what bounds RUNS_ON for an org runner that names a group: a group scoped to selected repositories cannot run a job in a repository outside the list.",
+	Reason:      "built from the group's visibility on the same rule as the secret pair, and pointed the same way: the repository is the consumer and the group the resource, so it runs with RUNS_ON{Job,RunnerGroup} rather than against it. It is what bounds RUNS_ON for an org runner that names a group: a group scoped to selected repositories cannot run a job in a repository outside the list.",
 	UpstreamFix: "none.",
 }, {
 	Subject:     "MEMBER_OF{Team,Team}",

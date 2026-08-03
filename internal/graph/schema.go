@@ -107,8 +107,8 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 	},
 	CanAccess: {
 		{App, Repository},
-		{RunnerGroup, Repository},
 		{Repository, Secret},
+		{Repository, RunnerGroup},
 	},
 	Needs: {
 		{Job, Job},

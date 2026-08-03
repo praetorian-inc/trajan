@@ -12,11 +12,13 @@ func orgFixture(secrets ...any) map[string]any {
 	}
 }
 
-func canAccessTargets(s *edgeSet, from NodeLabel) map[string][]string {
+// Both visibility fan-outs run repository -> resource, so the thing whose blast
+// radius is under test is the "to" end and the repositories are what collect.
+func canAccessSources(s *edgeSet, to NodeLabel) map[string][]string {
 	out := map[string][]string{}
 	for _, e := range edgesOfType(s, CanAccess) {
-		if e.FromLabel == from {
-			out[e.From] = append(out[e.From], e.To)
+		if e.ToLabel == to {
+			out[e.To] = append(out[e.To], e.From)
 		}
 	}
 	for _, v := range out {
@@ -42,15 +44,7 @@ func TestOrgSecretSelectedWithEmptyListReachesNothing(t *testing.T) {
 		"repos/shared-workflows.json": map[string]any{"_id": "shared-workflows", "repo": "shared-workflows", "visibility": "private"},
 	})
 
-	reach := map[string][]string{}
-	for _, e := range edgesOfType(s, CanAccess) {
-		if e.ToLabel == Secret {
-			reach[e.To] = append(reach[e.To], e.From)
-		}
-	}
-	for _, v := range reach {
-		slices.Sort(v)
-	}
+	reach := canAccessSources(s, Secret)
 
 	if got := reach["Secret|org|portus-labs|NPM_TOKEN"]; len(got) != 0 {
 		t.Errorf("NPM_TOKEN reaches %v, want nothing: an empty selected set names no repository", got)
@@ -86,7 +80,7 @@ func TestRunnerGroupSelectedWithEmptyListReachesNoRepository(t *testing.T) {
 			"scope": "org", "scope_key": "portus-labs", "name": "vm-b", "labels": []any{"self-hosted", "Linux"}},
 	})
 
-	reach := canAccessTargets(s, RunnerGroup)
+	reach := canAccessSources(s, RunnerGroup)
 	if got := len(reach["RunnerGroup|portus-labs|1"]); got != 2 {
 		t.Errorf("visibility \"all\" group reaches %d repos, want 2", got)
 	}
