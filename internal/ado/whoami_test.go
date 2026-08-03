@@ -272,6 +272,30 @@ func TestWhoAmI_PagedProjectsCountsEveryPage(t *testing.T) {
 	}
 }
 
+// A project with no name would build "//_apis/...", which real ADO answers 400/404
+// on three of the four surfaces — reporting them denied when they are not.
+func TestWhoAmI_SkipsNamelessProject(t *testing.T) {
+	t.Setenv("ADO_PAT", "pat")
+	paths := whoamiStub(t, nil, map[string]string{
+		"/_apis/projects": `{"count":2,"value":[{"id":"no-name"},{"name":"Named"}]}`,
+	})
+
+	out, err := runWhoAmI(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(paths(), " ")
+	if strings.Contains(joined, "//_apis/git/repositories") {
+		t.Fatalf("probed an empty project segment: %v", paths())
+	}
+	if !strings.Contains(joined, "/Named/_apis/git/repositories") {
+		t.Fatalf("want probes against the first named project, got %v", paths())
+	}
+	if !strings.Contains(out, "reachable: Projects, Repositories, Pipelines, Agent pools, Variable groups, Service connections, Artifact feeds\n") {
+		t.Fatalf("every surface must still read reachable, got %q", out)
+	}
+}
+
 func TestWhoAmI_HappyPathRequestCount(t *testing.T) {
 	t.Setenv("ADO_PAT", "pat")
 	paths := whoamiStub(t, nil, nil)

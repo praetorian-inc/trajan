@@ -73,8 +73,16 @@ func WhoAmI(ctx context.Context, org, token string) error {
 	probe("Agent pools", "core", APIVersion, "/_apis/distributedtask/pools")
 	probe("Artifact feeds", "feeds", APIVersionPreview, "/_apis/packaging/feeds")
 
-	if len(projects) > 0 {
-		pe := url.PathEscape(strField(projects[0], "name"))
+	// A nameless project builds a "//_apis/..." path, which answers 400/404 and so
+	// reads as denied; sample the first project that actually carries a name.
+	var sample string
+	for _, p := range projects {
+		if sample = strField(p, "name"); sample != "" {
+			break
+		}
+	}
+	if sample != "" {
+		pe := url.PathEscape(sample)
 		probe("Repositories", "core", APIVersion, "/"+pe+"/_apis/git/repositories")
 		probe("Pipelines", "core", APIVersion, "/"+pe+"/_apis/pipelines")
 		probe("Variable groups", "core", APIVersion, "/"+pe+"/_apis/distributedtask/variablegroups")
