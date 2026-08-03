@@ -327,12 +327,12 @@ func (st staging) suppressed(ctx context.Context, s *Session, g GitData, ref str
 	if err != nil {
 		return nil, s.SoftRead(err, "read "+ref)
 	}
-	paths, err := g.Tree(ctx, head)
+	paths, _, err := g.Tree(ctx, head)
 	if err != nil {
 		return nil, s.SoftRead(err, "read tree "+head)
 	}
 	var out []string
-	for _, p := range paths {
+	for p := range paths {
 		if !strings.HasPrefix(p, workflowDir) {
 			continue
 		}

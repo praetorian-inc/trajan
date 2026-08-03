@@ -701,11 +701,41 @@ func (c TreeChange) paths() []string {
 	return out
 }
 
-func mode(exec bool) string {
+// blobMode keeps the mode a path already carries instead of reasserting the default.
+// Editing a file is not a decision about its mode: rewriting a script the target
+// invokes directly — ./scripts/setup-env.sh and every payload that works that way —
+// at 100644 leaves the content in place and the job failing on the exec bit before it
+// runs a line of it, which reads as a payload that did not work.
+//
+// Only the two regular blob modes carry forward. A path the tree records as a symlink
+// or a submodule is not something a staged blob should inherit.
+func blobMode(existing map[string]string, path string, exec bool) string {
 	if exec {
 		return "100755"
 	}
+	switch existing[path] {
+	case "100644", "100755":
+		return existing[path]
+	}
 	return "100644"
+}
+
+// existingModes reads the modes of the tree this commit lays over. A failure is a note
+// rather than an error: the commit still lands, and saying so is better than a mode
+// change nobody asked for going unmentioned.
+func (g GitData) existingModes(ctx context.Context, treeSHA string, ch TreeChange) map[string]string {
+	if treeSHA == "" || len(ch.Files) == 0 {
+		return nil
+	}
+	modes, truncated, err := g.Tree(ctx, treeSHA)
+	if err != nil {
+		g.s.Note(fmt.Sprintf("the base tree was unreadable (%s), so no edited file's existing mode was preserved; a file the target invokes directly may land non-executable", apiMessage(err)))
+		return nil
+	}
+	if truncated {
+		g.s.Note("the base tree listing was truncated, so an edited file past the cut may not have kept its existing mode")
+	}
+	return modes
 }
 
 // Commit stages files as blobs, lays them over the ref's current tree, creates
@@ -737,6 +767,8 @@ func (g GitData) Commit(ctx context.Context, ref, message string, ch TreeChange,
 		}
 	}
 
+	existing := g.existingModes(ctx, baseTree, ch)
+
 	entries := make([]map[string]any, 0, len(ch.Files)+len(ch.Deletions)+len(ch.Copies))
 	for _, path := range slices.Sorted(maps.Keys(ch.Files)) {
 		blob, _, err := g.s.Mutate(ctx, Mutation{
@@ -751,7 +783,7 @@ func (g GitData) Commit(ctx context.Context, ref, message string, ch TreeChange,
 		if err != nil {
 			return Commit{}, err
 		}
-		entries = append(entries, map[string]any{"path": path, "mode": mode(ch.Files[path].Exec), "type": "blob", "sha": sha})
+		entries = append(entries, map[string]any{"path": path, "mode": blobMode(existing, path, ch.Files[path].Exec), "type": "blob", "sha": sha})
 	}
 	for _, path := range slices.Sorted(maps.Keys(ch.Copies)) {
 		entries = append(entries, map[string]any{"path": path, "mode": "100644", "type": "blob", "sha": ch.Copies[path]})
@@ -820,31 +852,36 @@ func (g GitData) Commit(ctx context.Context, ref, message string, ch TreeChange,
 
 // Tree lists the blob paths reachable from a commit, which is what suppression
 // needs to know before it can delete every workflow it did not write.
-func (g GitData) Tree(ctx context.Context, commitSHA string) ([]string, error) {
+// Tree maps every blob path at a commit to its mode. Truncated says GitHub cut the
+// listing short, which is not the same answer as a path being absent: a caller that
+// reads a miss as "this path is new" would be wrong about every path past the cut.
+func (g GitData) Tree(ctx context.Context, commitSHA string) (modes map[string]string, truncated bool, err error) {
 	client, err := g.s.Client()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	raw, _, err := client.Get(ctx, g.api("trees", commitSHA)+"?recursive=1", nil, false)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	var body struct {
 		Tree []struct {
 			Path string `json:"path"`
 			Type string `json:"type"`
+			Mode string `json:"mode"`
 		} `json:"tree"`
+		Truncated bool `json:"truncated"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	var out []string
+	out := make(map[string]string, len(body.Tree))
 	for _, e := range body.Tree {
 		if e.Type == "blob" {
-			out = append(out, e.Path)
+			out[e.Path] = e.Mode
 		}
 	}
-	return out, nil
+	return out, body.Truncated, nil
 }
 
 // BlobSHA reads the blob sha of one path at a ref, which is what a rename needs

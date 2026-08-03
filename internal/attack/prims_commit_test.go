@@ -224,3 +224,45 @@ func TestBoundFragmentsIncludeFilesEntries(t *testing.T) {
 		t.Errorf("a fragment attached through files: must be screened too: %v", errs)
 	}
 }
+
+// Editing a file is not a decision about its mode. A payload's whole effect can rest
+// on the target invoking a script directly — ./.platform/scripts/setup-env.sh in the
+// reusable-workflow case — and rewriting that script at 100644 leaves the content in
+// place with the job failing on the exec bit before it runs a line of it, which is
+// indistinguishable from a payload that did not work.
+func TestBlobModeKeepsTheModeAPathAlreadyHas(t *testing.T) {
+	tree := map[string]string{
+		"scripts/setup-env.sh": "100755",
+		"README.md":            "100644",
+		"vendor/link":          "120000",
+		"vendor/submodule":     "160000",
+	}
+	cases := []struct {
+		name string
+		path string
+		exec bool
+		want string
+	}{
+		{"an executable file stays executable", "scripts/setup-env.sh", false, "100755"},
+		{"a regular file stays regular", "README.md", false, "100644"},
+		{"a new path defaults to regular", "scripts/new.sh", false, "100644"},
+		{"a staged shell payload is executable wherever it lands", "scripts/new.sh", true, "100755"},
+		// A staged blob must not inherit a mode that does not describe a blob, or the
+		// tree write substitutes file content for a symlink target or a gitlink.
+		{"a symlink path is not inherited", "vendor/link", false, "100644"},
+		{"a submodule path is not inherited", "vendor/submodule", false, "100644"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := blobMode(tree, tc.path, tc.exec); got != tc.want {
+				t.Errorf("blobMode(%q, exec=%v) = %s, want %s", tc.path, tc.exec, got, tc.want)
+			}
+		})
+	}
+
+	// A tree that could not be read must not be read as "every path is new": the
+	// caller falls back to the default rather than to a wrong preserved mode.
+	if got := blobMode(nil, "scripts/setup-env.sh", false); got != "100644" {
+		t.Errorf("with no tree read, blobMode = %s, want the 100644 default", got)
+	}
+}
