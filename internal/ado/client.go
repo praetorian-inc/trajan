@@ -45,16 +45,24 @@ type ADO interface {
 type Client struct {
 	http  *http.Client
 	org   string
-	basic string // "Basic base64(:pat)"
+	authz string
 }
 
 var _ ADO = (*Client)(nil)
 
 func NewClient(org, pat string) *Client {
+	return newClient(org, "Basic "+base64.StdEncoding.EncodeToString([]byte(":"+pat)))
+}
+
+func NewClientBearer(org, token string) *Client {
+	return newClient(org, "Bearer "+token)
+}
+
+func newClient(org, authz string) *Client {
 	return &Client{
 		http:  &http.Client{Timeout: 90 * time.Second},
 		org:   org,
-		basic: "Basic " + base64.StdEncoding.EncodeToString([]byte(":"+pat)),
+		authz: authz,
 	}
 }
 
@@ -111,7 +119,7 @@ func (c *Client) do(ctx context.Context, method, rawURL, accept string, body io.
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", c.basic)
+	req.Header.Set("Authorization", c.authz)
 	req.Header.Set("Accept", accept)
 	req.Header.Set("User-Agent", userAgent)
 	if body != nil {

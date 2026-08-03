@@ -23,11 +23,16 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if err != nil {
 		return "", err
 	}
-	token, err := ResolveToken(cfg.Token)
-	if err != nil {
-		return "", err
+	var cl *Client
+	if bearer := strings.TrimSpace(cfg.BearerToken); bearer != "" {
+		cl = NewClientBearer(scope.Org, bearer)
+	} else {
+		token, err := ResolveToken(cfg.Token)
+		if err != nil {
+			return "", err
+		}
+		cl = NewClient(scope.Org, token)
 	}
-	cl := NewClient(scope.Org, token)
 
 	runDir, err := engine.MintRunDir(cfg, "ado", scope.Slug)
 	if err != nil {
