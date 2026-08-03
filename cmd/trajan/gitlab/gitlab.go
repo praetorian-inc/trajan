@@ -152,7 +152,7 @@ func newGitLabCmd() *cobra.Command {
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
 	reportCmd.Flags().StringVar(&reportMinSev, "min-severity", "info", "drop findings below this severity")
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
-	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: stdout for json/jsonl, run dir for md/html)")
+	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: the run dir)")
 	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j Bolt URL")
 	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")
 	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "", "Neo4j password")

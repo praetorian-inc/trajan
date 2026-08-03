@@ -151,7 +151,7 @@ func newGitHubCmd() *cobra.Command {
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
 	// No "o" shorthand: the root command already owns -o for --output, and cobra
 	// panics when a subcommand's local flag redefines an inherited shorthand.
-	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: stdout for json/jsonl, run dir for md/html)")
+	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: the run dir)")
 	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j Bolt URL")
 	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")
 	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "", "Neo4j password")

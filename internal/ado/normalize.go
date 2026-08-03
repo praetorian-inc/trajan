@@ -64,7 +64,11 @@ func Normalize(ctx context.Context, runDir string) error {
 	if err := state.Save(runDir); err != nil {
 		return err
 	}
-	return normErr
+	if normErr != nil {
+		return normErr
+	}
+	engine.PhaseDone(rec)
+	return nil
 }
 
 // Normalize is sequential, so the timer needs no locking.

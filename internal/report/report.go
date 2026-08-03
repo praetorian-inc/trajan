@@ -24,7 +24,7 @@ type Options struct {
 	Format        string // json | jsonl | md | html | all
 	MinSeverity   string // default info  (emit everything)
 	MinConfidence string // default low   (emit everything)
-	Out           string // "" = default (stdout for json/jsonl, file for md/html); "-" = stdout; else a directory
+	Out           string // "" = default (a file in the run dir); "-" = stdout; else a directory
 }
 
 var validFormats = map[string]bool{"json": true, "jsonl": true, "md": true, "html": true, "all": true}
@@ -61,17 +61,17 @@ func Run(ctx context.Context, runDir string, opts Options) error {
 		if err != nil {
 			return err
 		}
-		return emit(runDir, opts, opts.Format, "findings.jsonl", b)
+		return emit(runDir, opts, "findings.jsonl", b)
 	case "json":
 		b, err := renderJSON(findings)
 		if err != nil {
 			return err
 		}
-		return emit(runDir, opts, opts.Format, "findings.json", b)
+		return emit(runDir, opts, "findings.json", b)
 	case "md":
-		return emit(runDir, opts, opts.Format, "findings.md", renderMarkdown(meta, findings))
+		return emit(runDir, opts, "findings.md", renderMarkdown(meta, findings))
 	case "html":
-		return emit(runDir, opts, opts.Format, "findings.html", renderHTML(meta, findings))
+		return emit(runDir, opts, "findings.html", renderHTML(meta, findings))
 	case "all":
 		jsonl, err := renderJSONL(findings)
 		if err != nil {
@@ -85,7 +85,7 @@ func Run(ctx context.Context, runDir string, opts Options) error {
 			{"findings.jsonl", jsonl},
 			{"findings.md", renderMarkdown(meta, findings)},
 		} {
-			if err := emit(runDir, opts, "all", w.name, w.data); err != nil {
+			if err := emit(runDir, opts, w.name, w.data); err != nil {
 				return err
 			}
 		}
@@ -180,12 +180,10 @@ func renderJSON(findings []finding.Finding) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// emit sends data to stdout or a file. json/jsonl default to stdout (pipe to a
-// platform); md/html/all default to a file in the run dir. Out=="-" forces
-// stdout; a non-empty Out is treated as a destination directory.
-func emit(runDir string, opts Options, format, filename string, data []byte) error {
-	toStdout := opts.Out == "-" || (opts.Out == "" && (format == "json" || format == "jsonl"))
-	if toStdout {
+// Out=="-" forces stdout for piping; anything else is a destination directory,
+// defaulting to the run dir where the rest of the run already lives.
+func emit(runDir string, opts Options, filename string, data []byte) error {
+	if opts.Out == "-" {
 		_, err := os.Stdout.Write(data)
 		return err
 	}
