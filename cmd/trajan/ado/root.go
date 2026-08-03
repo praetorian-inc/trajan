@@ -125,7 +125,7 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
 	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: the run dir)")
 
-	for _, c := range []*cobra.Command{scanCmd, attackCmd, retrieveCmd, collect} {
+	for _, c := range []*cobra.Command{scanCmd, attackCmd, retrieveCmd, collect, run} {
 		c.Flags().String("azure-bearer-token", "", "Azure Entra ID bearer token (or set AZURE_BEARER_TOKEN)")
 	}
 
