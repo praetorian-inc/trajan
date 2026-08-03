@@ -39,7 +39,7 @@ func attachFixture(t *testing.T, files map[string]any, findings []finding.Findin
 		t.Fatal(err)
 	}
 	backfillObserved(n, s)
-	loaded, err := loadFindings(t.Context(), cfg, dir, fail)
+	loaded, _, err := loadFindings(t.Context(), cfg, dir, fail)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,8 +69,8 @@ func mustTarget(t *testing.T, s string) Target {
 
 // fr-05-02 pairs an upstream test job with a downstream publish job over
 // workflow_run. attack() names no endpoint side, and the victim is the
-// downstream job: it is the one that runs the PR code. The downstream job's
-// low_trust list is empty here, so the trigger classes fall back to medium.
+// downstream job: it is the one that runs the PR code. Its two trigger-class
+// lists differ, and both must survive onto the edge.
 func TestAttackEdgeVictimizesTheDownstreamJob(t *testing.T) {
 	const repo = "fr-05-02-checkout-head-sha-execute"
 	up := map[string]any{
@@ -113,8 +113,12 @@ func TestAttackEdgeVictimizesTheDownstreamJob(t *testing.T) {
 	if got[0].From != nodeID(ExternalActor, map[string]string{"kind": "external"}) {
 		t.Errorf("from = %q, want the ExternalActor singleton", got[0].From)
 	}
-	if want := []any{"workflow_run"}; !reflect.DeepEqual(got[0].Properties["trigger_classes"], want) {
-		t.Errorf("trigger_classes = %v, want %v from the victim's medium list", got[0].Properties["trigger_classes"], want)
+	if want := []any{}; !reflect.DeepEqual(got[0].Properties["trigger_classes_low_trust"], want) {
+		t.Errorf("trigger_classes_low_trust = %v, want %v: the victim has no low-trust trigger",
+			got[0].Properties["trigger_classes_low_trust"], want)
+	}
+	if want := []any{"workflow_run"}; !reflect.DeepEqual(got[0].Properties["trigger_classes_medium"], want) {
+		t.Errorf("trigger_classes_medium = %v, want %v", got[0].Properties["trigger_classes_medium"], want)
 	}
 	if res.attached != 1 || len(res.unattached) != 0 {
 		t.Errorf("attached=%d unattached=%d, want 1/0", res.attached, len(res.unattached))

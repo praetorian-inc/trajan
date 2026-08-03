@@ -155,7 +155,10 @@ func normalizeOrg(prior engine.PriorPhase, cp engine.CurrentPhase, org string) e
 
 		RunnerGroups:              groups,
 		AnyRunnerGroupPublicRepos: anyRunnerGroupPublic(groups),
-		OrgRunnersCount:           len(entListOf(runnersPayload, "runners")),
+		AnyRunnerGroupAllReposWithRunners: slices.ContainsFunc(groups, func(g RunnerGroupSummary) bool {
+			return g.Visibility != nil && *g.Visibility == "all" && g.MemberRunnerCount > 0
+		}),
+		OrgRunnersCount: len(entListOf(runnersPayload, "runners")),
 
 		HookURLs:         hookURLs,
 		HooksCount:       len(hooks),
@@ -277,11 +280,23 @@ func orgSecretSummaries(secrets []any) []OrgSecretSummary {
 	out := make([]OrgSecretSummary, 0, len(secrets))
 	for _, s := range secrets {
 		sm := entMap(s)
+		repos := repoNames(entList(sm["selected_repositories"]))
 		out = append(out, OrgSecretSummary{
-			Name:              entStr(sm["name"]),
-			Visibility:        entStr(sm["visibility"]),
-			SelectedRepoCount: len(entList(sm["selected_repositories"])),
+			Name:                 entStr(sm["name"]),
+			Visibility:           entStr(sm["visibility"]),
+			SelectedRepositories: repos,
+			SelectedRepoCount:    len(repos),
 		})
+	}
+	return out
+}
+
+func repoNames(repos []any) []string {
+	out := []string{}
+	for _, r := range repos {
+		if name := entStr(entMap(r)["name"]); name != "" {
+			out = append(out, name)
+		}
 	}
 	return out
 }
@@ -415,6 +430,8 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 
 			DefaultBranchProtectionPresent: bpPresent,
 			DefaultBranchProtectionSummary: legacyBP,
+
+			Codeowners: parseCodeowners(repoData["codeowners"]),
 
 			Provenance: []SourceProvenance{
 				{File: engine.CollectRepo(repoName)},

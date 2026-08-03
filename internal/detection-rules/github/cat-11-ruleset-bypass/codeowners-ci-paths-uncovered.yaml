@@ -1,0 +1,47 @@
+id: cat-11/codeowners-ci-paths-uncovered
+scenario_id: cat-11/03
+title: "Code-owner review required, but CI-executable paths are not code-owned"
+subject: chain
+graph: node(Branch)
+severity: high
+confidence: medium
+description: >
+  An active ruleset requires code-owner review on the repository's default
+  branch, so the org relies on CODEOWNERS to gate what merges — but CODEOWNERS
+  leaves the paths whose content a workflow EXECUTES unowned. Owning
+  `.github/workflows/` gates which steps run; it does not gate what those steps
+  run, so a pull request that touches only a script, a Makefile or a composite
+  action changes what CI executes with no owner sign-off.
+  DEFINITION: "CI-executable" is tested with a fixed set of representative
+  locations (`codeowners.uncovered_ci_paths`) — a workflow file, a composite
+  action at the repo root and under `.github/actions/`, a `scripts/` shell
+  script, and a Makefile. These are probes, not an inventory of the repository:
+  the finding says CODEOWNERS leaves those locations unowned, NOT that a
+  specific executed file in this repository is provably unowned.
+  Fires only where CODEOWNERS was collected and a file exists — an absent file
+  and an uncollected one both leave `codeowners.present` false and are not
+  reported here.
+  NOTE: joins the effective-ruleset chain (produced by correlate during
+  normalize). CODEOWNERS is read from the default branch, which is the branch
+  the file governs, so the rule is scoped to it.
+
+chain_of:
+  join: effective-ruleset
+  for_each: effective_per_branch
+  where:
+    all_of:
+      - is_default_branch == true
+      - require_code_owner_review_active == true
+      - codeowners.present == true
+      - codeowners.covers_ci_execution == false
+
+evidence:
+  - "Repo {{ repo }}: branch `{{ branch }}` requires code-owner review ({{ require_code_owner_review_active }})."
+  - "CODEOWNERS at {{ codeowners.path }} leaves these executable locations unowned: {{ codeowners.uncovered_ci_paths }}"
+  - "Workflow definitions themselves owned: {{ codeowners.covers_workflows }}"
+
+remediation_hint: >
+  Extend CODEOWNERS to the paths workflows execute — `/scripts/`, `/Makefile`,
+  `/action.yml`, `/.github/actions/` — or add a catch-all `*` rule so no path
+  reaching CI is unowned. Owning only `/.github/workflows/` leaves the
+  executed content ungated.

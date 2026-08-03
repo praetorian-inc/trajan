@@ -114,7 +114,16 @@ func (r *Rule) SubjectKind() string {
 	return r.Subject
 }
 
-func LoadRules() ([]Rule, error) {
+// A rule that cannot be used — bad YAML, no id, no where/chain_of, or an unusable
+// graph target — is skipped and reported to onError rather than failing the load,
+// so one broken file cannot zero out detection. Only IO is fatal.
+func LoadRules(onError func(error)) ([]Rule, error) {
+	skip := func(err error) {
+		if onError != nil {
+			onError(err)
+		}
+	}
+
 	var files []string
 	err := fs.WalkDir(detectionrules.FS, "github", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -138,14 +147,16 @@ func LoadRules() ([]Rule, error) {
 		}
 		var r Rule
 		if err := yaml.Unmarshal(b, &r); err != nil {
-			return nil, fmt.Errorf("bad rule yaml %s: %w", p, err)
+			skip(fmt.Errorf("bad rule yaml %s: %w", p, err))
+			continue
 		}
 		if r.ID == "" || (r.Where == nil && r.ChainOf == nil) {
 			continue
 		}
 		target, err := graph.ParseTarget(r.Graph)
 		if err != nil {
-			return nil, fmt.Errorf("rule %s (%s): %w", r.ID, p, err)
+			skip(fmt.Errorf("rule %s (%s): %w", r.ID, p, err))
+			continue
 		}
 		r.GraphTarget = target
 		r.RuleFile = p
@@ -276,7 +287,7 @@ func BuildFinding(rule *Rule, subject map[string]any, kind, org, runDir string) 
 		Subject:     finding.Subject{Kind: kind, ID: stringField(subject, "_id"), Display: subjectDisplay(kind, subject)},
 		Org:         org,
 		Repo:        stringField(subject, "repo"),
-		File:        stringField(subject, "workflow_name"),
+		File:        workflowFilePath(subject),
 		Code:        buildCode(runDir, subject),
 		Evidence:    evidence,
 		Remediation: remediation,
@@ -302,6 +313,15 @@ func ruleURL(ruleFile string) string {
 		return ""
 	}
 	return RuleSourceBase + "/internal/detection-rules/" + ruleFile
+}
+
+// workflowFilePath is the repo-relative locator that finding.code's line range
+// indexes into. workflow_name is the author-declared `name:` and is not a path.
+func workflowFilePath(subject map[string]any) string {
+	if f := stringField(subject, "workflow_filename"); f != "" {
+		return ".github/workflows/" + f
+	}
+	return ""
 }
 
 // subjectDisplay is a pre-rendered label so the renderer never parses subject.id.

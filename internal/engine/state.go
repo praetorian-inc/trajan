@@ -30,6 +30,9 @@ type PhaseRecord struct {
 	InputFiles  int      `json:"input_files"`
 	OutputFiles int      `json:"output_files"`
 	Errors      []string `json:"errors"`
+	// Errors also carries soft-fail per-item messages from a phase that succeeded,
+	// so only Failed tells you the phase aborted.
+	Failed bool `json:"failed"`
 }
 
 type Phase struct {
@@ -44,8 +47,8 @@ var (
 	PhaseCollect   = Phase{1, dirCollect}
 	PhaseNormalize = Phase{PhaseUnnumbered, dirNormalize}
 	PhaseScan      = Phase{2, dirScan}
-	PhaseGraph     = Phase{PhaseUnnumbered, "graph"}
-	PhasePush      = Phase{3, "push"}
+	PhaseGraph     = Phase{3, "graph"}
+	PhasePush      = Phase{4, "push"}
 	PhaseAnalyze   = Phase{PhaseUnnumbered, "analyze"}
 	PhaseAttack    = Phase{PhaseUnnumbered, "attack"}
 )
@@ -66,22 +69,31 @@ func (s *State) CheckPhase(p Phase) error {
 
 // RecordPhase sets the watermark to a numbered phase's own number — so re-running
 // collect LOWERS it and forces downstream phases to re-run — and leaves it alone
-// for un-numbered phases. The record is always appended.
+// for un-numbered phases. A failed phase drops the watermark below itself: its
+// output is missing or partial, so nothing downstream may run on it. The record is
+// always appended.
 func (s *State) RecordPhase(rec PhaseRecord) {
 	if rec.Num != PhaseUnnumbered {
-		s.LastPhase = rec.Num
+		if rec.Failed {
+			s.LastPhase = min(s.LastPhase, rec.Num-1)
+		} else {
+			s.LastPhase = rec.Num
+		}
 	}
 	s.Phases = append(s.Phases, rec)
 }
 
-// StaleDirs returns the phase directories invalidated when phase p re-runs, so a
-// run dir never mixes layers from different inputs.
+// StaleDirs returns the downstream phase directories invalidated when phase p
+// re-runs, so a run dir never mixes layers from different inputs. A phase's own
+// output dir is its own to clear.
 func (s *State) StaleDirs(p Phase) []string {
 	switch {
 	case p.Num == PhaseCollect.Num:
-		return []string{dirNormalize, dirScan}
+		return []string{dirNormalize, dirScan, dirGraph}
 	case p.Name == dirNormalize:
-		return []string{dirScan}
+		return []string{dirScan, dirGraph}
+	case p.Num == PhaseScan.Num:
+		return []string{dirGraph}
 	default:
 		return nil
 	}
@@ -152,5 +164,6 @@ func (t *PhaseTimer) Stop(err error) PhaseRecord {
 		InputFiles:  t.InputFiles,
 		OutputFiles: t.OutputFiles,
 		Errors:      errs,
+		Failed:      err != nil,
 	}
 }

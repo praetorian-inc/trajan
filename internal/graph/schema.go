@@ -40,7 +40,6 @@ const (
 	HasAccess        EdgeType = "HAS_ACCESS"
 	CanAccess        EdgeType = "CAN_ACCESS"
 	Needs            EdgeType = "NEEDS"
-	PushesTo         EdgeType = "PUSHES_TO"
 	RunsOn           EdgeType = "RUNS_ON"
 	Targets          EdgeType = "TARGETS"
 	Governs          EdgeType = "GOVERNS"
@@ -48,7 +47,6 @@ const (
 	RequiresReviewBy EdgeType = "REQUIRES_REVIEW_BY"
 	ProtectedBy      EdgeType = "PROTECTED_BY"
 	MemberOf         EdgeType = "MEMBER_OF"
-	TriggeredBy      EdgeType = "TRIGGERED_BY"
 	CanBypass        EdgeType = "CAN_BYPASS"
 	InstalledOn      EdgeType = "INSTALLED_ON"
 
@@ -113,10 +111,6 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 	Needs: {
 		{Job, Job},
 	},
-	PushesTo: {
-		{Job, Branch},
-		{Job, Repository},
-	},
 	RunsOn: {
 		{Job, Runner},
 		{Job, RunnerGroup},
@@ -146,10 +140,6 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 		{User, Team},
 		{Team, Team},
 	},
-	TriggeredBy: {
-		{Workflow, ExternalActor},
-		{Workflow, User},
-	},
 	CanBypass: {
 		{User, Ruleset},
 		{Team, Ruleset},
@@ -164,13 +154,13 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 	Calls: {
 		{Job, Workflow},
 	},
+	// {Job, Workflow} would restate CALLS on the identical endpoints; the fact it
+	// carried is a secrets_inherit property on that edge instead.
 	PassesSecret: {
-		{Job, Workflow},
 		{Job, Action},
 	},
 	CanAssume: {
 		{Job, CloudRole},
-		{Repository, CloudRole},
 	},
 	Triggers: {
 		{Workflow, Workflow},
@@ -186,8 +176,6 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 		{DeployKey, Branch},
 	},
 	CanApprove: {
-		{User, Branch},
-		{Team, Branch},
 		{User, Environment},
 		{Team, Environment},
 		{Job, Repository},
@@ -217,9 +205,15 @@ var identityKeys = map[NodeLabel][]string{
 	Secret:   {"scope", "scope_key", "name"},
 	Artifact: {"repo", "name"},
 	// Keyed on the prefix, not the full key: every cache rule correlates on the
-	// restore-keys prefix, so the prefix is the entity the graph reasons about.
-	Cache:       {"key_prefix"},
-	Runner:      {"scope", "id"},
+	// restore-keys prefix. Repo-qualified for the same reason as Secret — GitHub
+	// caches are repo-scoped, and a bare prefix makes every repo writing "npm-"
+	// a poisoning path into every repo reading it.
+	Cache: {"repo", "key_prefix"},
+	// Same defect as Secret: scope is the kind ("repo"/"org"). Repo runner ids are
+	// a per-repository sequence, so without scope_key every repo's first runner is
+	// one node and every RUNS_ON edge converges on it. A writer must qualify
+	// scope_key to owner/repo the way corpus.secretScopeKey does.
+	Runner:      {"scope", "scope_key", "id"},
 	RunnerGroup: {"org", "id"},
 	Environment: {"repo", "name"},
 	Ruleset:     {"scope", "id"},

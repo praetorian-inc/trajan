@@ -48,7 +48,7 @@ func Scan(ctx context.Context, runDir string, opts ScanOptions) error {
 	}
 
 	timer := engine.StartPhaseTimer(engine.PhaseScan, "scan")
-	scanErr := runScan(ctx, runDir, state.Org, opts, timer)
+	scanErr := runScan(ctx, runDir, state, opts, timer)
 
 	rec := timer.Stop(scanErr)
 	state.RecordPhase(rec)
@@ -64,15 +64,12 @@ func orgOnlyRules(rules []Rule) []Rule {
 	return slices.DeleteFunc(rules, func(r Rule) bool { return r.SubjectKind() != "org" })
 }
 
-func runScan(ctx context.Context, runDir, org string, opts ScanOptions, timer *engine.PhaseTimer) error {
+func runScan(ctx context.Context, runDir string, state *engine.State, opts ScanOptions, timer *engine.PhaseTimer) error {
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
+	onError := func(e error) { timer.Errors = append(timer.Errors, e.Error()) }
 
-	if err := os.RemoveAll(filepath.Join(runDir, "20-scan")); err != nil {
-		return fmt.Errorf("clear 20-scan: %w", err)
-	}
-
-	rules, err := LoadRules()
+	rules, err := LoadRules(onError)
 	if err != nil {
 		return fmt.Errorf("load rules: %w", err)
 	}
@@ -97,7 +94,13 @@ func runScan(ctx context.Context, runDir, org string, opts ScanOptions, timer *e
 		subjectsByKind[kind] = subs
 	}
 
-	onError := func(e error) { timer.Errors = append(timer.Errors, e.Error()) }
+	// Clearing output only once every fatal input check has passed keeps a scan
+	// that aborts from destroying the previous run's findings and graph.
+	for _, d := range append([]string{"20-scan"}, state.StaleDirs(engine.PhaseScan)...) {
+		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
+			return fmt.Errorf("clear %s: %w", d, err)
+		}
+	}
 
 	ruleFires := make(map[string]int, len(rules))
 	total := 0
@@ -118,7 +121,7 @@ func runScan(ctx context.Context, runDir, org string, opts ScanOptions, timer *e
 
 		fires := 0
 		for _, subj := range matched {
-			if err := emitFinding(cp, rule, subj, kind, org, runDir); err != nil {
+			if err := emitFinding(cp, rule, subj, kind, state.Org, runDir); err != nil {
 				onError(fmt.Errorf("%s: write finding: %w", rule.ID, err))
 				continue
 			}

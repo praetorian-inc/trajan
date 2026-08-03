@@ -1,6 +1,8 @@
 package github
 
 import (
+	"log/slog"
+
 	"github.com/spf13/cobra"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
@@ -104,7 +106,7 @@ func newGitHubCmd() *cobra.Command {
 			}
 			// internal/github imports internal/graph, so the rule -> target index
 			// is built here rather than inside graph.Build.
-			rules, err := github.LoadRules()
+			rules, err := github.LoadRules(func(e error) { slog.Warn("rule skipped", "err", e) })
 			if err != nil {
 				return err
 			}

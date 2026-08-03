@@ -229,11 +229,50 @@ func fetchRepoBundle(ctx context.Context, gh GitHub, org, repo string) (map[stri
 	if err != nil {
 		return nil, err
 	}
+	codeowners, err := fetchCodeowners(ctx, gh, org, repo, branch)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"repo":                      rawOrNull(full),
 		"default_branch_protection": rawOrNull(legacyBP),
 		"topics":                    rawOrNull(topics),
+		"codeowners":                codeowners,
 	}, nil
+}
+
+// GitHub resolves CODEOWNERS from .github/, then the repository root, then
+// docs/, and the first file found wins. Most repositories have none, so an
+// exhausted search records content: null rather than failing the bundle — the
+// distinction between "collected, absent" and "never collected" is what stops a
+// rule from reading a missing file as an uncovered one. A search that only ever
+// saw 403s is a third state and carries _unavailable, because "absent" would be
+// an answer the token was never allowed to give.
+var codeownersPaths = []string{".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"}
+
+func fetchCodeowners(ctx context.Context, gh GitHub, org, repo, branch string) (map[string]any, error) {
+	denied := false
+	for _, p := range codeownersPaths {
+		// Empty ref, not branch: a ref pins the read to the REST floor, and the
+		// contents API already defaults to the default branch.
+		body, sha, ok, err := gh.GetContentWithSHA(ctx,
+			fmt.Sprintf("/repos/%s/%s/contents/%s", org, repo, p), "", true)
+		if err != nil {
+			if isSoft(err) {
+				denied = true
+				continue
+			}
+			return nil, err
+		}
+		if ok {
+			return map[string]any{"path": p, "ref": branch, "sha": sha, "content": string(body)}, nil
+		}
+	}
+	out := map[string]any{"path": nil, "ref": branch, "sha": nil, "content": nil}
+	if denied {
+		out["_unavailable"] = true
+	}
+	return out, nil
 }
 
 func collectActionsSettings(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org, repo string) error {

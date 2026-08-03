@@ -180,10 +180,8 @@ func normalizeWorkflowText(text string, nc normalizeCtx) ([]Job, error) {
 
 	filename := filepath.Base(nc.relpath)
 
-	workflowName := ".github/workflows/" + filename
-	if name, ok := root.FieldValue("name", nil).(string); ok && strings.TrimSpace(name) != "" {
-		workflowName = name
-	}
+	declaredName, _ := root.FieldValue("name", nil).(string)
+	workflowName := strings.TrimSpace(declaredName)
 
 	onNode := root.Field("on")
 	if onNode == nil {
@@ -889,8 +887,14 @@ func extractCacheOps(step map[string]any) ([]CacheRef, []CacheRef) {
 }
 
 func cacheEntry(k string) CacheRef {
-	prefix := strings.Trim(strings.SplitN(k, "${{", 2)[0], "-_/")
-	return CacheRef{KeyTemplate: k, Scope: "scope-prefix:" + prefix}
+	return CacheRef{KeyTemplate: k, Scope: "scope-prefix:" + cacheKeyPrefix(k)}
+}
+
+// The literal head of the key template, which is what restore-keys prefix
+// matching compares against — everything from the first expression on is
+// unknowable statically.
+func cacheKeyPrefix(k string) string {
+	return strings.Trim(strings.SplitN(k, "${{", 2)[0], "-_/")
 }
 
 func restoreKeyLines(value any) []string {
@@ -914,9 +918,12 @@ func restoreKeyLines(value any) []string {
 	}
 }
 
-// The identifier is whatever the action names as the assumable identity; only
-// a literal is useful, since an expression resolves at run time to something
-// no collected fact records.
+// The identifier is whatever the action names as the assumable identity, kept
+// verbatim the way ArtifactRef.Name is: a reusable callee names its role
+// "${{ inputs.role-arn }}" and only the call site knows the literal, so
+// discarding the expression here severs the callee from the role it assumes.
+// Resolution against the caller's inputs happens in internal/graph, which has
+// the call graph; an expression that stays unresolved never becomes a node.
 var cloudLogins = []struct{ prefix, provider, key string }{
 	{"aws-actions/configure-aws-credentials", "aws", "role-to-assume"},
 	{"azure/login", "azure", "client-id"},
@@ -935,7 +942,7 @@ func extractCloudRoles(step map[string]any) []CloudRoleRef {
 			continue
 		}
 		id, _ := with[cl.key].(string)
-		if id == "" || strings.Contains(id, "${{") {
+		if id == "" {
 			continue
 		}
 		out = append(out, CloudRoleRef{Provider: cl.provider, Identifier: id})

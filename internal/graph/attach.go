@@ -329,9 +329,15 @@ func (a *attacher) attachAttack(f *finding.Finding, t Target, ref findingRef, an
 	}
 	actor := a.n.upsert(ExternalActor, map[string]string{"kind": "external"},
 		map[string]any{"synthetic": true}, "")
+	// The trigger classes go on the edge, not into ExternalActor's identity: 7
+	// victim jobs have an empty low_trust list and a per-class actor node would
+	// leave them sourceless. Both lists are emitted because ranking them here
+	// discards one. No _source: findings[] already names the rule, fingerprint
+	// and subject of every 20-scan file behind this edge.
+	tcs := obj(victim.rec["trigger_class_summary"])
 	a.s.add(t.Type, resolved(ExternalActor, actor.ID), resolved(Job, victim.id), map[string]any{
-		"trigger_classes": triggerClasses(victim.rec),
-		"_source":         []any{scanDir + "/findings/" + ref.RuleID},
+		"trigger_classes_low_trust": list(tcs["low_trust"]),
+		"trigger_classes_medium":    list(tcs["medium"]),
 	})
 	e := a.s.byID[edgeID(t.Type, actor.ID, victim.id)]
 	if e == nil {
@@ -340,17 +346,6 @@ func (a *attacher) attachAttack(f *finding.Finding, t Target, ref findingRef, an
 	}
 	a.toEdge(e, ref)
 	a.done(0, 1)
-}
-
-// The trigger classes go on the edge, not into ExternalActor's identity: 14 of
-// the victim jobs have an empty low_trust list and a per-class actor node would
-// leave them with no source.
-func triggerClasses(rec map[string]any) []any {
-	tcs := obj(rec["trigger_class_summary"])
-	if low := list(tcs["low_trust"]); len(low) > 0 {
-		return low
-	}
-	return list(tcs["medium"])
 }
 
 func (a *attacher) toNode(id string, ref findingRef) bool {
@@ -410,7 +405,7 @@ func (a *attacher) anchorCapability(e map[string]any) anchorSet {
 
 func (a *attacher) anchorCache(e map[string]any) anchorSet {
 	var out anchorSet
-	out.addNode(a.n, Cache, nd(Cache, "key_prefix", str(e["key_prefix"])).id, e)
+	out.addNode(a.n, Cache, cacheEndpoint(a.c, str(e["repo"]), str(e["key_prefix"])).id, e)
 	return out
 }
 

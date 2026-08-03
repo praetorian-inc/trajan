@@ -6,7 +6,7 @@ import (
 )
 
 func TestOrgOnlyFilterSelectsExactlyOrgSubjects(t *testing.T) {
-	rules, err := LoadRules()
+	rules, err := LoadRules(nil)
 	if err != nil {
 		t.Fatalf("LoadRules: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestOrgOnlyFilterSelectsExactlyOrgSubjects(t *testing.T) {
 }
 
 func TestMembersCanCreatePrivateReposRuleFires(t *testing.T) {
-	rules, err := LoadRules()
+	rules, err := LoadRules(nil)
 	if err != nil {
 		t.Fatalf("LoadRules: %v", err)
 	}

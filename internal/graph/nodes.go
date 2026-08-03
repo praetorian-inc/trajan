@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"path"
 	"slices"
 	"sort"
 	"strconv"
@@ -56,12 +57,9 @@ var mergeNotes = map[NodeLabel]string{
 // (Workflow, Action, Artifact, Cache, Branch) fan in by design.
 var recordLabels = map[NodeLabel]bool{
 	Organization: true, Repository: true, User: true, Team: true, App: true,
-	DeployKey: true, RunnerGroup: true, Ruleset: true, Environment: true,
+	DeployKey: true, Runner: true, RunnerGroup: true, Ruleset: true, Environment: true,
 	Secret: true, Job: true,
 }
-
-// Cleared the moment any real source backs the node.
-var falseWinsProps = map[string]bool{"observed_only": true, "synthetic": true}
 
 var orTrueProps = map[string]bool{"is_default_branch_any": true, "branches_slugged": true}
 
@@ -97,6 +95,9 @@ type nodeSet struct {
 	sourceRecs map[NodeLabel]int
 	incomplete map[NodeLabel]int
 	conflicts  map[conflictKey]int
+
+	illegal map[conflictKey]bool
+	dropped int
 }
 
 func newNodeSet() *nodeSet {
@@ -107,17 +108,24 @@ func newNodeSet() *nodeSet {
 		sourceRecs: map[NodeLabel]int{},
 		incomplete: map[NodeLabel]int{},
 		conflicts:  map[conflictKey]int{},
+		illegal:    map[conflictKey]bool{},
 	}
 }
 
+// identifies rejects an identity value that is missing or is still an
+// unevaluated expression. "${{ inputs.artifact-name }}" names whatever the
+// caller passed, so minting a node for it splits one artifact in two and leaves
+// no path between the job that writes it and the job that reads it.
+func identifies(v string) bool { return v != "" && !strings.Contains(v, "${{") }
+
 // upsert merges a source record into the node its identity tuple names, and
-// returns nil when any identity value is empty — a placeholder would have to
-// invent identity, and every consumer asks reachability questions.
+// returns nil when an identity value does not identify — a placeholder would
+// have to invent identity, and every consumer asks reachability questions.
 func (s *nodeSet) upsert(l NodeLabel, key map[string]string, props map[string]any, source string) *node {
 	k := make(map[string]string, len(IdentityKey(l)))
 	for _, name := range IdentityKey(l) {
 		v := key[name]
-		if v == "" {
+		if !identifies(v) {
 			s.incomplete[l]++
 			return nil
 		}
@@ -147,8 +155,6 @@ func (s *nodeSet) merge(n *node, props map[string]any) {
 			continue
 		}
 		switch {
-		case falseWinsProps[k]:
-			n.Properties[k] = truthy(old) && truthy(v)
 		case orTrueProps[k]:
 			n.Properties[k] = truthy(old) || truthy(v)
 		default:
@@ -192,6 +198,17 @@ func (s *nodeSet) indexSecret(scope, rawScopeKey, name string, n *node) {
 func (s *nodeSet) get(id string) *node { return s.byID[id] }
 
 func (s *nodeSet) has(id string) bool { _, ok := s.byID[id]; return ok }
+
+func (s *nodeSet) branchesIn(repo string) []string {
+	var out []string
+	for _, n := range s.byID {
+		if n.Labels[0] == Branch && n.Key["repo"] == repo {
+			out = append(out, n.Key["name"])
+		}
+	}
+	slices.Sort(out)
+	return out
+}
 
 func (s *nodeSet) subject(kind, recordID string) (string, bool) {
 	id, ok := s.subjects[kind][recordID]
@@ -260,7 +277,7 @@ func buildNodes(ctx context.Context, c *corpus) (*nodeSet, error) {
 	s := newNodeSet()
 	for _, emit := range []func(*corpus, *nodeSet){
 		emitOrganizations, emitRepositories, emitUsers, emitTeams, emitApps,
-		emitDeployKeys, emitRunnerGroups, emitRulesets, emitEnvironments,
+		emitDeployKeys, emitRunners, emitRunnerGroups, emitRulesets, emitEnvironments,
 		emitSecrets, emitBranches, emitWorkflows, emitJobs, emitArtifacts,
 		emitCaches, emitActions, emitCloudRoles,
 	} {
@@ -269,13 +286,14 @@ func buildNodes(ctx context.Context, c *corpus) (*nodeSet, error) {
 		}
 		emit(c, s)
 	}
+	s.sweepIllegal()
 	return s, nil
 }
 
 func emitOrganizations(c *corpus, s *nodeSet) {
 	for _, r := range c.dirs["org"] {
 		n := s.upsert(Organization, map[string]string{"login": str(r.fields["org"])},
-			recordProps(Organization, r.fields), r.rel)
+			s.recordProps(Organization, r.fields), r.rel)
 		s.index("org", r.id, n)
 	}
 }
@@ -283,7 +301,7 @@ func emitOrganizations(c *corpus, s *nodeSet) {
 func emitRepositories(c *corpus, s *nodeSet) {
 	for _, r := range c.dirs["repos"] {
 		n := s.upsert(Repository, map[string]string{"full_name": c.full(str(r.fields["repo"]))},
-			recordProps(Repository, r.fields), r.rel)
+			qualifyRepo(c, s.recordProps(Repository, r.fields)), r.rel)
 		s.index("repo", r.id, n)
 	}
 }
@@ -294,7 +312,7 @@ func emitUsers(c *corpus, s *nodeSet) {
 			continue
 		}
 		n := s.upsert(User, map[string]string{"login": str(r.fields["login"])},
-			recordProps(User, r.fields), r.rel)
+			s.recordProps(User, r.fields), r.rel)
 		s.index("principal", r.id, n)
 	}
 }
@@ -305,7 +323,7 @@ func emitTeams(c *corpus, s *nodeSet) {
 			continue
 		}
 		n := s.upsert(Team, map[string]string{"org": c.org, "slug": str(r.fields["slug"])},
-			recordProps(Team, r.fields), r.rel)
+			s.recordProps(Team, r.fields), r.rel)
 		s.index("principal", r.id, n)
 	}
 }
@@ -313,16 +331,36 @@ func emitTeams(c *corpus, s *nodeSet) {
 func emitApps(c *corpus, s *nodeSet) {
 	for _, r := range c.dirs["apps"] {
 		n := s.upsert(App, map[string]string{"app_slug": str(r.fields["app_slug"])},
-			recordProps(App, r.fields), r.rel)
+			s.recordProps(App, r.fields), r.rel)
 		s.index("app", r.id, n)
 	}
 }
 
+// A DeployKey is keyed on the fingerprint, which every installation of a reused
+// key shares, so the per-installation values would be first-writer-wins on it.
+// INSTALLED_ON already carries these four; added_by, created_at, last_used and
+// repo do not exist anywhere else and stay until the edge carries them too.
 func emitDeployKeys(c *corpus, s *nodeSet) {
 	for _, r := range c.dirs["deploy-keys"] {
-		n := s.upsert(DeployKey, map[string]string{"fingerprint": str(r.fields["fingerprint"])},
-			recordProps(DeployKey, r.fields), r.rel)
+		props := qualifyRepo(c, s.recordProps(DeployKey, r.fields))
+		// The identity is the fingerprint; everything below describes one
+		// installation of it and belongs on INSTALLED_ON.
+		for _, k := range []string{"key_id", "title", "read_only", "can_push", "repo", "added_by", "created_at", "last_used"} {
+			delete(props, k)
+		}
+		n := s.upsert(DeployKey, map[string]string{"fingerprint": str(r.fields["fingerprint"])}, props, r.rel)
 		s.index("deploy_key", r.id, n)
+	}
+}
+
+func emitRunners(c *corpus, s *nodeSet) {
+	for _, r := range c.dirs["runners"] {
+		n := s.upsert(Runner, map[string]string{
+			"scope":     str(r.fields["scope"]),
+			"scope_key": c.runnerScopeKey(r.fields),
+			"id":        decimal(r.fields["runner_id"]),
+		}, qualifyRepo(c, s.recordProps(Runner, r.fields)), r.rel)
+		s.index("runner", r.id, n)
 	}
 }
 
@@ -331,7 +369,7 @@ func emitRunnerGroups(c *corpus, s *nodeSet) {
 		n := s.upsert(RunnerGroup, map[string]string{
 			"org": str(r.fields["org"]),
 			"id":  decimal(r.fields["group_id"]),
-		}, recordProps(RunnerGroup, r.fields), r.rel)
+		}, s.recordProps(RunnerGroup, r.fields), r.rel)
 		s.index("runner_group", r.id, n)
 	}
 }
@@ -341,20 +379,24 @@ func emitRulesets(c *corpus, s *nodeSet) {
 		if truthy(r.fields["_empty"]) {
 			continue
 		}
+		props := qualifyRepo(c, s.recordProps(Ruleset, r.fields))
+		props["required_status_check_contexts"] = pluck(objects(r.fields["required_status_checks"]), "context")
 		n := s.upsert(Ruleset, map[string]string{
 			"scope": str(r.fields["scope"]),
 			"id":    decimal(r.fields["ruleset_id"]),
-		}, recordProps(Ruleset, r.fields), r.rel)
+		}, props, r.rel)
 		s.index("ruleset", r.id, n)
 	}
 }
 
 func emitEnvironments(c *corpus, s *nodeSet) {
 	for _, r := range c.dirs["environments"] {
+		props := s.recordProps(Environment, r.fields)
+		props["protection_rule_types"] = pluck(objects(r.fields["protection_rules_raw"]), "type")
 		n := s.upsert(Environment, map[string]string{
 			"repo": c.full(str(r.fields["repo"])),
 			"name": str(r.fields["name"]),
-		}, recordProps(Environment, r.fields), r.rel)
+		}, props, r.rel)
 		s.index("environment", r.id, n)
 	}
 }
@@ -366,7 +408,7 @@ func emitSecrets(c *corpus, s *nodeSet) {
 			"scope":     scope,
 			"scope_key": c.secretScopeKey(r.fields),
 			"name":      name,
-		}, recordProps(Secret, r.fields), r.rel)
+		}, qualifyRepo(c, s.recordProps(Secret, r.fields)), r.rel)
 		s.index("secret", r.id, n)
 		s.indexSecret(scope, str(r.fields["scope_key"]), name, n)
 	}
@@ -376,7 +418,7 @@ func emitSecrets(c *corpus, s *nodeSet) {
 			name := str(e["name"])
 			n := s.upsert(Secret, map[string]string{
 				"scope": "org", "scope_key": c.org, "name": name,
-			}, recordProps(Secret, e), src)
+			}, s.recordProps(Secret, e), src)
 			s.indexSecret("org", c.org, name, n)
 		}
 	}
@@ -394,16 +436,18 @@ func emitBranches(c *corpus, s *nodeSet) {
 			s.upsert(Branch, map[string]string{
 				"repo": c.full(str(e["repo"])),
 				"name": str(e["branch"]),
-			}, recordProps(Branch, e), c.chainSource(src[0], src[1]))
+			}, s.recordProps(Branch, e), c.chainSource(src[0], src[1]))
 		}
 	}
 }
 
 func emitCloudRoles(c *corpus, s *nodeSet) {
+	inputs := calleeInputs(c)
 	for _, r := range c.dirs["jobs"] {
+		in := inputs[calleeKey(c, r.fields)]
 		for _, cr := range list(r.fields["cloud_roles"]) {
 			m := obj(cr)
-			id := str(m["identifier"])
+			id := resolveInput(str(m["identifier"]), in)
 			if id == "" {
 				continue
 			}
@@ -416,7 +460,7 @@ func emitCloudRoles(c *corpus, s *nodeSet) {
 func emitWorkflows(c *corpus, s *nodeSet) {
 	for _, r := range c.dirs["jobs"] {
 		props := map[string]any{}
-		if v, ok := r.fields["workflow_name"]; ok {
+		if v := str(r.fields["workflow_name"]); v != "" {
 			props["workflow_name"] = v
 		}
 		s.upsert(Workflow, map[string]string{
@@ -429,16 +473,32 @@ func emitWorkflows(c *corpus, s *nodeSet) {
 func emitJobs(c *corpus, s *nodeSet) {
 	for _, r := range c.dirs["jobs"] {
 		repo := c.full(str(r.fields["repo"]))
-		props := recordProps(Job, r.fields)
+		props := s.recordProps(Job, r.fields)
 		if slug := str(r.fields["branch"]); slug != "" {
-			name, ok := c.trueBranch[repo+"\x00"+slug]
-			if !ok {
+			name := c.trueBranch[repo+"\x00"+slug]
+			if name == "" {
 				name = slug
 				props["branches_slugged"] = true
 			}
 			props["branches"] = []any{name}
 		}
 		props["is_default_branch_any"] = truthy(r.fields["is_default_branch"])
+		// Both are per-branch and a job merges its branch-scoped records, so the
+		// surviving scalar would be whichever record sorted first; branches and
+		// is_default_branch_any carry the same facts across the merge.
+		delete(props, "branch")
+		delete(props, "is_default_branch")
+
+		perms := obj(r.fields["permissions"])
+		scopes := []string{}
+		for k, v := range perms {
+			if !strings.HasPrefix(k, "_") && str(v) == "write" {
+				scopes = append(scopes, k)
+			}
+		}
+		props["token_write_scopes"] = stringArray(scopes)
+		props["token_source"] = perms["_source"]
+
 		n := s.upsert(Job, map[string]string{
 			"repo":     repo,
 			"workflow": workflowPath(str(r.fields["workflow_filename"])),
@@ -449,30 +509,95 @@ func emitJobs(c *corpus, s *nodeSet) {
 }
 
 func emitArtifacts(c *corpus, s *nodeSet) {
+	inputs := calleeInputs(c)
 	for _, r := range c.dirs["jobs"] {
 		repo := c.full(str(r.fields["repo"]))
+		in := inputs[calleeKey(c, r.fields)]
 		for _, field := range []string{"artifact_reads", "artifact_writes"} {
 			for _, e := range objects(r.fields[field]) {
-				s.upsert(Artifact, map[string]string{"repo": repo, "name": str(e["name"])}, nil, r.rel)
+				s.upsert(Artifact, map[string]string{"repo": repo, "name": resolveInput(str(e["name"]), in)}, nil, r.rel)
 			}
 		}
 	}
 }
 
-// Cache comes from cache-keyspace only: jobs[].cache_*[].scope embeds a
-// differently-derived prefix ("scope-prefix:build-tools-v3-pinned-2026-05")
-// that does not round-trip to the chain's key ("build/tools").
+// A reusable callee names its artifacts "${{ inputs.X }}" and only the call site
+// knows X, so without this the writer in the caller and the reader in the callee
+// land on two Artifact nodes with no path between them.
+// Two call sites disagreeing on an input leaves that input unresolvable: picking
+// either value would name an artifact the other caller never produces.
+func calleeInputs(c *corpus) map[[2]string]map[string]any {
+	out := map[[2]string]map[string]any{}
+	disputed := map[[2]string]map[string]bool{}
+	for _, e := range c.chainArray("reusable-callgraph", "edges") {
+		callee := obj(e["callee"])
+		repo := str(callee["repo"])
+		if truthy(callee["is_local"]) || repo == "" {
+			repo = str(obj(e["caller"])["repo"])
+		}
+		k := calleeIdent(c, repo, str(callee["path"]))
+		if out[k] == nil {
+			out[k] = map[string]any{}
+			disputed[k] = map[string]bool{}
+		}
+		for name, v := range obj(callee["inputs"]) {
+			if prev, seen := out[k][name]; seen && str(prev) != str(v) {
+				disputed[k][name] = true
+			}
+			out[k][name] = v
+		}
+	}
+	for k, names := range disputed {
+		for name := range names {
+			delete(out[k], name)
+		}
+	}
+	return out
+}
+
+// A reusable workflow always lives in .github/workflows, so the basename is the
+// identity the caller's path and the callee's workflow_filename agree on.
+func calleeIdent(c *corpus, repo, workflow string) [2]string {
+	return [2]string{c.full(repo), path.Base(workflow)}
+}
+
+func calleeKey(c *corpus, f map[string]any) [2]string {
+	return calleeIdent(c, str(f["repo"]), str(f["workflow_filename"]))
+}
+
+func resolveInput(name string, inputs map[string]any) string {
+	ref, ok := strings.CutPrefix(name, "${{")
+	if !ok {
+		return name
+	}
+	ref, ok = strings.CutSuffix(ref, "}}")
+	if !ok {
+		return name
+	}
+	ref, ok = strings.CutPrefix(strings.TrimSpace(ref), "inputs.")
+	if !ok {
+		return name
+	}
+	if v := str(inputs[ref]); identifies(v) {
+		return v
+	}
+	return name
+}
+
 func emitCaches(c *corpus, s *nodeSet) {
 	for _, field := range []string{"reads_by_prefix", "writes_by_prefix"} {
 		m, _ := c.chains["cache-keyspace"][field].(map[string]any)
+		src := c.chainSource("cache-keyspace", field)
 		for _, prefix := range slices.Sorted(maps.Keys(m)) {
-			s.upsert(Cache, map[string]string{"key_prefix": prefix}, nil,
-				c.chainSource("cache-keyspace", field))
+			for _, e := range objects(m[prefix]) {
+				repo := c.full(str(obj(e["job"])["repo"]))
+				s.upsert(Cache, map[string]string{"repo": repo, "key_prefix": prefix}, nil, src)
+			}
 		}
 	}
 	for _, e := range c.chainArray("cache-keyspace", "prefix_overlaps") {
-		s.upsert(Cache, map[string]string{"key_prefix": str(e["key_prefix"])},
-			recordProps(Cache, e), c.chainSource("cache-keyspace", "prefix_overlaps"))
+		s.upsert(Cache, map[string]string{"repo": c.full(str(e["repo"])), "key_prefix": str(e["key_prefix"])},
+			s.recordProps(Cache, e), c.chainSource("cache-keyspace", "prefix_overlaps"))
 	}
 }
 
@@ -490,7 +615,7 @@ func emitActions(c *corpus, s *nodeSet) {
 				}
 				ref = repo + "/" + rest
 			}
-			s.upsert(Action, map[string]string{"ref": ref}, recordProps(Action, e), r.rel)
+			s.upsert(Action, map[string]string{"ref": ref}, s.recordProps(Action, e), r.rel)
 		}
 	}
 }
@@ -513,6 +638,37 @@ func isWorkflowRef(uses string) bool {
 		(strings.HasSuffix(p, ".yml") || strings.HasSuffix(p, ".yaml"))
 }
 
+// qualifyRepo rewrites a bare repo property to "owner/repo". repo is an
+// identity key on Artifact, Branch, Environment, Job and Workflow, where it is
+// always qualified; the labels that carry it as a plain property would
+// otherwise put two conventions in one property name once the importer folds
+// key into properties.
+func qualifyRepo(c *corpus, props map[string]any) map[string]any {
+	if r := str(props["repo"]); r != "" {
+		props["repo"] = c.full(r)
+	}
+	return props
+}
+
+func pluck(entries []map[string]any, key string) []any {
+	vals := make([]string, 0, len(entries))
+	for _, e := range entries {
+		vals = append(vals, str(e[key]))
+	}
+	return stringArray(vals)
+}
+
+func stringArray(vals []string) []any {
+	slices.Sort(vals)
+	out := []any{}
+	for _, v := range slices.Compact(vals) {
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 func decimal(v any) string {
 	n, ok := v.(json.Number)
 	if !ok {
@@ -527,17 +683,38 @@ func decimal(v any) string {
 
 // recordProps copies the Neo4j-legal top-level fields of a source record.
 // Nested structure is dropped: Neo4j cannot store it as a property and the
-// detail already lives in 10-normalize.
-func recordProps(l NodeLabel, fields map[string]any) map[string]any {
+// detail already lives in 10-normalize. The key is registered rather than just
+// skipped because legality is decided per value: an array of objects is legal
+// exactly when it is empty, so dropping it here alone would leave the property
+// present on the records that have nothing to say and absent on the ones that
+// do, inverting every predicate written against it.
+func (s *nodeSet) recordProps(l NodeLabel, fields map[string]any) map[string]any {
 	ident := IdentityKey(l)
 	out := make(map[string]any, len(fields))
 	for k, v := range fields {
-		if k == "_id" || k == "_provenance" || slices.Contains(ident, k) || !legalProp(v) {
+		if k == "_id" || k == "_provenance" || slices.Contains(ident, k) {
+			continue
+		}
+		if !legalProp(v) {
+			s.illegal[conflictKey{l, k}] = true
 			continue
 		}
 		out[k] = v
 	}
 	return out
+}
+
+// sweepIllegal runs once every emitter has been seen, because a label's
+// declared shape is the union of the shapes of all its sources.
+func (s *nodeSet) sweepIllegal() {
+	for _, n := range s.byID {
+		for k := range n.Properties {
+			if s.illegal[conflictKey{n.Labels[0], k}] {
+				delete(n.Properties, k)
+				s.dropped++
+			}
+		}
+	}
 }
 
 func legalProp(v any) bool {

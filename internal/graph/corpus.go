@@ -2,6 +2,7 @@ package graph
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,11 +27,16 @@ type corpus struct {
 	dirs   map[string][]record
 	chains map[string]map[string]any
 
-	// trueBranch maps "<full repo>\x00<slug>" to the unslugged branch name.
-	// BranchSlug is not injective, so a job record's slugged branch can only be
-	// recovered against branches the chain layer actually observed.
+	// trueBranch maps "<full repo>\x00<slug>" to the unslugged branch name, and
+	// to "" where two branches share a slug ("feat/a" and "feat__a"). BranchSlug
+	// is not injective, so a job record's slugged branch can only be recovered
+	// against branches the chain layer actually observed, and where the recovery
+	// is ambiguous the caller must degrade rather than name one of the two.
 	trueBranch map[string]string
 
+	// seen is what 10-normalize offered, files is what parsed; the difference is
+	// dropped records the graph is silently missing.
+	seen  int
 	files int
 }
 
@@ -76,6 +82,7 @@ func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError 
 		dirs:       map[string][]record{},
 		chains:     map[string]map[string]any{},
 		trueBranch: map[string]string{},
+		seen:       len(wanted),
 		files:      len(recs),
 	}
 	for _, r := range recs {
@@ -96,9 +103,15 @@ func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError 
 
 	for _, e := range c.chainArray("effective-ruleset", "effective_per_branch") {
 		branch := str(e["branch"])
-		if repo := c.full(str(e["repo"])); repo != "" && branch != "" {
-			c.trueBranch[repo+"\x00"+engine.BranchSlug(branch)] = branch
+		repo := c.full(str(e["repo"]))
+		if repo == "" || branch == "" {
+			continue
 		}
+		k := repo + "\x00" + engine.BranchSlug(branch)
+		if prev, dup := c.trueBranch[k]; dup && prev != branch {
+			branch = ""
+		}
+		c.trueBranch[k] = branch
 	}
 	return c, nil
 }
@@ -110,6 +123,21 @@ func (c *corpus) full(repo string) string {
 		return ""
 	}
 	return c.org + "/" + repo
+}
+
+// repoNames returns the bare repo names of the org's repository records, in
+// record order, optionally filtered on the record's own fields.
+func (c *corpus) repoNames(keep func(map[string]any) bool) []string {
+	out := make([]string, 0, len(c.dirs["repos"]))
+	for _, r := range c.dirs["repos"] {
+		if keep != nil && !keep(r.fields) {
+			continue
+		}
+		if name := str(r.fields["repo"]); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func (c *corpus) chainArray(file, key string) []map[string]any {
@@ -135,6 +163,19 @@ func (c *corpus) secretScopeKey(f map[string]any) string {
 			return ""
 		}
 		return repo + ":" + env
+	}
+	return ""
+}
+
+// runnerScopeKey qualifies a runner's scope the way secretScopeKey does: repo
+// runner ids are a per-repository sequence, so an unqualified scope_key would
+// collapse every repo's first runner onto one node.
+func (c *corpus) runnerScopeKey(f map[string]any) string {
+	switch str(f["scope"]) {
+	case "org":
+		return c.org
+	case "repo":
+		return c.full(cmp.Or(str(f["repo"]), str(f["scope_key"])))
 	}
 	return ""
 }

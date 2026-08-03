@@ -166,7 +166,7 @@ func normalizeRunners(prior engine.PriorPhase, cp engine.CurrentPhase, org strin
 				id, entInt(st)))
 		}
 
-		repos := runnerGroupRepoNames(entList(g.data["selected_repositories"]))
+		repos := repoNames(entList(g.data["selected_repositories"]))
 		members := runnerGroupMemberIDs(entList(g.data["member_runners"]))
 
 		rec := RunnerGroupFact{
@@ -201,16 +201,6 @@ func runnerLabelNames(labels []any) []string {
 	out := []string{}
 	for _, l := range labels {
 		if name := entStr(entMap(l)["name"]); name != "" {
-			out = append(out, name)
-		}
-	}
-	return out
-}
-
-func runnerGroupRepoNames(repos []any) []string {
-	out := []string{}
-	for _, r := range repos {
-		if name := entStr(entMap(r)["name"]); name != "" {
 			out = append(out, name)
 		}
 	}
