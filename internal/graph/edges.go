@@ -396,11 +396,21 @@ func emitContains(c *corpus, _ *nodeSet, s *edgeSet) {
 		s.add(Contains, repoEndpoint(c, str(e["repo"])), branchEndpoint(c, str(e["repo"]), str(e["branch"])),
 			source(c.chainSource("effective-ruleset", "effective_per_branch")))
 	}
+	unslugged := 0
 	for _, r := range c.dirs["jobs"] {
 		wf := workflowEndpoint(c, r.fields)
-		s.add(Contains, repoEndpoint(c, str(r.fields["repo"])), wf, source(r.rel))
+		// The job record's branch is filename-slugged, so it reaches the Branch
+		// node's identity only through trueBranch; an ambiguous slug names no
+		// branch and the file's containment is unrecoverable.
+		repo := str(r.fields["repo"])
+		if name := c.trueBranch[c.full(repo)+"\x00"+str(r.fields["branch"])]; name != "" {
+			s.add(Contains, branchEndpoint(c, repo, name), wf, source(r.rel))
+		} else {
+			unslugged++
+		}
 		s.add(Contains, wf, jobEndpoint(c, r.fields), source(r.rel))
 	}
+	s.miss(Contains, Branch, Workflow, unslugged)
 	for _, r := range c.dirs["environments"] {
 		s.add(Contains, repoEndpoint(c, str(r.fields["repo"])), envEndpoint(c, str(r.fields["repo"]), str(r.fields["name"])), source(r.rel))
 	}

@@ -76,11 +76,13 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 		{Organization, Ruleset},
 		{Repository, Branch},
 		{Repository, Tag},
-		{Repository, Workflow},
 		{Repository, Environment},
 		{Repository, Secret},
 		{Repository, Runner},
 		{Repository, Ruleset},
+		// A workflow file is a blob on a branch and has no repository-level
+		// existence; Repository -> Workflow stays reachable through the branch.
+		{Branch, Workflow},
 		{Workflow, Job},
 		{Environment, Secret},
 		{RunnerGroup, Runner},

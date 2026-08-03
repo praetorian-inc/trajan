@@ -563,6 +563,12 @@ var gapRegister = []gapEntry{{
 	Reason:      "branch is deliberately excluded, so branch-scoped job records merge onto one job definition. Adding branch would leave Workflow{repo,path} un-branched and make CONTAINS{Workflow,Job} incoherent, so the merged branch set is preserved on properties.branches instead and every finding keeps its branch-qualified subject_id.",
 	UpstreamFix: "none wanted at the graph layer; branch-scoping the graph would require branching Workflow identity too.",
 }, {
+	Subject:     "identityKeys[Workflow]",
+	Kind:        "node",
+	Status:      "identity_defect",
+	Reason:      "{repo, path} omits the branch, so one node stands for every branch's copy of the file and their differences merge. CONTAINS now runs Branch -> Workflow, which makes the collapse visible rather than fixing it: ghektestorg's conf-ci/reusable-build.yml is 3 distinct blobs across 4 branches and still one node with 4 inbound edges, so a permissions block or a pinned ref that only one branch carries reads as if every branch carried it.",
+	UpstreamFix: "add branch to the key, which rekeys CONTAINS{Branch,Workflow}, CONTAINS{Workflow,Job}, CALLS{Job,Workflow}, TRIGGERS{Workflow,Workflow} and TARGETS{Workflow,Branch}, and the 6 rules whose graph: line names Workflow.",
+}, {
 	Subject:     "Organization secrets",
 	Kind:        "node",
 	Status:      "partial",
