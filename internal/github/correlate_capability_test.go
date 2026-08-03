@@ -419,3 +419,62 @@ func TestCapabilityAppInstallationBypassMatchesOnAppID(t *testing.T) {
 		t.Errorf("broad-admin routes_blocked %v, want direct_push", got)
 	}
 }
+
+// Oracle is the portus-labs configuration read from the GitHub API out of band:
+// shared-workflows/main runs ruleset protect-main with one approving review, no
+// bypass actors, and the org-wide "Actions can approve pull requests" toggle on,
+// so portus-bot — write, not admin, not a code owner — merges without a human.
+// payments-api/main has no ruleset at all, so there is no gate to satisfy.
+func TestCapabilityApprovalCountSelfSatisfiable(t *testing.T) {
+	prRuleset := func(approvals float64) []map[string]any {
+		rs := branchRuleset(1, []string{"pull_request"}, nil, nil)
+		rs["required_approving_review_count"] = approvals
+		return []map[string]any{rs}
+	}
+	approveRepo := func() map[string]any {
+		r := bareRepo()
+		r["can_approve_pull_request_reviews"] = true
+		r["actions_enabled"] = true
+		return r
+	}
+
+	cases := []struct {
+		name     string
+		repo     map[string]any
+		rulesets []map[string]any
+		want     bool
+	}{
+		{"one approval an Actions run can cast", approveRepo(), prRuleset(1), true},
+		// One repository, one Actions identity, and GitHub refuses a self-review,
+		// so the second approval still has to come from a person.
+		{"two approvals still cost a human", approveRepo(), prRuleset(2), false},
+		{"toggle off means the token's review does not count", bareRepo(), prRuleset(1), false},
+		{"no gate to satisfy", approveRepo(), nil, false},
+		{
+			name:     "Actions disabled leaves no run to cast it",
+			repo:     func() map[string]any { r := approveRepo(); r["actions_enabled"] = false; return r }(),
+			rulesets: prRuleset(1), want: false,
+		},
+		{
+			name: "a principal the rule never bound has nothing to satisfy",
+			repo: approveRepo(),
+			rulesets: func() []map[string]any {
+				rs := branchRuleset(1, []string{"pull_request"}, teamActor("always"), nil)
+				rs["required_approving_review_count"] = float64(1)
+				return []map[string]any{rs}
+			}(),
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			byPrincipal, _ := capabilityChain(tc.repo, tc.rulesets)
+			got := slices.Contains(edgeStrings(t, byPrincipal["user__u"], "circumvents"),
+				"approval_count_self_satisfiable")
+			if got != tc.want {
+				t.Errorf("approval_count_self_satisfiable = %v, want %v (circumvents=%v)",
+					got, tc.want, byPrincipal["user__u"]["circumvents"])
+			}
+		})
+	}
+}

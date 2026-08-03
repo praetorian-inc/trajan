@@ -487,6 +487,12 @@ var gapRegister = []gapEntry{{
 	UpstreamFix: "the rule, not the data: add can_approve_pull_request_reviews to the rule now that the repo record carries it. Any rule targeting this edge must keep the pull-requests: write predicate — the edge is gated on it and a wider predicate silently loses its matches.",
 	Targets:     []string{"edge(CAN_APPROVE, Job, Repository)"},
 }, {
+	Subject:     "CAN_LAND_CODE circumvents[approval_count_self_satisfiable] scope",
+	Kind:        "edge",
+	Status:      "partial",
+	Reason:      "set where the PR route is this principal's only way in, the gate still binds them, exactly one approval is demanded, and the repo lets an Actions run cast it. Exactly one because a repository has a single Actions identity and GitHub refuses a self-review, so two required approvals still cost a human. Two things it does not check. It presumes a ref exists outside the ruleset's ref_name scope to push the approving workflow to: deriveBranchCoverage reads conditions.ref_name and discards it, so nothing records that protect-main covers only ~DEFAULT_BRANCH. And the code-owner escape the rule pairs with it is probe-based — codeowners.covers_ci_execution tests five representative locations, and scripts/setup-env.sh, the file the portus-labs path actually turns on, is not one of them. The verdict happens to be right about that file — CODEOWNERS there owns only /.github/workflows/ and /README.md — but the probes are what the finding rests on, and they never touched it. The approval count also folds legacy protection the way single_approval_required does, so \"legacy requires a PR\" can pair with \"a ruleset says one approval\" from different sources.",
+	UpstreamFix: "for the ref scope: keep conditions.ref_name on the branch-coverage row, then require an ungated ref; isCatchAll already exists in collect.go. Write an fr-* scenario with a ~ALL ruleset carrying `creation` first, so the term has an oracle. For the code-owner half: collect the repository tree and model CODEOWNERS as OWNS_PATH{User|Team,Repository} carrying the pattern, which is the only shape that answers \"is THIS path owned\".",
+}, {
 	Subject:     "READS{Job,Secret} for unscoped references",
 	Kind:        "edge",
 	Status:      "identity_defect",

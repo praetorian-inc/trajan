@@ -1065,9 +1065,14 @@ type writePrincipal struct {
 func deriveCapabilityEdges(effective, principals, deployKeys, repos, apps []map[string]any, mintRepos map[string][]string) map[string]any {
 	defaultBranch := map[string]string{}
 	archived := map[string]bool{}
+	// Whether a run's GITHUB_TOKEN can cast an approving review at all. Neither
+	// half sits on a branch record, so no query over the graph can recover it.
+	tokenCanApprove := map[string]bool{}
 	for _, r := range repos {
 		defaultBranch[mStr(r, "repo")] = mStr(r, "default_branch")
 		archived[mStr(r, "repo")] = mBool(r, "archived")
+		tokenCanApprove[mStr(r, "repo")] = mBool(r, "actions_enabled") &&
+			mBool(r, "can_approve_pull_request_reviews")
 	}
 
 	teamsOf := map[string][]string{}
@@ -1174,6 +1179,7 @@ func deriveCapabilityEdges(effective, principals, deployKeys, repos, apps []map[
 		// repo-scope ruleset do not.
 		removable := mGet(eff, "legacy_protection_present") == true ||
 			slices.ContainsFunc(active, func(rs map[string]any) bool { return mStr(rs, "scope") == "repo" })
+		approvals, _ := numericValue(mGet(eff, "effective_required_approving_review_count"))
 
 		for _, wp := range byRepo[repo] {
 			matched := []any{}
@@ -1218,6 +1224,15 @@ func deriveCapabilityEdges(effective, principals, deployKeys, repos, apps []map[
 				"direct_push":  !archived[repo] && !legacyBlocksDirect && !appliedDirect["pull_request"] && !appliedDirect["update"],
 				"pull_request": !archived[repo] && wp.Kind != "deploy_key" && !legacyLock && !(appliedPR["update"] && !appliedPR["pull_request"]),
 			}
+			// The PR route is only a control if an approval is actually demanded of
+			// this principal, and the token's approval only counts when the gate
+			// still binds them — a bypass holder was never gated in the first place.
+			// Exactly one, not one-or-more: a repository has a single Actions
+			// identity and GitHub refuses a self-review, so two required approvals
+			// still cost the attacker a human.
+			prGate := appliedPR["pull_request"] || (legacyRequiresPR && !(wp.IsAdmin && legacyExemptsAdmins))
+			selfApproves := open["pull_request"] && prGate && approvals == 1 && tokenCanApprove[repo]
+
 			routesOpen, routesBlocked := []string{}, []string{}
 			for _, r := range []string{"direct_push", "pull_request"} {
 				if open[r] {
@@ -1242,15 +1257,21 @@ func deriveCapabilityEdges(effective, principals, deployKeys, repos, apps []map[
 				"is_default_branch": branch == defaultBranch[repo],
 
 				"circumvents": setList(map[string]bool{
-					"bypass_always":            bypassAll,
-					"bypass_pull_request":      bypassPR,
-					"bypass_unproven":          unproven,
-					"admin_can_remove_control": wp.IsAdmin && removable,
-					"admin_can_unarchive":      wp.IsAdmin && archived[repo],
+					"bypass_always":                   bypassAll,
+					"bypass_pull_request":             bypassPR,
+					"bypass_unproven":                 unproven,
+					"admin_can_remove_control":        wp.IsAdmin && removable,
+					"admin_can_unarchive":             wp.IsAdmin && archived[repo],
+					"approval_count_self_satisfiable": selfApproves,
 				}),
 				"routes_open":           routesOpen,
 				"routes_blocked":        routesBlocked,
 				"bypass_actors_matched": matched,
+
+				// Carried for the rule that reads this chain, not for the graph edge:
+				// emitCanLandCode copies an explicit field list and takes neither.
+				"code_owner_review_active":       mGet(eff, "require_code_owner_review_active"),
+				"codeowners_covers_ci_execution": mBool(mMap(eff, "codeowners"), "covers_ci_execution"),
 
 				"_provenance": append(slices.Clone(wp.Prov), listOrEmpty(eff, "_provenance")...),
 			})
