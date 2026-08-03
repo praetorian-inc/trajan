@@ -5,13 +5,25 @@ import (
 	"maps"
 )
 
-var allScopes = []string{
-	"actions", "attestations", "checks", "contents", "deployments",
-	"discussions", "id-token", "issues", "models", "packages", "pages",
-	"pull-requests", "repository-projects", "security-events", "statuses",
+// PermissionScopes is the workflow-syntax permissions table, plus models: that one
+// is absent from the table but real, and a job cannot reach GitHub Models without
+// it. repository-projects is gone with classic projects. It is exported because a
+// permissions: key outside this set is a workflow GitHub refuses to parse, which is
+// something a plan that composes a workflow document has to refuse before it
+// commits one.
+var PermissionScopes = []string{
+	"actions", "artifact-metadata", "attestations", "checks", "code-quality",
+	"contents", "deployments", "discussions", "id-token", "issues", "models",
+	"packages", "pages", "pull-requests", "security-events", "statuses",
+	"vulnerability-alerts",
 }
 
-var optInOnlyScopes = map[string]bool{"id-token": true, "attestations": true}
+// OptInOnlyScopes are the scopes that appear in no GITHUB_TOKEN default-permission
+// table, so a workflow that does not name id-token cannot mint an OIDC token however
+// permissive the repository or organization default is. A workflow-level write-all
+// does grant them — it grants every available scope — so this applies to the default
+// layer only.
+var OptInOnlyScopes = map[string]bool{"id-token": true, "attestations": true}
 
 type permInputs struct {
 	JobPerms           any
@@ -57,25 +69,42 @@ func pyStr(v any) string {
 func expandShorthand(value string) map[string]string {
 	switch value {
 	case "read-all":
-		return defaultScopeMap("read")
+		return shorthandScopes("read")
 	case "write-all":
-		return defaultScopeMap("write")
+		return shorthandScopes("write")
 	case "restricted", "{}":
-		return defaultScopeMap("none")
+		return shorthandScopes("none")
 	default:
 		return map[string]string{}
 	}
 }
 
-// opt-in scopes are forced to "none": they are never inherited from defaults/shorthand.
-func defaultScopeMap(grant string) map[string]string {
-	out := make(map[string]string, len(allScopes))
-	for _, s := range allScopes {
-		if optInOnlyScopes[s] {
+// shorthandScopes grants every scope one level, which is what read-all/write-all
+// mean, with the two scopes that do not have every level resolved to the one they
+// do: vulnerability-alerts has no write (write-all includes it as read), and
+// id-token is write or nothing (read-all therefore grants it nothing).
+func shorthandScopes(grant string) map[string]string {
+	out := make(map[string]string, len(PermissionScopes))
+	for _, s := range PermissionScopes {
+		switch {
+		case s == "vulnerability-alerts" && grant == "write":
+			out[s] = "read"
+		case s == "id-token" && grant == "read":
 			out[s] = "none"
-		} else {
+		default:
 			out[s] = grant
 		}
+	}
+	return out
+}
+
+// defaultScopeMap is the repository- or organization-wide default grant, which is
+// a smaller thing than a workflow's write-all: the opt-in scopes are never part
+// of it.
+func defaultScopeMap(grant string) map[string]string {
+	out := shorthandScopes(grant)
+	for s := range OptInOnlyScopes {
+		out[s] = "none"
 	}
 	return out
 }
@@ -140,8 +169,8 @@ func isStringBlock(block any) bool {
 }
 
 func allNone() map[string]string {
-	out := make(map[string]string, len(allScopes))
-	for _, s := range allScopes {
+	out := make(map[string]string, len(PermissionScopes))
+	for _, s := range PermissionScopes {
 		out[s] = "none"
 	}
 	return out

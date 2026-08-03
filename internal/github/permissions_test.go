@@ -7,11 +7,14 @@ import (
 	"testing"
 )
 
-// Independent copy of the canonical scope set: the test must not import the impl's allScopes.
+// Independent copy of the canonical scope set — the workflow-syntax permissions
+// table plus models: the test must not read PermissionScopes, or it would assert
+// the implementation against itself.
 var expectedScopes = []string{
-	"actions", "attestations", "checks", "contents", "deployments",
-	"discussions", "id-token", "issues", "models", "packages", "pages",
-	"pull-requests", "repository-projects", "security-events", "statuses",
+	"actions", "artifact-metadata", "attestations", "checks", "code-quality",
+	"contents", "deployments", "discussions", "id-token", "issues", "models",
+	"packages", "pages", "pull-requests", "security-events", "statuses",
+	"vulnerability-alerts",
 }
 
 func scopeKeys(out map[string]any) []string {
@@ -75,7 +78,7 @@ func TestResolveOrgDefaultReadOptInExempt(t *testing.T) {
 		t.Errorf("_source = %v, want org_default", out["_source"])
 	}
 	if ks := scopeKeys(out); !reflect.DeepEqual(ks, sortedCopy(expectedScopes)) {
-		t.Errorf("scope keys = %v, want full 15-scope set", ks)
+		t.Errorf("scope keys = %v, want the full scope set", ks)
 	}
 	if got := scope(t, out, "contents"); got != "read" {
 		t.Errorf("contents = %q, want read", got)
@@ -129,7 +132,7 @@ func TestResolveWorkflowShorthandReadAll(t *testing.T) {
 		t.Errorf("contents = %q, want read", got)
 	}
 	if got := scope(t, out, "id-token"); got != "none" {
-		t.Errorf("id-token = %q, want none (opt-in exempt under shorthand)", got)
+		t.Errorf("id-token = %q, want none: it is write-or-nothing, so a read grant leaves it ungranted", got)
 	}
 	ch := chainOf(t, out)
 	if len(ch) != 1 || ch[0]["source"] != "workflow" || ch[0]["value"] != "read-all" {
@@ -144,7 +147,7 @@ func TestResolveShorthandRestrictedAndEmptyBraces(t *testing.T) {
 	for _, v := range []string{"restricted", "{}"} {
 		out := resolvePermissions(permInputs{WorkflowPerms: v})
 		if ks := scopeKeys(out); !reflect.DeepEqual(ks, sortedCopy(expectedScopes)) {
-			t.Errorf("%q: scope keys = %v, want all 15", v, ks)
+			t.Errorf("%q: scope keys = %v, want every scope", v, ks)
 		}
 		for _, s := range expectedScopes {
 			if got := scope(t, out, s); got != "none" {
@@ -175,7 +178,7 @@ func TestResolveWorkflowDictResetsUnmentionedToNoneAndExplicitOptInWins(t *testi
 		t.Errorf("pull-requests = %q, want none (dict resets unmentioned)", got)
 	}
 	if ks := scopeKeys(out); !reflect.DeepEqual(ks, sortedCopy(expectedScopes)) {
-		t.Errorf("dict layer must emit all 15 scopes, got %v", ks)
+		t.Errorf("dict layer must emit every scope, got %v", ks)
 	}
 }
 
@@ -249,7 +252,7 @@ func TestResolveJobShorthandOverridesWorkflowDict(t *testing.T) {
 		t.Errorf("contents = %q, want read (job read-all)", got)
 	}
 	if got := scope(t, out, "id-token"); got != "none" {
-		t.Errorf("id-token = %q, want none (job read-all opt-in exempt, workflow grant discarded)", got)
+		t.Errorf("id-token = %q, want none (a read grant leaves a write-only scope ungranted; the workflow's write is discarded)", got)
 	}
 }
 
@@ -331,6 +334,65 @@ func TestResolveUnknownDefaultIsNoOp(t *testing.T) {
 	ch := chainOf(t, out)
 	if len(ch) != 1 || ch[0]["source"] != "workflow" {
 		t.Errorf("_chain = %v, want only workflow (empty org default is no-op)", ch)
+	}
+}
+
+// write-all grants every available scope. Treating the OIDC and provenance
+// scopes as unreachable from it is what made every write-all workflow look
+// incapable of minting a token.
+func TestResolveWriteAllGrantsOptInScopes(t *testing.T) {
+	for _, layer := range []permInputs{{WorkflowPerms: "write-all"}, {JobPerms: "write-all"}} {
+		out := resolvePermissions(layer)
+		if got := scope(t, out, "id-token"); got != "write" {
+			t.Errorf("id-token = %q under write-all, want write", got)
+		}
+		if got := scope(t, out, "attestations"); got != "write" {
+			t.Errorf("attestations = %q under write-all, want write", got)
+		}
+		for _, s := range []string{"artifact-metadata", "code-quality"} {
+			if got := scope(t, out, s); got != "write" {
+				t.Errorf("%s = %q under write-all, want write", s, got)
+			}
+		}
+	}
+}
+
+// vulnerability-alerts has no write level, so no layer may resolve it to one: a
+// shorthand includes it as read, and a rule that keys on the value has to see a
+// level the scope actually has.
+func TestResolveVulnerabilityAlertsIsNeverWrite(t *testing.T) {
+	cases := map[string]permInputs{
+		"workflow write-all": {WorkflowPerms: "write-all"},
+		"job write-all":      {JobPerms: "write-all"},
+		"repo default write": {RepoDefault: "write"},
+		"org default write":  {OrgDefault: "write"},
+	}
+	for name, in := range cases {
+		out := resolvePermissions(in)
+		if got := scope(t, out, "vulnerability-alerts"); got != "read" {
+			t.Errorf("%s: vulnerability-alerts = %q, want read", name, got)
+		}
+	}
+	if got := scope(t, resolvePermissions(permInputs{WorkflowPerms: "read-all"}), "vulnerability-alerts"); got != "read" {
+		t.Errorf("read-all: vulnerability-alerts = %q, want read", got)
+	}
+}
+
+// The repository- or organization-wide default is not a workflow's write-all: it
+// never confers the opt-in scopes, and a job that inherits it cannot mint an OIDC
+// token.
+func TestResolveDefaultWriteWithholdsOptInScopes(t *testing.T) {
+	for _, in := range []permInputs{{RepoDefault: "write"}, {OrgDefault: "write"}} {
+		out := resolvePermissions(in)
+		if got := scope(t, out, "contents"); got != "write" {
+			t.Errorf("contents = %q, want write", got)
+		}
+		if got := scope(t, out, "id-token"); got != "none" {
+			t.Errorf("id-token = %q under a default write grant, want none", got)
+		}
+		if got := scope(t, out, "attestations"); got != "none" {
+			t.Errorf("attestations = %q under a default write grant, want none", got)
+		}
 	}
 }
 

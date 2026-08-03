@@ -177,6 +177,131 @@ func TestGet403RateLimitResetSleep(t *testing.T) {
 	}
 }
 
+// A primary limit answers 403 or 429, and the 429 carries no Retry-After of its
+// own: the reset header is the whole instruction.
+func TestGet429PrimaryLimitWaitsForReset(t *testing.T) {
+	rec, restore := captureSleeps(t)
+	defer restore()
+
+	reset := time.Now().Unix() + 10
+	var n int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&n, 1) == 1 {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(reset, 10))
+			w.WriteHeader(429)
+			w.Write([]byte(`{"message":"API rate limit exceeded"}`))
+			return
+		}
+		w.WriteHeader(200)
+		w.Write([]byte(`{"ok":1}`))
+	}))
+	defer srv.Close()
+	c := newTestClient(srv)
+
+	body, _, err := c.Get(context.Background(), srv.URL+"/x", nil, false)
+	if err != nil {
+		t.Fatalf("a 429 primary limit must be waited out, got %v", err)
+	}
+	if string(body) != `{"ok":1}` {
+		t.Fatalf("body = %q", body)
+	}
+	if len(*rec) != 1 || (*rec)[0] <= 0 || (*rec)[0] > 12 {
+		t.Fatalf("expected one ~11s reset wait, got %v", *rec)
+	}
+}
+
+// A secondary limit can arrive with neither Retry-After nor a zeroed remaining
+// count, and the documented answer is to wait a minute and back off from there.
+func TestGetSecondaryLimitWithNoHeadersBacksOff(t *testing.T) {
+	rec, restore := captureSleeps(t)
+	defer restore()
+
+	var n int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&n, 1)
+		w.Header().Set("X-RateLimit-Remaining", "4931")
+		w.WriteHeader(403)
+		w.Write([]byte(`{"message":"You have exceeded a secondary rate limit. Please wait a few minutes before you try again."}`))
+	}))
+	defer srv.Close()
+	c := newTestClient(srv)
+
+	_, _, err := c.Get(context.Background(), srv.URL+"/x", nil, false)
+	var ghErr *GhError
+	if !errors.As(err, &ghErr) || ghErr.Status != 403 {
+		t.Fatalf("expected a 403 *GhError after the retries ran out, got %v", err)
+	}
+	if len(*rec) == 0 || (*rec)[0] != 60 {
+		t.Fatalf("first secondary-limit wait = %v, want 60s", *rec)
+	}
+	for i, d := range (*rec)[1:] {
+		if d != 120 {
+			t.Fatalf("wait %d = %v, want the 120s cap after the first minute (%v)", i+1, d, *rec)
+		}
+	}
+	if atomic.LoadInt32(&n) != 6 {
+		t.Fatalf("expected the 6-attempt loop to run out, got %d attempts", n)
+	}
+}
+
+// A 403 that is a permission denial must not be slept for: it carries the same
+// status as a rate limit and no wait will ever clear it.
+func TestGetPermissionDenied403DoesNotWait(t *testing.T) {
+	rec, restore := captureSleeps(t)
+	defer restore()
+
+	var n int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&n, 1)
+		w.Header().Set("X-RateLimit-Remaining", "4998")
+		w.WriteHeader(403)
+		w.Write([]byte(`{"message":"Resource not accessible by integration"}`))
+	}))
+	defer srv.Close()
+	c := newTestClient(srv)
+
+	_, _, err := c.Get(context.Background(), srv.URL+"/x", nil, false)
+	var ghErr *GhError
+	if !errors.As(err, &ghErr) || ghErr.Status != 403 {
+		t.Fatalf("expected an immediate 403 *GhError, got %v", err)
+	}
+	if len(*rec) != 0 {
+		t.Fatalf("a permission 403 must not wait, slept %v", *rec)
+	}
+	if atomic.LoadInt32(&n) != 1 {
+		t.Fatalf("expected a single attempt, got %d", n)
+	}
+}
+
+func TestRateLimitWaitEndsWithTheContext(t *testing.T) {
+	var n int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&n, 1)
+		w.WriteHeader(429)
+		w.Write([]byte(`{"message":"You have exceeded a secondary rate limit."}`))
+	}))
+	defer srv.Close()
+	c := newTestClient(srv)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+	start := time.Now()
+	_, _, err := c.Get(ctx, srv.URL+"/x", nil, false)
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("the 60s wait outlived the cancelled context: took %v", elapsed)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected a context error once the wait was cut short, got %v", err)
+	}
+	if got := atomic.LoadInt32(&n); got > 2 {
+		t.Fatalf("expected the loop to stop at the cancellation, got %d attempts", got)
+	}
+}
+
 func TestGetSixAttemptExhaustion(t *testing.T) {
 	rec, restore := captureSleeps(t)
 	defer restore()
