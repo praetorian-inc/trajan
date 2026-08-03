@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/dsl"
 )
 
 // The inner capture stops at '|' to reject (unsupported) filter syntax.
@@ -13,7 +15,7 @@ func renderEvidence(template string, subject any) string {
 	return templRe.ReplaceAllStringFunc(template, func(match string) string {
 		m := templRe.FindStringSubmatch(match)
 		path := strings.TrimSpace(m[1])
-		value := getPath(subject, path)
+		value := dsl.GetPath(subject, path)
 		if value == nil {
 			return "<none>"
 		}
@@ -63,7 +65,7 @@ func humanValue(v any) string {
 		}
 		return "[" + strings.Join(parts, ", ") + "]"
 	default:
-		return toStringValue(v)
+		return dsl.ToStringValue(v)
 	}
 }
 

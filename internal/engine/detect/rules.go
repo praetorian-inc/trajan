@@ -13,6 +13,7 @@ import (
 	yaml "go.yaml.in/yaml/v4"
 
 	detectionrules "github.com/praetorian-inc/trajan/internal/detection-rules"
+	"github.com/praetorian-inc/trajan/internal/dsl"
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/finding"
 )
@@ -312,7 +313,7 @@ func buildProvenance(rule *Rule, subject map[string]any) map[string]any {
 			if strings.HasPrefix(ref, "_provenance") {
 				continue // the collected-input pointer is added explicitly below
 			}
-			if v := getPath(subject, ref); v != nil {
+			if v := dsl.GetPath(subject, ref); v != nil {
 				prov[ref] = v
 			}
 		}

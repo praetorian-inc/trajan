@@ -1,16 +1,15 @@
-package detect
+package dsl
 
 import (
+	"reflect"
 	"testing"
 )
 
-func pred(s string) *Block { return &Block{Predicate: s} }
-
-func mustEval(t *testing.T, b *Block, subj any) bool {
+func mustEval(t *testing.T, predicate string, subj any) bool {
 	t.Helper()
-	ok, err := evaluateBlock(b, subj)
+	ok, err := EvaluatePredicate(predicate, subj)
 	if err != nil {
-		t.Fatalf("evaluateBlock(%+v): unexpected error %v", b, err)
+		t.Fatalf("EvaluatePredicate(%q): unexpected error %v", predicate, err)
 	}
 	return ok
 }
@@ -43,7 +42,7 @@ func TestEvaluatePredicateEqAndNe(t *testing.T) {
 		{`absent != "x"`, true},
 	}
 	for _, c := range cases {
-		if got := mustEval(t, pred(c.predicate), subj); got != c.want {
+		if got := mustEval(t, c.predicate, subj); got != c.want {
 			t.Errorf("%q => %v, want %v", c.predicate, got, c.want)
 		}
 	}
@@ -54,19 +53,19 @@ func TestEvaluatePredicateEmptyListEquality(t *testing.T) {
 		"empty":    []any{},
 		"nonempty": []any{"x"},
 	}
-	if !mustEval(t, pred(`empty == []`), subj) {
+	if !mustEval(t, `empty == []`, subj) {
 		t.Error("empty == [] should be true")
 	}
-	if mustEval(t, pred(`nonempty == []`), subj) {
+	if mustEval(t, `nonempty == []`, subj) {
 		t.Error("nonempty == [] should be false")
 	}
-	if !mustEval(t, pred(`nonempty != []`), subj) {
+	if !mustEval(t, `nonempty != []`, subj) {
 		t.Error("a populated list should be != []")
 	}
-	if !mustEval(t, pred(`absent != []`), subj) {
+	if !mustEval(t, `absent != []`, subj) {
 		t.Error("absent (nil) != [] should be true")
 	}
-	if mustEval(t, pred(`absent == []`), subj) {
+	if mustEval(t, `absent == []`, subj) {
 		t.Error("absent (nil) == [] should be false")
 	}
 }
@@ -87,7 +86,7 @@ func TestEvaluatePredicateContains(t *testing.T) {
 		{`single ∋ {push}`, false},
 	}
 	for _, c := range cases {
-		if got := mustEval(t, pred(c.predicate), subj); got != c.want {
+		if got := mustEval(t, c.predicate, subj); got != c.want {
 			t.Errorf("%q => %v, want %v", c.predicate, got, c.want)
 		}
 	}
@@ -111,7 +110,7 @@ func TestEvaluatePredicateSubset(t *testing.T) {
 		{`empty ⊆ {a}`, true}, // empty list is vacuously a subset
 	}
 	for _, c := range cases {
-		if got := mustEval(t, pred(c.predicate), subj); got != c.want {
+		if got := mustEval(t, c.predicate, subj); got != c.want {
 			t.Errorf("%q => %v, want %v", c.predicate, got, c.want)
 		}
 	}
@@ -134,7 +133,7 @@ func TestEvaluatePredicateMatches(t *testing.T) {
 		{`nilfield matches "x"`, false},
 	}
 	for _, c := range cases {
-		if got := mustEval(t, pred(c.predicate), subj); got != c.want {
+		if got := mustEval(t, c.predicate, subj); got != c.want {
 			t.Errorf("%q => %v, want %v", c.predicate, got, c.want)
 		}
 	}
@@ -156,7 +155,7 @@ func TestEvaluatePredicateNumericComparisons(t *testing.T) {
 		{`absent < 99`, false},
 	}
 	for _, c := range cases {
-		if got := mustEval(t, pred(c.predicate), subj); got != c.want {
+		if got := mustEval(t, c.predicate, subj); got != c.want {
 			t.Errorf("%q => %v, want %v", c.predicate, got, c.want)
 		}
 	}
@@ -164,66 +163,87 @@ func TestEvaluatePredicateNumericComparisons(t *testing.T) {
 
 func TestEvaluatePredicateInOperator(t *testing.T) {
 	subj := map[string]any{"kind": "tag"}
-	if !mustEval(t, pred(`kind in {tag, branch}`), subj) {
+	if !mustEval(t, `kind in {tag, branch}`, subj) {
 		t.Error("kind in {tag, branch} should be true")
 	}
-	if mustEval(t, pred(`kind in {sha, digest}`), subj) {
+	if mustEval(t, `kind in {sha, digest}`, subj) {
 		t.Error("kind in {sha, digest} should be false")
 	}
 }
 
-func TestCombinatorEmptyCollections(t *testing.T) {
-	subj := map[string]any{}
-	if !mustEval(t, &Block{IsCombo: true, AllOf: []Block{}}, subj) {
-		t.Error("empty all_of must be true")
+func TestSplitPredicateOperatorPrecedenceAndQuoting(t *testing.T) {
+	cases := []struct {
+		predicate string
+		field     string
+		op        string
+		rhs       string
+	}{
+		{`a >= 2`, "a", "ge", "2"},
+		{`a <= 2`, "a", "le", "2"},
+		{`a > 2`, "a", "gt", "2"},
+		{`a < 2`, "a", "lt", "2"},
+		{`a == 2`, "a", "eq", "2"},
+		{`a != 2`, "a", "ne", "2"},
+		// An == inside the quoted rhs must not be taken as the split operator.
+		{`name == "x == y"`, "name", "eq", `"x == y"`},
+		{`triggers ∋ {a, b}`, "triggers", "contains", "{a, b}"},
+		{`labels ⊆ {a}`, "labels", "subset", "{a}"},
+		{`x matches "re"`, "x", "matches", `"re"`},
 	}
-	if mustEval(t, &Block{IsCombo: true, AnyOf: []Block{}}, subj) {
-		t.Error("empty any_of must be false")
-	}
-	if !mustEval(t, &Block{IsCombo: true, NoneOf: []Block{}}, subj) {
-		t.Error("empty none_of must be true")
-	}
-	if _, err := evaluateBlock(&Block{IsCombo: true}, subj); err == nil {
-		t.Error("combinator with no all_of/any_of/none_of must error")
-	}
-}
-
-func TestCombinatorConjunction(t *testing.T) {
-	subj := map[string]any{
-		"a":        true,
-		"b":        false,
-		"triggers": []any{"pull_request_target"},
-	}
-	block := &Block{
-		IsCombo: true,
-		AllOf:   []Block{*pred(`a == true`)},
-		AnyOf:   []Block{*pred(`b == true`), *pred(`a == true`)},
-		NoneOf:  []Block{*pred(`b == true`)},
-	}
-	if !mustEval(t, block, subj) {
-		t.Error("true all_of + satisfiable any_of + clean none_of should fire")
-	}
-	block.NoneOf = []Block{*pred(`a == true`)}
-	if mustEval(t, block, subj) {
-		t.Error("none_of matching a true predicate must suppress the block")
-	}
-	block.AllOf = []Block{*pred(`a == true`), *pred(`b == true`)}
-	block.NoneOf = []Block{*pred(`b == true`)}
-	if mustEval(t, block, subj) {
-		t.Error("a false all_of member must fail the block")
+	for _, c := range cases {
+		field, op, rhs, ok := splitPredicate(c.predicate)
+		if !ok {
+			t.Errorf("%q: split failed", c.predicate)
+			continue
+		}
+		if field != c.field || op != c.op || rhs != c.rhs {
+			t.Errorf("split(%q) = (%q,%q,%q), want (%q,%q,%q)",
+				c.predicate, field, op, rhs, c.field, c.op, c.rhs)
+		}
 	}
 }
 
-func TestCombinatorNesting(t *testing.T) {
-	subj := map[string]any{"x": float64(5), "y": "tag"}
-	block := &Block{
-		IsCombo: true,
-		AnyOf: []Block{
-			{IsCombo: true, AllOf: []Block{*pred(`x >= 5`), *pred(`y == "tag"`)}},
-			*pred(`x > 100`),
-		},
+func TestSplitPredicateUnparseable(t *testing.T) {
+	if _, _, _, ok := splitPredicate("just_a_bare_field"); ok {
+		t.Error("a predicate with no operator must not split")
 	}
-	if !mustEval(t, block, subj) {
-		t.Error("nested all_of inside any_of should fire")
+	if _, err := EvaluatePredicate("nope", map[string]any{}); err == nil {
+		t.Error("EvaluatePredicate on an operatorless predicate should error")
+	}
+}
+
+func TestParseValue(t *testing.T) {
+	cases := []struct {
+		text string
+		want any
+	}{
+		{"null", nil},
+		{"None", nil},
+		{"true", true},
+		{"false", false},
+		{"[]", []any{}},
+		{"{}", map[string]any{}},
+		{`"quoted"`, "quoted"},
+		{`'quoted'`, "quoted"},
+		{"42", 42},
+		{"bare", "bare"},
+	}
+	for _, c := range cases {
+		if got := parseValue(c.text); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("parseValue(%q) = %#v, want %#v", c.text, got, c.want)
+		}
+	}
+	// Set literal: items are trimmed, quote-stripped, and trailing empties dropped.
+	set, ok := parseValue(`{a, 'b' , c,}`).(map[string]struct{})
+	if !ok {
+		t.Fatalf("set literal did not parse to a set: %#v", parseValue(`{a, 'b' , c,}`))
+	}
+	for _, want := range []string{"a", "b", "c"} {
+		if _, present := set[want]; !present {
+			t.Errorf("set missing %q: %#v", want, set)
+		}
+	}
+	if len(set) != 3 {
+		t.Errorf("set should have 3 members, got %d: %#v", len(set), set)
 	}
 }
