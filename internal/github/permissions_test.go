@@ -282,7 +282,7 @@ func TestResolveChainValueShapes(t *testing.T) {
 	}
 }
 
-// Dict values are stringified Python-style: booleans become "True"/"False".
+// Dict values are stringified: a boolean becomes "True"/"False".
 func TestResolveDictValuesStringified(t *testing.T) {
 	out := resolvePermissions(permInputs{
 		JobPerms: map[string]any{"contents": true, "issues": 0},
@@ -338,7 +338,7 @@ func TestResolveUnknownDefaultIsNoOp(t *testing.T) {
 }
 
 // write-all grants every available scope. Treating the OIDC and provenance
-// scopes as unreachable from it is what made every write-all workflow look
+// scopes as unreachable from it would make every write-all workflow look
 // incapable of minting a token.
 func TestResolveWriteAllGrantsOptInScopes(t *testing.T) {
 	for _, layer := range []permInputs{{WorkflowPerms: "write-all"}, {JobPerms: "write-all"}} {

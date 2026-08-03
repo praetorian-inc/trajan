@@ -100,12 +100,6 @@ func deploymentPendingList(ctx context.Context, s *Session, _ deploymentPendingL
 	return out, declareAbandonment(s, run, out)
 }
 
-// declareAbandonment records the rejection cleanup issues if the chain stops while
-// these environments are still waiting: an abandoned run left in the customer's
-// approvals queue is an artifact this tool created and must clear. It is recorded
-// only for a run this chain provoked — rejecting a deployment the customer's own
-// run is waiting on would sabotage their release, so a run that only came from
-// run.observe is left alone and the record says why.
 func declareAbandonment(s *Session, run WorkflowRun, pd PendingDeployment) error {
 	if !run.Provoked {
 		s.Note(fmt.Sprintf("this chain did not provoke run %d, so cleanup will not reject or cancel it: rejecting a deployment the customer's own run is waiting on would sabotage their release. If this chain leaves it waiting, that is the customer's own run waiting as it was",
@@ -141,11 +135,6 @@ func declareAbandonment(s *Session, run WorkflowRun, pd PendingDeployment) error
 	return nil
 }
 
-// selfApproval compares the account that provoked the run with the account
-// reading it. Either login can be missing — an App installation token has none,
-// and a run record that would not load leaves no actor — and in that case the
-// answer is not false, it is unestablished: false is what a reviewer distinct
-// from the actor looks like, and this is the measurement the primitive exists for.
 func selfApproval(pd PendingDeployment) Measurement {
 	switch {
 	case pd.ActingLogin == "":
@@ -168,8 +157,6 @@ type deploymentReviewParams struct {
 	Comment      string   `yaml:"comment"`
 }
 
-// deploymentReview has no inverse and writes none: an approval releases a real
-// deployment, whose jobs start before the call returns.
 func deploymentReview(ctx context.Context, s *Session, p deploymentReviewParams, in Inputs) (WorkflowRun, error) {
 	pd := In[PendingDeployment](in, "on")
 	loc := pd.RepoRef()
@@ -260,8 +247,7 @@ func deploymentReview(ctx context.Context, s *Session, p deploymentReviewParams,
 	return out, nil
 }
 
-// environmentIDs maps the named environments onto the ids the endpoint takes. A
-// name that is not waiting is refused under --execute: the id would be a guess,
+// A name that is not waiting is refused under --execute: the id would be a guess,
 // and a request naming the wrong environment is a refusal in the customer's audit
 // log that establishes nothing. A dry run renders it with the zero id every
 // unresolved object gets.
@@ -322,10 +308,10 @@ func recordReviewEffect(s *Session, pd PendingDeployment, named []string, state 
 	})
 }
 
-// retireAbandonment drops the declared rejection once nothing is left waiting.
-// Replaying it against a run this chain already released would be refused, and
-// cleanup would report an artifact still standing that is not there — and say a
-// deployment is stuck in the customer's queue that this chain let through.
+// Replaying the declared rejection against a run this chain already released
+// would be refused, and cleanup would report an artifact still standing that is
+// not there — and say a deployment is stuck in the customer's queue that this
+// chain let through.
 //
 // The sequence to retire comes from the ledger rather than from this process. A
 // resume rehydrates the step that declared it without running its body, so
@@ -436,9 +422,6 @@ func reviewerText(env PendingEnvironment) string {
 	return strings.Join(env.Reviewers, ", ")
 }
 
-// reviewerList names the reviewers of the environments a refused request aimed at,
-// which is the part of a 403 the operator needs: the refusal is about who the token
-// acts as, not about what it was granted.
 func reviewerList(named []string, waiting []PendingEnvironment) string {
 	var out []string
 	for _, env := range waiting {

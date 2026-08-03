@@ -443,7 +443,7 @@ type RunnerInventory struct {
 	Busy         int      `json:"busy"`
 	// AnyPersistent folds the per-runner readings into the one a when: gates on.
 	// One runner reported as not ephemeral settles it; a negative needs every
-	// runner to have reported the field, which the schema leaves optional.
+	// runner to have reported the field, which the runner schema leaves optional.
 	AnyPersistent Measurement `json:"any_persistent"`
 }
 

@@ -80,11 +80,12 @@ const listedPullRequest = `{
   "created_at": "2026-08-01T10:00:00Z"
 }`
 
-// The list endpoint cannot report mergeability, so pr.list handed every plan a
-// PullRequest whose mergeable_state was the empty string: a when: comparing it
-// with "clean" never matched and one comparing != "clean" always did, and neither
-// measured anything. The oracle is the schema — the field is absent from the list
-// item above and present on the singular pull request.
+// The list endpoint cannot report mergeability, so a pr.list that populated the
+// handle from it would hand every plan a PullRequest whose mergeable_state is the
+// empty string: a when: comparing it with "clean" never matches and one comparing
+// != "clean" always does, and neither measures anything. The oracle is the schema
+// — the field is absent from the list item above and present on the singular pull
+// request.
 func TestPrListReportsMergeabilityItActuallyRead(t *testing.T) {
 	loc := RepoLoc{Owner: "ghektestorg", Repo: "fr-11-07-stale-approval"}
 

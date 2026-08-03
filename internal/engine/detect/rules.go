@@ -20,8 +20,7 @@ import (
 
 // RuleSourceBase is the "<repo>/blob/<ref>" prefix that turns an embedded rule
 // path into a browsable URL. Overridable at build time (-ldflags) to pin a
-// release ref; set to "" to omit rule.url entirely. Adjust the repo/ref here
-// once the rules' permanent home is settled.
+// release ref; set to "" to omit rule.url entirely.
 var RuleSourceBase = "https://github.com/praetorian-inc/trajan/blob/main"
 
 type Block struct {

@@ -324,8 +324,6 @@ func NormalizeADOProjectAgentPool(project string, poolID int64) string {
 	return adoNorm("project-agent-pools", fmt.Sprintf("%s__%d.json", adoKey(project), poolID))
 }
 
-// ---- GitLab collect paths ----
-//
 // glKey sanitizes a GitLab group/project full path (slash-separated) for use as a
 // single path segment: anything outside [A-Za-z0-9.-] becomes '-'. '_' is folded
 // too, since multi-component keys are joined with "__" (adoKey's rationale).
@@ -462,8 +460,6 @@ func CollectGLUserMemberships(id int64) string {
 	return glCollect("user-memberships", fmt.Sprintf("%d.json", id))
 }
 
-// ---- GitLab normalize paths ----
-//
 // Node records key by glKey(subjectKey); jobs by project + workflow stem + job
 // name; chains one file per join. NormalizeGLChain is the GitLab analog of the
 // GitHub unexported chainPath.

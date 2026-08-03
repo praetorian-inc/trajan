@@ -220,10 +220,9 @@ func TestTheReviewEffectDoesNotRecordAnUnmeasuredSelfApproval(t *testing.T) {
 
 // POST /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments needs
 // "Deployments" repository permissions (write). Its sibling GET is "Actions" (read),
-// which is where the wrong declaration came from: with actions:write declared, the
-// preflight asserted a grant that does not authorize the call, so a plan passed
-// preflight and failed at the request — on a path that is Destructive, where a
-// mis-stated requirement costs most.
+// which is the plausible wrong answer: a preflight asserting actions:write passes a
+// plan the call then refuses — on a path that is Destructive, where a mis-stated
+// requirement costs most.
 func TestDeploymentReviewDeclaresDeploymentsWrite(t *testing.T) {
 	e, found := lookup("deployment.review")
 	if !found {

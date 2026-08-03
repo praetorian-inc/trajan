@@ -156,8 +156,8 @@ func TestTokenReachabilityProbe(t *testing.T) {
 		}
 	})
 
-	// The defect this replaced: a job holding the token by the route that actually
-	// occurs reported no token at all, understating the finding.
+	// A job holding the token by the route that actually occurs must not report no
+	// token at all, which understates the finding.
 	t.Run("the environment probe is reported separately", func(t *testing.T) {
 		dir := newRepo(t, true)
 		fields, _ := runShell(t, body, dir)

@@ -342,8 +342,8 @@ func TestCombineDismissalNeedsBothSurfacesForANegative(t *testing.T) {
 // repository setting, not authorship: "Allow GitHub Actions to create and approve
 // pull requests" is off by default on a repository created in a personal account,
 // and GITHUB_TOKEN is an App installation token. Waiving the guard for that class
-// sent an approval GitHub refuses, so the refusal landed in the customer's audit
-// log instead of here and produced no evidence.
+// sends an approval GitHub refuses, so the refusal lands in the customer's audit
+// log instead of here and produces no evidence.
 func TestActionsApprovalGuardReadsTheSettingThatBlocksIt(t *testing.T) {
 	const workflowPath = "/repos/ghektestorg/fr-11-07-stale-approval/actions/permissions/workflow"
 	pr := PullRequest{IssueLoc: IssueLoc{Owner: "ghektestorg", Repo: "fr-11-07-stale-approval", Number: 7}}

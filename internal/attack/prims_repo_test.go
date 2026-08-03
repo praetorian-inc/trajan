@@ -81,9 +81,9 @@ func TestAwaitForkWaitsForTheRefAndNotTheRepositoryRecord(t *testing.T) {
 }
 
 // POST /repos/{owner}/{repo}/forks needs "Administration" repository permissions
-// (write) — the same large grant repo.delete gates behind delete_repo. Declared
-// nowhere, the preflight said the fork needed nothing, so the step failed at the
-// call rather than in validation and the plan understated what the engagement
+// (write) — the same large grant repo.delete gates behind delete_repo. Undeclared,
+// the preflight reports that the fork needs nothing, the step fails at the call
+// rather than in validation, and the plan understates what the engagement
 // credential must hold.
 func TestRepoForkDeclaresAdministrationWrite(t *testing.T) {
 	spec, found := lookup("repo.fork")

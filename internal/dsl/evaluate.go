@@ -1,3 +1,14 @@
+// Package dsl is the predicate and path evaluator shared by detection rules'
+// where: blocks and attack plans' when: gates, so both read a decoded subject
+// through one operator set.
+//
+// Coercion and rendering here reproduce the semantics of the implementation this
+// replaced: a scalar compared against a set is wrapped as a one-element set,
+// booleans render as True/False and nil as None. Rule evidence and the findings
+// built from it are compared against that output byte for byte, so a change to
+// either is a diff in a customer's report rather than a cosmetic edit — which is
+// the whole reason these conversions are spelled out instead of left to Go's own
+// formatting.
 package dsl
 
 import (
@@ -202,7 +213,6 @@ func parseValue(text string) any {
 	return text
 }
 
-// A scalar becomes a one-element set, mirroring Python wrapping it as {expected}.
 func asSet(expected any) map[string]struct{} {
 	if s, ok := expected.(map[string]struct{}); ok {
 		return s
@@ -280,7 +290,6 @@ func toFloat(v any) (float64, bool) {
 	}
 }
 
-// ToStringValue mirrors Python str(): bools render as True/False, nil as None.
 func ToStringValue(v any) string {
 	switch s := v.(type) {
 	case string:

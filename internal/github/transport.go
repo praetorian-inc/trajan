@@ -16,7 +16,6 @@ const (
 	transportREST    transportKind = "rest"
 )
 
-// preferenceOrder is the global affinity ranking git > graphql > rest.
 var preferenceOrder = []transportKind{transportGit, transportGraphQL, transportREST}
 
 type transport interface {

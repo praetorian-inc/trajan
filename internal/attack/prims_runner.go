@@ -114,11 +114,6 @@ func addLabels(into, names []string) []string {
 	return into
 }
 
-// anyPersistent folds the per-runner readings into the one a when: gates on. A
-// single runner the API reports as not ephemeral settles it; a negative needs
-// every runner to have reported the field, because ephemeral is optional in the
-// runner schema and a runner that reported nothing is not a runner that reported
-// itself ephemeral.
 func anyPersistent(runners []Runner) Measurement {
 	silent := 0
 	for _, r := range runners {

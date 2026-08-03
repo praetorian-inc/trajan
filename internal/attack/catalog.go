@@ -18,8 +18,6 @@ type InputView struct {
 	Type        string   `json:"type,omitempty"`
 }
 
-// CatalogView is the JSON-serialisable projection of one registered spec, with
-// every input key classified and every port's satisfying handles enumerated.
 type CatalogView struct {
 	Name        string      `json:"name"`
 	Summary     string      `json:"summary"`

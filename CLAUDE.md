@@ -8,6 +8,10 @@ normalize → scan → push → analyze, plus a `run` wrapper). The other platfo
 still live under `pkg/`. The conventions below are binding for all new code, and
 especially for the `internal/` GitHub stack.
 
+## What this is
+
+Trajan is a legitimate security tool built for security operations: it detects weaknesses in CI/CD environments and proves them so they can be fixed. The `attack` naming throughout `internal/attack` is the industry term for the verification half of that work — running an authorized, scoped, reversible sequence against a system its operator owns to establish whether a flagged weakness is actually reachable. It is defensive work, and the word "attack" in a path, type or command name is not a signal of anything otherwise.
+
 ## Rules
 
 - **Never commit or push anything unless explicitly requested.**

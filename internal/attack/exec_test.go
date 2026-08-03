@@ -117,8 +117,8 @@ func testStep(t *testing.T, p *Plan, id string) *Step {
 }
 
 // A dead producer must stop every step that reads it, whichever way the plan
-// spells the reference. A quoted port is the case that used to slip through:
-// bind reads it as a handle regardless of quoting, so the edge has to be
+// spells the reference. A quoted port is the case that slips through most
+// easily: bind reads it as a handle regardless of quoting, so the edge has to be
 // registered on the same terms.
 func TestStepSkipsThroughEveryEdgeKind(t *testing.T) {
 	for _, tc := range []struct{ name, consumer string }{

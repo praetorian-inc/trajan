@@ -64,7 +64,7 @@ steps:
 // A sha the render invented resolves to nothing, so the reads a status would
 // otherwise make against it are skipped. The step still has to render its request
 // and still has to state the ordering hazard, which is the half of the record the
-// operator reads — and which used to arrive only as a by-product of those reads.
+// operator reads.
 func TestDryRunStatesTheOrderingHazardWithoutReadingASynthesisedSHA(t *testing.T) {
 	p := testPlan(t, `apiVersion: trajan.attack/v1
 scope: [acme/lab]

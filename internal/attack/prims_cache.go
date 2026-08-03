@@ -110,9 +110,6 @@ func cacheDelete(ctx context.Context, s *Session, _ cacheDeleteParams, in Inputs
 		s.MarkEmpty("no cache key was recorded, so there is no entry to delete")
 		return None{}, nil
 	}
-	// The recorded key standing equal to the restore-key prefix means the record
-	// names the prefix the customer's own caches share, not the entry this chain
-	// wrote — and there is no way to tell whose entry a delete would take.
 	if entry.RestoreKeyPrefix != "" && entry.Key == entry.RestoreKeyPrefix {
 		return None{}, fmt.Errorf("refusing to delete %q: it is also the restore-key prefix, so it names the customer's caches as much as ours — cache.poison must record the exact key the job wrote, which extends the prefix rather than equalling it",
 			entry.Key)

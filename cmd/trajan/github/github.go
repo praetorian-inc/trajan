@@ -9,8 +9,6 @@ import (
 	"github.com/praetorian-inc/trajan/internal/report"
 )
 
-// GitHubCmd is the root of the GitHub platform command tree. It is wired into
-// trajan's root command by cmd/trajan/root.go.
 var GitHubCmd = newGitHubCmd()
 
 func newGitHubCmd() *cobra.Command {

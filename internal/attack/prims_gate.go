@@ -201,10 +201,9 @@ func contextState(statuses []contextStatus, context string) string {
 
 const statusOrderAdvice = "a status attaches to a sha, not to a branch or a pull request, so it must be posted after the final ref update or it lands on a commit the gate no longer reads"
 
-// statusOrderNote is the ordering hazard made concrete. A status attaches to a
-// sha, so one posted before the last ref update lands on a commit the gate no
-// longer looks at; when the ref is readable this says whether that already
-// happened rather than only warning that it can.
+// statusOrderNote is the hazard made concrete: when the ref is readable this
+// says whether the status already landed on a commit the gate no longer looks
+// at, rather than only warning that it can.
 func statusOrderNote(ctx context.Context, c *github.Client, commit Commit, sha string) string {
 	if !strings.HasPrefix(commit.Ref, "refs/") {
 		return statusOrderAdvice

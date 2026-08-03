@@ -172,9 +172,6 @@ func prReviewAwait(ctx context.Context, s *Session, p prReviewAwaitParams, in In
 	}
 
 	out.ID, out.State, out.Reviewer, out.CommitSHA = found.ID, found.State, found.User.Login, found.CommitID
-	// stale is a comparison, and a comparison that could not be made must not read
-	// as one that came out equal: a plan gating on stale == false would take an
-	// unreadable head for an approval that covers it.
 	if head, err := prHead(ctx, client, path); err != nil {
 		out.Stale = Unmeasured(fmt.Sprintf("the head of #%d is unreadable (%s), so the commit review %d covers could not be compared with it",
 			pr.Number, apiMessage(err), found.ID))

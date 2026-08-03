@@ -99,9 +99,6 @@ func (x *executor) finalize(p *Plan, mode string, mutations int) error {
 }
 
 // stepSentence is one line of the customer-facing account of what the chain did.
-// A harvest's Loot handle arrives here through the same provenance, and the
-// evidence contract it parses out of a run extends these lines rather than
-// replacing them.
 func stepSentence(rec StepRecord) string {
 	verb := map[string]string{
 		statusOK:         "succeeded",
@@ -181,8 +178,6 @@ func provenanceSteps(records []StepRecord) []map[string]any {
 	return out
 }
 
-// primaryTarget is the repository the chain acted on: the first mutating step's
-// target, falling back to the allowlist the run was minted from.
 func (x *executor) primaryTarget(p *Plan) string {
 	for _, rec := range x.records {
 		if rec.Mutating && rec.Target != "" {

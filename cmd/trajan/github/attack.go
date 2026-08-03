@@ -15,9 +15,6 @@ import (
 	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
-// newAttackCmd is the attack subtree: the catalog an agent authors against, the
-// total validator, the credential store, and the runner — which is a dry run
-// unless --execute is passed.
 func newAttackCmd(cfg *engine.Config) *cobra.Command {
 	attackCmd := &cobra.Command{
 		Use:   "attack",

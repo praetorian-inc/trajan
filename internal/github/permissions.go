@@ -1,3 +1,13 @@
+// Package github collects, normalizes and scans a GitHub Actions estate.
+//
+// Several helpers here — pyStr and its siblings across the normalize and
+// correlate paths — deliberately reproduce the value rendering of the
+// implementation this package replaced: True/False for a boolean, None for an
+// absent value, and the same repr for a captured list. Normalized records and
+// the findings rendered from them are compared against that output byte for
+// byte, so a change in rendering is a diff in a customer's report rather than a
+// cosmetic edit. That is why those helpers exist and why their spellings look
+// un-Go-like; the constraint belongs here rather than at each of them.
 package github
 
 import (
@@ -49,7 +59,6 @@ func normalizeBlock(block any) (str string, dict map[string]string, isDict bool)
 	}
 }
 
-// stringifies like Python's str() so scope values stay byte-compatible with the Python output.
 func pyStr(v any) string {
 	switch x := v.(type) {
 	case string:
