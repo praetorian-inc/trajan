@@ -1,11 +1,9 @@
 package attack
 
 import (
-	"bufio"
 	"cmp"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -21,6 +19,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/dsl"
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/github"
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 const (
@@ -51,9 +50,8 @@ const dryRunNote = "No request was sent. Reads ahead of the first mutation were 
 type RunOptions struct {
 	// RunDir attaches to an existing run directory; empty mints a fresh one from
 	// the plan's scope.
-	RunDir     string
-	Execute    bool
-	Authorized bool
+	RunDir  string
+	Execute bool
 
 	// PlanID selects which plan inside RunDir to resume when it holds several.
 	PlanID string
@@ -210,10 +208,7 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 			// ledger header still has to say which assertion it is standing on.
 			authVia = cmp.Or(opts.prior.AuthorizedVia, "unrecorded") + " (inherited by resume)"
 		} else {
-			var err error
-			if authVia, err = assertAuthorization(p, opts.Authorized); err != nil {
-				return nil, err
-			}
+			authVia = "--execute"
 		}
 	}
 	if opts.Until != "" && !slices.ContainsFunc(allSteps(p), func(st Step) bool { return st.ID == opts.Until }) {
@@ -293,6 +288,7 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 		stepIDs:  map[string]bool{},
 		reads:    []string{},
 		planned:  []PlannedMutation{},
+		total:    len(allSteps(p)),
 	}
 	for _, st := range allSteps(p) {
 		x.stepIDs[st.ID] = true
@@ -303,12 +299,18 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 		}
 	}
 
+	head(p, sess, mode)
+
+	ui.Section("Attack Steps")
 	walkErr := x.walk(ctx, p.Steps)
 	// Cleanup runs whatever happened to the steps, in declaration order: a
 	// template's cleanup block is already authored as the undo sequence. --until
 	// is the one thing that holds it back, because the point of stopping early is
 	// that the artifacts must still be there when the operator resumes.
 	if !x.stopped {
+		if len(p.Cleanup) > 0 {
+			ui.Section("Cleanup")
+		}
 		if cerr := x.walk(ctx, p.Cleanup); walkErr == nil {
 			walkErr = cerr
 		}
@@ -343,8 +345,6 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 	if err := state.Save(runDir); err != nil {
 		return nil, err
 	}
-	engine.PhaseDone(rec, "mode", mode, "plan", p.ID)
-
 	res := &RunResult{Plan: p.ID, RunDir: runDir, PlanDir: planDir, Mode: mode, Mutations: ledger.Mutations(), Resumed: x.replayed}
 	if x.stopped {
 		res.StoppedAt = opts.Until
@@ -361,6 +361,13 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 			res.Skipped++
 		}
 	}
+
+	ui.Outcome("attack complete", outcomeCounts(res), elapsed(rec.DurationS))
+	ui.Note(planDir)
+	if res.StoppedAt != "" {
+		ui.Note(fmt.Sprintf("stopped after step %q; run `trajan gh attack resume -p %s` to continue", res.StoppedAt, runDir))
+	}
+	engine.PhaseIssues(rec)
 	return res, walkErr
 }
 
@@ -378,26 +385,6 @@ func attackRunDir(cfg *engine.Config, p *Plan, explicit string) (string, error) 
 		return "", err
 	}
 	return engine.MintRunDir(cfg, "gh", sc.Slug)
-}
-
-// assertAuthorization is the once-per-run gate every mutation sits behind.
-func assertAuthorization(p *Plan, preAsserted bool) (string, error) {
-	if preAsserted {
-		return "--i-am-authorized", nil
-	}
-	fi, err := os.Stdin.Stat()
-	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
-		return "", errors.New("--execute requires an authorization assertion; pass --i-am-authorized or run on a terminal")
-	}
-	fmt.Fprintf(os.Stderr, "Type the target scope %q to assert you are authorized to mutate it: ", p.Scope[0])
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	if err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(line) != p.Scope[0] {
-		return "", errors.New("authorization assertion did not match the target scope; nothing was sent")
-	}
-	return "interactive", nil
 }
 
 func writePlanRecord(runDir string, p *Plan, s *Session, mode string, authorized bool, via string) error {
@@ -448,6 +435,7 @@ type executor struct {
 	// never landed.
 	issued map[string]LedgerEntry
 
+	total    int
 	records  []StepRecord
 	seq      int
 	replayed int
@@ -509,7 +497,12 @@ func (x *executor) step(ctx context.Context, st *Step) {
 		if err := writeRecord(); err != nil {
 			x.errs = append(x.errs, fmt.Sprintf("step %s: write record: %v", st.ID, err))
 		}
-		slog.Info("step "+rec.Status, "step", st.ID, "uses", st.Uses, "target", rec.Target)
+		ui.Step(ui.StepLine{
+			Seq: rec.Seq, Total: x.total,
+			ID: st.ID, Uses: st.Uses,
+			Action: actionOf(st.Uses),
+			Target: rec.Target, Status: rec.Status, Detail: stepDetail(rec),
+		})
 	}()
 
 	e, ok := lookup(st.Uses)
@@ -730,7 +723,12 @@ func (x *executor) replay(st *Step, rec StepRecord) {
 			x.sess.alias(st.ID, id.Name)
 		}
 	}
-	slog.Info("step resumed", "step", st.ID, "uses", rec.Uses, "target", rec.Target)
+	ui.Step(ui.StepLine{
+		Seq: rec.Seq, Total: x.total,
+		ID: st.ID, Uses: rec.Uses,
+		Action: actionOf(rec.Uses),
+		Target: rec.Target, Status: "resumed", Detail: stepDetail(rec),
+	})
 }
 
 func (x *executor) adopt(st *Step, h Handle, rec *StepRecord) {

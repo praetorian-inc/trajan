@@ -174,7 +174,9 @@ func (s *Session) resolveIdentity(ctx context.Context, name, from string) (*iden
 	ic.kind = kind
 	ic.client = github.NewClient(token)
 	ic.login, ic.scopes = whoami(ctx, ic.client)
-	slog.Info("identity resolved", "identity", ic.name, "login", ic.login, "class", ic.kind)
+	// Debug, not Info: the run's head block names every identity it resolved, and
+	// resolution happens before there is a head to sit under.
+	slog.Debug("identity resolved", "identity", ic.name, "login", ic.login, "class", ic.kind)
 	return ic, nil
 }
 

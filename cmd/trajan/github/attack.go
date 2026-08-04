@@ -93,7 +93,7 @@ func newAttackCmd(cfg *engine.Config) *cobra.Command {
 
 	var runPath, setFile, until string
 	var setValues []string
-	var dryRun, execute, authorized, keepCipher bool
+	var dryRun, execute, keepCipher bool
 	var stepDelay time.Duration
 	run := &cobra.Command{
 		Use:   "run <plan|template-id>",
@@ -107,11 +107,10 @@ func newAttackCmd(cfg *engine.Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			res, err := attack.Run(cmd.Context(), cfg, p, attack.RunOptions{
-				RunDir: runPath, Execute: execute, Authorized: authorized,
+			_, err = attack.Run(cmd.Context(), cfg, p, attack.RunOptions{
+				RunDir: runPath, Execute: execute,
 				Until: until, StepDelay: stepDelay, KeepCipher: keepCipher,
 			})
-			printRun(cmd, res)
 			return err
 		},
 	}
@@ -119,8 +118,7 @@ func newAttackCmd(cfg *engine.Config) *cobra.Command {
 	run.Flags().StringArrayVar(&setValues, "set", nil, "set an input: --set key=value (repeatable)")
 	run.Flags().StringVar(&setFile, "set-file", "", "YAML file of input values")
 	run.Flags().BoolVar(&dryRun, "dry-run", false, "render every mutation without sending one (the default)")
-	run.Flags().BoolVar(&execute, "execute", false, "issue mutations against the target")
-	run.Flags().BoolVar(&authorized, "i-am-authorized", false, "assert authorization non-interactively")
+	run.Flags().BoolVar(&execute, "execute", false, "issue mutations against the target; passing it is the authorization assertion")
 	run.Flags().StringVar(&until, "until", "", "run up to and including this step id, then stop; cleanup is left for the resume")
 	run.Flags().DurationVar(&stepDelay, "step-delay", 0, "sleep between steps to absorb read-after-write propagation lag")
 	run.Flags().BoolVar(&keepCipher, "keep-cipher", false, "keep the harvest's persisted ciphertext after a successful decrypt instead of discarding it")
@@ -141,8 +139,7 @@ func newAttackCmd(cfg *engine.Config) *cobra.Command {
 			if len(args) == 1 {
 				opts.PlanID = args[0]
 			}
-			res, err := attack.Resume(cmd.Context(), cfg, opts)
-			printRun(cmd, res)
+			_, err = attack.Resume(cmd.Context(), cfg, opts)
 			return err
 		},
 	}
@@ -183,24 +180,10 @@ func newAttackCmd(cfg *engine.Config) *cobra.Command {
 	return attackCmd
 }
 
-func printRun(cmd *cobra.Command, res *attack.RunResult) {
-	if res == nil {
-		return
-	}
-	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "%s [%s] %s\n", res.Plan, res.Mode, res.PlanDir)
-	fmt.Fprintf(out, "  ok %d  planned %d  skipped %d  failed %d  resumed %d  mutations %d\n",
-		res.OK, res.Planned, res.Skipped, res.Failed, res.Resumed, res.Mutations)
-	if res.StoppedAt != "" {
-		fmt.Fprintf(out, "  stopped after step %q; run `trajan gh attack resume -p %s` to continue\n", res.StoppedAt, res.RunDir)
-	}
-}
-
-func printCleanup(cmd *cobra.Command, r *attack.CleanupReport) {
-	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "%s [%s] %s\n", r.Plan, r.Mode, r.PlanDir)
-	fmt.Fprintf(out, "  reversed %d  partial %d  irreversible %d  failed %d\n",
-		len(r.Reversed), len(r.Partial), len(r.Irreversible), len(r.Failed))
+func printCleanup(_ *cobra.Command, r *attack.CleanupReport) {
+	ui.Head(r.Plan, [2]string{"mode", r.Mode})
+	// reversed is counted and not itemized: a resource that is as it was needs no
+	// line. The three buckets below are what the operator still has to act on.
 	for _, section := range []struct {
 		label string
 		items []attack.CleanupItem
@@ -209,11 +192,22 @@ func printCleanup(cmd *cobra.Command, r *attack.CleanupReport) {
 		{"irreversible", r.Irreversible},
 		{"failed", r.Failed},
 	} {
+		if len(section.items) > 0 {
+			ui.Section(section.label)
+		}
 		for _, it := range section.items {
-			ui.Item(fmt.Sprintf("%s: %s %s %s %s", section.label, it.Step,
-				strings.TrimSpace(it.Method+" "+it.Path), it.Detail, it.Error))
+			ui.Item(strings.TrimSpace(strings.Join([]string{
+				it.Step, strings.TrimSpace(it.Method + " " + it.Path), it.Detail, it.Error,
+			}, " ")))
 		}
 	}
+	ui.Outcome("cleanup complete", []ui.Count{
+		{Label: "failed", N: len(r.Failed)},
+		{Label: "irreversible", N: len(r.Irreversible)},
+		{Label: "partial", N: len(r.Partial)},
+		{Label: "reversed", N: len(r.Reversed)},
+	}, "")
+	ui.Note(r.PlanDir)
 }
 
 func newIdentityCmd() *cobra.Command {
