@@ -29,10 +29,20 @@ import (
 // half; AES-256-GCM seals the stream under sym with a 12-byte nonce, and Go's
 // gcm.Open consumes ciphertext||tag, which is exactly the blob past the nonce.
 // Node is the toolchain: crypto.publicEncrypt with RSA_PKCS1_OAEP_PADDING +
-// oaepHash sha256, and createCipheriv('aes-256-gcm', ...). node is present on
-// every GitHub-hosted runner because the Actions runner itself is Node; a runner
-// without it exits non-zero with trajan-error=crypto-toolchain-unavailable
+// oaepHash sha256, and createCipheriv('aes-256-gcm', ...). A runner that resolves
+// no interpreter exits non-zero with trajan-error=crypto-toolchain-unavailable
 // rather than printing the stream in plaintext.
+//
+// PATH is not the whole answer to whether a runner has Node. Every runner release
+// bundles one under <runner>/externals, because the Actions runner cannot execute a
+// JavaScript action without it, but that copy is invoked by the runner directly and
+// is not on the PATH a run: step inherits — so a self-hosted host with no
+// system-wide install fails a PATH-only check while holding a usable interpreter.
+// Measured on the firing range: vm-trajan-devops answered
+// crypto-toolchain-unavailable to `command -v node`. The bundled path is derived
+// from RUNNER_TEMP rather than read from a variable of its own because the runner
+// publishes none, and the tool cache is searched too so a host that has run
+// actions/setup-node before is served by what that already left behind.
 const runKeyBits = 2048
 
 // errNoRunKey is the resume-across-processes case: the private half lives only in
@@ -144,7 +154,14 @@ func sealSteps(pubPEM string) (setup, seal string) {
   run: |
     set -eu
     m=%[1]s
-    command -v node >/dev/null 2>&1 || { echo "trajan-marker=$m"; echo trajan-error=crypto-toolchain-unavailable; echo "trajan-marker-end=$m"; exit 1; }
+    node_bin=$(command -v node 2>/dev/null || true)
+    if [ -z "$node_bin" ]; then
+      for c in "${RUNNER_TEMP%%/_work/_temp}"/externals/node*/bin/node "${RUNNER_TOOL_CACHE:-}"/node/*/*/bin/node; do
+        if [ -x "$c" ]; then node_bin=$c; break; fi
+      done
+    fi
+    [ -n "$node_bin" ] || { echo "trajan-marker=$m"; echo trajan-error=crypto-toolchain-unavailable; echo "trajan-marker-end=$m"; exit 1; }
+    printf '%%s' "$node_bin" > "${RUNNER_TEMP}/trajan-node"
     printf '%%s' '%[2]s' | base64 -d > "${RUNNER_TEMP}/trajan-pub.pem"
     printf '%%s' '%[3]s' | base64 -d > "${RUNNER_TEMP}/trajan-seal.js"
     : > "${RUNNER_TEMP}/trajan-collect"
@@ -160,10 +177,11 @@ func sealSteps(pubPEM string) (setup, seal string) {
     set -u
     m=%[1]s
     echo "trajan-marker=$m"
-    command -v node >/dev/null 2>&1 || { echo trajan-error=crypto-toolchain-unavailable; echo "trajan-marker-end=$m"; exit 1; }
+    node_bin=$(cat "${RUNNER_TEMP}/trajan-node" 2>/dev/null || true)
+    { [ -n "$node_bin" ] && [ -x "$node_bin" ]; } || { echo trajan-error=crypto-toolchain-unavailable; echo "trajan-marker-end=$m"; exit 1; }
     collect="${RUNNER_TEMP}/trajan-collect"
     if [ ! -s "$collect" ]; then echo trajan-error=nothing-collected; echo "trajan-marker-end=$m"; exit 1; fi
-    node "${RUNNER_TEMP}/trajan-seal.js" "${RUNNER_TEMP}/trajan-pub.pem" "$collect" || { echo trajan-error=seal-failed; echo "trajan-marker-end=$m"; exit 1; }
+    "$node_bin" "${RUNNER_TEMP}/trajan-seal.js" "${RUNNER_TEMP}/trajan-pub.pem" "$collect" || { echo trajan-error=seal-failed; echo "trajan-marker-end=$m"; exit 1; }
     echo "trajan-marker-end=$m"`, marker)
 
 	return setup, seal
