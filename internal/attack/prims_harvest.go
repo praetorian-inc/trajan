@@ -248,8 +248,13 @@ func runHarvest(ctx context.Context, s *Session, p runHarvestParams, in Inputs) 
 			// No seal and no marker: the payload did not execute. The fall-through
 			// classifies this as did_not_execute, never as a confidentiality break.
 		default:
-			cur.Notes = append(cur.Notes, "encryption was requested but the retrieved evidence carries no wrapped-key marker: "+
-				"the marker stream was not sealed (a target-authored job cannot be sealed by this run) and appears in plaintext in the run log")
+			if reason := sealStepReported(outer.fragments); reason != "" {
+				cur.Notes = append(cur.Notes, "encryption was requested and this run's own seal step reported "+reason+
+					": the marker stream was neither sealed nor collected, and the payload steps below a failed setup step do not run, so nothing retrieved here measures what they would have reached")
+			} else {
+				cur.Notes = append(cur.Notes, "encryption was requested but the retrieved evidence carries no wrapped-key marker: "+
+					"the marker stream was not sealed (a target-authored job cannot be sealed by this run) and appears in plaintext in the run log")
+			}
 		}
 	}
 
@@ -288,6 +293,22 @@ func runHarvest(ctx context.Context, s *Session, p runHarvestParams, in Inputs) 
 		return loot, err
 	}
 	return loot, s.Checkpoint(cur)
+}
+
+// sealStepReported is the error a seal step of this run's own making emitted. An
+// absent wrapped key has two causes that read identically in the evidence — a job
+// this run never composed, which has no seal steps to begin with, and a job it did
+// compose whose seal refused — and only the second leaves an error under the seal's
+// own marker. Reporting the first for the second tells the customer their job was
+// unsealable and their stream is in the log, when the truth is that ours declined
+// to seal and their steps never ran.
+func sealStepReported(fragments []harvestFragment) string {
+	for _, f := range fragments {
+		if strings.HasPrefix(f.Marker, sealMarkerPrefix) && f.Error != "" {
+			return f.Error
+		}
+	}
+	return ""
 }
 
 // sealedLoot ends the harvest on a seal it retrieved and could not open. The

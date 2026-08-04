@@ -37,6 +37,23 @@ func writeExecutable(t *testing.T, path, body string) {
 	}
 }
 
+// The seal marks its own envelope and the harvest recognizes it by that prefix, so
+// the agreement lives in two files with nothing in the type system holding it
+// together. Drifting either side does not break a build: it makes the harvest read
+// this run's sealing having failed as a job that was never ours to seal, and report
+// a plaintext stream in the customer's log over a job whose steps never ran.
+func TestSealFailureIsAttributedToThisRunAndNotThePayload(t *testing.T) {
+	payloadOnly := []harvestFragment{{Marker: "portus-hop3", Error: "beacon-unreachable"}}
+	if got := sealStepReported(payloadOnly); got != "" {
+		t.Errorf("a payload's own error was read as this run's seal failing: %q", got)
+	}
+
+	withSeal := append(payloadOnly, harvestFragment{Marker: randMarker(), Error: "crypto-toolchain-unavailable"})
+	if got := sealStepReported(withSeal); got != "crypto-toolchain-unavailable" {
+		t.Errorf("the seal step's own error was not attributable to this run: got %q", got)
+	}
+}
+
 // The redirect has to reach the step's own shell and stop there. BASH_ENV is
 // sourced on every non-interactive bash startup, so a tool that ships as a bash
 // script — az is one — becomes a shell that sources it too, and the redirect then

@@ -106,12 +106,17 @@ func (s *Session) unwrapSeal(wrappedB64, blobB64 string) ([]byte, error) {
 	return plain, nil
 }
 
+// sealMarkerPrefix brackets the seal steps' own envelope. The harvest reads it to
+// tell this run's sealing having failed from a job that was never ours to seal,
+// which are two causes of an absent wrapped key with nothing else to separate them.
+const sealMarkerPrefix = "trajan-seal-"
+
 func randMarker() string {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "trajan-seal"
 	}
-	return "trajan-seal-" + hex.EncodeToString(b[:])
+	return sealMarkerPrefix + hex.EncodeToString(b[:])
 }
 
 // sealJS is written to the runner by the setup step and run by the seal step. It
