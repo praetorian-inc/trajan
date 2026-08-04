@@ -105,7 +105,9 @@ func newGitLabCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return graph.Push(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser, neo4jPass)
+			// No --reset: GitLab has no graph phase yet, so there is nothing for a
+			// reset to protect against.
+			return graph.Push(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser, neo4jPass, false)
 		},
 	}
 	analyze := &cobra.Command{

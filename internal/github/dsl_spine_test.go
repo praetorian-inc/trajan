@@ -108,7 +108,7 @@ func TestClassifyGateStrongCaseSensitivity(t *testing.T) {
 
 func loadSpineRule(t *testing.T) *detect.Rule {
 	t.Helper()
-	rules, err := detect.LoadRules("github")
+	rules, err := detect.LoadRules("github", nil)
 	if err != nil {
 		t.Fatalf("LoadRules: %v", err)
 	}

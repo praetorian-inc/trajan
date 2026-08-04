@@ -4,6 +4,7 @@ go 1.25.3
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/owenrumney/go-sarif/v3 v3.3.0
 	github.com/praetorian-inc/augustus v0.0.9-0.20260227174649-efba096939a0

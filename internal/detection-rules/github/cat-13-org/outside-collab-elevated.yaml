@@ -2,6 +2,7 @@ id: cat-04/outside-collab-elevated
 scenario_id: cat-04/04
 title: "Outside collaborator has elevated role on a repo"
 subject: org
+graph: node(Organization)
 severity: high
 confidence: high
 description: >

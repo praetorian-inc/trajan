@@ -2,6 +2,7 @@ id: cat-04/runner-group-shared
 scenario_id: cat-04/06
 title: "Self-hosted runner group shared across trust boundaries"
 subject: org
+graph: node(Organization)
 severity: high
 confidence: high
 description: >

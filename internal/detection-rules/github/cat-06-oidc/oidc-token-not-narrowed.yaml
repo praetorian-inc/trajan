@@ -2,6 +2,7 @@ id: cat-06/oidc-token-not-narrowed
 scenario_id: cat-06/11
 title: "OIDC id-token write + permissive job permissions"
 subject: job
+graph: edge(CAN_ASSUME, Job, CloudRole)
 severity: medium
 confidence: low
 description: >

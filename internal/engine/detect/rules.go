@@ -97,6 +97,10 @@ type Rule struct {
 	Evidence        []string `yaml:"evidence"`
 	RemediationHint string   `yaml:"remediation_hint"`
 
+	// Carried as the raw string so this package stays provider-generic: the
+	// platform that understands the target vocabulary parses it.
+	Graph string `yaml:"graph"`
+
 	RuleFile string `yaml:"-"`
 }
 
@@ -111,8 +115,16 @@ func (r *Rule) SubjectKind() string {
 }
 
 // LoadRules walks a platform's rule subtree (detection-rules/<subtree>) and
-// returns its parsed rules, sorted by path for deterministic ordering.
-func LoadRules(subtree string) ([]Rule, error) {
+// returns its parsed rules, sorted by path for deterministic ordering. A rule
+// that cannot be used — bad YAML, no id, no where/chain_of — is skipped and
+// reported to onError rather than failing the load, so one broken file cannot
+// zero out detection. Only IO is fatal.
+func LoadRules(subtree string, onError func(error)) ([]Rule, error) {
+	skip := func(err error) {
+		if onError != nil {
+			onError(err)
+		}
+	}
 	var files []string
 	err := fs.WalkDir(detectionrules.FS, subtree, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -136,9 +148,11 @@ func LoadRules(subtree string) ([]Rule, error) {
 		}
 		var r Rule
 		if err := yaml.Unmarshal(b, &r); err != nil {
-			return nil, fmt.Errorf("bad rule yaml %s: %w", p, err)
+			skip(fmt.Errorf("bad rule yaml %s: %w", p, err))
+			continue
 		}
 		if r.ID == "" || (r.Where == nil && r.ChainOf == nil) {
+			skip(fmt.Errorf("unusable rule %s: needs an id and a where or chain_of", p))
 			continue
 		}
 		r.RuleFile = p

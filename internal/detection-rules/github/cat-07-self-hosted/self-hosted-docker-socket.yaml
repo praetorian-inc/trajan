@@ -2,6 +2,7 @@ id: cat-07/self-hosted-docker-socket
 scenario_id: cat-07/10
 title: "Self-hosted job mounts docker socket or uses passwordless sudo"
 subject: job
+graph: edge(RUNS_ON, Job, Runner)
 severity: high
 confidence: medium
 description: >

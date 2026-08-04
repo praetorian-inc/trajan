@@ -2,6 +2,7 @@ id: cat-08/apps-pats-app-broad-admin
 scenario_id: cat-08/01
 title: "Installed App holds admin-class permissions across all repos"
 subject: app
+graph: node(App)
 severity: high
 confidence: high
 description: >

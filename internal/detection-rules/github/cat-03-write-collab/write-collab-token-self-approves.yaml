@@ -1,0 +1,52 @@
+id: cat-03/write-collab-token-self-approves
+scenario_id: cat-03/09
+title: "Write principal can satisfy the branch's own approval requirement"
+subject: chain
+graph: edge(CAN_LAND_CODE, User, Branch)
+severity: high
+confidence: medium
+description: >
+  The branch admits this principal only through a pull request, and that pull
+  request needs at least one approving review — but the principal can produce
+  the approval itself. Holding write lets them push a side branch carrying a
+  workflow whose `permissions:` block they choose; the ruleset gates the target
+  branch, not the ref the workflow runs on. That run's GITHUB_TOKEN casts the
+  approving review, which counts because the repository enables "Allow GitHub
+  Actions to create and approve pull requests". The gate is satisfied rather
+  than bypassed, so no bypass actor and no admin right is involved.
+  The repository's `default_workflow_permissions` is deliberately NOT tested: a
+  workflow-declared permissions block REPLACES the resolved default, so a repo
+  default of `read` does not constrain a workflow the attacker brings, and
+  testing it would suppress a true finding.
+  Code-owner review is the one control that stops this, because the Actions bot
+  is never a code owner — so this fires only where code-owner review is off, or
+  where it is on but CODEOWNERS leaves executable paths unowned.
+  DEFINITION: `codeowners_covers_ci_execution` is a verdict over a fixed set of
+  representative locations, not an inventory of the repository. The finding says
+  CODEOWNERS leaves those locations unowned; it does NOT establish that the file
+  a given pull request touches is unowned.
+  NOTE: joins the capability-edges chain (produced by correlate during
+  normalize), so the finding lands on the specific (principal, branch) edge.
+
+chain_of:
+  join: capability-edges
+  for_each: edges
+  where:
+    all_of:
+      - principal_kind == "user"
+      - is_admin == false
+      - circumvents ∋ { approval_count_self_satisfiable }
+      - any_of:
+          - code_owner_review_active == false
+          - codeowners_covers_ci_execution == false
+
+evidence:
+  - "{{ principal_name }} holds {{ permission }} on {{ repo }} via {{ write_via }}; routes onto `{{ branch }}`: open {{ routes_open }}, blocked {{ routes_blocked }}."
+  - "The branch requires an approving review, and this principal is not exempt from it (circumvents: {{ circumvents }})."
+  - "Code-owner review active: {{ code_owner_review_active }}; CODEOWNERS covers CI-executable locations: {{ codeowners_covers_ci_execution }}."
+
+remediation_hint: >
+  Disable "Allow GitHub Actions to create and approve pull requests" at the org
+  or repository level — that alone breaks this path. Otherwise name required
+  reviewers on the ruleset, enable "require approval of the most recent
+  reviewable push", and extend CODEOWNERS to the paths CI executes.

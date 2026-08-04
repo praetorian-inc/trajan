@@ -2,6 +2,7 @@ id: cat-07/self-hosted-non-ephemeral
 scenario_id: cat-07/11
 title: "Self-hosted runner job — non-ephemeral by default"
 subject: job
+graph: edge(RUNS_ON, Job, Runner)
 severity: medium
 confidence: low
 description: >

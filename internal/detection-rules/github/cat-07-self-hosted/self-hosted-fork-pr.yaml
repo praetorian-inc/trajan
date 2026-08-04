@@ -2,6 +2,7 @@ id: cat-07/self-hosted-fork-pr
 scenario_id: cat-07/01
 title: "Self-hosted runner used in workflow with PR-class triggers"
 subject: job
+graph: edge(RUNS_ON, Job, Runner)
 severity: critical
 confidence: high
 description: >

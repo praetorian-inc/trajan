@@ -2,6 +2,7 @@ id: cat-10/ai-agents-pat-and-cloud-creds
 scenario_id: cat-10/10
 title: "Agent env contains PAT or cloud credentials alongside agent step"
 subject: job
+graph: edge(READS, Job, Secret)
 severity: high
 confidence: medium
 description: >

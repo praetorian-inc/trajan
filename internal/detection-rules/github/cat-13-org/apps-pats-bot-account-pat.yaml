@@ -2,6 +2,7 @@ id: cat-08/apps-pats-bot-account-pat
 scenario_id: cat-08/08
 title: "Bot/service account PAT in use as GITHUB_TOKEN replacement"
 subject: org
+graph: node(Secret)
 severity: medium
 confidence: low
 description: >

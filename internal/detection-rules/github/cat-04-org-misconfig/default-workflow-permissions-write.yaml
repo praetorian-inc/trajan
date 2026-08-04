@@ -2,6 +2,7 @@ id: cat-04/default-workflow-permissions-write
 scenario_id: cat-04/02
 title: "Repo default workflow permissions: write"
 subject: repo
+graph: node(Repository)
 severity: high
 confidence: high
 description: >

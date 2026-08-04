@@ -2,6 +2,7 @@ id: cat-10/ai-agents-bash-tool-shell-exec
 scenario_id: cat-10/07
 title: "Agent allowlist includes Bash/Shell or runs with bypassPermissions"
 subject: job
+graph: node(Job)
 severity: critical
 confidence: high
 description: >

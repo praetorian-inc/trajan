@@ -2,6 +2,7 @@ id: cat-03/write-collab-actions-write-rest-surface
 scenario_id: cat-03/10
 title: "Job has actions:write (REST API attack surface)"
 subject: job
+graph: node(Job)
 severity: medium
 confidence: low
 description: >

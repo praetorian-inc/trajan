@@ -2,6 +2,7 @@ id: cat-05/workflow-run-artifact-from-low-trust
 scenario_id: cat-05/01
 title: "workflow_run downstream reads an artifact written by a low-trust upstream"
 subject: chain
+graph: edge(READS, Job, Artifact)
 severity: critical
 confidence: high
 description: >

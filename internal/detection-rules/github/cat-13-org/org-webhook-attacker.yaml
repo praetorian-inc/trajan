@@ -2,6 +2,7 @@ id: cat-04/org-webhook-attacker
 scenario_id: cat-04/10
 title: "Org has webhook(s) pointing to externally-controlled URL"
 subject: org
+graph: node(Organization)
 severity: medium
 confidence: low
 description: >

@@ -2,6 +2,7 @@ id: cat-10/ai-agents-low-trust-prompt
 scenario_id: cat-10/01
 title: "AI agent invoked from low-trust trigger with write tokens"
 subject: job
+graph: attack(AGENT_INJECTION)
 severity: critical
 confidence: high
 description: >

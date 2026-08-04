@@ -2,6 +2,7 @@ id: cat-10/ai-agents-as-reviewer
 scenario_id: cat-10/08
 title: "Agent acts as PR reviewer/approver"
 subject: job
+graph: edge(CAN_APPROVE, Job, Repository)
 severity: high
 confidence: medium
 description: >

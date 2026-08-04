@@ -2,6 +2,7 @@ id: cat-05/workflow-run-pr-comment-channel
 scenario_id: cat-05/08
 title: "PR comment used as cross-workflow channel for sensitive payload"
 subject: chain
+graph: edge(TRIGGERS, Workflow, Workflow)
 severity: medium
 confidence: low
 description: >

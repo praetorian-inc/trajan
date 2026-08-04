@@ -2,6 +2,7 @@ id: cat-06/oidc-mints-id-token
 scenario_id: cat-06/01
 title: "Job mints an OIDC id-token (default sub template is broad)"
 subject: job
+graph: edge(CAN_ASSUME, Job, CloudRole)
 severity: medium
 confidence: medium
 description: >

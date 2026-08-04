@@ -2,6 +2,7 @@ id: cat-05/workflow-run-default-branch
 scenario_id: cat-05/10
 title: "workflow_run downstream runs from default branch (no PR review of its YAML)"
 subject: chain
+graph: edge(TRIGGERS, Workflow, Workflow)
 severity: medium
 confidence: high
 description: >
