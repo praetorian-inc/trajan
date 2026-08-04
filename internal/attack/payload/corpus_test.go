@@ -178,6 +178,38 @@ func TestTokenReachabilityProbe(t *testing.T) {
 // A fragment's declared scopes are what the composing step screens a permissions:
 // block against, so a requirement that only applies to one role must not be reported
 // for the other — and one that applies unconditionally must survive the defaults.
+// required: asserts that a value arrived, not that it holds anything, so an empty
+// list reaches the body — and there the shell flavor rendered `for name in ; do`,
+// which bash refuses. The fragment then died before emitting its marker, which is
+// the one thing a harvest reads as a payload that never executed. The workflow
+// flavor has always refused the case out loud; this brings the shell one to the same
+// standard. bash -n is the wrong oracle here: it parses the whole file, including a
+// loop the guard makes unreachable.
+func TestSecretReachabilityShellRefusesAnEmptyNameList(t *testing.T) {
+	body, err := Render("t-01/secret-reachability-shell", map[string]any{
+		"marker":       "m1",
+		"secret_names": []any{},
+	}, Env{})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	out, runErr := exec.Command("bash", "-c", body).CombinedOutput()
+	got := string(out)
+	if runErr == nil {
+		t.Fatalf("an empty name list must be refused rather than measured, got:\n%s", got)
+	}
+	if strings.Contains(got, "syntax error") {
+		t.Fatalf("the degenerate loop was still reached:\n%s", got)
+	}
+	if !strings.Contains(got, "trajan-marker=m1") {
+		t.Errorf("the refusal must arrive inside the marker envelope, or it reads as never having run; got:\n%s", got)
+	}
+	if !strings.Contains(got, "trajan-error=secret-names-empty") {
+		t.Errorf("want the negative stated explicitly, got:\n%s", got)
+	}
+}
+
 func TestRequiredPermissions(t *testing.T) {
 	cases := []struct {
 		name   string
