@@ -267,8 +267,11 @@ func (s *Session) preflight(p *Plan) {
 				missing = append(missing, want)
 			}
 		}
+		// A guess from the capability declarations, not a reading of what the plan
+		// will ask this identity for, so it fires on scopes a run never needs. It goes
+		// out at debug: a step that really cannot act fails with the API's own words.
 		if len(missing) > 0 {
-			slog.Warn("identity may lack a scope this plan needs",
+			slog.Debug("identity may lack a scope this plan needs",
 				"identity", ic.name, "missing", strings.Join(missing, ","), "has", strings.Join(ic.scopes, ","))
 		}
 	}
@@ -435,7 +438,7 @@ func (s *Session) AllowFork(fork, upstream RepoLoc) error {
 	}
 	target := fork.Owner + "/" + fork.Repo
 	if s.extraScope[target] == "" {
-		slog.Warn("scope extended to a fork this run owns", "fork", target, "upstream", up, "identity", s.ActingName())
+		slog.Debug("scope extended to a fork this run owns", "fork", target, "upstream", up, "identity", s.ActingName())
 	}
 	s.extraScope[target] = up
 	return nil

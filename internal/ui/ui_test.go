@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func render(t *testing.T, tier Tier, color bool, fn func(*Printer)) string {
@@ -120,8 +121,8 @@ func TestControlCharactersAreStripped(t *testing.T) {
 // and diffed. Both properties break silently, so both are pinned here.
 func TestStepRowHoldsAnEmptyColumnAndPadsNoFurtherThanItsLastWord(t *testing.T) {
 	got := render(t, Human, false, func(p *Printer) {
-		p.Step(StepLine{Seq: 9, Total: 15, Action: "await workflow run", Status: "unresolved", Detail: "not evaluated"})
-		p.Step(StepLine{Seq: 1, Total: 15, Action: "resolve repository", Target: "acme/widgets", Status: "ok", Detail: "topic"})
+		p.Step(StepLine{Seq: 9, Total: 15, Action: "await workflow run", Status: "unresolved", Note: "not evaluated"})
+		p.Step(StepLine{Seq: 1, Total: 15, Action: "resolve repository", Resource: "acme/widgets", Status: "ok", Note: "topic"})
 	})
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
 	for _, l := range lines {
@@ -136,17 +137,31 @@ func TestStepRowHoldsAnEmptyColumnAndPadsNoFurtherThanItsLastWord(t *testing.T) 
 	}
 }
 
+// A clause cut mid-rune lands in a log as a replacement character, and the note a
+// row carries is a client error the remote side wrote.
+func TestAClippedNoteStaysValidUTF8(t *testing.T) {
+	got := render(t, Human, false, func(p *Printer) {
+		p.Step(StepLine{Seq: 1, Total: 9, Action: "commit code", Resource: "acme/widgets", Status: "failed", Note: strings.Repeat("é", maxNote+10)})
+	})
+	if !utf8.ValidString(got) {
+		t.Fatalf("clip produced invalid UTF-8: %q", got)
+	}
+	if strings.Count(got, "é") != maxNote-1 {
+		t.Errorf("want %d runes kept, got %q", maxNote-1, got)
+	}
+}
+
 // The status color is decoration. A log read without it still has to distinguish a
 // step that ran from one that did not, which is the whole reason the word stays.
 func TestStepNamesItsStatusWithoutColorAndStaysSilentOnSuccess(t *testing.T) {
 	failed := render(t, Human, false, func(p *Printer) {
-		p.Step(StepLine{Seq: 6, Total: 15, Action: "open pull request", Target: "acme/widgets", Status: "failed", Detail: "422 no commits"})
+		p.Step(StepLine{Seq: 6, Total: 15, Action: "open pull request", Resource: "acme/widgets", Status: "failed", Note: "422 no commits"})
 	})
 	if !strings.Contains(failed, "failed") {
 		t.Errorf("a failed step must say so with color off: %q", failed)
 	}
 	ok := render(t, Human, false, func(p *Printer) {
-		p.Step(StepLine{Seq: 5, Total: 15, Action: "commit code", Target: "acme/widgets", Status: "ok", Detail: "a.txt"})
+		p.Step(StepLine{Seq: 5, Total: 15, Action: "commit code", Resource: "acme/widgets", Status: "ok", Note: "a.txt"})
 	})
 	if strings.Contains(ok, "ok") {
 		t.Errorf("a successful step should not spend a column saying so: %q", ok)
@@ -159,10 +174,10 @@ func TestColorLeavesTheStepTableIntact(t *testing.T) {
 		fn   func(*Printer)
 	}{
 		{"step", func(p *Printer) {
-			p.Step(StepLine{Seq: 1, Total: 9, Action: "create branch", Target: "acme/widgets", Status: "ok", Detail: "topic"})
+			p.Step(StepLine{Seq: 1, Total: 9, Action: "create branch", Resource: "acme/widgets", Status: "ok", Note: "topic"})
 		}},
 		{"failed step", func(p *Printer) {
-			p.Step(StepLine{Seq: 2, Total: 9, Action: "open pull request", Target: "acme/widgets", Status: "failed", Detail: "422"})
+			p.Step(StepLine{Seq: 2, Total: 9, Action: "open pull request", Resource: "acme/widgets", Status: "failed", Note: "422"})
 		}},
 		{"outcome", func(p *Printer) {
 			p.Outcome("attack complete", []Count{{"ok", 3}, {"failed", 1}}, "2s")
@@ -195,9 +210,10 @@ func TestOutcomeDropsZeroCounts(t *testing.T) {
 // table existed is the one a script may already read.
 func TestStepUnderDebugKeepsItsParseableLine(t *testing.T) {
 	got := render(t, Debug, false, func(p *Printer) {
-		p.Step(StepLine{Seq: 4, Total: 15, ID: "branch_a", Uses: "ref.create", Action: "create branch", Target: "acme/widgets", Status: "ok"})
+		p.Step(StepLine{Seq: 4, Total: 15, ID: "branch_a", Uses: "ref.create", Action: "create branch",
+			Target: "acme/widgets", Resource: "acme/widgets/tree/topic", Status: "ok"})
 	})
-	for _, want := range []string{`msg="step ok"`, "step=branch_a", "uses=ref.create", "target=acme/widgets"} {
+	for _, want := range []string{`msg="step ok"`, "step=branch_a", "uses=ref.create", "target=acme/widgets", "resource=acme/widgets/tree/topic"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in %q", want, got)
 		}

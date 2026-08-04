@@ -373,7 +373,10 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 	if res.StoppedAt != "" {
 		ui.Note(fmt.Sprintf("stopped after step %q; run `trajan gh attack resume -p %s` to continue", res.StoppedAt, runDir))
 	}
-	engine.PhaseIssues(rec)
+	// No engine.PhaseIssues here, unlike every other phase: a soft failure in this
+	// one already has a row of its own naming the step, its status and its reason,
+	// and a count in the line above. Reprinting the same errors under the run
+	// directory reads as a second, worse-formatted verdict on a run already reported.
 	return res, walkErr
 }
 
@@ -506,8 +509,10 @@ func (x *executor) step(ctx context.Context, st *Step) {
 		ui.Step(ui.StepLine{
 			Seq: rec.Seq, Total: x.total,
 			ID: st.ID, Uses: st.Uses,
-			Action: actionOf(st.Uses),
-			Target: rec.Target, Status: rec.Status, Detail: stepDetail(rec),
+			Action:   actionOf(st.Uses),
+			Target:   rec.Target,
+			Resource: resourceOf(rec),
+			Status:   rec.Status, Note: stepNote(rec),
 		})
 	}()
 
@@ -732,8 +737,10 @@ func (x *executor) replay(st *Step, rec StepRecord) {
 	ui.Step(ui.StepLine{
 		Seq: rec.Seq, Total: x.total,
 		ID: st.ID, Uses: rec.Uses,
-		Action: actionOf(rec.Uses),
-		Target: rec.Target, Status: "resumed", Detail: stepDetail(rec),
+		Action:   actionOf(rec.Uses),
+		Target:   rec.Target,
+		Resource: resourceOf(rec),
+		Status:   "resumed", Note: stepNote(rec),
 	})
 }
 

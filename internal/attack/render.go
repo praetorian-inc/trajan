@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,101 +45,132 @@ func present(vs ...string) []string {
 	return out
 }
 
-// maxDetail keeps the table's last column from wrapping. A real API error carries
-// a URL and a JSON body and runs to hundreds of characters; the whole text is in
-// the step record, and a failed step's error is reprinted in full by the degraded
-// block at the end of the run.
-const maxDetail = 72
-
-// stepDetail is the object column. A step that succeeded names what it produced;
-// anything else names why it did not, because the reason is then the news and the
-// object it would have produced does not exist.
-func stepDetail(rec StepRecord) string {
-	if rec.Status == statusOK {
-		return clip(objectOf(rec))
-	}
-	return clip(cmp.Or(rec.Error, rec.Note, objectOf(rec)))
-}
-
-func clip(s string) string {
-	r := []rune(s)
-	if len(r) <= maxDetail {
-		return s
-	}
-	return string(r[:maxDetail-1]) + "\u2026"
-}
-
-// objectOf is deliberately terser than handleSummary, which writes a clause for a
-// customer-facing report rather than a column of a table. Every case guards its
-// identifying field: a dry run renders a mutation without issuing it, so the
-// handle it produces is zero-valued and "#0" would name nothing.
-func objectOf(rec StepRecord) string {
+// resourceOf names the one object a step acted on, as its path on github.com: a row
+// resolves by pasting it after the host, and one grammar covers a repository, a
+// branch, a pull request, a comment and a run. Every case guards its identifying
+// field, because a dry run renders a mutation without issuing it \u2014 the handle it
+// produces is zero-valued, and "/pull/0" would name nothing. The repository is the
+// fallback rather than an error: it is the coarsest true answer, never a wrong one.
+func resourceOf(rec StepRecord) string {
+	root := rec.Target
 	switch t := rec.Handle.(type) {
-	case Fork:
-		return join(t.Owner, "/", t.Repo)
 	case Branch:
-		return shortRef(t.Ref)
-	case Commit:
-		if len(t.Files) > 0 {
-			return strings.Join(t.Files, " ")
-		}
-		return join(shortSHA(t.SHA), " on ", shortRef(t.Ref))
+		return sub(root, "tree", shortRef(t.Ref))
 	case Ref:
-		return join(shortRef(t.Ref), " at ", shortSHA(t.SHA))
+		return sub(root, "tree", shortRef(t.Ref))
+	case Commit:
+		return sub(root, "commit", realSHA(t.SHA))
 	case PullRequest:
-		if t.Number == 0 {
-			return ""
-		}
-		if t.Merged {
-			return fmt.Sprintf("#%d merged", t.Number)
-		}
-		return strings.TrimSpace(fmt.Sprintf("#%d %s", t.Number, t.State))
+		return sub(root, "pull", number(t.Number))
 	case Issue:
-		if t.Number == 0 {
-			return ""
-		}
-		return fmt.Sprintf("#%d", t.Number)
+		return sub(root, "issues", number(t.Number))
 	case Comment:
-		if t.ID == 0 {
-			return ""
+		// The one handle that already carries a URL, and the only one whose parent \u2014
+		// a pull request or an issue \u2014 nothing else on it distinguishes.
+		if p := urlPath(t.HTMLURL); p != "" {
+			return p
 		}
-		return fmt.Sprintf("comment %d on #%d", t.ID, t.Number)
 	case WorkflowRun:
-		return join(base(t.WorkflowPath), " ", cmp.Or(t.Conclusion, t.Status))
+		return sub(root, "actions/runs", number64(t.ID))
 	case DispatchReceipt:
-		return join(inputBase(rec, "workflow"), " on ", shortRef(t.Ref))
-	case Status:
-		return join(t.Context, " ", t.State)
-	case CheckRun:
-		return join(t.Name, " ", cmp.Or(t.Conclusion, t.Status))
-	case CacheEntry:
-		return t.Key
-	case RunnerInventory:
-		return fmt.Sprintf("%d runners, %d online", len(t.Runners), t.Online)
-	case PendingDeployment:
-		return environmentNames(t.Environments)
-	case Loot:
-		s := fmt.Sprintf("%d items, %s", len(t.Items), t.Classification)
-		if t.Encrypted {
-			s += ", encrypted"
+		if t.RunID != 0 {
+			return sub(root, "actions/runs", number64(t.RunID))
 		}
-		return s
+		return sub(root, "actions/workflows", inputBase(rec, "workflow"))
+	case Loot:
+		return sub(root, "actions/runs", number64(t.RunID))
+	case PendingDeployment:
+		return sub(root, "actions/runs", number64(t.RunID))
+	case CheckRun:
+		return sub(root, "runs", number64(t.ID))
+	case Status:
+		return sub(root, "commit", realSHA(t.SHA))
+	case CacheEntry:
+		return sub(root, "actions/caches", t.Key)
+	case RunnerInventory:
+		return t.Target
+	case Org:
+		return t.Owner
+	case Identity:
+		return t.Login
+	}
+	return root
+}
+
+// stepNote is what a row says after its resource. A step that did what it says
+// carries nothing, because the resource is then the whole news; the two exceptions
+// are outcomes rather than state, and dropping them would leave a row unable to say
+// whether the workflow it watched went green or whether the harvest saw its marker
+// at all. Anything other than ok names its reason in one clause: a failed inverse
+// an operator does not see is how a run gets read as clean when it is not.
+func stepNote(rec StepRecord) string {
+	if rec.Status != statusOK {
+		return firstClause(cmp.Or(rec.Error, rec.Note))
+	}
+	switch t := rec.Handle.(type) {
+	case WorkflowRun:
+		return cmp.Or(t.Conclusion, t.Status)
+	case Loot:
+		return t.Classification
 	}
 	return ""
 }
 
-// join drops the separator and the whole pair when either side is missing, so a
-// zero-valued handle yields nothing rather than a dangling "at" or a bare slash.
-func join(left, sep, right string) string {
-	switch {
-	case left == "" && right == "":
-		return ""
-	case left == "":
-		return right
-	case right == "":
-		return left
+// firstClause keeps the status a client error leads with and drops the URL and body
+// that follow it. A note is left whole: "when: false" is already the clause.
+func firstClause(s string) string {
+	before, _, found := strings.Cut(s, " from ")
+	if found {
+		return before
 	}
-	return left + sep + right
+	return s
+}
+
+// sub drops the whole segment when the handle did not identify one, so a zero-valued
+// handle names its repository rather than a path that resolves to nothing.
+func sub(root, segment, value string) string {
+	if root == "" || value == "" {
+		return root
+	}
+	return root + "/" + segment + "/" + value
+}
+
+// A dry run fills the sha of a commit it never created with plannedSHA, which is
+// not absent and not real: a path built from it names a commit nobody can fetch.
+func realSHA(s string) string {
+	if s == plannedSHA {
+		return ""
+	}
+	return shortSHA(s)
+}
+
+func number(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return strconv.Itoa(n)
+}
+
+func number64(n int64) string {
+	if n == 0 {
+		return ""
+	}
+	return strconv.FormatInt(n, 10)
+}
+
+// urlPath reduces a URL to what follows its host, keeping any fragment: the
+// #issuecomment-<id> is what makes a comment's path identify the comment rather
+// than the pull request it sits on.
+func urlPath(u string) string {
+	_, afterScheme, found := strings.Cut(u, "://")
+	if !found {
+		return ""
+	}
+	_, path, found := strings.Cut(afterScheme, "/")
+	if !found {
+		return ""
+	}
+	return path
 }
 
 // actionOf falls back to the primitive name so an unregistered uses: still names

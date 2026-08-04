@@ -477,7 +477,7 @@ func (cur *runCursor) observe(runs []runBody, w runWatch, match *regexp.Regexp) 
 	}
 	cur.Ambiguous = countEligible(cur.Candidates) > 1
 	if cur.Ambiguous && !was {
-		slog.Warn("run correlation is ambiguous; the candidate set is in the step record",
+		slog.Debug("run correlation is ambiguous; the candidate set is in the step record",
 			"chose", cur.RunID, "eligible", countEligible(cur.Candidates), "workflow", w.workflow)
 	}
 }

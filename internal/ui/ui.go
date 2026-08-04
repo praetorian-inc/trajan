@@ -268,24 +268,31 @@ func (p *Printer) Section(name string) {
 	p.raw(p.c(bold, clean(name)))
 }
 
-// StepLine is one row of an attack's step table. Uses reaches only --debug, which
-// keeps the machine-parseable line it had before this renderer existed; ID reaches
-// the table itself on the rows another step can refer to.
+// StepLine is one row of an attack's step table. Resource is the object the step
+// acted on and carries the row; Note is a clause the caller has already reduced to
+// what a column can hold. Uses and Target reach only --debug, which keeps the
+// machine-parseable line it had before this renderer existed; ID reaches the table
+// itself on the rows another step can refer to.
 type StepLine struct {
 	Seq, Total int
 	ID, Uses   string
 	Action     string
 	Target     string
+	Resource   string
 	Status     string
-	Detail     string
+	Note       string
 }
 
-// Step renders one row of the table. Any status but ok also names itself in the
-// detail column: the color on the action is decoration, and a log read without
-// it still has to distinguish a step that ran from one that did not.
+// Step renders one row of the table. Any status but ok also names itself: the color
+// on the action is decoration, and a log read without it still has to distinguish a
+// step that ran from one that did not.
 func (p *Printer) Step(l StepLine) {
 	if p.tier != Human {
-		p.log.Info("step "+l.Status, "step", l.ID, "uses", l.Uses, "target", l.Target)
+		args := []any{"step", l.ID, "uses", l.Uses, "target", l.Target, "resource", l.Resource}
+		if l.Note != "" {
+			args = append(args, "note", l.Note)
+		}
+		p.log.Info("step "+l.Status, args...)
 		return
 	}
 	w := len(strconv.Itoa(l.Total))
@@ -298,17 +305,34 @@ func (p *Printer) Step(l StepLine) {
 		// so the only two that have to carry the id that resolves the reference. The
 		// colon is load-bearing: without it "skipped branch_b step" reads as a phrase.
 		status = strings.TrimSpace(l.Status + " " + l.ID)
-		if l.Detail != "" {
+		if l.Note != "" {
 			status += ":"
 		}
 	}
 	p.raw(p.row("  ",
 		cell{fmt.Sprintf("%*d/%d", w, l.Seq, l.Total), 2*w + 1, dim},
 		cell{l.Action, 25, stepColor(l.Status)},
-		cell{l.Target, 28, dim},
+		cell{clip(l.Resource, maxResource), 46, plain},
 		cell{status, 0, stepColor(l.Status)},
-		cell{l.Detail, 0, plain},
+		cell{clip(l.Note, maxNote), 0, dim},
 	))
+}
+
+// A resource is an identifier and gets the room to stay pasteable; a note is a
+// clause and does not. Truncation belongs to this tier alone: a client error runs
+// to hundreds of characters with the URL it called and its response body, and
+// --debug is where an operator goes to read the whole of it.
+const (
+	maxResource = 64
+	maxNote     = 40
+)
+
+func clip(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
 }
 
 type Count struct {
