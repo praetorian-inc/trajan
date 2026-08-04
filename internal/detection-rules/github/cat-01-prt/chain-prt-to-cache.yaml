@@ -2,6 +2,7 @@ id: cat-01/chain-prt-to-cache
 scenario_id: cat-01/07
 title: "PRT job writes a cache prefix that a high-trust job reads"
 subject: chain
+graph: node(Cache)
 severity: high
 confidence: medium
 description: >

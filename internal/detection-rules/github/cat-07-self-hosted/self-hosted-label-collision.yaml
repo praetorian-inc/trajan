@@ -2,6 +2,7 @@ id: cat-07/self-hosted-label-collision
 scenario_id: cat-07/06
 title: "Self-hosted runner labels shared across trust boundaries"
 subject: job
+graph: edge(RUNS_ON, Job, Runner)
 severity: medium
 confidence: low
 description: >

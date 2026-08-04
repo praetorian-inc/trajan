@@ -333,7 +333,7 @@ jobs:
 // loadCrossJobRule loads the embedded cross-job-output chain rule by its id.
 func loadCrossJobRule(t *testing.T) *detect.Rule {
 	t.Helper()
-	rules, err := detect.LoadRules("github")
+	rules, err := detect.LoadRules("github", nil)
 	if err != nil {
 		t.Fatalf("LoadRules: %v", err)
 	}

@@ -2,6 +2,7 @@ package ado
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -40,6 +41,36 @@ func withServer(t *testing.T, h http.HandlerFunc) *Client {
 	hostBase["core"] = srv.URL
 	t.Cleanup(func() { hostBase["core"] = prev })
 	return NewClient("org", "pat")
+}
+
+func TestAuthorizationHeader(t *testing.T) {
+	var got atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.Store(r.Header.Get("Authorization"))
+		w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	prev := hostBase["core"]
+	hostBase["core"] = srv.URL
+	t.Cleanup(func() { hostBase["core"] = prev })
+
+	cases := []struct {
+		name, want string
+		client     *Client
+	}{
+		{"pat_basic", "Basic " + base64.StdEncoding.EncodeToString([]byte(":pat")), NewClient("org", "pat")},
+		{"entra_bearer", "Bearer jwt-token", NewClientBearer("org", "jwt-token")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, err := tc.client.Get(context.Background(), "core", APIVersion, "/x", nil, false); err != nil {
+				t.Fatal(err)
+			}
+			if h, _ := got.Load().(string); h != tc.want {
+				t.Fatalf("Authorization = %q, want %q", h, tc.want)
+			}
+		})
+	}
 }
 
 // Paginate must follow the x-ms-continuationtoken header and accumulate value[].

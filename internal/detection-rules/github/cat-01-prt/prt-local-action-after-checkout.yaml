@@ -2,6 +2,7 @@ id: cat-01/prt-local-action-after-checkout
 scenario_id: cat-01/02
 title: "pull_request_target uses local action after checking out PR head"
 subject: job
+graph: attack(PWN_REQUEST)
 severity: critical
 confidence: high
 description: >

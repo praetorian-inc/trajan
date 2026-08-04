@@ -2,6 +2,7 @@ id: cat-09/docker-gha-cache-mutable
 scenario_id: cat-09/10
 title: "docker/build-push-action uses GHA cache without trust segmentation"
 subject: job
+graph: node(Job)
 severity: medium
 confidence: low
 description: >

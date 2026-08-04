@@ -9,13 +9,11 @@ Trajan scans CI/CD pipelines for security vulnerabilities that attackers use to 
 
 ## What it does
 
-Trajan parses workflow YAML files, builds dependency graphs, runs detection plugins, and validates exploitability through built-in attack capabilities.
+Trajan parses workflow YAML files, builds dependency graphs, and runs detection plugins.
 
 - 32 detection plugins across multiple CI/CD platforms
-- 24 attack plugins across multiple CI/CD platforms
 - Graph-based analysis with taint tracking and gate detection
 - Browser-based scanner via WebAssembly (no backend needed)
-- Attack chains for multi-stage sequences with automatic context passing
 
 > [!NOTE]
 > Trajan is under active development. Some features may be incomplete and rough edges are expected. If you run into issues, please [open one](https://github.com/praetorian-inc/trajan/issues).
@@ -145,21 +143,21 @@ trajan github scan --path ./.github/workflows/ci.yml
 trajan github scan --repo owner/repo -o json > results.json
 ```
 
-For detailed usage, detection explanations, and attack walkthroughs, see the [Wiki](https://github.com/praetorian-inc/trajan/wiki).
+For detailed usage and detection explanations, see the [Wiki](https://github.com/praetorian-inc/trajan/wiki).
 
 ## Platform coverage
 
-| Platform | Detections | Attacks | Enumerate |
-|----------|-----------|---------|-----------|
-| GitHub Actions | 11 | 9 | token, repos, secrets |
-| GitLab CI | 8 | 3 | token, projects, groups, secrets, runners, branch-protections |
-| Azure DevOps | 6 | 9 | token, projects, repos, pipelines, connections, agent-pools, users, groups, and more |
-| Jenkins | 7 | 3 | access, jobs, nodes, plugins |
-| JFrog | scan-only | - | - |
+| Platform | Detections | Enumerate |
+|----------|-----------|-----------|
+| GitHub Actions | 11 | token, repos, secrets |
+| GitLab CI | 8 | token, projects, groups, secrets, runners, branch-protections |
+| Azure DevOps | 6 | token, projects, repos, pipelines, connections, agent-pools, users, groups, and more |
+| Jenkins | 7 | access, jobs, nodes, plugins |
+| JFrog | scan-only | - |
 
 ## Browser extension
 
-Trajan also compiles to a WebAssembly binary that runs entirely in the browser as a single HTML file. It uses the same detection engine, attack plugins, and enumeration logic as the CLI, just compiled to WASM. The web version of Trajan enables low-friction delivery into target environments as part of an assessment.
+Trajan also compiles to a WebAssembly binary that runs entirely in the browser as a single HTML file. It uses the same detection engine and enumeration logic as the CLI, just compiled to WASM. The web version of Trajan enables low-friction delivery into target environments as part of an assessment.
 
 ```sh
 make wasm       # build browser/trajan.wasm
@@ -206,14 +204,7 @@ graph TD
         GA --> Findings
     end
 
-    subgraph AF[Attack Flow]
-        direction LR
-        AP[Attack Plugins] --> |artifacts| Session[Session Tracker]
-        Session --> Cleanup
-    end
-
     Graph --> AE
-    AE --> AF
 ```
 
 ## Roadmap

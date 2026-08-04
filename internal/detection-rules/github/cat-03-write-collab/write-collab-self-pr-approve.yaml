@@ -2,6 +2,7 @@ id: cat-03/write-collab-self-pr-approve
 scenario_id: cat-03/01
 title: "Job can approve PRs (pull-requests:write + repo can_approve)"
 subject: job
+graph: edge(CAN_APPROVE, Job, Repository)
 severity: high
 confidence: high
 description: >

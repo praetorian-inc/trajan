@@ -2,6 +2,7 @@ id: cat-06/oidc-no-environment-scope
 scenario_id: cat-06/10
 title: "OIDC sub-claim customization risk: id-token write + no env"
 subject: job
+graph: edge(CAN_ASSUME, Job, CloudRole)
 severity: medium
 confidence: low
 description: >

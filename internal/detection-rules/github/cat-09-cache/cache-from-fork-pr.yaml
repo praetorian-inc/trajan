@@ -2,6 +2,7 @@ id: cat-09/cache-from-fork-pr
 scenario_id: cat-09/11
 title: "Cache restored by a reader job after a fork PR's writer ran"
 subject: chain
+graph: node(Cache)
 severity: critical
 confidence: medium
 description: >

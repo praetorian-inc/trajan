@@ -2,6 +2,7 @@ id: cat-09/toolcache-version-injection
 scenario_id: cat-09/06
 title: "Toolcache version string interpolated from attacker context"
 subject: job
+graph: attack(EXPRESSION_INJECTION)
 severity: high
 confidence: medium
 description: >

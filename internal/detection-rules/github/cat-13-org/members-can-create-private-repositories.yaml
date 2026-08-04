@@ -2,6 +2,7 @@ id: cat-13/members-can-create-private-repositories
 scenario_id: cat-13/01
 title: "Org members can create private repositories"
 subject: org
+graph: node(Organization)
 severity: low
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-03/write-collab-reusable-mutable-ref
 scenario_id: cat-03/09
 title: "Reusable workflow callee pinned to mutable ref (branch/tag)"
 subject: chain
+graph: edge(CALLS, Job, Workflow)
 severity: high
 confidence: high
 description: >

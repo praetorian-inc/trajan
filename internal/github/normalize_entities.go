@@ -14,7 +14,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-func normalizeEntities(runDir string) error {
+func normalizeEntities(runDir string, onError func(error)) error {
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
 
@@ -38,6 +38,18 @@ func normalizeEntities(runDir string) error {
 	}
 	if err := normalizeApps(prior, cp, org); err != nil {
 		return fmt.Errorf("normalize apps: %w", err)
+	}
+	if err := normalizePrincipals(prior, cp, org, onError); err != nil {
+		return fmt.Errorf("normalize principals: %w", err)
+	}
+	if err := normalizeRunners(prior, cp, org, onError); err != nil {
+		return fmt.Errorf("normalize runners: %w", err)
+	}
+	if err := normalizeSecrets(prior, cp, org, onError); err != nil {
+		return fmt.Errorf("normalize secrets: %w", err)
+	}
+	if err := normalizeDeployKeys(prior, cp, org, onError); err != nil {
+		return fmt.Errorf("normalize deploy keys: %w", err)
 	}
 	return nil
 }
@@ -143,7 +155,10 @@ func normalizeOrg(prior engine.PriorPhase, cp engine.CurrentPhase, org string) e
 
 		RunnerGroups:              groups,
 		AnyRunnerGroupPublicRepos: anyRunnerGroupPublic(groups),
-		OrgRunnersCount:           len(entListOf(runnersPayload, "runners")),
+		AnyRunnerGroupAllReposWithRunners: slices.ContainsFunc(groups, func(g RunnerGroupSummary) bool {
+			return g.Visibility != nil && *g.Visibility == "all" && g.MemberRunnerCount > 0
+		}),
+		OrgRunnersCount: len(entListOf(runnersPayload, "runners")),
 
 		HookURLs:         hookURLs,
 		HooksCount:       len(hooks),
@@ -265,11 +280,23 @@ func orgSecretSummaries(secrets []any) []OrgSecretSummary {
 	out := make([]OrgSecretSummary, 0, len(secrets))
 	for _, s := range secrets {
 		sm := entMap(s)
+		repos := repoNames(entList(sm["selected_repositories"]))
 		out = append(out, OrgSecretSummary{
-			Name:              entStr(sm["name"]),
-			Visibility:        entStr(sm["visibility"]),
-			SelectedRepoCount: len(entList(sm["selected_repositories"])),
+			Name:                 entStr(sm["name"]),
+			Visibility:           entStr(sm["visibility"]),
+			SelectedRepositories: repos,
+			SelectedRepoCount:    len(repos),
 		})
+	}
+	return out
+}
+
+func repoNames(repos []any) []string {
+	out := []string{}
+	for _, r := range repos {
+		if name := entStr(entMap(r)["name"]); name != "" {
+			out = append(out, name)
+		}
 	}
 	return out
 }
@@ -365,7 +392,9 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 	if err != nil {
 		return err
 	}
-	orgActions := entObj(entLoadData(prior, engine.CollectOrg(org)), "actions_permissions")
+	orgPayload := entLoadData(prior, engine.CollectOrg(org))
+	orgActions := entObj(orgPayload, "actions_permissions")
+	orgWorkflow := entObj(orgPayload, "actions_workflow_permissions")
 
 	for _, f := range files {
 		repoName := strings.TrimSuffix(path.Base(f.Rel), ".json")
@@ -385,6 +414,7 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 		rec := RepoFact{
 			ID:            repoName,
 			Repo:          repoName,
+			RepoID:        repoInfo["id"],
 			Owner:         entObj(repoInfo, "owner")["login"],
 			Visibility:    repoInfo["visibility"],
 			Archived:      entOrDefault(repoInfo["archived"], false),
@@ -392,14 +422,16 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 			Fork:          entOrDefault(repoInfo["fork"], false),
 			Private:       repoInfo["private"],
 
-			DefaultWorkflowPermissions:   entCoalesce(workflowPerms["default_workflow_permissions"], orgActions["default_workflow_permissions"]),
-			CanApprovePullRequestReviews: entCoalesce(workflowPerms["can_approve_pull_request_reviews"], orgActions["can_approve_pull_request_reviews"]),
+			DefaultWorkflowPermissions:   entOrDefault(workflowPerms["default_workflow_permissions"], orgWorkflow["default_workflow_permissions"]),
+			CanApprovePullRequestReviews: entOrDefault(workflowPerms["can_approve_pull_request_reviews"], orgWorkflow["can_approve_pull_request_reviews"]),
 			ActionsEnabled:               actionsPerms["enabled"],
 			AllowedActions:               entCoalesce(actionsPerms["allowed_actions"], orgActions["allowed_actions"]),
 			ShaPinningRequired:           actionsPerms["sha_pinning_required"],
 
 			DefaultBranchProtectionPresent: bpPresent,
 			DefaultBranchProtectionSummary: legacyBP,
+
+			Codeowners: parseCodeowners(repoData["codeowners"]),
 
 			Provenance: []SourceProvenance{
 				{File: engine.CollectRepo(repoName)},
@@ -415,16 +447,18 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 }
 
 func summarizeLegacyBP(bp map[string]any) *RepoLegacyBPSummary {
-	var lock any
-	if lb, ok := bp["lock_branch"].(map[string]any); ok {
-		lock = lb["enabled"]
-	}
+	reviews := entObj(bp, "required_pull_request_reviews")
 	return &RepoLegacyBPSummary{
-		RequiredReviews:      entObj(bp, "required_pull_request_reviews")["required_approving_review_count"],
+		RequiredReviews:      reviews["required_approving_review_count"],
 		EnforceAdmins:        entObj(bp, "enforce_admins")["enabled"],
 		RequiredStatusChecks: entTruthy(bp["required_status_checks"]),
 		RestrictionsPresent:  entTruthy(bp["restrictions"]),
-		LockBranch:           lock,
+		LockBranch:           entObj(bp, "lock_branch")["enabled"],
+
+		RequiredPullRequestReviews: len(reviews) > 0,
+		DismissStaleReviews:        reviews["dismiss_stale_reviews"],
+		RequireCodeOwnerReviews:    reviews["require_code_owner_reviews"],
+		RequireLastPushApproval:    reviews["require_last_push_approval"],
 	}
 }
 

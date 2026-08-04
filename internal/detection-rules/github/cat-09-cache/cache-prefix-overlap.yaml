@@ -2,6 +2,7 @@ id: cat-09/cache-prefix-overlap
 scenario_id: cat-09/01
 title: "Multiple jobs share a cache key prefix (restore-keys bypass surface)"
 subject: chain
+graph: node(Cache)
 severity: high
 confidence: medium
 description: >

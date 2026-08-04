@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/praetorian-inc/trajan/internal/ui"
@@ -72,29 +73,58 @@ func TestRecordPhaseWatermark(t *testing.T) {
 	}
 }
 
+// Every phase downstream of p reads p's output, so re-running p invalidates all
+// of them — including the graph, which carries a copy of the findings.
 func TestStaleDirs(t *testing.T) {
 	s := &State{}
-	if got, want := s.StaleDirs(PhaseCollect), []string{dirNormalize, dirScan}; !equalStrs(got, want) {
-		t.Errorf("StaleDirs(collect) = %v, want %v", got, want)
+	tests := []struct {
+		phase Phase
+		want  []string
+	}{
+		{PhaseCollect, []string{dirNormalize, dirScan, dirGraph}},
+		{PhaseNormalize, []string{dirScan, dirGraph}},
+		{PhaseScan, []string{dirGraph}},
+		{PhaseWhoAmI, nil},
 	}
-	if got, want := s.StaleDirs(PhaseNormalize), []string{dirScan}; !equalStrs(got, want) {
-		t.Errorf("StaleDirs(normalize) = %v, want %v", got, want)
-	}
-	if got := s.StaleDirs(PhaseScan); got != nil {
-		t.Errorf("StaleDirs(scan) = %v, want nil", got)
+	for _, tt := range tests {
+		if got := s.StaleDirs(tt.phase); !slices.Equal(got, tt.want) {
+			t.Errorf("StaleDirs(%s) = %v, want %v", tt.phase.Name, got, tt.want)
+		}
 	}
 }
 
-func equalStrs(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
+func TestFailedPhaseBlocksTheNextOne(t *testing.T) {
+	s := &State{Phases: []PhaseRecord{}}
+
+	collect := StartPhaseTimer(PhaseCollect, "collect")
+	collect.Errors = append(collect.Errors, "conf-ci/actions-settings: HTTP 422")
+	s.RecordPhase(collect.Stop(nil))
+	if s.LastPhase != 1 {
+		t.Fatalf("soft-fail errors must not count as failure: LastPhase = %d, want 1", s.LastPhase)
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
+	if err := s.CheckPhase(PhaseScan); err != nil {
+		t.Fatalf("scan after a soft-failed collect: %v", err)
 	}
-	return true
+
+	scan := StartPhaseTimer(PhaseScan, "scan")
+	s.RecordPhase(scan.Stop(errors.New("load job subjects: unexpected end of JSON input")))
+	if s.LastPhase != 1 {
+		t.Fatalf("after failed scan: LastPhase = %d, want 1", s.LastPhase)
+	}
+	if err := s.CheckPhase(PhasePush); !errors.Is(err, ErrPhaseBackStep) {
+		t.Fatalf("push after a failed scan: err = %v, want ErrPhaseBackStep", err)
+	}
+
+	// A failed collect has already wiped everything downstream, so the watermark
+	// has to fall below collect, not merely stop advancing.
+	s.LastPhase = 2
+	s.RecordPhase(StartPhaseTimer(PhaseCollect, "collect").Stop(errors.New("resolve token")))
+	if s.LastPhase != 0 {
+		t.Fatalf("after failed collect: LastPhase = %d, want 0", s.LastPhase)
+	}
+	if err := s.CheckPhase(PhaseScan); !errors.Is(err, ErrPhaseBackStep) {
+		t.Fatalf("scan after a failed collect: err = %v, want ErrPhaseBackStep", err)
+	}
 }
 
 func TestLoadStateMissing(t *testing.T) {

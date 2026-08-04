@@ -30,7 +30,16 @@ var provider = detect.Provider{
 	Display: subjectDisplay,
 	Code:    buildCode,
 	Repo:    func(s map[string]any) string { return detect.StringField(s, "repo") },
-	File:    func(s map[string]any) string { return detect.StringField(s, "workflow_name") },
+	File:    workflowFilePath,
+}
+
+// workflowFilePath is the repo-relative locator that finding.code's line range
+// indexes into. workflow_name is the author-declared `name:` and is not a path.
+func workflowFilePath(subject map[string]any) string {
+	if f := detect.StringField(subject, "workflow_filename"); f != "" {
+		return ".github/workflows/" + f
+	}
+	return ""
 }
 
 // Scan and ScanOptions are aliases: the scan is generic over platforms and lives

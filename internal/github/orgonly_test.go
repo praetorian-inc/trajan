@@ -8,7 +8,7 @@ import (
 )
 
 func TestOrgOnlyFilterSelectsExactlyOrgSubjects(t *testing.T) {
-	rules, err := detect.LoadRules("github")
+	rules, err := detect.LoadRules("github", nil)
 	if err != nil {
 		t.Fatalf("LoadRules: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestOrgOnlyFilterSelectsExactlyOrgSubjects(t *testing.T) {
 }
 
 func TestMembersCanCreatePrivateReposRuleFires(t *testing.T) {
-	rules, err := detect.LoadRules("github")
+	rules, err := detect.LoadRules("github", nil)
 	if err != nil {
 		t.Fatalf("LoadRules: %v", err)
 	}

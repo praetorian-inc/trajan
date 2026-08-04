@@ -99,9 +99,11 @@ func load(runDir string) ([]finding.Finding, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load findings: %w", err)
 	}
-	// Verification findings live one directory deeper, under 30-attack/<plan>/findings,
-	// alongside step records and loot that are not findings.
-	attackFiles, err := prior.IterJSON("30-attack")
+	// Verification findings live one directory deeper, under <plan>/findings, alongside
+	// step records and loot that are not findings. The phase directory comes from the
+	// constant: spelled out here, renumbering the phase would leave this reading zero
+	// findings and reporting no error.
+	attackFiles, err := prior.IterJSON(engine.AttackRoot())
 	if err != nil {
 		return nil, fmt.Errorf("load attack findings: %w", err)
 	}

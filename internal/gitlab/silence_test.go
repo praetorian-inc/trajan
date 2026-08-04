@@ -16,7 +16,7 @@ import (
 
 func glRuleByID(t *testing.T, id string) *detect.Rule {
 	t.Helper()
-	rules, err := detect.LoadRules("gitlab")
+	rules, err := detect.LoadRules("gitlab", nil)
 	if err != nil {
 		t.Fatalf("LoadRules(gitlab): %v", err)
 	}
@@ -460,7 +460,7 @@ func TestGitLabChainBenignTwinsSilence(t *testing.T) {
 // "chain" or one registered in the scan provider's SubjectDirs — otherwise scan
 // would silently load no subjects for it and the rule could never fire.
 func TestGitLabRulesLoadAndSubjectsRegistered(t *testing.T) {
-	rules, err := detect.LoadRules("gitlab")
+	rules, err := detect.LoadRules("gitlab", nil)
 	if err != nil {
 		t.Fatalf("LoadRules(gitlab): %v", err)
 	}

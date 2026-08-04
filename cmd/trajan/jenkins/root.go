@@ -18,7 +18,6 @@ func init() {
 	JenkinsCmd.PersistentFlags().String("password", "", "Jenkins password or API token for Basic auth (env: JENKINS_PASSWORD)")
 	JenkinsCmd.AddCommand(enumerateCmd)
 	JenkinsCmd.AddCommand(scanCmd)
-	JenkinsCmd.AddCommand(attackCmd)
 }
 
 func getToken(cmd *cobra.Command) string {

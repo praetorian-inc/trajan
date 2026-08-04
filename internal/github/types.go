@@ -43,10 +43,14 @@ type JobOutput struct {
 	Provenance                      *SourceProvenance `json:"_provenance"`
 }
 
+// Scope and ScopeKey are both null when no collected inventory defines the name.
+// ScopeKey is the engine.CollectSecrets key ("<org>", "<repo>", "<repo>__<env>"),
+// which is what identifies the secret; Scope is the precedence level that won.
 type SecretRef struct {
-	Name      string `json:"name"`
-	Scope     string `json:"scope"`
-	StepIndex int    `json:"step_index"` // -1 for job-env-level refs
+	Name      string  `json:"name"`
+	Scope     *string `json:"scope"` // "environment", "repo" or "org"
+	ScopeKey  *string `json:"scope_key"`
+	StepIndex int     `json:"step_index"` // -1 for job-env-level refs
 }
 
 type EnvironmentRef struct {
@@ -87,6 +91,11 @@ type ArtifactRef struct {
 	Name *string `json:"name"`
 }
 
+type CloudRoleRef struct {
+	Provider   string `json:"provider"`
+	Identifier string `json:"identifier"`
+}
+
 // Field order mirrors the on-disk key order. Slice fields must be initialized
 // non-nil by the normalizer so empties serialize as "[]" (not null).
 type Job struct {
@@ -109,6 +118,7 @@ type Job struct {
 	AttackerContextFieldsReferencedExec    []string `json:"attacker_context_fields_referenced_exec"`
 	AttackerContextFieldsReferencedBinding []string `json:"attacker_context_fields_referenced_binding"`
 
+	Needs                  []string         `json:"needs"`
 	NeedsOutputRefsExec    []NeedsOutputRef `json:"needs_output_refs_exec"`
 	NeedsOutputRefsBinding []NeedsOutputRef `json:"needs_output_refs_binding"`
 	NeedsOutputRefs        []NeedsOutputRef `json:"needs_output_refs"`
@@ -145,10 +155,11 @@ type Job struct {
 	OIDCAudience    *string `json:"oidc_audience"`     // always null
 	OIDCSubTemplate *string `json:"oidc_sub_template"` // "repo:<owner>/<repo>:ref:<ref>" when minting
 
-	CacheWrites    []CacheRef    `json:"cache_writes"`
-	CacheReads     []CacheRef    `json:"cache_reads"`
-	ArtifactWrites []ArtifactRef `json:"artifact_writes"`
-	ArtifactReads  []ArtifactRef `json:"artifact_reads"`
+	CloudRoles     []CloudRoleRef `json:"cloud_roles"`
+	CacheWrites    []CacheRef     `json:"cache_writes"`
+	CacheReads     []CacheRef     `json:"cache_reads"`
+	ArtifactWrites []ArtifactRef  `json:"artifact_writes"`
+	ArtifactReads  []ArtifactRef  `json:"artifact_reads"`
 
 	// Agent surface inlined flat to match the on-disk schema.
 	AgentActionClass        *string  `json:"agent_action_class"`

@@ -190,8 +190,11 @@ func (x *executor) primaryTarget(p *Plan) string {
 	return ""
 }
 
+// nil onError: this looks one rule up to decorate a finding, so a sibling rule that
+// will not parse is not this caller's business — it is reported where the scan phase
+// loads the corpus for real.
 func detectionRule(id string) *detect.Rule {
-	rules, err := detect.LoadRules("github")
+	rules, err := detect.LoadRules("github", nil)
 	if err != nil {
 		return nil
 	}

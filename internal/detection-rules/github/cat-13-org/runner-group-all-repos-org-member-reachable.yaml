@@ -1,0 +1,37 @@
+id: cat-04/runner-group-all-repos-org-member-reachable
+scenario_id: cat-04/11
+title: "Shared self-hosted fleet reachable from any repository an org member can create"
+subject: org
+graph: node(Organization)
+severity: high
+confidence: medium
+description: >
+  A runner group with visibility "all" has registered self-hosted runners, so
+  every repository in the org — including one created a minute ago — can land a
+  job on that fleet. Combined with members_can_create_private_repositories=true
+  and default_repository_permission=read, any org member who holds no write
+  access to any existing repository can still create a repository of their own
+  and execute arbitrary code on the shared runners, reaching whatever workspace
+  residue, caches, cloud identity or filesystem credentials the fleet carries
+  between jobs.
+  Distinct from cat-04/runner-group-shared, which requires the group to allow
+  PUBLIC repositories; this reaches the same fleet without one.
+  NOTE: policy-level signal only — proving cross-boundary reuse needs runner
+  host state (workspace residue, cached credentials) that is not collectable.
+
+where:
+  all_of:
+    - any_runner_group_all_repos_with_runners == true
+    - members_can_create_private_repositories == true
+    - default_repository_permission == "read"
+
+evidence:
+  - "Runner groups: {{ runner_groups }}"
+  - "A visibility=all group has registered runners: {{ any_runner_group_all_repos_with_runners }}"
+  - "Members can create private repositories: {{ members_can_create_private_repositories }}; org base permission: {{ default_repository_permission }}"
+
+remediation_hint: >
+  Move the self-hosted runners into a group with visibility "Selected
+  repositories" pinned to one trust boundary, or restrict repository creation
+  to admins. Ephemeral runners bound to a single job remove the residue the
+  shared fleet carries.

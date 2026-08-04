@@ -2,6 +2,7 @@ id: cat-03/write-collab-unprotected-branch
 scenario_id: cat-03/02
 title: "Repo has no active ruleset OR legacy protection on default branch"
 subject: chain
+graph: node(Branch)
 severity: high
 confidence: high
 description: >

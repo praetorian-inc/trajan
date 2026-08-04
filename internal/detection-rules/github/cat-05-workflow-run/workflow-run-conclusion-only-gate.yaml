@@ -2,6 +2,7 @@ id: cat-05/workflow-run-conclusion-only-gate
 scenario_id: cat-05/04
 title: "workflow_run downstream gates on conclusion only (pseudo-gate)"
 subject: job
+graph: node(Job)
 severity: medium
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-01/prt-weak-gate
 scenario_id: cat-01/04
 title: "pull_request_target checkout-execute with weak gate (label/author-association)"
 subject: job
+graph: attack(PWN_REQUEST)
 severity: critical
 confidence: medium
 description: >

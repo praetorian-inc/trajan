@@ -2,6 +2,7 @@ id: cat-12/env-bypass-self-review-allowed
 scenario_id: cat-12/04
 title: "Environment allows the deployment author to approve their own deploy"
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: high
 description: >
