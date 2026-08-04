@@ -611,7 +611,7 @@ func orgsCheck(p *Plan) []error {
 		case strings.TrimSpace(entry) == "":
 			errs = append(errs, errors.New("orgs: holds an empty entry"))
 		case strings.ContainsAny(entry, "/*"):
-			errs = append(errs, fmt.Errorf("orgs: %q must be an organization login, not a repository or a pattern; repositories belong in scope:", entry))
+			errs = append(errs, fmt.Errorf("orgs: %q must be an organization login, not a repository or a pattern; repositories belong under scope:, not here", entry))
 		}
 	}
 	return errs

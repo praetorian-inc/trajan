@@ -279,7 +279,7 @@ func runAwait(ctx context.Context, s *Session, p runAwaitParams, _ Inputs) (Work
 // GitHub handed over reads as though they had a say in which run this is.
 func awaitWatch(prev *Provocation, p runAwaitParams) (runWatch, error) {
 	if prev == nil {
-		return runWatch{}, errors.New("run.await has no preceding executed mutation to correlate against; a run this plan did not cause is run.observe, which binds its repository with on:")
+		return runWatch{}, errors.New("run.await has no preceding executed mutation to correlate against; a run this plan did not cause is run.observe, which binds its repository with an on: port")
 	}
 	w := runWatch{
 		repo:     prev.Repo,
@@ -895,7 +895,7 @@ func repoDispatch(ctx context.Context, s *Session, p repoDispatchParams, in Inpu
 	on := bound.RepoRef()
 	switch chars := utf8.RuneCountInString(p.EventType); {
 	case p.EventType == "":
-		return DispatchReceipt{}, errors.New("repo.dispatch needs event_type:")
+		return DispatchReceipt{}, errors.New("repo.dispatch needs an event_type: value")
 	case chars > maxEventTypeChars:
 		return DispatchReceipt{}, fmt.Errorf("repository_dispatch event_type must be %d characters or fewer, this one is %d", maxEventTypeChars, chars)
 	case len(p.ClientPayload) > maxClientPayloadProps:

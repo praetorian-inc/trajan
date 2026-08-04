@@ -153,7 +153,7 @@ type contextStatus struct {
 // every context, so the first page carries it whole; the contexts are paginated, and
 // a prior state left blank because it sat on the second page would understate the
 // record of what this step overwrote.
-func readCombinedStatus(ctx context.Context, c *github.Client, loc RepoLoc, sha, context string) (prior, combined string, err error) {
+func readCombinedStatus(ctx context.Context, c *github.Client, loc RepoLoc, sha, statusContext string) (prior, combined string, err error) {
 	path := fmt.Sprintf("/repos/%s/%s/commits/%s/status", loc.Owner, loc.Repo, sha)
 	raw, _, err := c.Get(ctx, path, url.Values{"per_page": []string{"100"}}, false)
 	if err != nil {
@@ -167,7 +167,7 @@ func readCombinedStatus(ctx context.Context, c *github.Client, loc RepoLoc, sha,
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return "", "", err
 	}
-	if state := contextState(body.Statuses, context); state != "" {
+	if state := contextState(body.Statuses, statusContext); state != "" {
 		return state, body.State, nil
 	}
 	if body.TotalCount <= len(body.Statuses) {
@@ -187,12 +187,12 @@ func readCombinedStatus(ctx context.Context, c *github.Client, loc RepoLoc, sha,
 		}
 		rest = append(rest, st)
 	}
-	return contextState(rest, context), body.State, nil
+	return contextState(rest, statusContext), body.State, nil
 }
 
-func contextState(statuses []contextStatus, context string) string {
+func contextState(statuses []contextStatus, statusContext string) string {
 	for _, st := range statuses {
-		if st.Context == context {
+		if st.Context == statusContext {
 			return st.State
 		}
 	}

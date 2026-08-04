@@ -429,7 +429,7 @@ func carrierText(s *Session, body, template string, params map[string]any) (stri
 	case body != "":
 		return body, nil
 	default:
-		return "", errors.New("needs a body: or a template:")
+		return "", errors.New("needs a body: or a template: key")
 	}
 }
 

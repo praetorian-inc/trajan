@@ -142,10 +142,18 @@ func appOf(slug string) struct {
 	return a
 }
 
-func jsonEscape(s string) string {
+// jsonQuoted is a whole JSON string, quotes included, for a fixture that
+// interpolates one as a value. %q is Go quoting, which looks identical for printable
+// ASCII and is a different grammar, so the marshaller stays the only escaper here.
+func jsonQuoted(s string) string {
 	b, err := json.Marshal(s)
 	if err != nil {
-		return s
+		return `""`
 	}
-	return string(b[1 : len(b)-1])
+	return string(b)
+}
+
+func jsonEscape(s string) string {
+	q := jsonQuoted(s)
+	return q[1 : len(q)-1]
 }

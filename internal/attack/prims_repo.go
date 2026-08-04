@@ -233,7 +233,7 @@ func repoCreate(ctx context.Context, s *Session, p repoCreateParams, _ Inputs) (
 		return WritableRepo{}, errors.New("owner and repo are required")
 	}
 	target := p.Owner + "/" + p.Repo
-	created := WritableRepo{RepoLoc: RepoLoc{Owner: p.Owner, Repo: p.Repo}, DefaultBranch: "main"}
+	created := WritableRepo{RepoLoc: RepoLoc(p), DefaultBranch: "main"}
 
 	client, err := s.Client()
 	if err != nil && s.Execute {

@@ -249,7 +249,9 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 	if err != nil {
 		return nil, err
 	}
-	defer ledger.Close()
+	// Every entry is written and synced as it is recorded, so Close has no buffered
+	// undo record left to lose and its error is not one a run can act on.
+	defer func() { _ = ledger.Close() }()
 
 	sess, err := NewSession(ctx, p, planDir, ledger, opts.Execute)
 	if err != nil {
@@ -933,7 +935,7 @@ func interpolations(s string) []string {
 // A string that is nothing but one reference keeps that reference's type; any
 // other occurrence is building a larger string and stringifies.
 func (x *executor) interpolate(s string) (any, bool) {
-	if m := interpRe.FindStringSubmatch(s); m != nil && m[0] == s {
+	if m := interpRe.FindStringSubmatch(s); len(m) > 0 && m[0] == s {
 		return x.lookupRef(m[1])
 	}
 	resolved := true

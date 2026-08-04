@@ -285,13 +285,13 @@ func BuildFinding(p Provider, rule *Rule, subject map[string]any, kind, org, run
 }
 
 func buildRuleDSL(rule *Rule) any {
-	dsl := RuleDSL{Subject: rule.Subject}
+	out := RuleDSL{Subject: rule.Subject}
 	if rule.ChainOf != nil {
-		dsl.ChainOf = rule.ChainOf
+		out.ChainOf = rule.ChainOf
 	} else {
-		dsl.Where = rule.Where
+		out.Where = rule.Where
 	}
-	return dsl
+	return out
 }
 
 func ruleURL(ruleFile string) string {

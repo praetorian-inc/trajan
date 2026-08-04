@@ -15,7 +15,7 @@ import (
 func TestIssueOpenUnknownOutcomeNamesTheIssueItLeft(t *testing.T) {
 	const title = "CI reproduction"
 	issue := func(number int, body string) string {
-		return fmt.Sprintf(`[{"number":%d,"state":"open","title":%q,"body":"%s"}]`, number, title, jsonEscape(body))
+		return fmt.Sprintf(`[{"number":%d,"state":"open","title":%q,"body":%s}]`, number, title, jsonQuoted(body))
 	}
 
 	for _, tc := range []struct {
@@ -48,7 +48,7 @@ func TestIssueOpenUnknownOutcomeNamesTheIssueItLeft(t *testing.T) {
 // a comment this run posted standing with nothing naming it.
 func TestCommentCreateUnknownOutcomeNamesTheCommentItLeft(t *testing.T) {
 	comment := func(id int, body, login string) string {
-		return fmt.Sprintf(`{"id":%d,"body":"%s","user":{"login":%q}}`, id, jsonEscape(body), login)
+		return fmt.Sprintf(`{"id":%d,"body":%s,"user":{"login":%q}}`, id, jsonQuoted(body), login)
 	}
 	mine := comment(7001, carrier, "mallory")
 

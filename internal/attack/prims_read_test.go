@@ -50,7 +50,10 @@ func (a *stubAPI) Paginate(_ context.Context, path string, _ url.Values, _ int) 
 		return nil, err
 	}
 	var items []json.RawMessage
-	return items, json.Unmarshal(raw, &items)
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (a *stubAPI) GetRaw(context.Context, string, url.Values, string) ([]byte, http.Header, error) {

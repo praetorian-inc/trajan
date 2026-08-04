@@ -349,10 +349,10 @@ func (st staging) suppressed(ctx context.Context, s *Session, g GitData, ref str
 // names first; a single name is the narrow form. The spec itself is screened by
 // envelopeErrors, offline, before any request is issued.
 func secretsEnv(spec string) map[string]string {
-	switch {
-	case spec == "":
+	switch spec {
+	case "":
 		return nil
-	case spec == "all":
+	case "all":
 		return map[string]string{"TRAJAN_SECRETS": "${{ toJSON(secrets) }}"}
 	default:
 		return map[string]string{spec: "${{ secrets." + spec + " }}"}

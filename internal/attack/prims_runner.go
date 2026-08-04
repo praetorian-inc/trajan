@@ -33,7 +33,7 @@ func runnerList(ctx context.Context, s *Session, _ runnerListParams, in Inputs) 
 	repo, hasRepo := InOpt[Repo](in, "repo")
 	org, hasOrg := InOpt[Org](in, "org")
 	if hasRepo == hasOrg {
-		return RunnerInventory{}, errors.New("runner.list reads either a repository or an organization: bind exactly one of repo: or org:")
+		return RunnerInventory{}, errors.New("runner.list reads either a repository or an organization: bind exactly one of the repo: or org: ports")
 	}
 
 	out := RunnerInventory{Runners: []Runner{}, Labels: []string{}, CustomLabels: []string{}}

@@ -360,15 +360,15 @@ func TestKeepPlaintextRetainsTheDecryptedStream(t *testing.T) {
 	for _, keep := range []bool{false, true} {
 		t.Run(map[bool]string{false: "discarding the ciphertext", true: "keeping the ciphertext"}[keep], func(t *testing.T) {
 			raw := filepath.Join(t.TempDir(), "run-1-attempt-1")
-			cipher := filepath.Join(raw, "logs.zip")
+			sealedArchive := filepath.Join(raw, "logs.zip")
 			unsealed := filepath.Join(raw, "artifact-1-trajan.zip")
-			for _, p := range []string{cipher, unsealed} {
+			for _, p := range []string{sealedArchive, unsealed} {
 				if err := engine.WriteRaw(p, []byte("retrieved bytes")); err != nil {
 					t.Fatalf("seed %s: %v", p, err)
 				}
 			}
 			cur := &harvestCursor{RawPath: raw, Sources: []harvestSource{
-				{Channel: channelLogs, Name: "logs.zip", Bytes: 15, Entries: 1, Path: cipher},
+				{Channel: channelLogs, Name: "logs.zip", Bytes: 15, Entries: 1, Path: sealedArchive},
 				{Channel: channelArtifact, Name: "artifact-1-trajan.zip", Bytes: 15, Entries: 1, Path: unsealed},
 			}}
 
@@ -385,7 +385,7 @@ func TestKeepPlaintextRetainsTheDecryptedStream(t *testing.T) {
 			if cur.RawPath != raw {
 				t.Errorf("raw path = %q, want %q", cur.RawPath, raw)
 			}
-			_, err = os.Stat(cipher)
+			_, err = os.Stat(sealedArchive)
 			if keep && err != nil {
 				t.Errorf("--keep-cipher discarded the ciphertext anyway: %v", err)
 			}

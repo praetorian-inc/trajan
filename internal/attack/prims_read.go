@@ -78,7 +78,7 @@ func repoResolve(ctx context.Context, s *Session, p repoResolveParams, _ Inputs)
 	if p.Owner == "" || p.Repo == "" {
 		return Repo{}, errors.New("owner and repo are required")
 	}
-	bare := Repo{RepoLoc: RepoLoc{Owner: p.Owner, Repo: p.Repo}}
+	bare := Repo{RepoLoc: RepoLoc(p)}
 	client, err := s.Client()
 	if err != nil {
 		if err := s.SoftRead(err, "resolve repository"); err != nil {

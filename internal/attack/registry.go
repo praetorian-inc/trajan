@@ -94,7 +94,11 @@ func In[T Handle](in Inputs, port string) T {
 	if !ok {
 		panic(fmt.Sprintf("attack: port %q not bound", port))
 	}
-	return h.(T)
+	typed, ok := h.(T)
+	if !ok {
+		panic(fmt.Sprintf("attack: port %q holds %T, not %s", port, h, reflect.TypeFor[T]()))
+	}
+	return typed
 }
 
 // InOpt does not panic where In does: an optional port that no step bound, or one
@@ -132,8 +136,11 @@ func Register[P any, O Handle](spec Spec, fn Fn[P, O]) {
 		spec:      spec,
 		paramType: reflect.TypeFor[P](),
 		invoke: func(ctx context.Context, s *Session, p any, in Inputs) (Handle, error) {
-			o, err := fn(ctx, s, p.(P), in)
-			return o, err
+			typed, ok := p.(P)
+			if !ok {
+				return nil, fmt.Errorf("attack: %s was handed params of type %T, not %s", spec.Name, p, reflect.TypeFor[P]())
+			}
+			return fn(ctx, s, typed, in)
 		},
 	}
 }

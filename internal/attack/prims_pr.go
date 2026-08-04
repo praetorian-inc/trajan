@@ -932,7 +932,7 @@ func selfReviewGuard(ctx context.Context, s *Session, client github.GitHub, even
 	}
 	if login := s.Login(); login != "" && login == author {
 		return fmt.Errorf("identity %q is the user %q who authored %s/%s#%d, and GitHub refuses a user's approval of their own pull request: "+
-			"this plan named one identity where the chain needs two — declare a second under identities: and name it in this step's as:",
+			"this plan named one identity where the chain needs two — declare a second under identities: and name it in this step's as: key",
 			s.ActingName(), login, pr.Owner, pr.Repo, pr.Number)
 	}
 	return nil
