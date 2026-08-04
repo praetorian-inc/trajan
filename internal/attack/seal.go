@@ -142,6 +142,19 @@ process.stdout.write('trajan-ciphertext=' + blob.toString('base64') + '\n');
 // markers land in the file, not the world-readable log, which retains only the
 // steps' own (value-free) source echo. The seal step exempts itself with
 // TRAJAN_SEALING and prints the envelope.
+//
+// The redirect script unsets BASH_ENV as its first act, and that line is what makes
+// the mechanism correct rather than merely quiet. Bash sources BASH_ENV on every
+// non-interactive startup, so without the unset it reaches not just the step's shell
+// but every bash script the step invokes — and the redirect then replaces that
+// child's stdout, which inside $(...) is the pipe the caller is reading. The child's
+// output lands in the collection file and the caller captures the empty string.
+// Measured on the firing range: `az` ships as a bash wrapper, so a step reading
+// `tok=$(az account get-access-token ...)` saw nothing and reported its own negative
+// while the token sat in the evidence one line above — the mechanism manufacturing
+// exactly the false negative a Measurement is shaped to make impossible. Binaries
+// were unaffected, which is why curl in the same step worked and made the failure
+// look like a property of the tool rather than of the collection.
 func sealSteps(pubPEM string) (setup, seal string) {
 	marker := randMarker()
 	pub := base64.StdEncoding.EncodeToString([]byte(pubPEM))
@@ -165,7 +178,7 @@ func sealSteps(pubPEM string) (setup, seal string) {
     printf '%%s' '%[2]s' | base64 -d > "${RUNNER_TEMP}/trajan-pub.pem"
     printf '%%s' '%[3]s' | base64 -d > "${RUNNER_TEMP}/trajan-seal.js"
     : > "${RUNNER_TEMP}/trajan-collect"
-    printf '%%s\n' '[ -n "${TRAJAN_SEALING:-}" ] || exec >> "'"${RUNNER_TEMP}"'/trajan-collect" 2>&1' > "${RUNNER_TEMP}/trajan-redirect.sh"
+    printf '%%s\n' 'unset BASH_ENV' '[ -n "${TRAJAN_SEALING:-}" ] || exec >> "'"${RUNNER_TEMP}"'/trajan-collect" 2>&1' > "${RUNNER_TEMP}/trajan-redirect.sh"
     echo "BASH_ENV=${RUNNER_TEMP}/trajan-redirect.sh" >> "$GITHUB_ENV"`, marker, pub, js)
 
 	seal = fmt.Sprintf(`- name: trajan-seal
