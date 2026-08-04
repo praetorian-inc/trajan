@@ -1,6 +1,11 @@
 package report
 
 import (
+	"encoding/json"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/praetorian-inc/trajan/internal/finding"
@@ -65,4 +70,77 @@ func TestFilterAndOrderTieBreaksByRuleThenSubject(t *testing.T) {
 			t.Errorf("pos %d: want %v, got (%s,%s)", i, w, got[i].Rule.ID, got[i].Subject.ID)
 		}
 	}
+}
+
+// json/jsonl used to stream to stdout whenever --out was unset, so the default
+// invocation dumped every finding into the terminal.
+func TestDefaultOutputGoesToDiskNotStdout(t *testing.T) {
+	for _, format := range []string{"jsonl", "json", "md", "html"} {
+		t.Run(format, func(t *testing.T) {
+			runDir := seedRun(t)
+			stdout := captureStdout(t, func() {
+				if err := Run(t.Context(), runDir, Options{Format: format}); err != nil {
+					t.Fatalf("Run: %v", err)
+				}
+			})
+			if stdout != "" {
+				t.Errorf("wrote %d bytes to stdout, want none", len(stdout))
+			}
+			want := filepath.Join(runDir, "findings."+format)
+			if _, err := os.Stat(want); err != nil {
+				t.Errorf("no report on disk: %v", err)
+			}
+		})
+	}
+}
+
+func TestOutDashStillPipes(t *testing.T) {
+	runDir := seedRun(t)
+	stdout := captureStdout(t, func() {
+		if err := Run(t.Context(), runDir, Options{Format: "jsonl", Out: "-"}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	})
+	if !strings.Contains(stdout, `"finding_id"`) {
+		t.Errorf("--out - produced %q, want the findings", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(runDir, "findings.jsonl")); !os.IsNotExist(err) {
+		t.Error("--out - also wrote a file")
+	}
+}
+
+func seedRun(t *testing.T) string {
+	t.Helper()
+	runDir := t.TempDir()
+	dir := filepath.Join(runDir, "20-scan", "findings")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	b, err := json.Marshal(mk("high", "high", "cat-01/x", "acme/repo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "f.json"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return runDir
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	defer func() { os.Stdout = orig }()
+
+	fn()
+	w.Close()
+	b, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }

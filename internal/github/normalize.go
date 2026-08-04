@@ -52,7 +52,11 @@ func Normalize(ctx context.Context, runDir string) error {
 	if err := state.Save(runDir); err != nil {
 		return err
 	}
-	return normErr
+	if normErr != nil {
+		return normErr
+	}
+	engine.PhaseDone(rec)
+	return nil
 }
 
 func normalizeJobs(prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) ([]Job, error) {

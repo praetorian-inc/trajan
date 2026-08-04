@@ -6,14 +6,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/engine/detect"
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
 // LoadRules skips an unusable rule instead of failing, so nothing at run time
-// notices a rule that stopped loading. This is where a bad id, an unparseable
-// where/chain_of or a typo'd graph target has to be caught.
+// notices a rule that stopped loading. This is where a bad id or an unparseable
+// where/chain_of has to be caught.
 func TestEveryEmbeddedRuleLoads(t *testing.T) {
 	var skipped []string
-	rules, err := LoadRules(func(e error) { skipped = append(skipped, e.Error()) })
+	rules, err := detect.LoadRules("github", func(e error) { skipped = append(skipped, e.Error()) })
 	if err != nil {
 		t.Fatalf("LoadRules: %v", err)
 	}
@@ -25,8 +28,27 @@ func TestEveryEmbeddedRuleLoads(t *testing.T) {
 	}
 }
 
+// detect carries rule.Graph unparsed, so a typo'd target now survives loading
+// and only surfaces when the graph phase builds its rule -> target index —
+// where a rule that fails to parse silently attaches nothing.
+func TestEveryEmbeddedRuleHasAParsableGraphTarget(t *testing.T) {
+	rules, err := detect.LoadRules("github", nil)
+	if err != nil {
+		t.Fatalf("LoadRules: %v", err)
+	}
+	var bad []string
+	for _, r := range rules {
+		if _, err := graph.ParseTarget(r.Graph); err != nil {
+			bad = append(bad, r.ID+": "+err.Error())
+		}
+	}
+	if len(bad) > 0 {
+		t.Errorf("rule(s) with an unusable graph target:\n%s", strings.Join(bad, "\n"))
+	}
+}
+
 func TestBlockMarshalJSON(t *testing.T) {
-	scalar, err := json.Marshal(Block{Predicate: "a == b"})
+	scalar, err := json.Marshal(detect.Block{Predicate: "a == b"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +56,7 @@ func TestBlockMarshalJSON(t *testing.T) {
 		t.Errorf("scalar block: want %q, got %s", "a == b", scalar)
 	}
 
-	combo, err := json.Marshal(Block{IsCombo: true, AllOf: []Block{{Predicate: "x"}, {Predicate: "y"}}})
+	combo, err := json.Marshal(detect.Block{IsCombo: true, AllOf: []detect.Block{{Predicate: "x"}, {Predicate: "y"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,10 +66,10 @@ func TestBlockMarshalJSON(t *testing.T) {
 }
 
 func TestBuildFindingOrgBackfillAndProvenance(t *testing.T) {
-	rule := &Rule{
+	rule := &detect.Rule{
 		ID: "cat-x/y", Title: "T", Severity: "high", Confidence: "high",
 		Subject:  "job",
-		Where:    &Block{Predicate: "foo != null"},
+		Where:    &detect.Block{Predicate: "foo != null"},
 		Evidence: []string{"value is {{ foo }}"},
 	}
 	subj := map[string]any{
@@ -56,7 +78,7 @@ func TestBuildFindingOrgBackfillAndProvenance(t *testing.T) {
 		"_provenance": map[string]any{"workflow_file": "wf.yml"},
 	}
 
-	f := BuildFinding(rule, subj, "job", "myorg", "")
+	f := detect.BuildFinding(provider, rule, subj, "job", "myorg", "")
 
 	if f.Org != "myorg" {
 		t.Errorf("org should backfill from the run scope when the subject lacks one, got %q", f.Org)
@@ -76,14 +98,14 @@ func TestBuildFindingOrgBackfillAndProvenance(t *testing.T) {
 }
 
 func TestBuildFindingSubjectOwnerWins(t *testing.T) {
-	rule := &Rule{ID: "cat-x/y", Subject: "org"}
+	rule := &detect.Rule{ID: "cat-x/y", Subject: "org"}
 	subj := map[string]any{"_id": "acme", "owner": "acme"}
-	f := BuildFinding(rule, subj, "org", "passed-org", "")
+	f := detect.BuildFinding(provider, rule, subj, "org", "passed-org", "")
 	if f.Org != "passed-org" {
 		t.Errorf("a non-empty run scope should win; got %q", f.Org)
 	}
 
-	f2 := BuildFinding(rule, subj, "org", "", "")
+	f2 := detect.BuildFinding(provider, rule, subj, "org", "", "")
 	if f2.Org != "acme" {
 		t.Errorf("with no run scope, org should come from the subject owner; got %q", f2.Org)
 	}
@@ -93,14 +115,14 @@ func TestBuildFindingSubjectOwnerWins(t *testing.T) {
 // .github/workflows/deploy.yml. The report renders finding.file next to
 // code.line_range as one locator, so file must be the path, never the name.
 func TestBuildFindingFileIsTheWorkflowPath(t *testing.T) {
-	rule := &Rule{ID: "cat-x/y", Subject: "job"}
+	rule := &detect.Rule{ID: "cat-x/y", Subject: "job"}
 	subj := map[string]any{"_id": "j1", "workflow_name": "deploy", "workflow_filename": "deploy.yml"}
-	if f := BuildFinding(rule, subj, "job", "ghektestorg", ""); f.File != ".github/workflows/deploy.yml" {
+	if f := detect.BuildFinding(provider, rule, subj, "job", "ghektestorg", ""); f.File != ".github/workflows/deploy.yml" {
 		t.Errorf("file should be the workflow path, got %q", f.File)
 	}
 
 	repoSubj := map[string]any{"_id": "ghektestorg/fr-02-01", "repo": "fr-02-01"}
-	if f := BuildFinding(rule, repoSubj, "repo", "ghektestorg", ""); f.File != "" {
+	if f := detect.BuildFinding(provider, rule, repoSubj, "repo", "ghektestorg", ""); f.File != "" {
 		t.Errorf("a subject with no workflow has no file locator, got %q", f.File)
 	}
 }

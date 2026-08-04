@@ -1,0 +1,29 @@
+id: cat-08/cross-project-template-source
+scenario_id: cat-08/06
+title: "Pipeline extends a template from another project's repository"
+subject: pipeline
+severity: high
+confidence: medium
+description: >
+  The pipeline pulls its extends template from a repository in a different
+  project (the source name is <project>/<repo> and resolves cross-project).
+  This widens the supply-chain trust boundary beyond the consumer project:
+  the build identity must reach across the project boundary to resolve the
+  template, and whoever can write that other project's template repo
+  controls YAML that runs inside this pipeline's context. It is a distinct
+  governance surface from a same-project template because the two repos are
+  typically owned and reviewed by different teams.
+where:
+  all_of:
+    - "extends_source != null"
+    - "extends_source.is_cross_project == true"
+evidence:
+  - "Pipeline {{ name }} ({{ project }}) extends a template from another project: {{ extends_source.name }}"
+  - "Cross-project source repo {{ extends_source.repository }} in project {{ extends_source.source_project }}"
+  - "Template ref: '{{ extends_source.ref }}' (ref_pinned={{ extends_source.ref_pinned }})"
+remediation_hint: >
+  Move the shared template into the consumer's own project so the trust
+  boundary matches the ownership boundary, or restrict Contribute on the
+  cross-project template repo to a trusted maintainer group and pin the
+  consumed ref to an immutable tag/SHA. Review the build identity's
+  cross-project access so template resolution does not grant broad reach.

@@ -1,0 +1,26 @@
+id: cat-02/predefined-variable-injection
+scenario_id: cat-02/01
+title: "Attacker-controlled predefined variable macro-expanded into a script body"
+subject: queue_time_injection
+severity: high
+confidence: high
+description: >
+  A predefined pipeline variable whose value is attacker-controlled — commit
+  message (Build.SourceVersionMessage), PR source branch
+  (System.PullRequest.SourceBranch) and similar — is macro-expanded $(var)
+  directly into a script body. The attacker never needs queue-build permission:
+  they set the value simply by crafting a commit message or branch name, then
+  triggering the pipeline. The untrusted string is spliced onto the shell command
+  line and executed with the pipeline's identity. This is not governed by the
+  queue-time variable limit, so it fires regardless of that setting.
+where:
+  all_of:
+    - "via == 'predefined_variable'"
+    - "sink_type == 'macro_in_script'"
+evidence:
+  - "Pipeline {{ pipeline_id }} job {{ job }}: predefined macro $({{ macro_name }}) expands into a {{ sink_location }} sink"
+  - "Via {{ via }}, confidence {{ confidence }} — value is set by a commit/branch, not by queue permission"
+remediation_hint: >
+  Never macro-expand Build.SourceVersionMessage, System.PullRequest.SourceBranch,
+  or other repository-content-derived predefined variables into a script. Map
+  them through an intermediate env: variable and quote/validate before use.

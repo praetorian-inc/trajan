@@ -3,10 +3,14 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 type State struct {
@@ -81,6 +85,30 @@ func (s *State) RecordPhase(rec PhaseRecord) {
 		}
 	}
 	s.Phases = append(s.Phases, rec)
+}
+
+// Soft failures are announced, not just recorded: a rule that never fires
+// because its input was unreadable makes the finding count look complete.
+func PhaseDone(rec PhaseRecord, attrs ...any) {
+	name := phaseLabel(rec.Phase)
+	slog.Info(name+" complete", attrs...)
+	if len(rec.Errors) == 0 {
+		return
+	}
+	slog.Warn(name+" degraded", "skipped", len(rec.Errors))
+	for _, e := range rec.Errors {
+		ui.Item(e)
+	}
+}
+
+// A phase is named for the directory it writes ("20-scan"); the ordinal is
+// the on-disk contract, not something to say out loud.
+func phaseLabel(phase string) string {
+	num, name, ok := strings.Cut(phase, "-")
+	if !ok || num == "" || strings.TrimLeft(num, "0123456789") != "" {
+		return phase
+	}
+	return name
 }
 
 // StaleDirs returns the downstream phase directories invalidated when phase p

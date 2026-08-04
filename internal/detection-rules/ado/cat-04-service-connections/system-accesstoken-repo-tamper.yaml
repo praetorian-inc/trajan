@@ -1,0 +1,40 @@
+id: cat-04/system-accesstoken-repo-tamper
+scenario_id: cat-04/03
+title: "Pipeline exposes System.AccessToken with no protecting check"
+subject: pipeline_poisoning
+severity: high
+confidence: medium
+description: >
+  A pipeline job exposes System.AccessToken to its steps
+  (exposes_system_access_token == true) and the poisoning path into that job is
+  ungated (gate_state == 'absent'). System.AccessToken is the pipeline identity's
+  OAuth credential against the ADO REST API; whenever the Project (or Collection)
+  Build Service identity holds Contribute or higher on repositories, that token
+  becomes a write credential able to push commits, retarget refs, or tamper with
+  history. Because the sink is reachable from an attacker-influenceable trigger
+  (a PR build, a CI push, or a manually queued branch) with no branch-control or
+  approval check in the way, code introduced through a pull request or feature
+  branch can drive the token. Confidence is medium: the token exposure and the
+  absent gate are ADO-confirmable, but the Build Service's actual repo-role
+  breadth is on the permissions plane and not carried on this edge.
+
+where:
+  all_of:
+    - "exposes_system_access_token == true"
+    - "gate_state == 'absent'"
+
+evidence:
+  - "Pipeline {{ pipeline_id }} job {{ job }} in project {{ project }}"
+  - "Trigger: {{ trigger }} via {{ via }}"
+  - "Sink: {{ sink_kind }} / {{ sink_form }}"
+  - "System.AccessToken exposed: {{ exposes_system_access_token }}"
+  - "Gate state: {{ gate_state }}"
+
+remediation_hint: >
+  Set the pipeline's System.AccessToken permissions to read-only where write
+  access is not needed. Strip Contribute / Force Push from the Project and
+  Collection Build Service identities on repositories they do not need to write.
+  Gate the poisonable trigger: require pull-request review and build validation on
+  the branches the pipeline builds, and add a Branch control check to the
+  protected resources the job touches so attacker-authored YAML cannot reach the
+  token.

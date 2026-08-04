@@ -1,6 +1,10 @@
 package engine
 
-import "testing"
+import (
+	"path"
+	"strings"
+	"testing"
+)
 
 func TestCollectPaths(t *testing.T) {
 	tests := []struct {
@@ -165,5 +169,20 @@ func TestBranchBuildersNonDefault(t *testing.T) {
 				t.Errorf("got %q, want %q", tt.got, tt.want)
 			}
 		})
+	}
+}
+
+// NormalizeADOEdges must hash the composite key into a bounded, collision-free
+// filename: distinct keys never share a file (the adoKey "__"->"--" flattening
+// used to alias them), and a long key never overflows the 255-byte path limit.
+func TestNormalizeADOEdgesBoundedDistinct(t *testing.T) {
+	a := NormalizeADOEdges("has-policy", "foo-bar__baz")
+	b := NormalizeADOEdges("has-policy", "foo__bar-baz")
+	if a == b {
+		t.Errorf("distinct composite keys collided to %q", a)
+	}
+	long := NormalizeADOEdges("uses-connection", strings.Repeat("refs/heads/very-long-branch/", 40))
+	if base := path.Base(long); len(base) > 64 {
+		t.Errorf("edge filename not bounded: %d bytes (%q)", len(base), base)
 	}
 }

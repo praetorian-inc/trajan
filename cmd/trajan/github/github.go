@@ -1,11 +1,13 @@
 package github
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/spf13/cobra"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/engine/detect"
 	"github.com/praetorian-inc/trajan/internal/github"
 	"github.com/praetorian-inc/trajan/internal/graph"
 	"github.com/praetorian-inc/trajan/internal/report"
@@ -105,15 +107,22 @@ func newGitHubCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// internal/github imports internal/graph, so the rule -> target index
-			// is built here rather than inside graph.Build.
-			rules, err := github.LoadRules(func(e error) { slog.Warn("rule skipped", "err", e) })
+			// detect carries rule.Graph as an unparsed string so it stays
+			// provider-generic; the target vocabulary is this platform's, so the
+			// rule -> target index is built here rather than inside graph.Build.
+			onError := func(e error) { slog.Warn("rule skipped", "err", e) }
+			rules, err := detect.LoadRules("github", onError)
 			if err != nil {
 				return err
 			}
 			targets := make(map[string]graph.Target, len(rules))
 			for _, r := range rules {
-				targets[r.ID] = r.GraphTarget
+				t, err := graph.ParseTarget(r.Graph)
+				if err != nil {
+					onError(fmt.Errorf("%s: %w", r.ID, err))
+					continue
+				}
+				targets[r.ID] = t
 			}
 			return graph.Build(cmd.Context(), cfg, runDir, targets)
 		},
@@ -174,6 +183,8 @@ func newGitHubCmd() *cobra.Command {
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
 	reportCmd.Flags().StringVar(&reportMinSev, "min-severity", "info", "drop findings below this severity")
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
+	// No "o" shorthand: the root command already owns -o for --output, and cobra
+	// panics when a subcommand's local flag redefines an inherited shorthand.
 	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: stdout for json/jsonl, run dir for md/html)")
 	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j Bolt URL")
 	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")

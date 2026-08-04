@@ -1,0 +1,32 @@
+id: cat-12/overscoped-ai-extension
+scenario_id: cat-12/04
+title: "Org-installed third-party extension holds over-broad write scopes"
+subject: extension
+severity: high
+confidence: medium
+description: >
+  A non-Microsoft extension installed org-wide requests OAuth scopes far
+  exceeding a review/assist function — write/manage over code, work items,
+  build execution, or service endpoints — so its task runs with those
+  scopes in every project. For an AI extension a single prompt injection
+  activates the full granted scope; for any extension a backdoored
+  auto-update wields it deterministically. Read-only assistants should hold
+  only vso.code / vso.threads scopes; write/manage grants are the risk.
+
+where:
+  all_of:
+    - org_installed == true
+    - is_builtin == false
+    - scopes ∋ {vso.code_write, vso.code_manage, vso.work_write, vso.build_execute, vso.serviceendpoint_manage, vso.serviceendpoint_query, vso.variablegroups_write, vso.tokens}
+
+evidence:
+  - "Extension {{ extension_name }} (publisher {{ publisher_name }}) installed org-wide, builtin={{ is_builtin }}"
+  - "Granted scopes: {{ scopes }}"
+  - "Auto-update: {{ auto_update }}; pipeline decorator: {{ has_pipeline_decorator_contribution }}"
+
+remediation_hint: >
+  Audit the extension's requested scopes in its vss-extension.json. Remove
+  scopes that exceed its stated function; a review/assist extension needs
+  only vso.code (read) and vso.threads. Disable auto-update for extensions
+  with write/manage scopes so new versions require re-consent, and prefer
+  publishers you trust.

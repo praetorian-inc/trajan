@@ -635,7 +635,7 @@ func deriveCacheKeyspace(jobs []map[string]any) map[string]any {
 		order := []string{}
 		add := func(entries []map[string]any) {
 			for _, e := range entries {
-				jb := e["job"].(map[string]any)
+				jb, _ := e["job"].(map[string]any)
 				id, _ := jb["_id"].(string)
 				if _, seen := allJobs[id]; !seen {
 					order = append(order, id)

@@ -1,0 +1,32 @@
+id: cat-13/artifact-upload-exfiltration
+scenario_id: cat-13/05
+title: "Untrusted text echoed to stdout injects ##vso[artifact.upload] to exfiltrate local secret files"
+subject: logging_command_injection
+severity: high
+confidence: high
+description: >
+  A step echoes attacker-controlled text (commit message, PR source branch,
+  a file from the checked-out PR, or a fetched HTTP body) to stdout. An
+  embedded ##vso[artifact.upload] / build.uploadlog / task.uploadfile line
+  publishes an arbitrary local file — an agent credential store, a
+  written-out secret file, or a service-connection token cache — as a build
+  artifact or log the attacker can later download. No outbound network call
+  is required, defeating firewalled and self-hosted agent egress controls;
+  the destination is the build's own artifact store, readable by anyone with
+  pipeline Read. Same unconditional ##vso[...] parsing as CVE-2023-21553.
+
+where:
+  all_of:
+    - "via == 'artifact_upload_exfil'"
+    - "untrusted_source in {commit_message, pr_source_branch, file_content, http_response}"
+
+evidence:
+  - "Pipeline {{ pipeline_id }} job {{ job }} ({{ project }}): untrusted {{ untrusted_source }} echoed at step {{ echo_step }}"
+  - "Injected ##vso[artifact.upload] exfiltrates {{ target_resource }} at step {{ consumer_step }}, effect {{ effect }}"
+  - "confidence={{ confidence }} identity_scope={{ identity_scope }}"
+
+remediation_hint: >
+  Never echo attacker-controlled data to stdout after a step that writes
+  credential files. Isolate authentication tasks and untrusted-echo steps in
+  separate jobs, and delete credential files immediately after use. Restrict
+  artifact and log download permissions on the pipeline.

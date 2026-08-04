@@ -66,8 +66,8 @@ func (g *gqlClient) query(ctx context.Context, query string, vars map[string]any
 			}
 			return json.Unmarshal(env.Data, out)
 		}
-		switch {
-		case resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504:
+		switch resp.StatusCode {
+		case 502, 503, 504:
 			b := readAllClose(resp)
 			sleepFn(ctx, 2)
 			if i == 5 {
