@@ -32,6 +32,7 @@ func newAdoCmd() *cobra.Command {
 
 	collectRun := func(cmd *cobra.Command, args []string) (string, error) {
 		cfg.Token, _ = cmd.Flags().GetString("token") // honor the global --token (persistent flag)
+		cfg.BearerToken = getBearerToken(cmd)
 		locator := ""
 		if len(args) > 0 {
 			locator = args[0]
@@ -136,8 +137,7 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
 	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: the run dir)")
 
-	// Entra ID bearer auth is only wired into these three; the phased commands are PAT-only.
-	for _, c := range []*cobra.Command{scanCmd, attackCmd, retrieveCmd} {
+	for _, c := range []*cobra.Command{scanCmd, attackCmd, retrieveCmd, collect, run} {
 		c.Flags().String("azure-bearer-token", "", "Azure Entra ID bearer token (or set AZURE_BEARER_TOKEN)")
 	}
 

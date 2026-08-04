@@ -15,6 +15,21 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
+func redactedInvocation(args []string) []string {
+	creds := map[string]bool{"--token": true, "--azure-bearer-token": true}
+	out := make([]string, len(args))
+	copy(out, args)
+	for i := 0; i < len(out); i++ {
+		if eq := strings.IndexByte(out[i], '='); eq > 0 && creds[out[i][:eq]] {
+			out[i] = out[i][:eq+1] + "REDACTED"
+		} else if creds[out[i]] && i+1 < len(out) {
+			out[i+1] = "REDACTED"
+			i++
+		}
+	}
+	return out
+}
+
 func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, error) {
 	if strings.TrimSpace(locator) == "" {
 		locator = strings.TrimSpace(os.Getenv("ORG_NAME"))
@@ -23,11 +38,16 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if err != nil {
 		return "", err
 	}
-	token, err := ResolveToken(cfg.Token)
-	if err != nil {
-		return "", err
+	var cl *Client
+	if bearer := strings.TrimSpace(cfg.BearerToken); bearer != "" {
+		cl = NewClientBearer(scope.Org, bearer)
+	} else {
+		token, err := ResolveToken(cfg.Token)
+		if err != nil {
+			return "", err
+		}
+		cl = NewClient(scope.Org, token)
 	}
-	cl := NewClient(scope.Org, token)
 
 	runDir, err := engine.MintRunDir(cfg, "ado", scope.Slug)
 	if err != nil {
@@ -48,7 +68,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	state.Platform = "ado"
 	state.Scope = scopeString(scope)
 	state.Org = scope.Org
-	state.Invocation = os.Args[1:]
+	state.Invocation = redactedInvocation(os.Args[1:])
 	if state.StartedAt == "" {
 		state.StartedAt = engine.IsoformatUTC(timeNow())
 	}
