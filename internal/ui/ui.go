@@ -22,11 +22,13 @@ const (
 // Indices 0-15 only, never hex: these resolve through the reader's own theme.
 const (
 	red     = 9
+	green   = 10
 	yellow  = 11
 	blue    = 12
 	magenta = 13
 	dim     = 8
 	bold    = -1
+	plain   = -2
 )
 
 type Printer struct {
@@ -65,7 +67,7 @@ func ColorEnabled() bool {
 }
 
 func (p *Printer) c(idx int, s string) string {
-	if !p.color || s == "" {
+	if !p.color || s == "" || idx == plain {
 		return s
 	}
 	if idx == bold {
@@ -88,7 +90,34 @@ func severityColor(s string) int {
 	case "low":
 		return blue
 	}
-	return 0
+	return plain
+}
+
+// stepColor grades an attack step by outcome. Green is spent only here, on the
+// one word that says what the step did, because a run where every line is
+// colored is a run where a failure no longer stands out.
+func stepColor(status string) int {
+	switch status {
+	case "ok":
+		return green
+	case "failed":
+		return red
+	case "skipped", "unresolved":
+		return yellow
+	}
+	return plain
+}
+
+// countColor leaves the expected outcomes uncolored, so a clean run closes with
+// no color at all and the first red thing on the screen is always news.
+func countColor(label string) int {
+	switch label {
+	case "failed":
+		return red
+	case "skipped", "unresolved", "partial", "irreversible":
+		return yellow
+	}
+	return plain
 }
 
 func (p *Printer) raw(s string) { fmt.Fprintln(p.w, s) }
@@ -115,6 +144,15 @@ func (p *Printer) Item(s string) {
 		return
 	}
 	p.log.Info(s)
+}
+
+// Note is an indented line of chrome — a path, a next command — that recedes
+// because it is not the news of the block it sits under.
+func (p *Printer) Note(s string) {
+	if p.tier != Human {
+		return
+	}
+	p.raw("  " + p.c(dim, clean(s)))
 }
 
 func (p *Printer) Error(msg, remedy string) {
@@ -158,6 +196,165 @@ func (p *Printer) Severities(counts map[string]int) {
 	}
 }
 
+type cell struct {
+	s     string
+	w     int
+	color int
+}
+
+// row pads every cell but the last non-empty one, so no row carries trailing
+// whitespace into a redirected log. Padding is measured on the plain text and
+// applied before coloring, because an escape sequence occupies no columns. An
+// empty cell holds its column when it has a width and disappears when it does
+// not, which is how the status cell vanishes on the rows that succeeded.
+func (p *Printer) row(indent string, cs ...cell) string {
+	last := -1
+	for i, c := range cs {
+		if c.s != "" {
+			last = i
+		}
+	}
+	if last < 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(indent)
+	for i, c := range cs[:last+1] {
+		if c.s == "" && c.w == 0 {
+			continue
+		}
+		s := clean(c.s)
+		if i < last && len(s) < c.w {
+			s += strings.Repeat(" ", c.w-len(s))
+		}
+		b.WriteString(p.c(c.color, s))
+		if i < last {
+			b.WriteByte(' ')
+		}
+	}
+	return b.String()
+}
+
+// Head opens a run: a bold subject, then indented label/value rows whose labels
+// recede because the value is the news — the rule humanAttrs applies to an attr
+// key, in a shape a single line could not hold.
+func (p *Printer) Head(subject string, fields ...[2]string) {
+	if p.tier != Human {
+		args := make([]any, 0, 2*len(fields))
+		for _, f := range fields {
+			if f[1] != "" {
+				args = append(args, f[0], f[1])
+			}
+		}
+		p.log.Info(subject, args...)
+		return
+	}
+	p.raw(p.c(bold, clean(subject)))
+	for _, f := range fields {
+		if f[1] == "" {
+			continue
+		}
+		p.raw("  " + p.c(dim, fmt.Sprintf("%-8s", f[0])) + "  " + clean(f[1]))
+	}
+}
+
+// Section titles a block of rows. Debug carries the per-item records and has no
+// use for a heading to group them under.
+func (p *Printer) Section(name string) {
+	if p.tier != Human {
+		return
+	}
+	p.raw("")
+	p.raw(p.c(bold, clean(name)))
+}
+
+// StepLine is one row of an attack's step table. Uses reaches only --debug, which
+// keeps the machine-parseable line it had before this renderer existed; ID reaches
+// the table itself on the rows another step can refer to.
+type StepLine struct {
+	Seq, Total int
+	ID, Uses   string
+	Action     string
+	Target     string
+	Status     string
+	Detail     string
+}
+
+// Step renders one row of the table. Any status but ok also names itself in the
+// detail column: the color on the action is decoration, and a log read without
+// it still has to distinguish a step that ran from one that did not.
+func (p *Printer) Step(l StepLine) {
+	if p.tier != Human {
+		p.log.Info("step "+l.Status, "step", l.ID, "uses", l.Uses, "target", l.Target)
+		return
+	}
+	w := len(strconv.Itoa(l.Total))
+	status := l.Status
+	switch l.Status {
+	case "ok":
+		status = ""
+	case "failed", "skipped":
+		// The only two statuses another step's note can name ("step %q is failed"),
+		// so the only two that have to carry the id that resolves the reference. The
+		// colon is load-bearing: without it "skipped branch_b step" reads as a phrase.
+		status = strings.TrimSpace(l.Status + " " + l.ID)
+		if l.Detail != "" {
+			status += ":"
+		}
+	}
+	p.raw(p.row("  ",
+		cell{fmt.Sprintf("%*d/%d", w, l.Seq, l.Total), 2*w + 1, dim},
+		cell{l.Action, 25, stepColor(l.Status)},
+		cell{l.Target, 28, dim},
+		cell{status, 0, stepColor(l.Status)},
+		cell{l.Detail, 0, plain},
+	))
+}
+
+type Count struct {
+	Label string
+	N     int
+}
+
+// Outcome closes a run with its counts and a dim trailer. Zero counts go unsaid
+// for the same reason Severities drops them.
+func (p *Printer) Outcome(subject string, counts []Count, trailer string) {
+	if p.tier != Human {
+		args := make([]any, 0, 2*len(counts))
+		for _, c := range counts {
+			if c.N > 0 {
+				args = append(args, c.Label, c.N)
+			}
+		}
+		p.log.Info(subject, args...)
+		return
+	}
+	var parts []string
+	for _, c := range counts {
+		if c.N == 0 {
+			continue
+		}
+		parts = append(parts, p.c(bold, strconv.Itoa(c.N))+" "+p.c(countColor(c.Label), c.Label))
+	}
+	// Outcome closes a block, so it owns the blank line that separates it from the
+	// rows above rather than making every caller remember one.
+	p.raw("")
+	line := clean(subject)
+	if len(parts) > 0 {
+		line += ": " + strings.Join(parts, ", ")
+	}
+	if trailer != "" {
+		line += " " + p.c(dim, clean(trailer))
+	}
+	p.raw(line)
+}
+
 func Item(s string)                    { std.Item(s) }
 func Error(msg, remedy string)         { std.Error(msg, remedy) }
 func Severities(counts map[string]int) { std.Severities(counts) }
+
+func Note(s string)                                          { std.Note(s) }
+func Head(subject string, fields ...[2]string)               { std.Head(subject, fields...) }
+func Section(name string)                                    { std.Section(name) }
+func Step(l StepLine)                                        { std.Step(l) }
+func Outcome(subject string, counts []Count, trailer string) { std.Outcome(subject, counts, trailer) }
