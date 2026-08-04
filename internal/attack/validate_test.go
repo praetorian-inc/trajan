@@ -168,6 +168,21 @@ steps:
 	if errs := hardErrs(plan("survived.review_decision")); !hasSubstr(errs, "carries no operator") {
 		t.Fatalf("want a gate with no operator refused offline, got %v", errs)
 	}
+
+	// Either quote delimits a literal here, so a dotted one is a string and not
+	// <step>.<field>. Scanning past double quotes invents a producer the author never
+	// named: the plan fails validation over it, and the executor's identical scan
+	// takes an edge on it and skips the gated step whenever that phantom skips.
+	if errs := hardErrs(plan(`survived.review_decision == \"some.value\"`)); len(errs) != 0 {
+		t.Fatalf("a double-quoted literal must not be read as a step reference, got %v", errs)
+	}
+	// The opening quote is what closes the run. Toggling on either character lets
+	// this apostrophe end the literal early, and everything after it — the whole
+	// reference — is then read as still inside the string and dropped, so the typo'd
+	// field below goes unchecked and the gate reaches the run unvalidated.
+	if errs := hardErrs(plan(`\"it's approved\" == survived.review_decisionn`)); !hasSubstr(errs, `no field "review_decisionn"`) {
+		t.Fatalf("a reference after a double-quoted literal holding an apostrophe must still be checked, got %v", errs)
+	}
 }
 
 // The seal is applied to the job envelope, so a plan that attaches only

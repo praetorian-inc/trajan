@@ -399,7 +399,7 @@ func validateWhen(st *Step, prior map[string]bool, info map[string]stepInfo) []e
 		errs = append(errs, fmt.Errorf("%s: when: %q carries no operator, so there is nothing to compare; a gate is a predicate (%s == true), never a bare path",
 			stepLabel(st), st.When, st.When))
 	}
-	for _, m := range whenRefRe.FindAllStringSubmatch(stripSingleQuoted(st.When), -1) {
+	for _, m := range whenRefRe.FindAllStringSubmatch(stripQuoted(st.When), -1) {
 		id, path := m[1], strings.TrimPrefix(m[0], m[1]+".")
 		if !prior[id] {
 			errs = append(errs, fmt.Errorf("step %q: when references %q which is not a prior step", st.ID, id))
@@ -933,15 +933,26 @@ func kindLabel(k reflect.Kind) string {
 	}
 }
 
-func stripSingleQuoted(s string) string {
+// stripQuoted removes a predicate's string literals so a reference scan sees only
+// what could be one. Both quotes delimit in this DSL, and the opening character is
+// what closes the run: toggling on either makes an apostrophe inside "..." swallow
+// the rest of the predicate, and honoring only ' leaves a dotted literal looking
+// exactly like <step>.<field>. Neither mistake is visible in a plan — the first
+// drops references the author did write, the second invents one they did not, so a
+// legal gate fails validation over a step that does not exist and, through the same
+// scan in the executor, takes an edge on it and skips with it.
+func stripQuoted(s string) string {
 	var b strings.Builder
-	inq := false
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\'' {
-			inq = !inq
-			continue
-		}
-		if !inq {
+	var quote byte
+	for i := range len(s) {
+		switch {
+		case quote != 0:
+			if s[i] == quote {
+				quote = 0
+			}
+		case s[i] == '\'' || s[i] == '"':
+			quote = s[i]
+		default:
 			b.WriteByte(s[i])
 		}
 	}

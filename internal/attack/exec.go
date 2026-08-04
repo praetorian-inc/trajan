@@ -814,7 +814,7 @@ func (x *executor) dependencies(st *Step, spec Spec) []string {
 	// a skipped predecessor's fields as their zero values. Its ports stay edges:
 	// a cleanup step whose subject was never created has nothing to undo.
 	if !st.isCleanup {
-		for _, m := range whenRefRe.FindAllStringSubmatch(stripSingleQuoted(st.When), -1) {
+		for _, m := range whenRefRe.FindAllStringSubmatch(stripQuoted(st.When), -1) {
 			add(m[1])
 		}
 	}
@@ -990,7 +990,7 @@ func (x *executor) evalWhen(st *Step) (bool, error) {
 		x.zeroSubjects(st, subject)
 		return dsl.EvaluatePredicate(st.When, subject)
 	}
-	for _, m := range whenRefRe.FindAllStringSubmatch(stripSingleQuoted(st.When), -1) {
+	for _, m := range whenRefRe.FindAllStringSubmatch(stripQuoted(st.When), -1) {
 		v, ok := x.lookupRef(m[0])
 		if !ok {
 			return false, fmt.Errorf("when: %s resolves to nothing", m[0])
@@ -1007,7 +1007,7 @@ func (x *executor) evalWhen(st *Step) (bool, error) {
 // value of the handle its primitive declares, so a gate comparing merge.sha to
 // the empty string holds when the merge skipped, rather than reading nil.
 func (x *executor) zeroSubjects(st *Step, subject map[string]any) {
-	for _, m := range whenRefRe.FindAllStringSubmatch(stripSingleQuoted(st.When), -1) {
+	for _, m := range whenRefRe.FindAllStringSubmatch(stripQuoted(st.When), -1) {
 		id := m[1]
 		if _, produced := subject[id]; produced || !x.stepIDs[id] {
 			continue
