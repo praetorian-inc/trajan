@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -207,7 +208,7 @@ func runHarvest(ctx context.Context, s *Session, p runHarvestParams, in Inputs) 
 	// fact from a readable log carrying no marker — that one is a payload that did
 	// not run.
 	if cur.Files == 0 {
-		s.MarkEmpty(harvestNote(Loot{Classification: lootNotRead}, harvestParse{}, run, cur))
+		s.MarkEmpty(harvestNote(Loot{Classification: lootNotRead}, newHarvestParse(), run, cur))
 		return notRead(s, cur, run)
 	}
 
@@ -224,7 +225,7 @@ func runHarvest(ctx context.Context, s *Session, p runHarvestParams, in Inputs) 
 	encrypted := false
 	if enc := strings.TrimSpace(s.Plan.Encryption); enc != "" && enc != "none" {
 		encrypted = true
-		outer := harvestParse{fragments: []harvestFragment{}, items: []LootItem{}}
+		outer := newHarvestParse()
 		for _, ev := range files {
 			parseEvidence(ev, ev.channel == channelLogs, &outer)
 		}
@@ -235,7 +236,7 @@ func runHarvest(ctx context.Context, s *Session, p runHarvestParams, in Inputs) 
 			if err != nil {
 				return sealedLoot(s, cur, run, outer, sealFailureReason(s, err, len(outer.seal.chunks), persistedFiles(cur), cur.RawPath))
 			}
-			files = replaceSealed(files, outer.seal.entries, evidence{channel: channelLogs, name: "sealed:" + sourceLabel(cur), body: plain})
+			files = replaceSealed(files, outer.seal.entries, evidence{channel: channelLogs, stream: "sealed", name: "sealed:" + sourceLabel(cur), body: plain})
 			keepPlaintext(s, cur, rawDir, plain, outer.seal.carriers)
 		case outer.seal.wrapped != "":
 			return sealedLoot(s, cur, run, outer, "the retrieved evidence carries a wrapped key but no ciphertext to open with it: the marker stream was sealed and "+
@@ -252,7 +253,7 @@ func runHarvest(ctx context.Context, s *Session, p runHarvestParams, in Inputs) 
 		}
 	}
 
-	res := harvestParse{fragments: []harvestFragment{}, items: []LootItem{}}
+	res := newHarvestParse()
 	for _, ev := range files {
 		parseEvidence(ev, ev.channel == channelLogs, &res)
 	}
@@ -490,8 +491,15 @@ func safeArtifactName(name string) string {
 	}, name)
 }
 
+// stream names the continuous output an entry is a slice of. GitHub writes one
+// log file per step, so a fragment's opening marker, its fields and its closing
+// marker routinely arrive in three different files of one job — they are one
+// stream and the parser reads them as one. Two jobs are not, and neither is a job
+// beside an artifact: an envelope left open by a job that died must not adopt the
+// next job's fields.
 type evidence struct {
 	channel string
+	stream  string
 	name    string
 	body    []byte
 }
@@ -557,10 +565,47 @@ func unzipText(channel, archive string, body []byte) ([]evidence, int, error) {
 			dropped++
 			continue
 		}
-		out = append(out, evidence{channel: channel, name: archive + ":" + f.Name, body: b})
+		out = append(out, evidence{channel: channel, stream: streamOf(channel, archive, f.Name), name: archive + ":" + f.Name, body: b})
 	}
-	slices.SortFunc(out, func(a, b evidence) int { return cmp.Compare(a.name, b.name) })
+	slices.SortFunc(out, byStep)
 	return out, dropped, nil
+}
+
+func streamOf(channel, archive, entry string) string {
+	if job, _, nested := strings.Cut(entry, "/"); channel == channelLogs && nested {
+		return archive + ":" + job
+	}
+	return archive + ":" + entry
+}
+
+// byStep puts a stream's entries in the order the runner wrote them, which is the
+// order the envelope spans. GitHub numbers the per-step files, and by name alone
+// 10_ precedes 1_ — enough on its own to close a fragment before the steps that
+// filled it. Anything with no step number (a job's system.txt) sorts after the
+// steps rather than into the middle of them.
+func byStep(a, b evidence) int {
+	if c := cmp.Compare(a.stream, b.stream); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(stepIndex(a.name), stepIndex(b.name)); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.name, b.name)
+}
+
+func stepIndex(name string) int {
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		name = name[i+1:]
+	}
+	digits, _, found := strings.Cut(name, "_")
+	if !found {
+		return math.MaxInt
+	}
+	n, err := strconv.Atoi(digits)
+	if err != nil {
+		return math.MaxInt
+	}
+	return n
 }
 
 type markerField struct{ name, value string }
@@ -609,6 +654,15 @@ type harvestParse struct {
 	malformed int
 	rejected  int
 	spliced   int
+
+	// The fragment left open by the last entry parsed, and the stream it was
+	// opened in: the envelope crosses files within a stream and never across one.
+	open   int
+	stream string
+}
+
+func newHarvestParse() harvestParse {
+	return harvestParse{fragments: []harvestFragment{}, items: []LootItem{}, open: -1}
 }
 
 var (
@@ -619,10 +673,18 @@ var (
 // parseEvidence walks one retrieved file. requireClose is false for an artifact:
 // a log is a stream that can be cut off mid-fragment, but an uploaded file either
 // arrived whole or did not arrive at all, so its fields need no closing marker.
+//
+// Entries of one stream are parsed in order and share the open envelope; the
+// first entry of a new stream drops it, so a fragment that never closed stays
+// incomplete rather than swallowing whatever the next stream emitted. Callers
+// pass the entries in the order returned by unzipText, which is that order.
 func parseEvidence(ev evidence, requireClose bool, out *harvestParse) {
+	if ev.stream != out.stream {
+		out.stream, out.open = ev.stream, -1
+	}
 	sc := bufio.NewScanner(bytes.NewReader(ev.body))
 	sc.Buffer(make([]byte, 0, 64*1024), maxEntryBytes)
-	echoing, open := false, -1
+	echoing := false
 
 	for sc.Scan() {
 		line := sc.Text()
@@ -673,14 +735,14 @@ func parseEvidence(ev evidence, requireClose bool, out *harvestParse) {
 					Marker: f.value, Channel: ev.channel, Source: ev.name,
 					Complete: !requireClose, Fields: []string{},
 				})
-				open = len(out.fragments) - 1
+				out.open = len(out.fragments) - 1
 			case "marker-end":
-				if open < 0 || out.fragments[open].Marker != f.value {
+				if out.open < 0 || out.fragments[out.open].Marker != f.value {
 					out.rejected++
 					continue
 				}
-				out.fragments[open].Complete = true
-				open = -1
+				out.fragments[out.open].Complete = true
+				out.open = -1
 			default:
 				switch f.name {
 				case "wrapped-key":
@@ -690,12 +752,12 @@ func parseEvidence(ev evidence, requireClose bool, out *harvestParse) {
 					out.seal.chunks = append(out.seal.chunks, f.value)
 					out.seal.carry(ev.name)
 				}
-				if open < 0 {
+				if out.open < 0 {
 					out.orphans++
 					continue
 				}
 				out.items = append(out.items, item(f, expiry))
-				frag := &out.fragments[open]
+				frag := &out.fragments[out.open]
 				if !slices.Contains(frag.Fields, f.name) {
 					frag.Fields = append(frag.Fields, f.name)
 				}
@@ -712,7 +774,7 @@ func parseEvidence(ev evidence, requireClose bool, out *harvestParse) {
 		// and only on a line whose field boundaries are not a guess, because a value
 		// that swallowed a following token would otherwise mint a reachable secret
 		// out of text the payload merely echoed.
-		if open >= 0 && !spliced && firstValue(fields, "reachable") == "true" {
+		if out.open >= 0 && !spliced && firstValue(fields, "reachable") == "true" {
 			if name := firstValue(fields, "secret"); name != "" {
 				out.secrets = append(out.secrets, name)
 			}

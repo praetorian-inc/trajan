@@ -22,11 +22,12 @@ import (
 )
 
 func harvestEv(channel, body string) evidence {
-	return evidence{channel: channel, name: channel + ".zip:1_job.txt", body: []byte(body)}
+	archive, entry := channel+".zip", "job/1_job.txt"
+	return evidence{channel: channel, stream: streamOf(channel, archive, entry), name: archive + ":" + entry, body: []byte(body)}
 }
 
 func harvestParseOf(evs ...evidence) harvestParse {
-	res := harvestParse{fragments: []harvestFragment{}, items: []LootItem{}}
+	res := newHarvestParse()
 	for _, ev := range evs {
 		parseEvidence(ev, ev.channel == channelLogs, &res)
 	}
@@ -453,14 +454,14 @@ func TestUnsealedSourcesReachTheClassificationBesideTheDecryptedStream(t *testin
 	const marker = "trajan-fr-05-01"
 	collected := "trajan-marker=" + marker + "\ntrajan-artifact-name=trajan-evidence trajan-artifact-run=4242\ntrajan-marker-end=" + marker + "\n"
 	files := []evidence{
-		{channel: channelLogs, name: "logs.zip:1_verify/9_trajan-seal.txt", body: []byte(sealEnvelope(t, &key.PublicKey, "trajan-seal-1", collected))},
-		{channel: channelArtifact, name: "artifact-7-trajan-evidence.zip:trajan-artifact-marker", body: []byte(
+		{channel: channelLogs, stream: "logs.zip:1_verify", name: "logs.zip:1_verify/9_trajan-seal.txt", body: []byte(sealEnvelope(t, &key.PublicKey, "trajan-seal-1", collected))},
+		{channel: channelArtifact, stream: "artifact-7-trajan-evidence.zip:trajan-artifact-marker", name: "artifact-7-trajan-evidence.zip:trajan-artifact-marker", body: []byte(
 			"trajan-marker=" + marker + "\ntrajan-run=4242\ntrajan-repo=ghektestorg/fr-05-01-artifact-handoff\ntrajan-event=pull_request\n")},
 	}
 	cur := &harvestCursor{Files: len(files), Sources: []harvestSource{srcLogs, srcArtifactRead}}
 	run := WorkflowRun{ID: 4242, Status: "completed"}
 
-	outer := harvestParse{fragments: []harvestFragment{}, items: []LootItem{}}
+	outer := newHarvestParse()
 	for _, ev := range files {
 		parseEvidence(ev, ev.channel == channelLogs, &outer)
 	}
@@ -472,8 +473,8 @@ func TestUnsealedSourcesReachTheClassificationBesideTheDecryptedStream(t *testin
 		t.Fatalf("decrypted stream = %q, want %q", plain, collected)
 	}
 
-	res := harvestParse{fragments: []harvestFragment{}, items: []LootItem{}}
-	for _, ev := range replaceSealed(files, outer.seal.entries, evidence{channel: channelLogs, name: "sealed:" + sourceLabel(cur), body: plain}) {
+	res := newHarvestParse()
+	for _, ev := range replaceSealed(files, outer.seal.entries, evidence{channel: channelLogs, stream: "sealed", name: "sealed:" + sourceLabel(cur), body: plain}) {
 		parseEvidence(ev, ev.channel == channelLogs, &res)
 	}
 
@@ -555,6 +556,68 @@ func TestUnzipTextCountsWhatItPassedOver(t *testing.T) {
 	}
 	if len(files) != 1 || dropped != 0 {
 		t.Errorf("per-step entries = %d dropped = %d, want 1 and 0", len(files), dropped)
+	}
+}
+
+// A fragment whose envelope is workflow steps rather than lines of one script
+// arrives in as many log files as it had steps, because GitHub writes one file
+// per step. Reading each file as a stream of its own left the marker in the
+// preamble's file and every field an orphan in the next — a run that yielded its
+// whole payload reported as having yielded nothing. The epilogue sits at step 10
+// because that is where ordering by name alone puts the close before the open.
+func TestParseEvidenceEnvelopeSpansAJobsStepFiles(t *testing.T) {
+	files, _, err := unzipText(channelLogs, "logs.zip", harvestZip(t, [][2]string{
+		{"verify/1_Set up job.txt", "Runner name: 'vm-trajan-devops'\n"},
+		{"verify/2_trajan freeform preamble.txt", "trajan-marker=portus-hop3\n"},
+		{"verify/3_runner identity beacon.txt", "trajan-whoami=azureuser\ntrajan-beacon-status=200\n"},
+		{"verify/10_trajan freeform epilogue.txt", "trajan-marker-end=portus-hop3\n"},
+		{"verify/system.txt", "runner diagnostics\n"},
+	}))
+	if err != nil {
+		t.Fatalf("unzipText: %v", err)
+	}
+	res := newHarvestParse()
+	for _, ev := range files {
+		parseEvidence(ev, true, &res)
+	}
+
+	if len(res.fragments) != 1 || !res.fragments[0].Complete {
+		t.Fatalf("fragments = %+v, want one complete", res.fragments)
+	}
+	if res.orphans != 0 || res.rejected != 0 {
+		t.Errorf("orphans = %d rejected = %d, want 0 and 0", res.orphans, res.rejected)
+	}
+	for _, want := range [][2]string{{"whoami", "azureuser"}, {"beacon-status", "200"}} {
+		if !slices.ContainsFunc(res.items, func(it LootItem) bool { return it.Name == want[0] && it.Value == want[1] }) {
+			t.Errorf("%s=%s is not in the loot: %+v", want[0], want[1], res.items)
+		}
+	}
+	if got := classify(res, harvestRead{logs: true, terminal: true}); got != lootYielded {
+		t.Errorf("classification = %s, want %s", got, lootYielded)
+	}
+}
+
+// The envelope spans a job, not an archive. A job that died before its epilogue
+// leaves the fragment open, and adopting the next job's fields into it would
+// report one job's output as another's.
+func TestParseEvidenceEnvelopeDoesNotCrossJobs(t *testing.T) {
+	files, _, err := unzipText(channelLogs, "logs.zip", harvestZip(t, [][2]string{
+		{"cut-off/2_payload.txt", "trajan-marker=M\n"},
+		{"next-job/2_payload.txt", "trajan-whoami=root\n"},
+	}))
+	if err != nil {
+		t.Fatalf("unzipText: %v", err)
+	}
+	res := newHarvestParse()
+	for _, ev := range files {
+		parseEvidence(ev, true, &res)
+	}
+
+	if len(res.fragments) != 1 || res.fragments[0].Complete {
+		t.Fatalf("fragments = %+v, want one incomplete", res.fragments)
+	}
+	if len(res.items) != 0 || res.orphans != 1 {
+		t.Errorf("items = %+v orphans = %d, want none and 1", res.items, res.orphans)
 	}
 }
 
