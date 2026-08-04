@@ -253,6 +253,12 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 		return nil, err
 	}
 	sess.Resumed = resume
+	// A resume inherits the original run's start, so a watch restarted in a new
+	// process still reaches back to the run the first process provoked rather than
+	// opening a window after it had already finished.
+	if resume && opts.prior != nil && opts.prior.StartedAt != "" {
+		sess.StartedAt = parseRecordTime(opts.prior.StartedAt)
+	}
 	sess.KeepCipher = opts.KeepCipher
 	if resume {
 		if err := sameIdentities(opts.prior.Identities, sess); err != nil {

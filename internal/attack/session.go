@@ -43,6 +43,11 @@ type Session struct {
 	// instead of discarding it.
 	KeepCipher bool
 
+	// StartedAt bounds how far back a watch may reach for a run this plan did not
+	// issue. A resumed run keeps the original moment, so a watch restarted in a new
+	// process still reaches the run the first process provoked.
+	StartedAt time.Time
+
 	identities map[string]*identityClient
 	aliases    map[string]string
 	acting     actingContext
@@ -110,6 +115,7 @@ func NewSession(ctx context.Context, p *Plan, planDir string, ledger *Ledger, ex
 		PlanDir:    planDir,
 		Ledger:     ledger,
 		Execute:    execute,
+		StartedAt:  time.Now(),
 		identities: map[string]*identityClient{},
 		aliases:    map[string]string{},
 		extraScope: map[string]string{},

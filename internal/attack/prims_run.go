@@ -305,13 +305,23 @@ func awaitWatch(prev *Provocation, p runAwaitParams) (runWatch, error) {
 	return w, nil
 }
 
-// runObserve watches a run nothing in the plan caused, so it takes its
-// repository from on: and its cursor from the moment the watch starts.
+// runObserve watches a run nothing in the plan caused, so it takes its repository
+// from on: and its window from the start of the run rather than from the moment the
+// watch starts. The run it waits on is commonly concurrent with the step above it —
+// a laundered CI run fires the instant an agent pushes the branch, which is
+// partway through the agent's own run — so a window opened when this step begins
+// asks for a run that has already finished. Widening it costs a larger candidate
+// set, which workflow:, ref: and match: narrow and an ambiguous correlation
+// reports rather than resolves silently.
 func runObserve(ctx context.Context, s *Session, p runObserveParams, in Inputs) (WorkflowRun, error) {
+	since := s.StartedAt
+	if since.IsZero() {
+		since = time.Now()
+	}
 	return watchRun(ctx, s, runWatch{
 		repo:     In[RepoScoped](in, "on").RepoRef(),
 		workflow: p.Workflow,
-		since:    time.Now().Add(-correlationSkew),
+		since:    since.Add(-correlationSkew),
 		ref:      p.Ref,
 		match:    p.Match,
 		timeout:  p.Timeout,
