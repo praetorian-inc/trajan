@@ -184,7 +184,7 @@ type PlanRecord struct {
 
 // Run validates, wires the run directory, and walks the plan once in declaration
 // order. Only a condition that makes the run meaningless — an invalid plan, an
-// unwritable run dir, an unresolvable identity under --execute, a cancelled
+// unwritable run dir, an unresolvable identity under --execute, a canceled
 // context — returns an error; a step that fails is recorded and the walk goes on.
 func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*RunResult, error) {
 	var hard []string

@@ -400,7 +400,7 @@ func (p workflowCommitParams) job() (workflowJob, error) {
 // fire; a plan that measures a different boundary names the events it needs.
 //
 // No permissions: block is emitted unless the plan asked for one. That is
-// deliberate: the repository or organisation default left in force is itself an
+// deliberate: the repository or organization default left in force is itself an
 // observable this tool reports on, and an explicit block would replace it with
 // ours.
 //
@@ -568,7 +568,7 @@ func (p workflowCommitParams) envelopeErrors() []error {
 	}
 
 	for _, k := range slices.Sorted(maps.Keys(p.Permissions)) {
-		// An unrecognised key fails the same way an unrecognised value does — GitHub
+		// An unrecognized key fails the same way an unrecognized value does — GitHub
 		// refuses to parse the document — so it is caught here rather than becoming a
 		// failed run in the customer's audit trail that produces no evidence. The
 		// vocabulary is the one the pipeline normalizes against, because a scope a plan
@@ -618,7 +618,7 @@ func (p workflowCommitParams) permissionScopeErrors() []error {
 			case len(p.Permissions) > 0:
 				errs = append(errs, fmt.Errorf("permissions[%s] is absent, and %s needs %s: %s; specifying any permission sets every unspecified one to none, so this block strips it", req.Scope, b.id, req.Scope, req.Level))
 			case github.OptInOnlyScopes[req.Scope]:
-				errs = append(errs, fmt.Errorf("permissions[%s] is absent, and %s needs %s: %s, which no repository or organisation default ever grants; a job that does not name it explicitly cannot have it", req.Scope, b.id, req.Scope, req.Level))
+				errs = append(errs, fmt.Errorf("permissions[%s] is absent, and %s needs %s: %s, which no repository or organization default ever grants; a job that does not name it explicitly cannot have it", req.Scope, b.id, req.Scope, req.Level))
 			}
 		}
 	}

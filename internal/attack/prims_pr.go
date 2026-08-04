@@ -284,7 +284,7 @@ func prMergeabilityAwait(ctx context.Context, s *Session, p prMergeabilityAwaitP
 	}
 	out.MergeableState = found.MergeableState
 	out.Mergeable = found.Mergeable != nil && *found.Mergeable
-	// Any unrecognised mergeable_state is treated as not clean: the value set is
+	// Any unrecognized mergeable_state is treated as not clean: the value set is
 	// not guaranteed stable, and "not clean" is the safe reading for a gate.
 	out.Clean = found.MergeableState == "clean"
 	out.Computed = found.Mergeable != nil
@@ -916,7 +916,7 @@ func reviewReadBack(s *Session, path, event, commitID, state string, prior []int
 // GitHub's refusal of a user's approval of their own pull request is real but is
 // documented nowhere — not on the reviews endpoint, whose only relevant answers
 // are a bare 403 and a 422 that reads "Validation failed, or the endpoint has been
-// spammed" — so it is not stated here as documented behaviour.
+// spammed" — so it is not stated here as documented behavior.
 func selfReviewGuard(ctx context.Context, s *Session, client github.GitHub, event, author string, pr PullRequest) error {
 	if event != "APPROVE" {
 		return nil

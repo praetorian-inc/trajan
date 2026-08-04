@@ -231,8 +231,11 @@ var (
 	// for. GitHub grants those three to GitHub Actions alone, and no identity class
 	// here records that distinction, so it is GitHub's refusal to make rather than
 	// one to make offline against a principal this side cannot classify.
-	checkStatuses    = []string{"queued", "in_progress", "completed", "waiting", "requested", "pending"}
-	checkConclusions = []string{"action_required", "cancelled", "failure", "neutral", "success", "skipped", "stale", "timed_out"}
+	checkStatuses = []string{"queued", "in_progress", "completed", "waiting", "requested", "pending"}
+	// Compared against what a plan supplies rather than read as prose. GitHub's
+	// conclusion vocabulary uses the British spelling below, so the US one here would
+	// reject the only value the API accepts.
+	checkConclusions = []string{"action_required", "cancelled", "failure", "neutral", "success", "skipped", "stale", "timed_out"} //nolint:misspell // GitHub's own vocabulary, not prose
 )
 
 // checkCreate writes no inverse. A check run cannot be deleted, and patching one
@@ -351,7 +354,7 @@ func checkCreate(ctx context.Context, s *Session, p checkCreateParams, in Inputs
 // error in the customer's audit log that produces no evidence. It also insists the
 // bound identity is the one that will act, because s.Mutate issues as the step's
 // as:, so a plan naming an App under identity: and acting as something else would
-// assert a capability it does not use. An unrecognised class is allowed through:
+// assert a capability it does not use. An unrecognized class is allowed through:
 // the classes GitHub definitely refuses are named here, and a principal this list
 // has not learned about is not one to refuse offline.
 func appIdentityGuard(s *Session, bound Identity) error {

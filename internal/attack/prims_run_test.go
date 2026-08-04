@@ -595,7 +595,7 @@ func TestRepoDispatchRefusesOverLimitPayloadsLocally(t *testing.T) {
 
 // 409 is the only failure the cancel endpoint documents, and a run that finished
 // between the pre-read and the call is the case the step already handles, so it
-// must be recognised however Mutate and the ledger wrapped it. The rest of
+// must be recognized however Mutate and the ledger wrapped it. The rest of
 // runCancel needs a fake API, which internal/github does not expose a hook for.
 func TestCancelConflictIsRecognisedThroughWrapping(t *testing.T) {
 	conflict := &github.GhError{Status: http.StatusConflict, URL: "https://api.github.com/repos/o/r/actions/runs/1/cancel"}

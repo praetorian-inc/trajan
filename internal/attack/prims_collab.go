@@ -206,9 +206,9 @@ type labelAddParams struct {
 	Label string `yaml:"label"`
 }
 
-// labelAdd produces the issue view of what it labelled. The labels endpoint is
+// labelAdd produces the issue view of what it labeled. The labels endpoint is
 // /issues/{n}/labels for a pull request too, and a primitive produces exactly one
-// handle type, so a labelled pull request comes back as the issue it also is —
+// handle type, so a labeled pull request comes back as the issue it also is —
 // IsPull records which it was, and a chain needing the pull request binds the step
 // that opened it.
 func labelAdd(ctx context.Context, s *Session, p labelAddParams, in Inputs) (Issue, error) {

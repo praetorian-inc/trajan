@@ -191,7 +191,7 @@ func coerce(p Param, v any, f Flavor) (any, error) {
 
 // quoteFor is the single decision about how a value reaches the body, so a type
 // added to paramTypes is quoted whether or not its author thought about it. An
-// unrecognised shape is an error rather than a raw interpolation, and the one
+// unrecognized shape is an error rather than a raw interpolation, and the one
 // shape that must not be quoted says so in its own type.
 func quoteFor(f Flavor, v any) (any, error) {
 	switch t := v.(type) {

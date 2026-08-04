@@ -32,7 +32,7 @@ type CatalogView struct {
 	Inputs      []InputView `json:"inputs"`
 }
 
-// CatalogViews serialises the live registry: the prompt source an agent authors
+// CatalogViews serializes the live registry: the prompt source an agent authors
 // plans from. Because it is generated from the registry, it can never describe a
 // primitive that does not exist.
 func CatalogViews() []CatalogView {

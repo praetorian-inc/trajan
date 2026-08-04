@@ -735,9 +735,9 @@ func runCancel(ctx context.Context, s *Session, _ runCancelParams, in Inputs) (W
 	// WorkflowRun that satisfies this same port, and the repository allowlist is no
 	// gate here because it contains that repository by construction — so the
 	// invariant is enforced on the handle: a run this chain did not cause is the
-	// customer's own work, and cancelling it would interrupt their release.
+	// customer's own work, and canceling it would interrupt their release.
 	if !run.Provoked {
-		return run, fmt.Errorf("run %d in %s/%s was observed, not provoked by this plan, so it is not this chain's to cancel: cancelling a run the customer started would interrupt their own work. Only a run correlated by run.await may be cancelled",
+		return run, fmt.Errorf("run %d in %s/%s was observed, not provoked by this plan, so it is not this chain's to cancel: canceling a run the customer started would interrupt their own work. Only a run correlated by run.await may be canceled",
 			run.ID, run.Owner, run.Repo)
 	}
 	client, err := s.Client()
@@ -764,7 +764,7 @@ func runCancel(ctx context.Context, s *Session, _ runCancelParams, in Inputs) (W
 		Path:   fmt.Sprintf("/repos/%s/%s/actions/runs/%d/cancel", run.Owner, run.Repo, run.ID),
 		Target: run.Owner + "/" + run.Repo,
 		Note: "cancellation is cooperative and not instantaneous: if: always() steps, continue-on-error steps " +
-			"and composite post-steps still execute, so a cancelled job is not a job that did nothing",
+			"and composite post-steps still execute, so a canceled job is not a job that did nothing",
 	}); err != nil {
 		if !isConflict(err) {
 			return run, err
@@ -774,7 +774,7 @@ func runCancel(ctx context.Context, s *Session, _ runCancelParams, in Inputs) (W
 		// what that read measured rather than what the status code might have meant. The
 		// step yields no cancellation either way, which is the same outcome the pre-read
 		// above produces for a run that had already finished.
-		reason := fmt.Sprintf("cancelling run %d was refused with 409, the only failure this endpoint documents, and it documents no meaning for it", run.ID)
+		reason := fmt.Sprintf("canceling run %d was refused with 409, the only failure this endpoint documents, and it documents no meaning for it", run.ID)
 		if client != nil {
 			current, readErr := readRun(ctx, client, run.RepoRef(), run.ID)
 			switch {
@@ -792,7 +792,7 @@ func runCancel(ctx context.Context, s *Session, _ runCancelParams, in Inputs) (W
 	// A dry run sent no cancellation, so the handle must not claim a state the run
 	// never reached.
 	if s.Execute {
-		run.Status = "cancelling"
+		run.Status = "canceling"
 	}
 	return run, nil
 }
@@ -840,7 +840,7 @@ func workflowDispatch(ctx context.Context, s *Session, p workflowDispatchParams,
 		raw, _, err := client.Get(ctx, fmt.Sprintf("/repos/%s/%s/actions/workflows/%s", on.Owner, on.Repo, url.PathEscape(file)), nil, false)
 		if readErr := s.SoftRead(err, "read workflow "+file); readErr != nil {
 			// Only a 404 says anything about the customer's repository. A 500, a DNS
-			// failure or a cancelled context says something about the network, and
+			// failure or a canceled context says something about the network, and
 			// asserting a configuration fact from one of those puts a claim in the run
 			// record the run never established.
 			var ghErr *github.GhError

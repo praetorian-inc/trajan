@@ -61,7 +61,7 @@ type stepInfo struct {
 	origin     repoOrigin
 	repoScoped bool
 	// idKind is the credential class an identity-producing step resolves to,
-	// empty when it cannot be known before the run. It is the offline analogue of
+	// empty when it cannot be known before the run. It is the offline analog of
 	// Session.ActingKind, carried forwards like origin so a later step can be held
 	// to a capability boundary GitHub would otherwise answer 403 to.
 	idKind string
@@ -708,7 +708,7 @@ func actingDescription(st *Step) string {
 	return fmt.Sprintf("the identity this step acts as (%s)", st.As)
 }
 
-// actingKindOffline is the offline analogue of Session.ActingKind for one step:
+// actingKindOffline is the offline analog of Session.ActingKind for one step:
 // the class its as: resolves to, or the plan default's when it names none.
 func actingKindOffline(p *Plan, st *Step, info map[string]stepInfo) string {
 	if si, ok := info[st.As]; ok && si.produced == KindIdentity {

@@ -15,7 +15,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// Resume continues a run that stopped — killed mid-watch, cancelled, or stopped
+// Resume continues a run that stopped — killed mid-watch, canceled, or stopped
 // on purpose with --until. Steps the earlier run completed are skipped and their
 // handles rehydrated from the step records; a step that was still waiting picks
 // up its checkpointed cursor, so the watch resumes instead of the provocation

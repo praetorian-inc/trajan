@@ -292,7 +292,7 @@ func TestRateLimitWaitEndsWithTheContext(t *testing.T) {
 	start := time.Now()
 	_, _, err := c.Get(ctx, srv.URL+"/x", nil, false)
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
-		t.Fatalf("the 60s wait outlived the cancelled context: took %v", elapsed)
+		t.Fatalf("the 60s wait outlived the canceled context: took %v", elapsed)
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected a context error once the wait was cut short, got %v", err)

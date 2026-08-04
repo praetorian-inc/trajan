@@ -60,7 +60,7 @@ type InputSpec struct {
 
 // Step is flat: id + uses + as/when + the primitive's own input keys. Keys holds
 // everything the registry disambiguates into ports and fields. quoted records
-// which scalars were YAML-quoted, by path, so the resolver can honour
+// which scalars were YAML-quoted, by path, so the resolver can honor
 // quote-to-force-literal at every depth: a bare word that names a step or input
 // is a reference, but the same spelling quoted is the literal string, inside a
 // files: map or a params: object as much as at the top level.

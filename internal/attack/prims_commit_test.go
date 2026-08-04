@@ -149,7 +149,7 @@ func TestPermissionBlockCannotStripABoundFragmentsScope(t *testing.T) {
 	}
 }
 
-// id-token is never inherited from a repository or organisation default, so a
+// id-token is never inherited from a repository or organization default, so a
 // fragment needing it is unsatisfiable unless the plan spells it out. Without this
 // the run starts, mints nothing, and reports the negative observation as though it
 // were a fact about the target.
@@ -180,7 +180,7 @@ func TestNeverInheritedScopeMustBeExplicit(t *testing.T) {
 	}
 }
 
-// A permissions: key GitHub does not recognise is a document it refuses to parse,
+// A permissions: key GitHub does not recognize is a document it refuses to parse,
 // the same failure an out-of-vocabulary value produces. The near miss is the case
 // worth catching — pull-request is not pull-requests, and a job naming it sets
 // nothing while looking as though it set something — and repository-projects is the

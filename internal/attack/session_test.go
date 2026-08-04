@@ -17,7 +17,7 @@ import (
 )
 
 // unknownOutcomeSession drives Session.Mutate against a test server. The mutation
-// path is a full URL, which the client honours verbatim, so nothing global is
+// path is a full URL, which the client honors verbatim, so nothing global is
 // rewired.
 func unknownOutcomeSession(t *testing.T) (*Session, string) {
 	t.Helper()

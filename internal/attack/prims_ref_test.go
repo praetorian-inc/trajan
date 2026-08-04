@@ -59,7 +59,7 @@ func ledgerOf(s *Session) string {
 // gitRefAPI answers as the two documented endpoints do: GET /git/ref/{ref} is exact
 // or 404, and GET /git/refs/{ref} prefix-matches like matching-refs, so a ref that is
 // absent while a longer one carries its name answers 200 with an array. A DELETE of a
-// ref that is not there is refused, which is what makes an unrecognised absence a
+// ref that is not there is refused, which is what makes an unrecognized absence a
 // failed request in the customer's audit trail.
 func gitRefAPI(existing []string, sent *[]string) http.HandlerFunc {
 	object := func(w http.ResponseWriter, ref, sha string) {
