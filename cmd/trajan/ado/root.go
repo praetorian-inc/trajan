@@ -137,14 +137,14 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
 	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: the run dir)")
 
-	for _, c := range []*cobra.Command{scanCmd, attackCmd, retrieveCmd, collect, run} {
+	for _, c := range []*cobra.Command{scanCmd, collect, run} {
 		c.Flags().String("azure-bearer-token", "", "Azure Entra ID bearer token (or set AZURE_BEARER_TOKEN)")
 	}
 
 	// The phased scan takes over "ado scan"; the legacy scanner stays reachable here.
 	scanCmd.Use = "scan-legacy"
 
-	ado.AddCommand(whoami, enumerateCmd, collect, normalize, scan, reportCmd, run, attackCmd, retrieveCmd, scanCmd)
+	ado.AddCommand(whoami, enumerateCmd, collect, normalize, scan, reportCmd, run, scanCmd)
 	return ado
 }
 

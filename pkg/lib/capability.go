@@ -5,13 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
 	"github.com/praetorian-inc/capability-sdk/pkg/capability"
 	"github.com/praetorian-inc/capability-sdk/pkg/capmodel"
 
-	"github.com/praetorian-inc/trajan/internal/registry"
 	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/praetorian-inc/trajan/pkg/match"
 )
@@ -44,31 +41,7 @@ func (c *SDKCapability) Description() string {
 func (c *SDKCapability) Input() any { return capmodel.Repository{} }
 
 func (c *SDKCapability) Parameters() []capability.Parameter {
-	params := match.DefaultParameters()
-	return append(params,
-		capability.Bool("active_mode", "Enable active attack execution (disabled by default)").
-			WithDefault("false"),
-		capability.Parameter{
-			Name:        "attack_plugins",
-			Description: "Attack plugins to execute",
-			Type:        "[]string",
-			Options:     registry.ListAttackPlugins(),
-		},
-		capability.Bool("dry_run", "Simulate attacks without making changes").
-			WithDefault("true"),
-		capability.Int("attack_timeout", "Timeout in seconds for attack execution").
-			WithDefault("300"),
-		capability.String("c2_repo", "C2 repository for interactive shell and runner-on-runner attacks (e.g., owner/repo)"),
-		capability.String("target_os", "Target runner OS for runner-on-runner attacks").
-			WithOptions("linux", "win", "macos"),
-		capability.String("target_arch", "Target runner architecture for runner-on-runner attacks").
-			WithOptions("x64", "arm64"),
-		capability.String("runner_labels", "Comma-separated runner labels for targeting specific runners"),
-		capability.String("delivery", "Delivery method for AI prompt injection attacks").
-			WithOptions("pr", "issue", "comment"),
-		capability.String("persistence_method", "Persistence method for persistence attacks").
-			WithOptions("workflow", "action", "package"),
-	)
+	return match.DefaultParameters()
 }
 
 func (c *SDKCapability) Match(ctx capability.ExecutionContext, input capmodel.Repository) error {
@@ -81,14 +54,6 @@ var InvokeScanFunc = defaultInvokeScan
 
 func defaultInvokeScan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 	return Scan(ctx, cfg)
-}
-
-// InvokeAttackFunc is the function used by Invoke to perform attack execution.
-// Override in tests to avoid real API calls.
-var InvokeAttackFunc = defaultInvokeAttack
-
-func defaultInvokeAttack(ctx context.Context, cfg AttackConfig) (*AttackResult, error) {
-	return Attack(ctx, cfg)
 }
 
 func (c *SDKCapability) Invoke(ctx capability.ExecutionContext, input capmodel.Repository, output capability.Emitter) error {
@@ -152,90 +117,6 @@ func (c *SDKCapability) Invoke(ctx capability.ExecutionContext, input capmodel.R
 		}); err != nil {
 			return err
 		}
-	}
-
-	// Active attack execution (opt-in, disabled by default)
-	activeMode, _ := ctx.Parameters.GetBool("active_mode")
-	if !activeMode {
-		return nil
-	}
-
-	pluginsStr, _ := ctx.Parameters.GetString("attack_plugins")
-	if pluginsStr == "" {
-		slog.Warn("trajan: active_mode enabled but no plugins specified", "repo", input.URL)
-		return nil
-	}
-
-	dryRun, _ := ctx.Parameters.GetBool("dry_run")
-	timeoutSec, _ := ctx.Parameters.GetInt("attack_timeout")
-	if timeoutSec <= 0 {
-		timeoutSec = 300
-	}
-
-	plugins := strings.Split(pluginsStr, ",")
-	for i := range plugins {
-		plugins[i] = strings.TrimSpace(plugins[i])
-	}
-
-	// Collect plugin-specific options
-	extraOpts := make(map[string]string)
-	pluginOptKeys := []string{"c2_repo", "target_os", "target_arch", "runner_labels", "delivery", "persistence_method"}
-	for _, key := range pluginOptKeys {
-		if v, ok := ctx.Parameters.GetString(key); ok && v != "" {
-			extraOpts[key] = v
-		}
-	}
-	// Map persistence_method to the "method" key expected by the persistence plugin
-	if v, ok := extraOpts["persistence_method"]; ok {
-		extraOpts["method"] = v
-		delete(extraOpts, "persistence_method")
-	}
-
-	attackResult, err := InvokeAttackFunc(context.Background(), AttackConfig{
-		Platform:  platformName,
-		Token:     token,
-		BaseURL:   baseURL,
-		Org:       input.Org,
-		Repo:      input.Name,
-		Plugins:   plugins,
-		DryRun:    dryRun,
-		Timeout:   time.Duration(timeoutSec) * time.Second,
-		ExtraOpts: extraOpts,
-	})
-	if err != nil {
-		return fmt.Errorf("trajan attack %s/%s: %w", input.Org, input.Name, err)
-	}
-
-	for _, attackErr := range attackResult.Errors {
-		slog.Warn("trajan: attack warning", "error", attackErr, "repo", input.URL)
-	}
-
-	successCount := 0
-	for _, ar := range attackResult.Results {
-		if !ar.Success {
-			continue
-		}
-		successCount++
-		riskName := fmt.Sprintf("cicd-attack-%s", ar.Plugin)
-		proof, _ := json.MarshalIndent(ar, "", "  ")
-		if err := output.Emit(capmodel.Risk{
-			Name:       riskName,
-			Status:     TriageHigh,
-			Target:     input,
-			TargetName: input.URL,
-			Source:     "trajan",
-			Proof:      proof,
-		}); err != nil {
-			return err
-		}
-	}
-
-	if len(attackResult.Errors) > 0 && successCount == 0 {
-		errMsgs := make([]string, len(attackResult.Errors))
-		for i, e := range attackResult.Errors {
-			errMsgs[i] = e.Error()
-		}
-		return fmt.Errorf("trajan: all attack plugins failed: %s", strings.Join(errMsgs, "; "))
 	}
 
 	return nil
