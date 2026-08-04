@@ -16,7 +16,8 @@ import (
 
 func init() {
 	Register(Spec{
-		Name: "deployment.pending.list",
+		Name:   "deployment.pending.list",
+		Action: "read pending deployments",
 		Summary: "Read which environments are blocking a waiting run, who may release each one, and whether the acting " +
 			"identity may. current_user_can_approve beside the run's triggering actor is the measurement a configuration " +
 			"flag cannot give: the account that caused the deployment is also allowed to release it.",
@@ -25,7 +26,8 @@ func init() {
 	}, deploymentPendingList)
 
 	Register(Spec{
-		Name: "deployment.review",
+		Name:   "deployment.review",
+		Action: "review deployment",
 		Summary: "Approve or reject named environments of a waiting run. Observing is the default — every environment an " +
 			"approval releases must be named here, never derived — because releasing one pushes a real deployment.",
 		Ports: []Port{Accepts[PendingDeployment]("on", true)},

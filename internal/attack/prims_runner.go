@@ -13,7 +13,8 @@ import (
 
 func init() {
 	Register(Spec{
-		Name: "runner.list",
+		Name:   "runner.list",
+		Action: "list self-hosted runners",
 		Summary: "List the self-hosted runners a repository or an organization registers, with the labels an operator " +
 			"assigned kept apart from the ones configuration applies, whether each registered as ephemeral, their " +
 			"online/busy state and their runner group.",

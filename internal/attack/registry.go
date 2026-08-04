@@ -43,7 +43,12 @@ func Accepts[T Handle](name string, required bool) Port {
 }
 
 type Spec struct {
-	Name     string
+	Name string
+	// Action is the imperative the run log shows in place of Name: "create branch"
+	// rather than "ref.create". It lives beside the code that issues the request so
+	// it cannot drift from it, and it is deliberately not derived from Summary,
+	// whose first clause reads as documentation rather than as a line of a log.
+	Action   string
 	Summary  string
 	Ports    []Port
 	Caps     []Capability

@@ -18,6 +18,7 @@ import (
 func init() {
 	Register(Spec{
 		Name:       "comment.create",
+		Action:     "post comment",
 		Summary:    "Post a comment on an issue or a pull request.",
 		Ports:      []Port{Accepts[Commentable]("on", true)},
 		Caps:       []Capability{CapIssues},
@@ -28,6 +29,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "comment.delete",
+		Action:     "delete comment",
 		Summary:    "Delete a comment.",
 		Ports:      []Port{Accepts[Comment]("comment", true)},
 		Caps:       []Capability{CapIssues},
@@ -36,7 +38,8 @@ func init() {
 	}, commentDelete)
 
 	Register(Spec{
-		Name: "label.add",
+		Name:   "label.add",
+		Action: "add label",
 		Summary: "Add an existing label to a pull request or an issue. The labeled event fires immediately, " +
 			"which is the trigger a plan measuring on: pull_request: types: [labeled] is after.",
 		Ports:      []Port{Accepts[Commentable]("on", true)},
@@ -48,6 +51,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "issue.open",
+		Action:     "open issue",
 		Summary:    "Open an issue — the cheapest comment target for the injection chain.",
 		Ports:      []Port{Accepts[Repo]("repo", true)},
 		Caps:       []Capability{CapIssues},

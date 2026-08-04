@@ -14,7 +14,8 @@ import (
 
 func init() {
 	Register(Spec{
-		Name: "repo.fork",
+		Name:   "repo.fork",
+		Action: "fork repository",
 		Summary: "Fork a repository into an attacker-controlled owner to obtain a writable low-trust head. Needs " +
 			"administration:write on the source alongside contents:read, and a GitHub App must be installed on the " +
 			"destination account with access to all repositories and on the source account with access to the source.",
@@ -28,7 +29,8 @@ func init() {
 	}, repoFork)
 
 	Register(Spec{
-		Name: "repo.create",
+		Name:   "repo.create",
+		Action: "create repository",
 		Summary: "Create a private repository the run owns, to establish what a credential reaches through an " +
 			"organization it is only a member of — a runner group whose visibility is all, most of all. Needs " +
 			"administration:write on the organization and its members_can_create_private_repositories setting, " +
@@ -40,6 +42,7 @@ func init() {
 
 	Register(Spec{
 		Name:        "repo.delete",
+		Action:      "delete repository",
 		Summary:     "Delete a repository this run created — the inverse of repo.fork.",
 		Ports:       []Port{Accepts[RepoScoped]("repo", true)},
 		Caps:        []Capability{CapDeleteRepo},

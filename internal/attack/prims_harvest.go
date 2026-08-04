@@ -82,6 +82,7 @@ const harvestBasis = "the payload's marker envelope: a fragment opens with traja
 func init() {
 	Register(Spec{
 		Name:       "run.harvest",
+		Action:     "harvest evidence",
 		Summary:    "Read a completed run's evidence from one channel and classify the result; decrypts when the plan sets encryption:.",
 		Ports:      []Port{Accepts[WorkflowRun]("on", true)},
 		OriginFrom: "on",

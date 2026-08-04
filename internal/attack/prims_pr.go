@@ -19,6 +19,7 @@ import (
 func init() {
 	Register(Spec{
 		Name:       "pr.open",
+		Action:     "open pull request",
 		Summary:    "Open a pull request from a head ref — same-repo or cross-fork — into a base branch.",
 		Ports:      []Port{Accepts[WritableRef]("head", true), Accepts[RepoScoped]("base", true)},
 		Caps:       []Capability{CapPullRequests},
@@ -30,6 +31,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "pr.close",
+		Action:     "close pull request",
 		Summary:    "Close a pull request.",
 		Ports:      []Port{Accepts[PullRequest]("pr", true)},
 		Caps:       []Capability{CapPullRequests},
@@ -39,6 +41,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "pr.review.await",
+		Action:     "await review",
 		Summary:    "Block until a review decision — an approval or a change request — arrives on a pull request, checkpointing the poll cursor.",
 		Ports:      []Port{Accepts[PullRequest]("on", true)},
 		OriginFrom: "on",
@@ -46,6 +49,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "pr.merge.await",
+		Action:     "await pull request merge",
 		Summary:    "Block until a pull request reaches a terminal merged or closed state.",
 		Ports:      []Port{Accepts[PullRequest]("on", true)},
 		OriginFrom: "on",
@@ -53,6 +57,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "pr.mergeability.await",
+		Action:     "await mergeability",
 		Summary:    "Poll until GitHub has computed a pull request's mergeability and required-check state.",
 		Ports:      []Port{Accepts[PullRequest]("on", true)},
 		OriginFrom: "on",
@@ -60,6 +65,7 @@ func init() {
 
 	Register(Spec{
 		Name:        "pr.merge",
+		Action:      "merge pull request",
 		Summary:     "Merge a pull request via the API with an expected-head SHA guard.",
 		Ports:       []Port{Accepts[PullRequest]("pr", true), Accepts[Commit]("expected", false)},
 		Caps:        []Capability{CapContentsWrite},
@@ -70,6 +76,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "pr.review.state",
+		Action:     "read review state",
 		Summary:    "Read a pull request's aggregate review decision and per-review staleness in one record.",
 		Ports:      []Port{Accepts[PullRequest]("on", true)},
 		OriginFrom: "on",
@@ -77,6 +84,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "pr.review.submit",
+		Action:     "submit review",
 		Summary:    "Submit a review — APPROVE, REQUEST_CHANGES or COMMENT — against a specific commit of a PR.",
 		Ports:      []Port{Accepts[PullRequest]("pr", true), Accepts[Commit]("commit", false)},
 		Caps:       []Capability{CapPullRequests},

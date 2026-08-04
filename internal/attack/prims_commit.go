@@ -18,6 +18,7 @@ import (
 func init() {
 	Register(Spec{
 		Name:       "commit.code",
+		Action:     "commit code",
 		Summary:    "Commit non-workflow source onto a writable ref via the Git Data API, including deletions, renames and staged payload fragments.",
 		Ports:      []Port{Accepts[WritableRef]("on", true), Accepts[Commit]("expect", false)},
 		Caps:       []Capability{CapContentsWrite},
@@ -28,6 +29,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "workflow.commit",
+		Action:     "commit workflow",
 		Summary:    "Commit a workflow document (and any workspace files it needs) onto a branch; trigger:, runs_on:, permissions:, environment:, needs:, timeout_minutes: and secrets: shape the job envelope a workflow_steps fragment cannot emit for itself.",
 		Ports:      []Port{Accepts[WritableRef]("on", true), Accepts[Commit]("expect", false)},
 		Caps:       []Capability{CapContentsWrite, CapWorkflow},

@@ -15,7 +15,8 @@ import (
 
 func init() {
 	Register(Spec{
-		Name: "cache.poison",
+		Name:   "cache.poison",
+		Action: "poison cache entry",
 		Summary: "Record the Actions cache entry a job this chain committed will write, under the key and ref scope a " +
 			"later run restores. It issues no request — the write lands from inside the job — and the record is what " +
 			"gives cleanup and the finding a name for the entry.",
@@ -27,7 +28,8 @@ func init() {
 	}, cachePoison)
 
 	Register(Spec{
-		Name: "cache.delete",
+		Name:   "cache.delete",
+		Action: "delete cache entry",
 		Summary: "Delete one cache entry by id — mandatory cleanup for a poisoned entry. It never deletes by key prefix: " +
 			"the prefix is shared with the customer's real caches by construction.",
 		Ports:      []Port{Accepts[CacheEntry]("cache", true)},

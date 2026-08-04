@@ -69,11 +69,13 @@ const correlationBasis = "heuristic: the workflow file path, a created-after cur
 func init() {
 	Register(Spec{
 		Name:    "run.await",
+		Action:  "await workflow run",
 		Summary: "Correlate the immediately-preceding provocation to its workflow run and poll it to a terminal state.",
 	}, runAwait)
 
 	Register(Spec{
 		Name:       "run.observe",
+		Action:     "watch for workflow run",
 		Summary:    "Poll for a workflow run the plan did not cause — a human comment, a laundered CI run, a workflow_run cascade.",
 		Ports:      []Port{Accepts[RepoScoped]("on", true)},
 		OriginFrom: "on",
@@ -81,6 +83,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "run.cancel",
+		Action:     "cancel workflow run",
 		Summary:    "Cancel an in-flight run — blast-radius control and deliberate race-losing.",
 		Ports:      []Port{Accepts[WorkflowRun]("run", true)},
 		Caps:       []Capability{CapActionsWrite},
@@ -90,6 +93,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "workflow.dispatch",
+		Action:     "dispatch workflow",
 		Summary:    "Fire workflow_dispatch against a chosen ref with inputs — the cleanest on-demand execution channel.",
 		Ports:      []Port{Accepts[RepoScoped]("on", true)},
 		Caps:       []Capability{CapActionsWrite},
@@ -99,6 +103,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "repo.dispatch",
+		Action:     "dispatch repository event",
 		Summary:    "Fire repository_dispatch with an arbitrary client_payload against the default-branch workflows.",
 		Ports:      []Port{Accepts[RepoScoped]("on", true)},
 		Caps:       []Capability{CapContentsWrite},

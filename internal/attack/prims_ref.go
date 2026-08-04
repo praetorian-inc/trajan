@@ -11,6 +11,7 @@ import (
 func init() {
 	Register(Spec{
 		Name:       "ref.create",
+		Action:     "create branch",
 		Summary:    "Create a branch ref from a start ref.",
 		Ports:      []Port{Accepts[WritableRef]("on", true)},
 		Caps:       []Capability{CapContentsWrite},
@@ -26,6 +27,7 @@ func init() {
 	// a chain has any business deleting.
 	Register(Spec{
 		Name:       "ref.delete",
+		Action:     "delete branch",
 		Summary:    "Delete a branch this chain created — cleanup inverse, and an attack step where deletion is unprotected.",
 		Ports:      []Port{Accepts[Branch]("ref", true)},
 		Caps:       []Capability{CapContentsWrite},
@@ -39,6 +41,7 @@ func init() {
 	// comes from the commit being pointed at.
 	Register(Spec{
 		Name:       "ref.update",
+		Action:     "move branch",
 		Summary:    "Point a ref at a commit — the mutable-ref primitive and the stale-approval TOCTOU mechanism.",
 		Ports:      []Port{Accepts[Commit]("to", true)},
 		Caps:       []Capability{CapContentsWrite},

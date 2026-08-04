@@ -15,6 +15,7 @@ import (
 func init() {
 	Register(Spec{
 		Name:       "pr.list",
+		Action:     "find pull request",
 		Summary:    "Find an open pull request the chain can reuse instead of opening one.",
 		Ports:      []Port{Accepts[Repo]("repo", true)},
 		OriginFrom: "repo",
@@ -22,6 +23,7 @@ func init() {
 
 	Register(Spec{
 		Name:       "issue.list",
+		Action:     "find issue",
 		Summary:    "Find an existing issue to use as a comment target.",
 		Ports:      []Port{Accepts[Repo]("repo", true)},
 		OriginFrom: "repo",
@@ -29,22 +31,26 @@ func init() {
 
 	Register(Spec{
 		Name:    "identity.resolve",
+		Action:  "resolve identity",
 		Summary: "Resolve a credential from env or the identity store into a typed identity, classifying its token class.",
 	}, identityResolve)
 
 	Register(Spec{
 		Name:    "repo.resolve",
+		Action:  "resolve repository",
 		Summary: "Resolve an owner/name pair into a Repo handle, reading the metadata every downstream port needs.",
 	}, repoResolve)
 
 	Register(Spec{
-		Name: "org.resolve",
+		Name:   "org.resolve",
+		Action: "resolve organization",
 		Summary: "Resolve an organization named directly by owner:, gated on the plan's orgs: allowlist — " +
 			"a separate list from scope:, because an organization names no repository.",
 	}, orgResolve)
 
 	Register(Spec{
 		Name:       "repo.writable",
+		Action:     "confirm write access",
 		Summary:    "Assert and produce write access to a repository the plan did not create, without going through a fork.",
 		Ports:      []Port{Accepts[Repo]("repo", true)},
 		OriginFrom: "repo",

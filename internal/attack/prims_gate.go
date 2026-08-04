@@ -16,7 +16,8 @@ import (
 
 func init() {
 	Register(Spec{
-		Name: "status.create",
+		Name:   "status.create",
+		Action: "create commit status",
 		Summary: "Post a commit status under a chosen context. It attaches to a SHA, not to a branch or a pull request, " +
 			"and it is not a check run: a required check of the same name is not satisfied by a status, nor the reverse.",
 		Ports:      []Port{Accepts[Repo]("repo", true), Accepts[Commit]("commit", true)},
@@ -26,7 +27,8 @@ func init() {
 	}, statusCreate)
 
 	Register(Spec{
-		Name: "check.create",
+		Name:   "check.create",
+		Action: "create check run",
 		Summary: "Create a check run on a commit — the gate a required status check cannot express. Only a GitHub App " +
 			"installation token with checks:write can, which is why identity: is a port; status: defaults to completed " +
 			"and conclusion: to success, the outcome a merge gate reads as satisfied.",
