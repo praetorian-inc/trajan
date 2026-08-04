@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/dsl"
 )
 
 // ValidationWarning is a non-fatal diagnostic. It is returned in the same slice
@@ -383,11 +385,20 @@ var whenRefRe = regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_-]*)\.[a-zA-Z0-9_.]+`)
 // A bare word inside a predicate is not a literal — it is a read — so a typo'd
 // path would otherwise evaluate false, skip the step and everything under it, and
 // report the gate's negative case as though it had been measured.
+//
+// The gate must also be a predicate the evaluator can decide. A path with no
+// operator — `merged.merged` for `merged.merged == true` — is not a truthiness
+// test but a string the evaluator refuses, and it refuses it at the step, which
+// on a chain that mutates is after the mutations above it have landed.
 func validateWhen(st *Step, prior map[string]bool, info map[string]stepInfo) []error {
 	if st.When == "" {
 		return nil
 	}
 	var errs []error
+	if !dsl.ValidPredicate(st.When) {
+		errs = append(errs, fmt.Errorf("%s: when: %q carries no operator, so there is nothing to compare; a gate is a predicate (%s == true), never a bare path",
+			stepLabel(st), st.When, st.When))
+	}
 	for _, m := range whenRefRe.FindAllStringSubmatch(stripSingleQuoted(st.When), -1) {
 		id, path := m[1], strings.TrimPrefix(m[0], m[1]+".")
 		if !prior[id] {

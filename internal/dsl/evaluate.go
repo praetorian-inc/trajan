@@ -40,6 +40,15 @@ var operators = []operator{
 	{" in ", "in"},
 }
 
+// ValidPredicate reports whether a predicate carries an operator, and so whether
+// EvaluatePredicate can decide it at all. It exists so a caller holding the text
+// before it holds a subject — a plan validated offline — can refuse the same
+// string the evaluator would, rather than discovering it mid-run.
+func ValidPredicate(predicate string) bool {
+	_, _, _, ok := splitPredicate(predicate)
+	return ok
+}
+
 // EvaluatePredicate evaluates one bare predicate ("field == 'x'") against a
 // decoded subject. It is the single operator set shared by detection where: and
 // attack when:.

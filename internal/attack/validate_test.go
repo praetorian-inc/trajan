@@ -161,6 +161,13 @@ steps:
 	if !hasSubstr(errs, `step "merge"`) {
 		t.Fatalf("the error must name the step whose gate is broken, got %v", errs)
 	}
+
+	// A path with no operator is not a truthiness test — the evaluator has nothing
+	// to compare and refuses the string. It refuses it at the step, which on a
+	// chain that mutates is after the steps above it have already landed.
+	if errs := hardErrs(plan("survived.review_decision")); !hasSubstr(errs, "carries no operator") {
+		t.Fatalf("want a gate with no operator refused offline, got %v", errs)
+	}
 }
 
 // The seal is applied to the job envelope, so a plan that attaches only
