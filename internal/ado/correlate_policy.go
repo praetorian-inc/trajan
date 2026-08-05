@@ -6,13 +6,13 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// Normalized policy_type display names (the collected policy type friendly names).
+// ADO's friendly policy-type names, which is what the normalized records carry.
 const (
 	minReviewersType    = "Minimum number of reviewers"
 	buildValidationType = "Build"
 )
 
-// Git-namespace ACL action names (see the Git Repositories security namespace).
+// Action names from the Git Repositories security namespace.
 const (
 	actContribute       = "GenericContribute"
 	actEditPolicies     = "EditPolicies"
@@ -20,11 +20,9 @@ const (
 	actBypassPRComplete = "PullRequestBypassPolicy" // Bypass policies when completing PRs
 )
 
-// deriveBranchAccessEdges emits the cat-06 permission edges — CAN_PUSH_TO
-// (unreviewed write, schema §5), CAN_MERGE_VIA_PR (its gated complement), and
-// CAN_BYPASS (an explicit Git-namespace bypass grant, fanned out per governed
-// BranchPolicy). Sources are the repo's Contribute/bypass grants; the
-// HAS_POLICY/BranchPolicy premises are kept, not replaced.
+// CAN_PUSH_TO is unreviewed write, CAN_MERGE_VIA_PR its gated complement, and
+// CAN_BYPASS an explicit Git-namespace bypass grant. These are added alongside the
+// HAS_POLICY/BranchPolicy premises they are derived from, never in place of them.
 func deriveBranchAccessEdges(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer) error {
 	branches, err := loadRecords(prior, "10-normalize/branches")
 	if err != nil {
@@ -81,8 +79,8 @@ func deriveBranchAccessEdges(prior engine.PriorPhase, cp engine.CurrentPhase, ti
 					return err
 				}
 			}
-			// the gated complement: a blocking review policy exists, so the same
-			// contributor can still land code through a PR (trivially if self-approval).
+			// A blocking review policy exists, so the same contributor can still land code
+			// through a PR — trivially where self-approval counts.
 			if gov.blockingMinReviewers != nil {
 				mergeVia := []string{"reviewed_pr"}
 				if entBool(mMap(gov.blockingMinReviewers, "settings")["creator_vote_counts"]) {
@@ -133,8 +131,8 @@ func governingPolicies(edges []map[string]any, polByConfig map[int64]map[string]
 	return g
 }
 
-// branchWeaknesses returns the branch-scoped CAN_PUSH_TO via variants (independent
-// of the principal) — the ways an unreviewed push lands despite the policies.
+// The via variants that hold for the branch itself, independent of any principal:
+// the ways an unreviewed push lands despite the policies.
 func branchWeaknesses(g govPolicies) []string {
 	var via []string
 	if !g.anyBlocking {
@@ -173,8 +171,8 @@ func emitBranchEdge(cp engine.CurrentPhase, timer *engine.PhaseTimer, kind, edge
 	return emit(cp, timer, engine.NormalizeADOEdges(kind, hashKey(edgeKind, desc, mStr(b, "_id"))), rec)
 }
 
-// deriveCanBypass emits one CAN_BYPASS edge per (bypass-holding principal,
-// governed BranchPolicy) — the intentional per-policy fan-out (schema §5).
+// One edge per (bypass-holding principal, governed BranchPolicy): the per-policy
+// fan-out is intentional, not a missing dedup.
 func deriveCanBypass(cp engine.CurrentPhase, timer *engine.PhaseTimer, hasPolicy []map[string]any, polByConfig map[int64]map[string]any, repoIDByName map[string]string, repoGrants repoGrantIndex) error {
 	seen := map[string]bool{}
 	for _, e := range hasPolicy {

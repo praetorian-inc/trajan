@@ -18,9 +18,8 @@ import (
 	"github.com/praetorian-inc/trajan/internal/finding"
 )
 
-// RuleSourceBase is the "<repo>/blob/<ref>" prefix that turns an embedded rule
-// path into a browsable URL. Overridable at build time (-ldflags) to pin a
-// release ref; set to "" to omit rule.url entirely.
+// Turns an embedded rule path into a browsable URL. Overridable at build time
+// (-ldflags) to pin a release ref; "" omits rule.url entirely.
 var RuleSourceBase = "https://github.com/praetorian-inc/trajan/blob/main"
 
 type Block struct {
@@ -48,10 +47,8 @@ func (b *Block) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// MarshalJSON mirrors UnmarshalYAML so a Block round-trips into the finding's
-// rule.dsl as authored: a scalar predicate becomes a bare string, a combo
-// becomes {all_of|any_of|none_of}. Value receiver so non-pointer []Block
-// elements serialize the same way.
+// Mirrors UnmarshalYAML so a Block round-trips into the finding's rule.dsl as
+// authored. Value receiver so non-pointer []Block elements serialize the same way.
 func (b Block) MarshalJSON() ([]byte, error) {
 	if !b.IsCombo {
 		return json.Marshal(b.Predicate)
@@ -75,9 +72,8 @@ type ChainOf struct {
 	Where   *Block `yaml:"where" json:"where,omitempty"`
 }
 
-// RuleDSL is the matching logic carried in a finding's rule.dsl: the subject
-// plus whichever of where/chain_of applies. No metadata (title/severity/...),
-// which lives at the finding's top level.
+// A finding's rule.dsl: matching logic only. Metadata (title/severity/...) lives at
+// the finding's top level.
 type RuleDSL struct {
 	Subject string   `json:"subject,omitempty"`
 	Where   *Block   `json:"where,omitempty"`
@@ -97,8 +93,8 @@ type Rule struct {
 	Evidence        []string `yaml:"evidence"`
 	RemediationHint string   `yaml:"remediation_hint"`
 
-	// Carried as the raw string so this package stays provider-generic: the
-	// platform that understands the target vocabulary parses it.
+	// Raw string so this package stays provider-generic: the platform that
+	// understands the target vocabulary parses it.
 	Graph string `yaml:"graph"`
 
 	RuleFile string `yaml:"-"`
@@ -114,11 +110,9 @@ func (r *Rule) SubjectKind() string {
 	return r.Subject
 }
 
-// LoadRules walks a platform's rule subtree (detection-rules/<subtree>) and
-// returns its parsed rules, sorted by path for deterministic ordering. A rule
-// that cannot be used — bad YAML, no id, no where/chain_of — is skipped and
-// reported to onError rather than failing the load, so one broken file cannot
-// zero out detection. Only IO is fatal.
+// Rules come back sorted by path for deterministic ordering. An unusable rule — bad
+// YAML, no id, no where/chain_of — is skipped and reported to onError so one broken
+// file cannot zero out detection; only IO is fatal.
 func LoadRules(subtree string, onError func(error)) ([]Rule, error) {
 	skip := func(err error) {
 		if onError != nil {
@@ -252,10 +246,9 @@ func hash12(s string) string {
 	return fmt.Sprintf("%x", sum)[:12]
 }
 
-// BuildFinding maps a matched subject into a canonical finding. org is the run's
-// scope (threaded from scan); it backfills finding.Org for subjects that don't
-// carry their own owner (job records don't), and is ignored when they do. runDir
-// resolves the collected YAML for the code snippet; pass "" to skip it.
+// org, the run's scope, backfills finding.Org only for subjects that don't carry
+// their own owner, as job records don't. runDir resolves the collected YAML for the
+// code snippet; pass "" to skip it.
 func BuildFinding(p Provider, rule *Rule, subject map[string]any, kind, org, runDir string) finding.Finding {
 	evidence := make([]string, 0, len(rule.Evidence))
 	for _, tmpl := range rule.Evidence {
@@ -315,10 +308,9 @@ func ruleURL(ruleFile string) string {
 	return RuleSourceBase + "/internal/detection-rules/" + ruleFile
 }
 
-// buildProvenance carries the structured values that back the rendered evidence
-// — the subject fields the evidence templates referenced — plus a pointer to the
-// collected input(s) the subject came from. The raw template lives in the rule
-// (rule.url), so it isn't repeated here.
+// The structured values behind the rendered evidence — the subject fields the
+// templates referenced — plus a pointer to the collected input(s) the subject came
+// from. The template itself lives in the rule, so it isn't repeated here.
 func buildProvenance(rule *Rule, subject map[string]any) map[string]any {
 	prov := map[string]any{}
 	for _, tmpl := range rule.Evidence {
@@ -355,8 +347,7 @@ func buildProvenance(rule *Rule, subject map[string]any) map[string]any {
 	return prov
 }
 
-// StringField reads a string field from a normalized record, "" if absent or
-// non-string. Exported so platform Providers can read subject fields.
+// "" when the key is absent or not a string. Exported for platform Providers.
 func StringField(m map[string]any, key string) string {
 	if s, ok := m[key].(string); ok {
 		return s

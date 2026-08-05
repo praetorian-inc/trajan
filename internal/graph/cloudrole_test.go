@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// callerEdge is a reusable-callgraph row: caller job -> shared-workflows/deploy.yml
-// carrying the inputs that call site passed.
 func callerEdge(repo, roleARN string) map[string]any {
 	return map[string]any{
 		"caller": map[string]any{"_id": repo + "__deploy__deploy", "repo": repo,
@@ -56,10 +54,9 @@ func cloudRoleIDs(n *nodeSet) []string {
 	return out
 }
 
-// A reusable callee names its role "${{ inputs.role-arn }}"; only the call site
-// knows the literal. One caller resolves it; two callers passing different
-// values leave it unresolvable, because picking either would assert a role the
-// other caller's deployment never assumes.
+// A reusable callee names its role "${{ inputs.role-arn }}" and only the call site knows
+// the literal. One caller resolves it; two passing different values leave it unresolvable,
+// because picking either asserts a role the other caller's deployment never assumes.
 func TestCloudRoleResolvesThroughCallerInputsAndDropsDisputedOnes(t *testing.T) {
 	const arn = "arn:aws:iam::929514686768:role/portus-payments-api-deploy"
 

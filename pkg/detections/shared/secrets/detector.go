@@ -1,4 +1,3 @@
-// modules/trajan/pkg/detections/shared/secrets/detector.go
 package secrets
 
 import (
@@ -8,7 +7,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/detections/shared"
 )
 
-// Detector detects potential secret exposure patterns
 type Detector struct {
 	patterns []secretPattern
 }
@@ -19,7 +17,6 @@ type secretPattern struct {
 	confidence detections.Confidence
 }
 
-// New creates a new secrets detector
 func New() *Detector {
 	return &Detector{
 		patterns: []secretPattern{
@@ -67,7 +64,6 @@ func New() *Detector {
 	}
 }
 
-// DetectSecretPattern checks if a string might expose secrets
 func (d *Detector) DetectSecretPattern(value string) []shared.SecretMatch {
 	var matches []shared.SecretMatch
 
@@ -84,5 +80,4 @@ func (d *Detector) DetectSecretPattern(value string) []shared.SecretMatch {
 	return matches
 }
 
-// Ensure Detector implements shared.SecretDetector
 var _ shared.SecretDetector = (*Detector)(nil)

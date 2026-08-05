@@ -89,7 +89,6 @@ func runListPipelinesAzDO() error {
 		return enc.Encode(result)
 
 	case "csv":
-		// Pipelines
 		headers := []string{"Type", "ID", "Name", "Folder", "Path"}
 		var rows [][]string
 		for _, p := range pipelines {

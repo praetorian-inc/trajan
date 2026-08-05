@@ -64,7 +64,7 @@ func TestRun_FirstErrorCancels(t *testing.T) {
 			return 0, wantErr
 		}
 		// Block on ctx so non-failing goroutines unwind on cancel rather than racing
-		// to completion, which would make the out!=nil assertion flaky.
+		// to completion, which would make the nil-out assertion flaky.
 		select {
 		case <-ctx.Done():
 			return 0, ctx.Err()
@@ -176,9 +176,8 @@ func TestRunPartial_RecoversPanic(t *testing.T) {
 	}
 }
 
-// A panicking item with onError == nil must be dropped silently, exactly like
-// a returned error is in TestRunPartial_NilOnError — the recovered value must
-// never propagate as a panic out of RunPartial itself.
+// A panicking item with onError == nil must be dropped silently, exactly like a
+// returned error, and must never propagate as a panic out of RunPartial itself.
 func TestRunPartial_NilOnErrorPanic(t *testing.T) {
 	items := []int{1, 2, 3}
 	out := RunPartial(context.Background(), 2, items,

@@ -19,15 +19,12 @@ func init() {
 	})
 }
 
-// Detection detects when CI/CD secrets/variables are accessible in merge request pipelines
-// without protected branch restrictions
 type Detection struct {
 	base.BaseDetection
 	secretKeywords []string
 	varPattern     *regexp.Regexp
 }
 
-// New creates a new merge-request-secrets-exposure detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection(
@@ -45,16 +42,13 @@ func New() *Detection {
 			"credentials",
 			"credential",
 		},
-		// Match GitLab CI variables like $VAR or ${VAR}
 		varPattern: regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?`),
 	}
 }
 
-// Detect analyzes the graph for secrets exposed in merge request pipelines
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
-	// Get all workflow nodes
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
@@ -68,31 +62,24 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			continue
 		}
 
-		// Check if workflow triggers on merge requests
 		if !common.HasMergeRequestTrigger(wf, g) {
 			continue
 		}
 
-		// DFS to find jobs and steps that access secrets
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			job, ok := node.(*graph.JobNode)
 			if !ok {
 				return true
 			}
 
-			// Skip if job is restricted to protected branches only
 			if common.IsProtectedBranchOnly(job) {
 				return true
 			}
 
-			// Check if job runs on merge request trigger
-			// Jobs without If conditions inherit the workflow's trigger context
-			// Only check jobs that explicitly mention MR events OR have no If condition (inherit from workflow)
 			if !common.JobRunsOnMR(job, wf, g) {
 				return true
 			}
 
-			// Collect ALL sensitive variables from ALL steps in this job
 			var allSensitiveVars []string
 			var firstStep *graph.StepNode
 			seen := make(map[string]bool)
@@ -111,7 +98,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 					firstStep = step
 				}
 
-				// Collect sensitive variables from this step
 				sensitiveVars := d.findSensitiveVariables(step.Run)
 				for _, varName := range sensitiveVars {
 					if !seen[varName] {
@@ -123,7 +109,7 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 				return true
 			})
 
-			// Create ONE finding per job with all exposed variables
+			// One finding per job, not per step.
 			if len(allSensitiveVars) > 0 && firstStep != nil {
 				finding := d.createFinding(g, job, firstStep, allSensitiveVars)
 				findings = append(findings, finding)
@@ -136,12 +122,10 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// findSensitiveVariables finds sensitive variable references in a script
 func (d *Detection) findSensitiveVariables(script string) []string {
 	var sensitiveVars []string
 	seen := make(map[string]bool)
 
-	// Find all variable references
 	matches := d.varPattern.FindAllStringSubmatch(script, -1)
 	for _, match := range matches {
 		if len(match) < 2 {
@@ -153,7 +137,6 @@ func (d *Detection) findSensitiveVariables(script string) []string {
 			continue
 		}
 
-		// Check if variable name contains sensitive keywords
 		if d.isSensitiveVariable(varName) {
 			sensitiveVars = append(sensitiveVars, varName)
 			seen[varName] = true
@@ -163,7 +146,6 @@ func (d *Detection) findSensitiveVariables(script string) []string {
 	return sensitiveVars
 }
 
-// isSensitiveVariable checks if a variable name contains sensitive keywords
 func (d *Detection) isSensitiveVariable(varName string) bool {
 	varLower := strings.ToLower(varName)
 
@@ -176,22 +158,17 @@ func (d *Detection) isSensitiveVariable(varName string) bool {
 	return false
 }
 
-// createFinding creates a finding for secrets exposed in an MR pipeline
 func (d *Detection) createFinding(g *graph.Graph, job *graph.JobNode, step *graph.StepNode, exposedVars []string) detections.Finding {
 	wf := common.GetJobParentWorkflow(g, job)
 	if wf == nil {
-		// Fallback to empty workflow info if parent not found
 		wf = &graph.WorkflowNode{}
 	}
-	// Build enhanced evidence message
 	varList := strings.Join(exposedVars, ", ")
 	evidence := fmt.Sprintf("Job '%s' runs on merge_request trigger and accesses sensitive variables (%s) without protected branch restrictions. ", job.Name, varList)
 	evidence += fmt.Sprintf("External attackers can submit malicious merge requests that modify this job to exfiltrate %d secrets.", len(exposedVars))
 
-	// Build attack chain
 	attackChain := detections.BuildChainFromNodes(wf, job, step)
 
-	// Create line ranges
 	var lineRanges []detections.LineRange
 	if job.Line > 0 {
 		lineRanges = append(lineRanges, detections.LineRange{
@@ -208,7 +185,6 @@ func (d *Detection) createFinding(g *graph.Graph, job *graph.JobNode, step *grap
 		})
 	}
 
-	// Build metadata
 	metadata := make(map[string]interface{})
 	metadata["exposedSecrets"] = exposedVars
 	metadata["secretCount"] = len(exposedVars)

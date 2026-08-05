@@ -16,19 +16,16 @@ func init() {
 	})
 }
 
-// Detection detects overly permissive pipeline permissions in Jenkins
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new permissions detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("permissions", "jenkins", detections.SeverityMedium),
 	}
 }
 
-// overlyBroadPermValues contains permission values that indicate excessive access
 var overlyBroadPermValues = map[string][]string{
 	"admin":       {"true"},
 	"all":         {"write", "true"},
@@ -36,8 +33,6 @@ var overlyBroadPermValues = map[string][]string{
 	"build":       {"admin"},
 }
 
-// broadConditionKeywords contains keywords in job conditions that indicate
-// overly broad permission grants
 var broadConditionKeywords = []string{
 	"org-admin",
 	"admin-access",
@@ -46,7 +41,6 @@ var broadConditionKeywords = []string{
 	"unrestricted",
 }
 
-// Detect finds overly permissive pipeline permissions in the workflow graph
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
@@ -76,7 +70,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// hasOverlyBroadPermissions checks if a job has overly permissive permissions
 func (d *Detection) hasOverlyBroadPermissions(job *graph.JobNode) bool {
 	for key, value := range job.Permissions {
 		lowerKey := strings.ToLower(key)
@@ -93,7 +86,6 @@ func (d *Detection) hasOverlyBroadPermissions(job *graph.JobNode) bool {
 	return false
 }
 
-// hasBroadCondition checks if a job condition contains broad permission keywords
 func (d *Detection) hasBroadCondition(job *graph.JobNode) bool {
 	lowerIf := strings.ToLower(job.If)
 	for _, keyword := range broadConditionKeywords {
@@ -104,7 +96,6 @@ func (d *Detection) hasBroadCondition(job *graph.JobNode) bool {
 	return false
 }
 
-// createFinding creates a finding for excessive permissions
 func (d *Detection) createFinding(wf *graph.WorkflowNode, job *graph.JobNode) detections.Finding {
 	evidence := job.If
 	if evidence == "" && len(job.Permissions) > 0 {

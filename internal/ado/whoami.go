@@ -50,10 +50,9 @@ func WhoAmI(ctx context.Context, org, token string) error {
 	}
 
 	reachable := map[string]bool{}
-	// Reachability is the HTTP status, never list emptiness: an org with zero
-	// variable groups is reachable, a PAT denied them is not. A hard failure
-	// (transport, exhausted 5xx/429 retries) proves nothing either way, so it warns
-	// rather than silently reading as a missing scope.
+	// Reachability is the HTTP status, never list emptiness: an org with zero variable
+	// groups is reachable, a PAT denied them is not. A hard failure proves nothing
+	// either way, so it warns rather than reading as a missing scope.
 	mark := func(name string, status int, err error) {
 		switch {
 		case err != nil:
@@ -62,7 +61,7 @@ func WhoAmI(ctx context.Context, org, token string) error {
 			reachable[name] = true
 		}
 	}
-	// Only the status is wanted, so ask for one item and don't page the list.
+	// Only the status matters, so ask for one item and don't page.
 	probe := func(name, host, api, p string) {
 		_, status, err := softGet(ctx, cl, host, api, p, url.Values{"$top": {"1"}})
 		mark(name, status, err)

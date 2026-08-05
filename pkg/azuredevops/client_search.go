@@ -6,8 +6,6 @@ import (
 	"net/url"
 )
 
-// SearchCode searches for code across repositories in a project
-// API: POST https://almsearch.dev.azure.com/{org}/{project}/_apis/search/codesearchresults?api-version=7.1-preview.1
 func (c *Client) SearchCode(ctx context.Context, projectNameOrID string, req CodeSearchRequest) (*CodeSearchResult, error) {
 	search := c.SearchClient()
 	encodedProject := url.PathEscape(projectNameOrID)
@@ -20,8 +18,6 @@ func (c *Client) SearchCode(ctx context.Context, projectNameOrID string, req Cod
 	return &result, nil
 }
 
-// SearchCodeOrg searches for code across all projects in the organization
-// API: POST https://almsearch.dev.azure.com/{org}/_apis/search/codesearchresults?api-version=7.1-preview.1
 func (c *Client) SearchCodeOrg(ctx context.Context, req CodeSearchRequest) (*CodeSearchResult, error) {
 	search := c.SearchClient()
 	path := fmt.Sprintf("/_apis/search/codesearchresults?api-version=%s", APIVersion)

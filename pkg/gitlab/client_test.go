@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestClient_GetProject tests fetching a single project
 func TestClient_GetProject(t *testing.T) {
 	mockProject := Project{
 		ID:                1234,
@@ -34,12 +33,10 @@ func TestClient_GetProject(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Note: r.URL.Path is automatically decoded by httptest server
-		// We encode "owner/test-project" as "owner%2Ftest-project" but it appears decoded here
+		// httptest decodes the path, so the encoded "owner%2Ftest-project" arrives split.
 		assert.Equal(t, "/api/v4/projects/owner/test-project", r.URL.Path)
 		assert.Equal(t, "GET", r.Method)
 
-		// Verify authentication header (GitLab uses PRIVATE-TOKEN)
 		assert.NotEmpty(t, r.Header.Get("PRIVATE-TOKEN"))
 
 		w.Header().Set("Content-Type", "application/json")
@@ -64,7 +61,6 @@ func TestClient_GetProject(t *testing.T) {
 	assert.Equal(t, "owner", project.Namespace.Name)
 }
 
-// TestClient_ListGroupProjects tests listing projects in a group
 func TestClient_ListGroupProjects(t *testing.T) {
 	mockProjects := []Project{
 		{
@@ -110,7 +106,6 @@ func TestClient_ListGroupProjects(t *testing.T) {
 	assert.Equal(t, "private", projects[1].Visibility)
 }
 
-// TestClient_GetWorkflowFile tests fetching .gitlab-ci.yml
 func TestClient_GetWorkflowFile(t *testing.T) {
 	mockContent := `stages:
   - build
@@ -134,7 +129,6 @@ test:
 		assert.Equal(t, "main", r.URL.Query().Get("ref"))
 
 		w.Header().Set("Content-Type", "application/json")
-		// GitLab returns base64-encoded content
 		response := map[string]string{
 			"content": mockContent,
 		}
@@ -153,12 +147,11 @@ test:
 	assert.Contains(t, string(content), "npm install")
 }
 
-// TestClient_RateLimitHandling tests rate limit header parsing
 func TestClient_RateLimitHandling(t *testing.T) {
 	mockProject := Project{ID: 1, Name: "test"}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Set GitLab rate limit headers (NO X- prefix!)
+		// GitLab omits the X- prefix on these headers.
 		w.Header().Set("RateLimit-Limit", "2000")
 		w.Header().Set("RateLimit-Remaining", "1500")
 		w.Header().Set("RateLimit-Reset", "1735776000") // 2025-01-02 00:00:00 UTC
@@ -174,12 +167,10 @@ func TestClient_RateLimitHandling(t *testing.T) {
 	_, err := client.GetProject(ctx, "owner/test")
 	require.NoError(t, err)
 
-	// Verify rate limiter was updated
 	assert.Equal(t, 2000, client.rateLimiter.Limit())
 	assert.Equal(t, 1500, client.rateLimiter.Remaining())
 }
 
-// TestClient_429RateLimitRetry tests automatic retry on 429 with Retry-After header
 func TestClient_429RateLimitRetry(t *testing.T) {
 	mockProject := Project{ID: 1, Name: "test"}
 	requestCount := 0
@@ -187,15 +178,13 @@ func TestClient_429RateLimitRetry(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
 
-		// Return 429 on first 2 requests
 		if requestCount <= 2 {
-			w.Header().Set("Retry-After", "1") // 1 second
+			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Write([]byte(`{"message": "Rate limited"}`))
 			return
 		}
 
-		// Return success on 3rd request
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(mockProject)
 	}))
@@ -204,12 +193,11 @@ func TestClient_429RateLimitRetry(t *testing.T) {
 	client := NewClient(server.URL, "test-token")
 	ctx := context.Background()
 
-	// Should succeed after retries
 	project, err := client.GetProject(ctx, "owner/test")
 	require.NoError(t, err)
 	require.NotNil(t, project)
 
-	// Verify it retried (3 requests total: 2 failures + 1 success)
+	// 2 failures + 1 success.
 	assert.Equal(t, 3, requestCount)
 	assert.Equal(t, 1, project.ID)
 }
@@ -240,7 +228,6 @@ func TestRetryAfterSeconds(t *testing.T) {
 	}
 }
 
-// TestClient_429RetryAfterHeader tests parsing of Retry-After header
 func TestClient_429RetryAfterHeader(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -290,21 +277,18 @@ func TestClient_429RetryAfterHeader(t *testing.T) {
 			assert.Equal(t, 2, requestCount)
 
 			if tt.expectWait {
-				// Should have waited at least some time
 				assert.Greater(t, elapsed.Milliseconds(), int64(500))
 			}
 		})
 	}
 }
 
-// TestClient_429MaxRetries tests retry limit to prevent infinite loops
 func TestClient_429MaxRetries(t *testing.T) {
 	requestCount := 0
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
 
-		// Always return 429
 		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(http.StatusTooManyRequests)
 		w.Write([]byte(`{"message": "Rate limited"}`))
@@ -314,16 +298,14 @@ func TestClient_429MaxRetries(t *testing.T) {
 	client := NewClient(server.URL, "test-token")
 	ctx := context.Background()
 
-	// Should fail after max retries
 	_, err := client.GetProject(ctx, "owner/test")
 	require.Error(t, err)
 
-	// Should have tried exactly 3 times (initial + 2 retries = max 3 attempts)
+	// initial attempt + 2 retries.
 	assert.Equal(t, 3, requestCount)
 	assert.Contains(t, err.Error(), "429")
 }
 
-// TestGetProjectMember tests fetching project member access level
 func TestGetProjectMember(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/v4/projects/123/members/all/456", r.URL.Path)
@@ -362,8 +344,6 @@ func TestClient_GetJobTrace_410Gone(t *testing.T) {
 	assert.Empty(t, trace)
 }
 
-// TestClient_GetTemplate_Caching tests that GetTemplate caches the project ID
-// to avoid redundant GetProject calls for each template fetch
 func TestClient_GetTemplate_Caching(t *testing.T) {
 	getProjectCallCount := 0
 	getFileCallCount := 0
@@ -388,16 +368,13 @@ build:
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		// Track GetProject calls
 		if r.URL.Path == "/api/v4/projects/gitlab-org/gitlab" {
 			getProjectCallCount++
 			json.NewEncoder(w).Encode(mockProject)
 			return
 		}
 
-		// Track GetWorkflowFile calls for templates
-		// The path will look like /api/v4/projects/278964/repository/files/lib/gitlab/ci/templates/Docker.gitlab-ci.yml
-		// Note: httptest.NewServer auto-decodes URL paths, so we check for decoded path
+		// httptest decodes the path, so match on the decoded form.
 		if strings.Contains(r.URL.Path, "/repository/files/lib/gitlab/ci/templates/") {
 			getFileCallCount++
 			assert.Equal(t, "master", r.URL.Query().Get("ref"))
@@ -418,7 +395,6 @@ build:
 	client := NewClient(server.URL, "test-token")
 	ctx := context.Background()
 
-	// Fetch 3 different templates
 	templates := []string{"Docker.gitlab-ci.yml", "Nodejs.gitlab-ci.yml", "Python.gitlab-ci.yml"}
 
 	for _, templateName := range templates {
@@ -428,15 +404,11 @@ build:
 		assert.Contains(t, string(content), "stages:")
 	}
 
-	// CRITICAL: GetProject should be called only ONCE (cached), not 3 times
 	assert.Equal(t, 1, getProjectCallCount, "GetProject should be called only once due to caching")
 
-	// But GetWorkflowFile should be called 3 times (once per template)
 	assert.Equal(t, 3, getFileCallCount, "GetWorkflowFile should be called for each template")
 }
 
-// TestClient_GetTemplate_ConcurrentCaching tests thread-safety of template project caching
-// Ensures lazy initialization works correctly when multiple goroutines fetch templates simultaneously
 func TestClient_GetTemplate_ConcurrentCaching(t *testing.T) {
 	getProjectCallCount := 0
 	var mu sync.Mutex
@@ -455,7 +427,7 @@ func TestClient_GetTemplate_ConcurrentCaching(t *testing.T) {
 			mu.Lock()
 			getProjectCallCount++
 			mu.Unlock()
-			// Add small delay to increase chance of race condition if locking is broken
+			// Widen the race window so broken locking shows up.
 			time.Sleep(10 * time.Millisecond)
 			json.NewEncoder(w).Encode(mockProject)
 			return
@@ -474,7 +446,6 @@ func TestClient_GetTemplate_ConcurrentCaching(t *testing.T) {
 	client := NewClient(server.URL, "test-token")
 	ctx := context.Background()
 
-	// Launch 10 concurrent template fetches
 	const numGoroutines = 10
 	var wg sync.WaitGroup
 	wg.Add(numGoroutines)
@@ -490,8 +461,7 @@ func TestClient_GetTemplate_ConcurrentCaching(t *testing.T) {
 
 	wg.Wait()
 
-	// With proper locking, GetProject should be called exactly once
-	// Without locking, it could be called multiple times
+	// Correct locking fetches the project exactly once.
 	mu.Lock()
 	count := getProjectCallCount
 	mu.Unlock()
@@ -499,7 +469,6 @@ func TestClient_GetTemplate_ConcurrentCaching(t *testing.T) {
 	assert.Equal(t, 1, count, "GetProject should be called exactly once even with concurrent access")
 }
 
-// BenchmarkGetTemplate_WithCaching benchmarks template fetching with caching enabled
 func BenchmarkGetTemplate_WithCaching(b *testing.B) {
 	mockProject := Project{
 		ID:                278964,
@@ -529,11 +498,9 @@ func BenchmarkGetTemplate_WithCaching(b *testing.B) {
 	client := NewClient(server.URL, "test-token")
 	ctx := context.Background()
 
-	// Reset the timer to exclude setup time
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		// Fetch different templates to simulate real usage
 		templateName := fmt.Sprintf("Template-%d.gitlab-ci.yml", i%5)
 		_, err := client.GetTemplate(ctx, templateName)
 		if err != nil {
@@ -542,8 +509,6 @@ func BenchmarkGetTemplate_WithCaching(b *testing.B) {
 	}
 }
 
-// TestClient_APIErrorTyped verifies that doRequest returns a typed *APIError
-// on non-2xx responses, enabling callers to use errors.As for structured inspection.
 func TestClient_APIErrorTyped(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -555,20 +520,16 @@ func TestClient_APIErrorTyped(t *testing.T) {
 	_, err := client.GetProject(context.Background(), "owner/missing")
 	require.Error(t, err)
 
-	// Error must be inspectable as *APIError through the wrapping chain
 	var apiErr *APIError
 	require.True(t, errors.As(err, &apiErr), "expected *APIError in chain, got: %T — %v", err, err)
 	assert.Equal(t, 404, apiErr.StatusCode)
 	assert.Contains(t, apiErr.Body, "404 Project Not Found")
 
-	// Helper must work
 	assert.True(t, IsNotFoundError(err))
 	assert.False(t, IsPermissionError(err))
 }
 
-// TestClient_APIErrorTyped_WriteMethod verifies that doRequestWithBody (POST/PUT/DELETE) returns
-// a typed *APIError on non-2xx responses, enabling callers to use errors.As for structured inspection.
-// This tests the POST path (CreateCommit -> postJSON -> doRequestWithBody).
+// Exercises the POST path: CreateCommit -> postJSON -> doRequestWithBody.
 func TestClient_APIErrorTyped_WriteMethod(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -587,7 +548,6 @@ func TestClient_APIErrorTyped_WriteMethod(t *testing.T) {
 	_, err := client.CreateCommit(context.Background(), 123, "test-branch", actions, "Test commit")
 	require.Error(t, err)
 
-	// Error must be inspectable as *APIError through the wrapping chain
 	var apiErr *APIError
 	require.True(t, errors.As(err, &apiErr), "expected *APIError in chain, got: %T — %v", err, err)
 	assert.Equal(t, 404, apiErr.StatusCode)

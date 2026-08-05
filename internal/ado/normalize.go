@@ -15,10 +15,6 @@ type projectMeta struct {
 	Name string
 }
 
-// Normalize turns the raw collected JSON (00-collect) into structural node/edge
-// records (10-normalize) per the ADO security-graph ontology. This is the
-// structural pass: nodes, collected edges, and the three settings-resolution
-// joins. Derived/attack (taint) edges are a later pass.
 func Normalize(ctx context.Context, runDir string) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
@@ -80,10 +76,9 @@ func emit(cp engine.CurrentPhase, timer *engine.PhaseTimer, rel string, rec any)
 	return nil
 }
 
-// Per-project surface files are keyed by the sanitized name, not the true name.
-// collect writes the whole org roster but only fans out to the scoped project,
-// so a scoped run must re-apply that filter here or it emits project subjects
-// whose detail was never collected.
+// collect writes the whole org roster but fans out only to the scoped project, so a
+// scoped run must re-apply that filter or it emits project subjects whose detail was
+// never collected.
 func projects(prior engine.PriorPhase, org, only string) []projectMeta {
 	var out []projectMeta
 	for _, raw := range entLoadList(prior, engine.CollectADOProjects(org)) {

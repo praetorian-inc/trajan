@@ -50,13 +50,11 @@ func runListProjectsAzureDevOps(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// List projects
 	projects, err := client.ListProjects(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Render based on output format
 	switch enumOutput {
 	case "json":
 		enc := json.NewEncoder(os.Stdout)

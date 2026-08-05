@@ -1,4 +1,3 @@
-// pkg/scanner/executor.go
 package scanner
 
 import (
@@ -16,26 +15,23 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// DetectionExecutor orchestrates plugin execution across workflows
 type DetectionExecutor struct {
 	plugins          []detections.Detection
 	concurrency      int64
 	cache            *ScanResultCache
-	metadata         map[string]interface{} // Platform-level context (runners, etc.) — flows into per-workflow graphs
-	instanceMetadata map[string]interface{} // Instance-level context (e.g., jenkins_client) — only used for instance-level detections
-	mu               sync.Mutex             // Protects workflows map updates
+	metadata         map[string]interface{} // flows into every per-workflow graph
+	instanceMetadata map[string]interface{} // instance-level detections only, never a workflow graph
+	mu               sync.Mutex             // guards discoveredWorkflows writes
 }
 
-// ExecutionResult contains findings and any errors encountered
 type ExecutionResult struct {
 	Findings []detections.Finding
 	Errors   []error
 }
 
-// NewDetectionExecutor creates a new plugin executor with the given plugins
 func NewDetectionExecutor(plugins []detections.Detection, concurrency int) *DetectionExecutor {
 	if concurrency <= 0 {
-		concurrency = 10 // Default from Chariot convention
+		concurrency = 10
 	}
 	return &DetectionExecutor{
 		plugins:     plugins,
@@ -44,7 +40,6 @@ func NewDetectionExecutor(plugins []detections.Detection, concurrency int) *Dete
 	}
 }
 
-// SetMetadata sets platform-level context that will be passed to all graphs
 func (e *DetectionExecutor) SetMetadata(key string, value interface{}) {
 	if e.metadata == nil {
 		e.metadata = make(map[string]interface{})
@@ -52,8 +47,7 @@ func (e *DetectionExecutor) SetMetadata(key string, value interface{}) {
 	e.metadata[key] = value
 }
 
-// SetInstanceMetadata sets instance-level context used only for instance-level detections.
-// Unlike SetMetadata, values set here do NOT flow into per-workflow graphs.
+// Unlike SetMetadata, these values never reach a per-workflow graph.
 func (e *DetectionExecutor) SetInstanceMetadata(key string, value interface{}) {
 	if e.instanceMetadata == nil {
 		e.instanceMetadata = make(map[string]interface{})
@@ -61,7 +55,6 @@ func (e *DetectionExecutor) SetInstanceMetadata(key string, value interface{}) {
 	e.instanceMetadata[key] = value
 }
 
-// Execute runs all plugins against workflows and returns findings with any errors
 func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]platforms.Workflow) (*ExecutionResult, error) {
 	g, gCtx := errgroup.WithContext(ctx)
 	sem := semaphore.NewWeighted(e.concurrency)
@@ -72,19 +65,17 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 		Errors:   make([]error, 0),
 	}
 
-	// Collect workflows discovered via include directives into a separate map.
-	// This prevents goroutines from writing to the same map that the range loop
-	// below is iterating, which would be a data race.
+	// A separate map: goroutines must never write the workflows map that the
+	// range loop below is iterating.
 	discoveredWorkflows := make(map[string][]platforms.Workflow)
 
 	for repoSlug, wfs := range workflows {
-		repoSlug := repoSlug // Capture loop variable
+		repoSlug := repoSlug
 		wfs := wfs
 
 		for _, wf := range wfs {
 			wf := wf
 
-			// Acquire semaphore before spawning goroutine
 			if err := sem.Acquire(gCtx, 1); err != nil {
 				return result, err
 			}
@@ -93,7 +84,6 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 				defer sem.Release(1)
 				defer func() {
 					if r := recover(); r != nil {
-						// Safety net: catch any panics that slip through
 						panicErr := fmt.Errorf("panic in workflow execution for %s: %v", repoSlug, r)
 						mu.Lock()
 						result.Errors = append(result.Errors, panicErr)
@@ -104,7 +94,6 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 					}
 				}()
 
-				// Check cache before executing
 				if e.cache != nil {
 					if cached, ok := e.cache.Get(repoSlug, wf.Path, string(wf.Content)); ok {
 						mu.Lock()
@@ -116,7 +105,6 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 
 				findings, errs := e.executeOnWorkflow(gCtx, repoSlug, wf, discoveredWorkflows)
 
-				// Store in cache
 				if e.cache != nil {
 					e.cache.Set(repoSlug, wf.Path, string(wf.Content), findings)
 				}
@@ -126,7 +114,6 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 				result.Errors = append(result.Errors, errs...)
 				mu.Unlock()
 
-				// Log errors as warnings
 				for _, err := range errs {
 					slog.Warn("workflow execution error", "error", err)
 				}
@@ -140,16 +127,13 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 		return result, err
 	}
 
-	// Merge included workflows discovered during scanning into the caller's
-	// workflows map. Done after g.Wait() so there are no concurrent readers
-	// or writers — the earlier range loop at the top of Execute was iterating
-	// this same map, which is why goroutines must not touch it directly.
+	// After g.Wait(): the range loop above iterated this same map, so nothing
+	// may mutate it while the goroutines are live.
 	for slug, wfs := range discoveredWorkflows {
 		workflows[slug] = append(workflows[slug], wfs...)
 	}
 
-	// Run instance-level detections (e.g., Jenkins live detections that only
-	// need platform metadata, not parsed workflow content).
+	// Instance-level detections need only platform metadata, not parsed workflows.
 	if len(e.instanceMetadata) > 0 {
 		instanceGraph := graph.NewGraph()
 		for k, v := range e.instanceMetadata {
@@ -168,16 +152,13 @@ func (e *DetectionExecutor) Execute(ctx context.Context, workflows map[string][]
 	return result, nil
 }
 
-// executeOnWorkflow returns findings and any errors encountered.
-// Included workflows discovered via include directives are written into
-// discoveredWorkflows (under e.mu) rather than the caller's map, so the
-// range loop in Execute never races with these goroutine writes.
+// Include-directive discoveries go into discoveredWorkflows under e.mu, never
+// the caller's map, which Execute's range loop is still iterating.
 func (e *DetectionExecutor) executeOnWorkflow(ctx context.Context, repoSlug string, wf platforms.Workflow, discoveredWorkflows map[string][]platforms.Workflow) ([]detections.Finding, []error) {
 	var findings []detections.Finding
 	var errs []error
 
-	// Merge executor metadata with workflow-specific metadata
-	// Workflow metadata (e.g., gitlab_client) takes precedence
+	// Workflow metadata (e.g. gitlab_client) overrides executor metadata.
 	mergedMetadata := make(map[string]interface{})
 	for k, v := range e.metadata {
 		mergedMetadata[k] = v
@@ -193,9 +174,6 @@ func (e *DetectionExecutor) executeOnWorkflow(ctx context.Context, repoSlug stri
 		return nil, []error{fmt.Errorf("building graph for %s/%s: %w", repoSlug, wf.Path, err)}
 	}
 
-	// Record any workflows pulled in by include directives. Written into a
-	// shared discovery map under e.mu; the caller merges these into the
-	// user-visible workflows map after all goroutines complete.
 	includedWorkflows := gr.GetIncludedWorkflows(repoSlug)
 	if len(includedWorkflows) > 0 {
 		e.mu.Lock()
@@ -209,7 +187,7 @@ func (e *DetectionExecutor) executeOnWorkflow(ctx context.Context, repoSlug stri
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					// Capture panic as an error - don't crash the scan
+					// One panicking plugin must not sink the scan.
 					errs = append(errs, fmt.Errorf("plugin %s on %s/%s: panic: %v", plugin.Name(), repoSlug, wf.Path, r))
 					slog.Warn("plugin panic recovered",
 						"plugin", plugin.Name(),

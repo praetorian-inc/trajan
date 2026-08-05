@@ -27,11 +27,9 @@ type corpus struct {
 	dirs   map[string][]record
 	chains map[string]map[string]any
 
-	// trueBranch maps "<full repo>\x00<slug>" to the unslugged branch name, and
-	// to "" where two branches share a slug ("feat/a" and "feat__a"). BranchSlug
-	// is not injective, so a job record's slugged branch can only be recovered
-	// against branches the chain layer actually observed, and where the recovery
-	// is ambiguous the caller must degrade rather than name one of the two.
+	// Maps "<full repo>\x00<slug>" to the unslugged branch name, and to "" where two
+	// branches share a slug ("feat/a" and "feat__a"). BranchSlug is not injective, so
+	// an ambiguous slug must make the caller degrade rather than name one of the two.
 	trueBranch map[string]string
 
 	// seen is what 10-normalize offered, files is what parsed; the difference is
@@ -40,9 +38,8 @@ type corpus struct {
 	files int
 }
 
-// loadCorpus reads every 10-normalize record once. chains/indices is skipped:
-// it re-keys data the primary records already carry, and its filenames embed
-// raw ${{ }} expressions.
+// chains/indices is skipped: it re-keys data the primary records already carry, and
+// its filenames embed raw ${{ }} expressions.
 func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError func(error)) (*corpus, error) {
 	all, err := engine.PriorPhase{RunDir: runDir}.IterJSON(normalizeDir)
 	if err != nil {
@@ -116,8 +113,8 @@ func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError 
 	return c, nil
 }
 
-// full qualifies a bare repo name. Every identity property that names a
-// repository holds "owner/repo" so joins survive a second org being scanned.
+// Every identity property naming a repository holds "owner/repo", so joins survive
+// a second org being scanned.
 func (c *corpus) full(repo string) string {
 	if repo == "" {
 		return ""
@@ -125,8 +122,6 @@ func (c *corpus) full(repo string) string {
 	return c.org + "/" + repo
 }
 
-// repoNames returns the bare repo names of the org's repository records, in
-// record order, optionally filtered on the record's own fields.
 func (c *corpus) repoNames(keep func(map[string]any) bool) []string {
 	out := make([]string, 0, len(c.dirs["repos"]))
 	for _, r := range c.dirs["repos"] {
@@ -148,9 +143,8 @@ func (c *corpus) chainSource(file, key string) string {
 	return "chains/" + file + ".json#" + key
 }
 
-// secretScopeKey canonicalizes the scope a secret lives in. It is built from the
-// record's own repo/environment fields, never by splitting the "__"-slugged
-// scope_key, which is ambiguous.
+// The canonical scope is built from the record's own repo/environment fields, never
+// by splitting the "__"-slugged scope_key, which is ambiguous.
 func (c *corpus) secretScopeKey(f map[string]any) string {
 	switch str(f["scope"]) {
 	case "org":
@@ -167,8 +161,7 @@ func (c *corpus) secretScopeKey(f map[string]any) string {
 	return ""
 }
 
-// runnerScopeKey qualifies a runner's scope the way secretScopeKey does: repo
-// runner ids are a per-repository sequence, so an unqualified scope_key would
+// Repo runner ids are a per-repository sequence, so an unqualified scope_key would
 // collapse every repo's first runner onto one node.
 func (c *corpus) runnerScopeKey(f map[string]any) string {
 	switch str(f["scope"]) {

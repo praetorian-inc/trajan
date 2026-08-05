@@ -1,4 +1,3 @@
-// pkg/platforms/jfrog/tokenprobe/prober.go
 package tokenprobe
 
 import (
@@ -12,27 +11,24 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/jfrog"
 )
 
-// JFrogClient defines the interface required by TokenProber from client.go
+// Satisfied by *jfrog.Client.
 type JFrogClient interface {
 	GetUser(ctx context.Context) (*jfrog.User, error)
 	GetSystemInfo(ctx context.Context) (map[string]interface{}, error)
 	Get(ctx context.Context, path string) (*http.Response, error)
 }
 
-// JFrogPlatform defines the interface required from Platform methods
 type JFrogPlatform interface {
 	ExtractRemoteRepoCredentials(ctx context.Context) ([]jfrog.RemoteRepoCredentials, error)
 	GetLDAPConfig(ctx context.Context) ([]jfrog.LDAPSetting, error)
 	ScanBuildsForSecrets(ctx context.Context, limit int) ([]jfrog.BuildSecret, error)
 }
 
-// TokenProber probes JFrog token capabilities via API calls
 type TokenProber struct {
 	client   JFrogClient
 	platform JFrogPlatform
 }
 
-// NewProber creates a new JFrog token prober
 func NewProber(client JFrogClient, platform JFrogPlatform) *TokenProber {
 	return &TokenProber{
 		client:   client,
@@ -40,7 +36,6 @@ func NewProber(client JFrogClient, platform JFrogPlatform) *TokenProber {
 	}
 }
 
-// Probe enumerates the capabilities of the configured token
 func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 	result := &ProbeResult{
 		Capabilities:       make([]Capability, 0),
@@ -52,7 +47,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		AddOns:             make([]string, 0),
 	}
 
-	// Step 1: Validate token by getting user info
 	user, err := p.client.GetUser(ctx)
 	if err != nil {
 		result.Valid = false
@@ -69,7 +63,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 	}
 	result.IsAdmin = user.Admin
 
-	// Step 2: Get system info (version, license, addons)
 	sysInfo, err := p.client.GetSystemInfo(ctx)
 	if err == nil {
 		if version, ok := sysInfo["version"].(string); ok {
@@ -87,12 +80,10 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		}
 	}
 
-	// Step 3: Probe resources concurrently
 	var mu sync.Mutex
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(10)
 
-	// List repositories
 	g.Go(func() error {
 		repos, err := p.listRepositories(gctx)
 		if err == nil && len(repos) > 0 {
@@ -101,7 +92,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 			result.RepositoryCount = len(repos)
 			result.Repositories = repos
 
-			// Count by type
 			for _, repo := range repos {
 				result.RepositoriesByType[repo.Type]++
 			}
@@ -110,7 +100,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		return nil
 	})
 
-	// List builds
 	g.Go(func() error {
 		builds, err := p.listBuilds(gctx)
 		if err == nil && len(builds) > 0 {
@@ -123,7 +112,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		return nil
 	})
 
-	// List users (admin only)
 	g.Go(func() error {
 		_, err := p.listUsers(gctx)
 		if err == nil {
@@ -134,7 +122,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		return nil
 	})
 
-	// List groups
 	g.Go(func() error {
 		groups, err := p.listGroups(gctx)
 		if err == nil && len(groups) > 0 {
@@ -146,7 +133,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		return nil
 	})
 
-	// List permissions
 	g.Go(func() error {
 		perms, err := p.listPermissions(gctx)
 		if err == nil && len(perms) > 0 {
@@ -158,7 +144,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		return nil
 	})
 
-	// Check LDAP config (admin only)
 	g.Go(func() error {
 		_, err := p.platform.GetLDAPConfig(gctx)
 		if err == nil {
@@ -169,13 +154,11 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		return nil
 	})
 
-	// Remote repo credentials
 	g.Go(func() error {
 		creds, _ := p.platform.ExtractRemoteRepoCredentials(gctx)
 		if len(creds) > 0 {
 			mu.Lock()
 			result.addCapability(CapabilityRemoteCredentials)
-			// Check if any have credentials
 			for _, cred := range creds {
 				if cred.HasCreds {
 					result.HasRemoteCredentials = true
@@ -187,7 +170,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		return nil
 	})
 
-	// Scan builds for secrets
 	g.Go(func() error {
 		secrets, _ := p.platform.ScanBuildsForSecrets(gctx, 5)
 		if len(secrets) > 0 {
@@ -203,7 +185,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 	return result, nil
 }
 
-// listRepositories retrieves all repositories
 func (p *TokenProber) listRepositories(ctx context.Context) ([]Repository, error) {
 	resp, err := p.client.Get(ctx, "/api/repositories")
 	if err != nil {
@@ -232,7 +213,6 @@ func (p *TokenProber) listRepositories(ctx context.Context) ([]Repository, error
 	return repos, nil
 }
 
-// listBuilds retrieves build names
 func (p *TokenProber) listBuilds(ctx context.Context) ([]string, error) {
 	resp, err := p.client.Get(ctx, "/api/build")
 	if err != nil {
@@ -255,7 +235,7 @@ func (p *TokenProber) listBuilds(ctx context.Context) ([]string, error) {
 
 	builds := make([]string, len(buildList.Builds))
 	for i, build := range buildList.Builds {
-		// Extract build name from URI (format: /build-name)
+		// The API returns the URI as "/build-name".
 		name := build.URI
 		if len(name) > 0 && name[0] == '/' {
 			name = name[1:]
@@ -266,7 +246,6 @@ func (p *TokenProber) listBuilds(ctx context.Context) ([]string, error) {
 	return builds, nil
 }
 
-// listUsers checks if user listing is accessible (admin only)
 func (p *TokenProber) listUsers(ctx context.Context) (bool, error) {
 	resp, err := p.client.Get(ctx, "/api/security/users")
 	if err != nil {
@@ -277,7 +256,6 @@ func (p *TokenProber) listUsers(ctx context.Context) (bool, error) {
 	return resp.StatusCode == http.StatusOK, nil
 }
 
-// listGroups retrieves all groups
 func (p *TokenProber) listGroups(ctx context.Context) ([]Group, error) {
 	resp, err := p.client.Get(ctx, "/api/security/groups")
 	if err != nil {
@@ -307,7 +285,6 @@ func (p *TokenProber) listGroups(ctx context.Context) ([]Group, error) {
 	return groups, nil
 }
 
-// listPermissions retrieves permission targets
 func (p *TokenProber) listPermissions(ctx context.Context) ([]Permission, error) {
 	resp, err := p.client.Get(ctx, "/api/security/permissions")
 	if err != nil {

@@ -1,4 +1,3 @@
-// pkg/scanner/executor_test.go
 package scanner
 
 import (
@@ -14,7 +13,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// mockPlugin is a test plugin that returns predefined findings
 type mockPlugin struct {
 	name     string
 	findings []detections.Finding
@@ -40,7 +38,6 @@ func (m *mockPlugin) Detect(ctx context.Context, g *graph.Graph) ([]detections.F
 	return m.findings, nil
 }
 
-// validWorkflowYAML is a minimal valid GitHub Actions workflow
 var validWorkflowYAML = []byte(`
 name: CI
 on: [push]
@@ -53,7 +50,6 @@ jobs:
 `)
 
 func TestDetectionExecutor_Execute_ErrorHandling(t *testing.T) {
-	// Plugin that returns an error should not stop execution
 	errorPlugin := &mockPlugin{
 		name: "error-plugin",
 		err:  assert.AnError,
@@ -74,12 +70,9 @@ func TestDetectionExecutor_Execute_ErrorHandling(t *testing.T) {
 	}
 
 	result, err := executor.Execute(context.Background(), workflows)
-	// Should not fail even though one plugin errored
 	require.NoError(t, err)
-	// Should still get finding from good plugin
 	require.Len(t, result.Findings, 1)
 	assert.Equal(t, detections.VulnActionsInjection, result.Findings[0].Type)
-	// Should have captured the error from error-plugin
 	require.Len(t, result.Errors, 1)
 	assert.Contains(t, result.Errors[0].Error(), "error-plugin")
 }
@@ -104,16 +97,12 @@ func TestDetectionExecutor_Execute_InvalidWorkflow(t *testing.T) {
 	}
 
 	result, err := executor.Execute(context.Background(), workflows)
-	// Should not fail entire execution
 	require.NoError(t, err)
-	// Should still get findings from valid workflow
 	assert.Len(t, result.Findings, 1)
-	// Should have captured the error from invalid workflow
 	require.Len(t, result.Errors, 1)
 	assert.Contains(t, result.Errors[0].Error(), "building graph")
 }
 
-// panicPlugin is a test plugin that panics during Detect
 type panicPlugin struct {
 	name string
 }
@@ -135,7 +124,6 @@ func (p *panicPlugin) Detect(ctx context.Context, g *graph.Graph) ([]detections.
 }
 
 func TestDetectionExecutor_Execute_PanicRecovery(t *testing.T) {
-	// Plugin that panics should be recovered and not crash the scan
 	panicPlug := &panicPlugin{name: "panic-plugin"}
 	goodPlugin := &mockPlugin{
 		name: "good-plugin",
@@ -153,19 +141,15 @@ func TestDetectionExecutor_Execute_PanicRecovery(t *testing.T) {
 	}
 
 	result, err := executor.Execute(context.Background(), workflows)
-	// Should not crash even though one plugin panicked
 	require.NoError(t, err)
-	// Should still get finding from good plugin
 	require.Len(t, result.Findings, 1)
 	assert.Equal(t, detections.VulnActionsInjection, result.Findings[0].Type)
-	// Should have captured the panic as an error
 	require.Len(t, result.Errors, 1)
 	assert.Contains(t, result.Errors[0].Error(), "panic-plugin")
 	assert.Contains(t, result.Errors[0].Error(), "panic")
 }
 
 func TestDetectionExecutor_Execute_MultiplePanicRecovery(t *testing.T) {
-	// Multiple workflows with panicking plugin should all be recovered
 	panicPlug := &panicPlugin{name: "panic-plugin"}
 
 	executor := NewDetectionExecutor([]detections.Detection{panicPlug}, 10)
@@ -183,11 +167,9 @@ func TestDetectionExecutor_Execute_MultiplePanicRecovery(t *testing.T) {
 	}
 
 	result, err := executor.Execute(context.Background(), workflows)
-	// Should not crash
 	require.NoError(t, err)
-	// No findings since plugin panicked
 	assert.Empty(t, result.Findings)
-	// Should have captured 3 panics (one per workflow)
+	// One recovered panic per workflow.
 	require.Len(t, result.Errors, 3)
 	for _, e := range result.Errors {
 		assert.Contains(t, e.Error(), "panic-plugin")
@@ -196,7 +178,6 @@ func TestDetectionExecutor_Execute_MultiplePanicRecovery(t *testing.T) {
 }
 
 func TestDetectionExecutor_Execute_PopulatesIncludedWorkflows(t *testing.T) {
-	// Test that executor extracts included workflows from graph and adds them to workflows map
 	mockPlugin := &mockPlugin{
 		name: "test-plugin",
 		findings: []detections.Finding{
@@ -206,7 +187,6 @@ func TestDetectionExecutor_Execute_PopulatesIncludedWorkflows(t *testing.T) {
 
 	executor := NewDetectionExecutor([]detections.Detection{mockPlugin}, 10)
 
-	// GitLab workflow with include
 	gitlabWorkflowWithInclude := []byte(`
 include:
   - project: 'shared/templates'
@@ -225,7 +205,6 @@ test:
 				Content:  gitlabWorkflowWithInclude,
 				RepoSlug: "group/project",
 				Metadata: map[string]interface{}{
-					// Mock GitLab client would be here in real scenario
 					"included_workflow:shared/templates//templates/security.yml": platforms.Workflow{
 						Name:     "security.yml",
 						Path:     "/templates/security.yml",
@@ -242,7 +221,6 @@ test:
 	assert.Len(t, result.Findings, 1)
 	assert.Empty(t, result.Errors)
 
-	// Verify included workflow was added to workflows map
 	assert.Contains(t, workflows, "shared/templates")
 	require.Len(t, workflows["shared/templates"], 1)
 	assert.Equal(t, "security.yml", workflows["shared/templates"][0].Name)
@@ -250,7 +228,6 @@ test:
 }
 
 func TestDetectionExecutor_Execute_MultipleIncludedWorkflows(t *testing.T) {
-	// Test that multiple included workflows from same and different repos are handled correctly
 	mockPlugin := &mockPlugin{
 		name: "test-plugin",
 		findings: []detections.Finding{
@@ -310,18 +287,14 @@ test:
 	assert.Len(t, result.Findings, 1)
 	assert.Empty(t, result.Errors)
 
-	// Verify included workflows from shared/templates
 	assert.Contains(t, workflows, "shared/templates")
 	assert.Len(t, workflows["shared/templates"], 2)
 
-	// Verify included workflow from other/repo
 	assert.Contains(t, workflows, "other/repo")
 	require.Len(t, workflows["other/repo"], 1)
 	assert.Equal(t, "deploy.yml", workflows["other/repo"][0].Name)
 }
 
-// instanceDetectionPlugin returns a finding when the graph contains
-// "jenkins_client" metadata, simulating a Jenkins instance-level detection.
 type instanceDetectionPlugin struct {
 	name string
 }
@@ -343,8 +316,6 @@ func (p *instanceDetectionPlugin) Detect(_ context.Context, g *graph.Graph) ([]d
 	return nil, nil
 }
 
-// callCountPlugin counts how many times Detect is called. An optional
-// onDetect callback runs on each invocation.
 type callCountPlugin struct {
 	name      string
 	callCount int
@@ -369,7 +340,7 @@ func TestDetectionExecutor_Execute_InstanceLevelDetections(t *testing.T) {
 
 	executor.SetInstanceMetadata("jenkins_client", "mock-client")
 
-	// Pass nil workflows -- instance-level detections do not require workflows.
+	// nil workflows: an instance-level detection needs none.
 	result, err := executor.Execute(context.Background(), nil)
 	require.NoError(t, err)
 	require.Len(t, result.Findings, 1, "should return exactly 1 instance-level finding")
@@ -381,7 +352,7 @@ func TestDetectionExecutor_Execute_NoInstanceDetectionsWithoutInstanceMetadata(t
 	counter := &callCountPlugin{name: "counter"}
 	executor := NewDetectionExecutor([]detections.Detection{counter}, 10)
 
-	// Only set workflow-level metadata, NOT instance metadata.
+	// SetMetadata, not SetInstanceMetadata: the instance-level pass must not fire.
 	executor.SetMetadata("runners", "linux")
 
 	workflows := map[string][]platforms.Workflow{
@@ -393,8 +364,6 @@ func TestDetectionExecutor_Execute_NoInstanceDetectionsWithoutInstanceMetadata(t
 	_, err := executor.Execute(context.Background(), workflows)
 	require.NoError(t, err)
 
-	// Plugin should be called exactly 1 time (for the single workflow).
-	// Without instance metadata the instance-level loop should NOT fire.
 	assert.Equal(t, 1, counter.callCount,
 		"plugin should be called once for the workflow, not again for instance-level")
 }

@@ -1,4 +1,3 @@
-// pkg/platforms/jfrog/init.go
 package jfrog
 
 import (

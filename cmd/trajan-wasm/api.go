@@ -2,14 +2,7 @@
 
 // Package main provides the WASM-JS bridge API for Trajan browser execution.
 //
-// This file exports Go functions to JavaScript, enabling browser-based
-// CI/CD security scanning and offensive security testing.
-//
-// All exported functions follow the pattern:
-//   - Accept JSON-encoded parameters from JavaScript
-//   - Return JSON-encoded results or errors
-//   - Use context for cancellation support
-//   - Include progress callbacks for long-running operations
+// Every exported function takes JSON-encoded arguments and returns a JS promise.
 package main
 
 import (
@@ -37,10 +30,9 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/search"
 	"github.com/praetorian-inc/trajan/pkg/storage"
 
-	// Import all detections to trigger init() registration
+	// Blank imports: platform and detection init registration.
 	_ "github.com/praetorian-inc/trajan/pkg/detections/all"
 
-	// GitLab detections - import for init() registration
 	_ "github.com/praetorian-inc/trajan/pkg/gitlab/detections/ai"
 	_ "github.com/praetorian-inc/trajan/pkg/gitlab/detections/includes"
 	_ "github.com/praetorian-inc/trajan/pkg/gitlab/detections/injection"
@@ -50,22 +42,11 @@ import (
 	_ "github.com/praetorian-inc/trajan/pkg/gitlab/detections/selfhostedrunner"
 	_ "github.com/praetorian-inc/trajan/pkg/gitlab/detections/unpinned"
 
-	// Azure DevOps detections - import for init() registration
 	_ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/ai"
-	// TODO: Uncomment when these packages are created
-	// _ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/connections"
-	// _ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/environmentgates"
-	// _ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/forksecurity"
-	// _ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/insecurepermissions"
-	// _ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/insecuresecrets"
-	// _ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/overpermconnections"
-	// _ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/templates"
-	// _ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/triggers"
-	// _ "github.com/praetorian-inc/trajan/pkg/azuredevops/detections/unrestrictedpools"
 )
 
 const (
-	// adoProxyBase is the local CORS proxy URL for Azure DevOps API requests
+	// Local CORS proxy for Azure DevOps requests.
 	adoProxyBase = "http://localhost:8080/azdo-proxy"
 )
 
@@ -77,9 +58,8 @@ var (
 	activeScanCancelFunc context.CancelFunc
 )
 
-// validateBaseURL validates user-provided base URLs to prevent SSRF attacks.
-// For security testing tools, we allow localhost and private networks (for testing internal infrastructure)
-// but block cloud metadata services (169.254.169.254) to prevent credential theft.
+// Private networks and localhost are allowed on purpose: assessors test internal
+// infrastructure. Cloud metadata services are blocked to stop credential theft.
 func validateBaseURL(rawURL string) error {
 	if rawURL == "" {
 		return nil // Empty is allowed (uses default)
@@ -102,8 +82,7 @@ func validateBaseURL(rawURL string) error {
 
 	ip := net.ParseIP(host)
 
-	// CRITICAL: Block AWS/GCP/Azure metadata services
-	// These can leak cloud credentials even from localhost browser
+	// Reachable even from a localhost browser, and they hand out cloud credentials.
 	if ip != nil {
 		if ip.String() == "169.254.169.254" {
 			return fmt.Errorf("access to cloud metadata service (169.254.169.254) is forbidden")
@@ -155,7 +134,6 @@ func validateBaseURL(rawURL string) error {
 	return nil
 }
 
-// validatePlatform validates the platform parameter to prevent injection
 func validatePlatform(platform string) error {
 	if platform == "" {
 		return fmt.Errorf("platform is required")
@@ -171,7 +149,6 @@ func validatePlatform(platform string) error {
 	return nil
 }
 
-// validateTarget validates target org/group/project names to prevent injection
 func validateTarget(target string) error {
 	if target == "" {
 		return nil // Optional for some operations
@@ -188,10 +165,9 @@ func validateTarget(target string) error {
 	return nil
 }
 
-// adoProxyTransport rewrites Azure DevOps API requests through the local proxy server
-// to bypass browser CORS restrictions. In WASM, net/http uses the browser's fetch API
-// which enforces CORS for cross-origin requests. Routing through localhost (same-origin)
-// avoids this entirely. The local server.go proxy forwards the request server-side.
+// Rewrites Azure DevOps requests through the local proxy: in WASM net/http uses the
+// browser fetch API, which enforces CORS. localhost is same-origin, so the local
+// server forwards it on.
 type adoProxyTransport struct {
 	proxyBase string // e.g. "http://localhost:8080"
 }
@@ -219,8 +195,6 @@ func countWorkflows(sr *platforms.ScanResult) int {
 	return count
 }
 
-// Initialize sets up the WASM application (config, storage, plugin registration)
-//
 // JavaScript signature:
 //
 //	async function initialize(): Promise<{success: bool, error?: string}>
@@ -261,8 +235,6 @@ func Initialize(this js.Value, args []js.Value) interface{} {
 	return promiseConstructor.New(handler)
 }
 
-// StartScan initiates a vulnerability scan
-//
 // JavaScript signature:
 //
 //	async function startScan(target: string, options: {
@@ -304,12 +276,12 @@ func StartScan(this js.Value, args []js.Value) interface{} {
 				}
 			}
 
-			_ = globalConfig.Scan.Concurrent // Will use when implementing full scan
+			_ = globalConfig.Scan.Concurrent
 			if !options.Get("concurrent").IsUndefined() {
 				_ = options.Get("concurrent").Int()
 			}
 
-			_ = globalConfig.Scan.IncludeArchived // Will use when implementing full scan
+			_ = globalConfig.Scan.IncludeArchived
 			if !options.Get("includeArchived").IsUndefined() {
 				_ = options.Get("includeArchived").Bool()
 			}
@@ -383,7 +355,6 @@ func StartScan(this js.Value, args []js.Value) interface{} {
 					config.GitLab = &platforms.GitLabAuth{Token: token}
 				case "azuredevops":
 					config.AzureDevOps = &platforms.AzureDevOpsAuth{PAT: token, Organization: baseURL}
-					// Proxy ADO API calls through localhost to bypass browser CORS restrictions
 					if origin := js.Global().Get("location").Get("origin").String(); origin != "" {
 						config.HTTPTransport = &adoProxyTransport{proxyBase: origin}
 					}
@@ -522,8 +493,6 @@ func StartScan(this js.Value, args []js.Value) interface{} {
 	return promiseConstructor.New(handler)
 }
 
-// GetResults retrieves scan results by scan ID
-//
 // JavaScript signature:
 //
 //	async function getResults(scanId: string): Promise<{findings: Array, error?: string}>
@@ -571,8 +540,6 @@ func GetResults(this js.Value, args []js.Value) interface{} {
 	return promiseConstructor.New(handler)
 }
 
-// ExportResults exports scan results in specified format
-//
 // JavaScript signature:
 //
 //	async function exportResults(scanId: string, format: 'json' | 'sarif'): Promise<{data: string, error?: string}>
@@ -614,7 +581,6 @@ func ExportResults(this js.Value, args []js.Value) interface{} {
 				exportData = string(data)
 
 			case "sarif":
-				// TODO: Implement SARIF export when results package is complete
 				reject.Invoke(map[string]interface{}{
 					"error": "SARIF export not yet implemented",
 				})
@@ -639,8 +605,6 @@ func ExportResults(this js.Value, args []js.Value) interface{} {
 	return promiseConstructor.New(handler)
 }
 
-// ConfigSet updates a configuration value
-//
 // JavaScript signature:
 //
 //	async function configSet(key: string, value: any): Promise<{success: bool, error?: string}>
@@ -701,8 +665,6 @@ func ConfigSet(this js.Value, args []js.Value) interface{} {
 	return promiseConstructor.New(handler)
 }
 
-// ConfigGet reads a configuration value
-//
 // JavaScript signature:
 //
 //	async function configGet(key: string): Promise<{value: any, error?: string}>
@@ -740,8 +702,6 @@ func ConfigGet(this js.Value, args []js.Value) interface{} {
 	return promiseConstructor.New(handler)
 }
 
-// CancelScan cancels an active scan
-//
 // JavaScript signature:
 //
 //	function cancelScan(): {success: bool}
@@ -760,8 +720,6 @@ func CancelScan(this js.Value, args []js.Value) interface{} {
 	})
 }
 
-// ValidateToken validates a GitHub token and returns user info and organizations
-//
 // JavaScript signature:
 //
 //	async function trajanValidateToken(options: {
@@ -914,7 +872,6 @@ func validateAzureDevOpsToken(ctx context.Context, options js.Value, resolve, re
 		return
 	}
 
-	// Proxy ADO API calls through localhost to bypass browser CORS restrictions
 	var clientOpts []adoplatform.ClientOption
 	if origin := js.Global().Get("location").Get("origin").String(); origin != "" {
 		clientOpts = append(clientOpts, adoplatform.WithHTTPTransport(&adoProxyTransport{proxyBase: origin}))
@@ -1057,8 +1014,6 @@ func SelfEnumerate(this js.Value, args []js.Value) interface{} {
 	return githubUnsupported("self enumeration")
 }
 
-// githubUnsupported returns a rejected promise indicating the operation is
-// GitHub-only and not available in the browser; use the trajan CLI instead.
 func githubUnsupported(operation string) interface{} {
 	handler := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		reject := args[1]
@@ -1089,8 +1044,6 @@ func getProgressCallback(options js.Value) ProgressCallback {
 	}
 }
 
-// Enumerate performs platform-specific resource enumeration
-//
 // JavaScript signature:
 //
 //	async function trajanEnumerate(
@@ -1679,8 +1632,6 @@ func enumerateADOAgentPools(ctx context.Context, org, token string, progressCall
 func enumerateADOAttackPaths(ctx context.Context, org, token, target string, progressCallback ProgressCallback, resolve, reject js.Value) {
 	progressCallback(20, "Analyzing ADO attack paths...")
 
-	// Not implemented in WASM -- requires permission analysis, trigger inspection,
-	// and policy correlation that are only available via the CLI.
 	progressCallback(100, "Complete")
 
 	result := map[string]interface{}{
@@ -1706,8 +1657,6 @@ func enumerateADOAttackPaths(ctx context.Context, org, token, target string, pro
 func enumerateADOForkSecurity(ctx context.Context, org, token, target string, progressCallback ProgressCallback, resolve, reject js.Value) {
 	progressCallback(20, "Scanning ADO fork security...")
 
-	// Not implemented in WASM -- requires deep build-definition scanning,
-	// trigger analysis, and secret-exposure detection only available via CLI.
 	progressCallback(100, "Complete")
 
 	result := map[string]interface{}{
@@ -1730,8 +1679,6 @@ func enumerateADOForkSecurity(ctx context.Context, org, token, target string, pr
 	})
 }
 
-// Search performs code search using GitHub or SourceGraph
-//
 // JavaScript signature:
 //
 //	async function trajanSearch(query: string, options: {
@@ -1821,7 +1768,6 @@ func Search(this js.Value, args []js.Value) interface{} {
 	return promiseConstructor.New(handler)
 }
 
-// registerFunctions registers all exported functions to the global JavaScript scope
 func registerFunctions() {
 	js.Global().Set("trajanInitialize", js.FuncOf(Initialize))
 	js.Global().Set("trajanStartScan", js.FuncOf(StartScan))

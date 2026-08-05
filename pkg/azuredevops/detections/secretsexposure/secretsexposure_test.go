@@ -387,7 +387,7 @@ func TestSecretsExposureDetection_Detect_TaskInputNonSecretVariable(t *testing.T
 	assert.Empty(t, findings, "Expected no findings for task input referencing non-secret variable")
 }
 
-// Regression test: safe echo should not prevent printenv detection in the same script block
+// A safe echo must not mask printenv detection in the same script block.
 func TestSecretsExposureDetection_Detect_SafeEchoPlusPrintenv(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -408,7 +408,7 @@ func TestSecretsExposureDetection_Detect_SafeEchoPlusPrintenv(t *testing.T) {
 	assert.Contains(t, findings[0].Evidence, "printenv dumps all environment variables")
 }
 
-// Regression test: same bug in task script inputs (checkScriptContent path)
+// Same invariant on the task-script-input path.
 func TestSecretsExposureDetection_Detect_TaskScriptSafeEchoPlusPrintenv(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -433,7 +433,6 @@ func TestSecretsExposureDetection_Detect_TaskScriptSafeEchoPlusPrintenv(t *testi
 	assert.Contains(t, findings[0].Evidence, "Task input script dumps environment variables")
 }
 
-// Fork-security test: a PR trigger + step env key containing "secret" should produce VulnPullRequestSecretsExposure
 func TestSecretsExposureDetection_Detect_ForkSecretExposureOnPRTrigger(t *testing.T) {
 	d := New()
 	ctx := context.Background()

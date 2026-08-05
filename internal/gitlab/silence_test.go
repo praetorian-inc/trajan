@@ -456,9 +456,9 @@ func TestGitLabChainBenignTwinsSilence(t *testing.T) {
 	}
 }
 
-// All 141 gitlab rules must load, and every rule's subject kind must be either
-// "chain" or one registered in the scan provider's SubjectDirs — otherwise scan
-// would silently load no subjects for it and the rule could never fire.
+// Every rule's subject kind must be either "chain" or one registered in the scan
+// provider's SubjectDirs; otherwise scan loads no subjects for it and the rule can
+// never fire, with nothing to indicate why.
 func TestGitLabRulesLoadAndSubjectsRegistered(t *testing.T) {
 	rules, err := detect.LoadRules("gitlab", nil)
 	if err != nil {

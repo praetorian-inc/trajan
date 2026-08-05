@@ -25,7 +25,6 @@ func TestIdentifyAttackPaths_PRAttack(t *testing.T) {
 
 	paths := identifyAttackPaths(perms, triggers, policies)
 
-	// Should have PR Trigger Attack
 	found := false
 	for _, path := range paths {
 		if path.Name == "PR Trigger Attack" {
@@ -53,13 +52,10 @@ func TestIdentifyAttackPaths_MultipleRisks(t *testing.T) {
 
 	paths := identifyAttackPaths(perms, triggers, policies)
 
-	// Should have multiple paths sorted by risk
 	assert.Greater(t, len(paths), 3)
 
-	// First should be Critical
 	assert.Equal(t, "Critical", paths[0].Risk)
 
-	// Check that we have expected paths
 	pathNames := make(map[string]bool)
 	for _, path := range paths {
 		pathNames[path.Name] = true
@@ -78,6 +74,5 @@ func TestIdentifyAttackPaths_NoPermissions(t *testing.T) {
 
 	paths := identifyAttackPaths(perms, triggers, policies)
 
-	// No permissions, so no attack paths
 	assert.Len(t, paths, 0)
 }

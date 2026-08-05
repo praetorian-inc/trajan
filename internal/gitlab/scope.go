@@ -13,11 +13,10 @@ const (
 	ScopeGroup
 )
 
-// Scope narrows a run. GitLab paths are variable-depth: a group is a full nested
-// slash path, a project is <group-path>/<project>. Segment count alone can't
-// distinguish "group/subgroup/subgroup" from "group/subgroup/project", so
-// ParseScope records the raw split with a provisional group Kind; Collect probes
-// /groups then /projects to confirm (see collect.go).
+// GitLab paths are variable-depth, so segment count alone cannot tell
+// "group/subgroup/subgroup" from "group/subgroup/project". ParseScope records the raw
+// split with a provisional group Kind and Collect probes /groups then /projects to
+// settle it.
 type Scope struct {
 	Kind    ScopeKind
 	Group   string // full group path (namespace)
@@ -26,9 +25,8 @@ type Scope struct {
 	path    string // raw normalized path, group and project undecided
 }
 
-// ParseScope accepts "group", "group/subgroup", "group/subgroup/project", or a
-// gitlab.com / self-hosted URL. The full path is provisionally the group; Collect
-// flips the last segment to a project if the /groups probe 404s.
+// Accepts a path or a gitlab.com / self-hosted URL. The whole path is provisionally
+// the group; Collect flips the last segment to a project if the /groups probe 404s.
 func ParseScope(arg string) (Scope, error) {
 	s := strings.TrimSpace(arg)
 	hasScheme := strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "http://")
@@ -49,9 +47,9 @@ func ParseScope(arg string) (Scope, error) {
 	return sc, nil
 }
 
-// isHost treats the first segment as a host to strip only if it looks like one: a
-// dotted label with a scheme, or gitlab.com, or a multi-label / IP-style host
-// (guards the self-hosted 3.136.153.111 case).
+// A first segment is only stripped as a host if it looks like one: dotted with a
+// scheme, gitlab.com, or multi-label. The multi-label test is what lets a bare
+// self-hosted IP through as a host rather than as a group name.
 func isHost(seg string, hasScheme bool) bool {
 	if !strings.Contains(seg, ".") {
 		return false

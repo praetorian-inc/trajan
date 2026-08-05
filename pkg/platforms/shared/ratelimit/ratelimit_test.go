@@ -1,4 +1,3 @@
-// pkg/platforms/shared/ratelimit/ratelimit_test.go
 package ratelimit
 
 import (
@@ -11,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLimiter_Update_WithXPrefix tests GitHub/Bitbucket header format (X-RateLimit-*)
 func TestLimiter_Update_WithXPrefix(t *testing.T) {
 	config := Config{
 		HeaderPrefix:     "X-RateLimit-",
@@ -34,7 +32,6 @@ func TestLimiter_Update_WithXPrefix(t *testing.T) {
 	assert.Equal(t, time.Unix(1700000000, 0), limiter.ResetTime())
 }
 
-// TestLimiter_Update_WithoutXPrefix tests GitLab header format (RateLimit-*)
 func TestLimiter_Update_WithoutXPrefix(t *testing.T) {
 	config := Config{
 		HeaderPrefix:     "RateLimit-",
@@ -57,7 +54,6 @@ func TestLimiter_Update_WithoutXPrefix(t *testing.T) {
 	assert.Equal(t, time.Unix(1735776000, 0), limiter.ResetTime())
 }
 
-// TestLimiter_ShouldThrottle_GitHub tests 5% threshold
 func TestLimiter_ShouldThrottle_GitHub(t *testing.T) {
 	config := Config{
 		HeaderPrefix:     "X-RateLimit-",
@@ -95,7 +91,6 @@ func TestLimiter_ShouldThrottle_GitHub(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Manually set values for test
 			limiter.mu.Lock()
 			limiter.remaining = tt.remaining
 			limiter.limit = tt.limit
@@ -106,7 +101,6 @@ func TestLimiter_ShouldThrottle_GitHub(t *testing.T) {
 	}
 }
 
-// TestLimiter_ShouldThrottle_GitLab tests 10% threshold
 func TestLimiter_ShouldThrottle_GitLab(t *testing.T) {
 	config := Config{
 		HeaderPrefix:     "RateLimit-",
@@ -160,7 +154,6 @@ func TestLimiter_ShouldThrottle_GitLab(t *testing.T) {
 	}
 }
 
-// TestLimiter_Wait_ContextCanceled tests context cancellation
 func TestLimiter_Wait_ContextCanceled(t *testing.T) {
 	config := Config{
 		DefaultLimit:     5000,
@@ -182,7 +175,6 @@ func TestLimiter_Wait_ContextCanceled(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
-// TestLimiter_Concurrent tests thread safety
 func TestLimiter_Concurrent(t *testing.T) {
 	config := Config{
 		HeaderPrefix:     "RateLimit-",
@@ -196,7 +188,6 @@ func TestLimiter_Concurrent(t *testing.T) {
 	header.Set("RateLimit-Limit", "2000")
 	header.Set("RateLimit-Remaining", "1000")
 
-	// Run concurrent operations
 	done := make(chan bool)
 	for i := 0; i < 10; i++ {
 		go func() {
@@ -208,17 +199,14 @@ func TestLimiter_Concurrent(t *testing.T) {
 		}()
 	}
 
-	// Wait for all goroutines
 	for i := 0; i < 10; i++ {
 		<-done
 	}
 
-	// Verify state is consistent
 	assert.Equal(t, 2000, limiter.Limit())
 	assert.Equal(t, 1000, limiter.Remaining())
 }
 
-// TestLimiter_WithoutRetryAfter tests platforms that don't support retry-after
 func TestLimiter_WithoutRetryAfter(t *testing.T) {
 	config := Config{
 		HeaderPrefix:       "RateLimit-",
@@ -232,7 +220,6 @@ func TestLimiter_WithoutRetryAfter(t *testing.T) {
 	header := http.Header{}
 	header.Set("Retry-After", "30")
 
-	// Should ignore Retry-After when not supported
 	limiter.Update(header)
 
 	retryAfter := limiter.RetryAfter()

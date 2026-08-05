@@ -8,13 +8,12 @@ import (
 	"testing"
 )
 
-// The firing-range corpus (trajan-fr-group/trjfx, scenario projects cat-NN-vMM)
-// is the independent oracle for these tests: we assert the field contract holds
-// across a full Normalize of a real collected run, never what the code happens to
-// produce for a hand-built input. The corpus is a P2 collect run dir; point the
-// test at one with TRAJAN_GL_CORPUS. Absent, the test skips (the corpus is large
-// and lives outside the tree). A run dir is copied so Normalize's in-place writes
-// never mutate the shared corpus.
+// The firing-range corpus (trajan-fr-group/trjfx, scenario projects cat-NN-vMM) is the
+// independent oracle here: the field contract is asserted across a full Normalize of a
+// real collect run, never against what the code produces for a hand-built input. Point
+// TRAJAN_GL_CORPUS at a collect run dir; absent, these skip, since the corpus is large
+// and lives outside the tree. The dir is copied first so Normalize's in-place writes
+// cannot mutate it.
 func corpusRun(t *testing.T) string {
 	t.Helper()
 	src := os.Getenv("TRAJAN_GL_CORPUS")
@@ -81,10 +80,10 @@ func readNormRecords(t *testing.T, run, dir string) []map[string]any {
 	return out
 }
 
-// TestCorpusEmptyListsSerializeAsBracket is hard-contract C1: every list-typed
-// field named in the contract must serialize as [] when empty, never null and
-// never omitted — valuesEqual(nil,[]) is false, so an absent list breaks the
-// rules that gate on == [] / != []. We assert directly against the on-disk JSON.
+// Every list-typed field must serialize as [] when empty, never null and never
+// omitted: the engine's equality holds nil and [] to be different values, so an absent
+// list silently breaks every rule gating on == [] or != []. Asserted against the
+// on-disk JSON text, not the decoded value.
 func TestCorpusEmptyListsSerializeAsBracket(t *testing.T) {
 	run := corpusRun(t)
 	// (dir, field) pairs the contract calls out as load-bearing for == []/!= [].
@@ -125,9 +124,8 @@ func TestCorpusEmptyListsSerializeAsBracket(t *testing.T) {
 	}
 }
 
-// TestCorpusBooleansPresent is the C-boolean contract: every derived project
-// boolean the rules read must be present (defaulting false), never omitted — a
-// rule writing `x == true`/`x != true` against a missing key silently misfires.
+// Every derived project boolean must be present, defaulting to false, never omitted: a
+// rule writing `x == true` or `x != true` against a missing key silently misfires.
 func TestCorpusBooleansPresent(t *testing.T) {
 	run := corpusRun(t)
 	recs := readNormRecords(t, run, "projects")
@@ -154,9 +152,9 @@ func TestCorpusBooleansPresent(t *testing.T) {
 	}
 }
 
-// TestCorpusAccessLevelsNumeric is hard-contract C3: protected-branch/tag access
-// levels and member access levels are numeric (rules read >=30, ∋{30}, ==30). A
-// string role enum leaking through would make those predicates dead.
+// Protected-branch, protected-tag and member access levels must stay numeric, because
+// the rules compare against the numbers; a string role enum leaking through would make
+// those predicates dead rather than wrong.
 func TestCorpusAccessLevelsNumeric(t *testing.T) {
 	run := corpusRun(t)
 	saw := false
@@ -193,10 +191,9 @@ func assertNumericLevel(t *testing.T, rec map[string]any, path string, v any) {
 	}
 }
 
-// TestCorpusDuoGuardrailUppercase is hard-contract C-guardrail: any emitted
-// prompt-injection level (job duo_guardrail_level/duo_instance_guardrail_level,
-// instance prompt_injection_protection_level) that carries the GraphQL enum must
-// keep it UPPERCASE verbatim. We only assert on values that look like the enum.
+// Any emitted prompt-injection level carrying the GraphQL enum must keep it UPPERCASE
+// verbatim, since the rules match those exact strings. Only enum-looking values are
+// asserted on.
 func TestCorpusDuoGuardrailUppercase(t *testing.T) {
 	run := corpusRun(t)
 	enum := map[string]bool{"NO_CHECKS": true, "LOG_ONLY": true, "INTERRUPT": true}
@@ -218,10 +215,8 @@ func TestCorpusDuoGuardrailUppercase(t *testing.T) {
 	}
 }
 
-// TestCorpusChainKeys is the hard for_each contract: correlate must write each of
-// the nine joins under exactly its contract key (an unset/mismatched key makes
-// iterChainItems default to "links" → iterate nothing). This is checked against
-// the contract table, not the code.
+// correlate must write each of the nine joins under exactly the key its rules iterate:
+// a mismatched key makes iterChainItems fall back to "links" and iterate nothing.
 func TestCorpusChainKeys(t *testing.T) {
 	run := corpusRun(t)
 	want := map[string]string{
@@ -259,11 +254,9 @@ func TestCorpusChainKeys(t *testing.T) {
 	}
 }
 
-// TestCorpusProtectedVarSelfResolving asserts the self-resolving invariant on the
-// real join output: every emitted reachable_vars tuple carries a protected var,
-// and the tuple's project equals the var's project (correlation (b): member ⊂ ref
-// project). If the join leaked non-protected vars or cross-project members the
-// literal-only rules would fire wrongly.
+// On the real join output: every reachable_vars tuple carries a protected var and the
+// tuple's project equals the var's. A leaked non-protected var or a cross-project
+// member would make the literal-only rules fire on something that is not reachable.
 func TestCorpusProtectedVarSelfResolving(t *testing.T) {
 	run := corpusRun(t)
 	b, err := os.ReadFile(filepath.Join(run, "10-normalize", "chains", "protected-var-reachability.json"))
@@ -290,8 +283,7 @@ func TestCorpusProtectedVarSelfResolving(t *testing.T) {
 	}
 }
 
-// TestCorpusProvenanceOnEveryRecord: _provenance rides on every normalized record
-// (evidence templating depends on it). Checked across all subject dirs present.
+// Evidence templating reads _provenance, so every normalized record must carry it.
 func TestCorpusProvenanceOnEveryRecord(t *testing.T) {
 	run := corpusRun(t)
 	for _, dir := range []string{"projects", "jobs", "groups", "instance", "merge-requests", "environments", "runners", "agents", "credentials", "integrations"} {

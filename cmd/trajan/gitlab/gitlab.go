@@ -9,8 +9,6 @@ import (
 	"github.com/praetorian-inc/trajan/internal/report"
 )
 
-// GitLabCmd is the root of the GitLab platform command tree. It is wired into
-// trajan's root command by cmd/trajan/root.go.
 var GitLabCmd = newGitLabCmd()
 
 func newGitLabCmd() *cobra.Command {

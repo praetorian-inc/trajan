@@ -2,11 +2,10 @@ package gitlab
 
 import "testing"
 
-// TestChainForEachKeys is the hard for_each contract, guarded without a corpus:
-// each of the nine joins must expose its tuple list under exactly the key the
-// rules' chain_of.for_each reads (an unset/mismatched key makes iterChainItems
-// default to "links" and iterate nothing). The key set is the contract table in
-// docs/gitlab/gitlab-normalized-fields.md, not what the code returns.
+// Each of the nine joins must expose its tuple list under exactly the key the rules'
+// chain_of.for_each reads: an unset or mismatched key makes iterChainItems fall back to
+// "links" and iterate nothing, silently. The expected keys are taken from the rules,
+// not from what the code returns.
 func TestChainForEachKeys(t *testing.T) {
 	c := &correlator{
 		instance: map[string]any{},
@@ -335,8 +334,8 @@ func TestInstanceScopedVarReachability(t *testing.T) {
 	}
 }
 
-// TestProtectedVarParticipantProvenance: the branch/tag and member participants
-// carry _provenance{project_path} for evidence templating (MUST-FIX 13).
+// The branch/tag and member participants carry _provenance{project_path}, without
+// which an evidence template reading {project_path} renders empty.
 func TestProtectedVarParticipantProvenance(t *testing.T) {
 	proj := map[string]any{
 		"_id":                "grp/p1",

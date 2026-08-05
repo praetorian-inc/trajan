@@ -27,10 +27,9 @@ func canAccessSources(s *edgeSet, to NodeLabel) map[string][]string {
 	return out
 }
 
-// An org secret with visibility "selected" and an empty repository list is
-// reachable by nothing. The count alone cannot say so: a fan-out driven by
-// Secret.visibility would give it the widest blast radius in the org, which is
-// the exact inverse of the setting.
+// An org secret with visibility "selected" and an empty repository list is reachable by
+// nothing. A fan-out driven by Secret.visibility alone would give it the widest blast
+// radius in the org, the exact inverse of the setting.
 func TestOrgSecretSelectedWithEmptyListReachesNothing(t *testing.T) {
 	s := build(t, map[string]any{
 		"org/portus-labs.json": orgFixture(
@@ -171,10 +170,9 @@ func TestRunsOnIgnoresGitHubHostedJobs(t *testing.T) {
 	}
 }
 
-// The runner listing returns runner_group_id: null, so group membership is only
-// knowable from the groups' member_runner_ids. Reading the null field instead
-// leaves every org runner ungated: a job pinned to one group lands on another
-// group's machine, and a group scoped away from the repo still serves it.
+// The runner listing returns runner_group_id: null, so group membership is only knowable
+// from the groups' member_runner_ids. Reading the null field leaves every org runner
+// ungated: a pinned job lands on another group's machine and scoping stops binding.
 func TestRunsOnHonorsGroupMembership(t *testing.T) {
 	corpus := func(t *testing.T, group map[string]any, job map[string]any) *edgeSet {
 		t.Helper()

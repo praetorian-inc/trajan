@@ -19,7 +19,6 @@ Subcommands:
   - files: Search for files by filename pattern`,
 	}
 
-	// Add subcommands
 	cmd.AddCommand(newSearchCodeCmd())
 	cmd.AddCommand(newSearchCredsCmd())
 	cmd.AddCommand(newSearchLogsCmd())

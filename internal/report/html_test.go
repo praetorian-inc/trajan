@@ -35,9 +35,8 @@ func emptyInline(doc, tag string) string {
 	return head + "<" + tag + "></" + tag + ">" + tail
 }
 
-// Every pointer field on a finding is nullable, and scan emits findings with all
-// of them nil. A template that dereferences one produces an execute error, which
-// the old string-building renderer could not have hit.
+// Every pointer field on a finding is nullable and scan emits findings with all
+// of them nil; a template that dereferences one fails at execute time.
 func TestRenderHTMLTolerAtesEveryNilField(t *testing.T) {
 	f := finding.Finding{
 		FindingID: "F-001", Provider: "github", Severity: "high", Confidence: "low",
@@ -57,8 +56,7 @@ func TestRenderHTMLTolerAtesEveryNilField(t *testing.T) {
 	}
 }
 
-// The rule id belongs behind the Details toggle, not in the card header where it
-// read as noise on every finding.
+// The rule id belongs behind the Details toggle, not in the card header.
 func TestRenderHTMLKeepsRuleOutOfTheCardHeader(t *testing.T) {
 	f := finding.Finding{
 		Severity: "high", Confidence: "high", Title: "T",
@@ -87,8 +85,8 @@ func TestRenderHTMLShowsDetailsForDescriptionAlone(t *testing.T) {
 	}
 }
 
-// The previous renderer interpolated Rule.URL into href after only HTML-escaping
-// it, so a non-http scheme reached the browser intact.
+// Rule.URL reaches an href, where HTML-escaping alone still lets a javascript:
+// scheme through to the browser intact.
 func TestRenderHTMLNeutersNonHTTPRuleURL(t *testing.T) {
 	f := finding.Finding{
 		Severity: "high", Confidence: "high",
@@ -104,9 +102,8 @@ func TestRenderHTMLNeutersNonHTTPRuleURL(t *testing.T) {
 	}
 }
 
-// The theme toggle has to work on a report with nothing in it, so the script
-// always ships and its filter half early-returns on a missing #q. That contract
-// only holds while the empty report really does omit the filter UI.
+// The script always ships so the theme toggle works on an empty report; its
+// filter half early-returns on a missing #q, which the empty report must omit.
 func TestRenderHTMLEmptyReportKeepsThemeButNotFilters(t *testing.T) {
 	out := renderOne(t, reportMeta{Generated: time.Now()}, nil)
 
@@ -217,8 +214,8 @@ func TestLocationOf(t *testing.T) {
 	}
 }
 
-// _meta.json predates the platform field on older runs, but every finding names
-// its own provider.
+// Older runs wrote no platform into _meta.json, but every finding names its own
+// provider.
 func TestPlatformLabelFallsBackToFindingProvider(t *testing.T) {
 	got := platformLabel(reportMeta{}, []finding.Finding{{Provider: "gitlab"}})
 	if got != "GitLab" {

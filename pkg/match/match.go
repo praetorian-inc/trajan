@@ -1,6 +1,5 @@
-// Package match provides lightweight CI/CD platform detection and capability
-// parameter definitions for Trajan. It is safe to import without pulling in
-// heavy platform adapter dependencies.
+// Package match provides CI/CD platform detection and capability parameter
+// definitions without pulling in the platform adapter dependencies.
 package match
 
 import (
@@ -11,8 +10,8 @@ import (
 	"github.com/praetorian-inc/capability-sdk/pkg/capmodel"
 )
 
-// SupportedPlatforms maps URL substrings to Trajan platform identifiers.
-// Jenkins and JFrog are self-hosted; they need the explicit "platform" parameter.
+// Jenkins and JFrog are absent: self-hosted URLs are unrecognizable, so they
+// arrive through the explicit "platform" parameter instead.
 var SupportedPlatforms = map[string]string{
 	"github.com":    "github",
 	"gitlab.com":    "gitlab",
@@ -21,7 +20,6 @@ var SupportedPlatforms = map[string]string{
 	"circleci.com":  "circleci",
 }
 
-// DetectPlatform determines the CI/CD platform from a repository URL.
 func DetectPlatform(repoURL string) (string, bool) {
 	for domain, platform := range SupportedPlatforms {
 		if strings.Contains(repoURL, domain) {
@@ -31,7 +29,6 @@ func DetectPlatform(repoURL string) (string, bool) {
 	return "", false
 }
 
-// DefaultParameters returns the standard capability parameters for Trajan.
 func DefaultParameters() []capability.Parameter {
 	return []capability.Parameter{
 		capability.String("token", "Authentication token for the CI/CD platform API"),
@@ -45,14 +42,12 @@ func DefaultParameters() []capability.Parameter {
 	}
 }
 
-// Repository validates that the input repository is scannable by Trajan,
-// applying URL-based platform detection with optional explicit platform override.
 func Repository(ctx capability.ExecutionContext, input capmodel.Repository) error {
 	if input.URL == "" {
 		return fmt.Errorf("repository URL is required")
 	}
 
-	// Explicit platform override accepts any URL (needed for self-hosted Jenkins/JFrog)
+	// A self-hosted instance can live at any URL, so an explicit platform skips detection.
 	if platform, ok := ctx.Parameters.GetString("platform"); ok && platform != "" {
 		return nil
 	}

@@ -24,7 +24,6 @@ const (
 	graphDir = "30-graph"
 )
 
-// Build reads 10-normalize and 20-scan and writes 30-graph/{nodes,edges,_summary}.json.
 // targets maps a rule id to its graph target; the caller supplies it because
 // internal/github imports internal/graph and the dependency cannot be reversed.
 func Build(ctx context.Context, cfg *engine.Config, runDir string, targets map[string]Target) error {
@@ -158,11 +157,9 @@ func loadFindings(ctx context.Context, cfg *engine.Config, runDir string, onErro
 	return out, len(files), nil
 }
 
-// An edge endpoint whose full identity tuple is known but which has no backing
-// record is a real entity outside the collection, not a placeholder: the two
-// reusable-workflow callees in uncollected repos and the environments named only
-// by a deployment. Emitting it keeps the relation truthful; inventing an
-// identity value would not, which is why upsert still refuses those.
+// An endpoint with a complete identity tuple and no backing record is a real entity
+// outside the collection — a callee in an uncollected repo, an environment named only
+// by a deployment — so emitting it is truthful where inventing an identity is not.
 func backfillObserved(n *nodeSet, s *edgeSet) int {
 	minted := 0
 	for _, id := range slices.Sorted(maps.Keys(s.byID)) {
@@ -403,10 +400,9 @@ func summarize(runDir string, in inputsSummary, all []node, edgeList []edge, edg
 	}
 }
 
-// gapEntry is a curated finding of the collect/normalize audit. Targets names the
-// rule targets whose unattached findings the gap explains, so findings_blocked is
-// computed from the run and cannot drift from it. A target belongs to exactly one
-// row, or the column double-counts and stops summing to findings.unattached.
+// Targets names the rule targets whose unattached findings the gap explains, so
+// findings_blocked is computed from the run rather than written down. A target belongs
+// to exactly one row, or the column stops summing to findings.unattached.
 type gapEntry struct {
 	Subject         string   `json:"subject"`
 	Kind            string   `json:"kind"`

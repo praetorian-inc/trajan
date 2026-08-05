@@ -17,24 +17,20 @@ func init() {
 	})
 }
 
-// Detection detects whether the Jenkins script console is accessible.
 // An accessible script console allows arbitrary Groovy/OS command execution.
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new Jenkins script console detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("script-console", "jenkins", detections.SeverityCritical),
 	}
 }
 
-// RequiresAPI reports that this detection cannot run in --local mode; it
-// requires a live Jenkins client to query the running instance.
+// Needs a live Jenkins client, so it cannot run in --local mode.
 func (d *Detection) RequiresAPI() bool { return true }
 
-// Detect checks if the Jenkins script console is accessible
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	clientData, ok := g.GetMetadata("jenkins_client")
 	if !ok {

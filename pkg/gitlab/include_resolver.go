@@ -1,4 +1,3 @@
-// pkg/gitlab/include_resolver.go
 package gitlab
 
 import (
@@ -8,28 +7,25 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/analysis/parser"
 )
 
-// IncludeResolver resolves GitLab CI include directives recursively.
-// This resolver is not thread-safe and should not be shared across goroutines.
+// Not safe for concurrent use.
 type IncludeResolver struct {
 	client     *Client
 	projectID  int
 	defaultRef string
-	cache      map[string]*parser.NormalizedWorkflow // Stores parsed workflows to avoid re-parsing
-	processed  map[string]bool                       // Tracks processed includes for cycle detection
+	cache      map[string]*parser.NormalizedWorkflow
+	processed  map[string]bool // cycle detection
 	maxDepth   int
 }
 
-// IncludedWorkflow represents a resolved included workflow
 type IncludedWorkflow struct {
-	Source   string // Cache key (for deduplication)
-	Path     string // Clean file path (for display)
+	Source   string // cache key
+	Path     string // display path
 	Type     string // local, project, template
-	Content  []byte // Raw YAML content before parsing
+	Content  []byte
 	Workflow *parser.NormalizedWorkflow
 	Includes []*IncludedWorkflow
 }
 
-// NewIncludeResolver creates a new include resolver
 func NewIncludeResolver(client *Client, projectID int, ref string) *IncludeResolver {
 	return &IncludeResolver{
 		client:     client,
@@ -41,8 +37,7 @@ func NewIncludeResolver(client *Client, projectID int, ref string) *IncludeResol
 	}
 }
 
-// getDisplayPath extracts the display path from a GitLab include directive
-// This avoids parsing the cache key which breaks if paths contain colons
+// Parsing the cache key instead would break on paths containing colons.
 func getDisplayPath(inc parser.GitLabInclude) string {
 	switch inc.Type {
 	case parser.IncludeTypeLocal:
@@ -58,7 +53,6 @@ func getDisplayPath(inc parser.GitLabInclude) string {
 	}
 }
 
-// makeKey generates a unique cache key for an include
 func (r *IncludeResolver) makeKey(inc parser.GitLabInclude) string {
 	switch inc.Type {
 	case parser.IncludeTypeLocal:
@@ -76,12 +70,10 @@ func (r *IncludeResolver) makeKey(inc parser.GitLabInclude) string {
 	}
 }
 
-// fetchLocal fetches a local include from the same repository
 func (r *IncludeResolver) fetchLocal(ctx context.Context, path string) ([]byte, error) {
 	return r.client.GetWorkflowFile(ctx, r.projectID, path, r.defaultRef)
 }
 
-// fetchProject fetches an include from another GitLab project
 func (r *IncludeResolver) fetchProject(ctx context.Context, projectPath, filePath, ref string) ([]byte, error) {
 	if projectPath == "" {
 		return nil, fmt.Errorf("project path cannot be empty")
@@ -90,22 +82,18 @@ func (r *IncludeResolver) fetchProject(ctx context.Context, projectPath, filePat
 		return nil, fmt.Errorf("file path cannot be empty")
 	}
 
-	// Get project by path
 	project, err := r.client.GetProject(ctx, projectPath)
 	if err != nil {
 		return nil, fmt.Errorf("getting project %s: %w", projectPath, err)
 	}
 
-	// Use provided ref or default to HEAD
 	if ref == "" {
 		ref = "HEAD"
 	}
 
-	// Fetch file from project
 	return r.client.GetWorkflowFile(ctx, project.ID, filePath, ref)
 }
 
-// fetchTemplate fetches a GitLab official template
 func (r *IncludeResolver) fetchTemplate(ctx context.Context, templateName string) ([]byte, error) {
 	if templateName == "" {
 		return nil, fmt.Errorf("template name cannot be empty")
@@ -113,23 +101,18 @@ func (r *IncludeResolver) fetchTemplate(ctx context.Context, templateName string
 	return r.client.GetTemplate(ctx, templateName)
 }
 
-// resolveInclude resolves a single include directive
 func (r *IncludeResolver) resolveInclude(ctx context.Context, inc parser.GitLabInclude, depth int) (*IncludedWorkflow, error) {
-	// Check depth limit
 	if depth >= r.maxDepth {
 		return nil, fmt.Errorf("max include depth %d exceeded", r.maxDepth)
 	}
 
-	// Generate cache key
 	key := r.makeKey(inc)
 
-	// Check if already processed (cycle detection)
 	if r.processed[key] {
-		return nil, nil // Skip, already processed
+		return nil, nil // already processed
 	}
 	r.processed[key] = true
 
-	// Fetch content based on type
 	var content []byte
 	var err error
 
@@ -151,25 +134,21 @@ func (r *IncludeResolver) resolveInclude(ctx context.Context, inc parser.GitLabI
 		return nil, fmt.Errorf("fetching include %s: %w", key, err)
 	}
 
-	// Parse the included file
 	gitlabParser := parser.NewGitLabParser()
 	normalized, err := gitlabParser.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("parsing include %s: %w", key, err)
 	}
 
-	// Cache the parsed workflow
 	r.cache[key] = normalized
 
-	// Recursively resolve nested includes
 	var nestedIncludes []*IncludedWorkflow
 	if rawGitLabCI, ok := normalized.Raw.(*parser.GitLabCI); ok {
 		if len(rawGitLabCI.Includes) > 0 {
 			for _, nestedInc := range rawGitLabCI.Includes {
 				nestedResult, err := r.resolveInclude(ctx, nestedInc, depth+1)
 				if err != nil {
-					// TODO: Consider logging nested include errors for better visibility
-					// Current behavior: graceful degradation - skip failed includes and continue
+					// Graceful degradation: skip the failed nested include.
 					continue
 				}
 				if nestedResult != nil {
@@ -183,25 +162,22 @@ func (r *IncludeResolver) resolveInclude(ctx context.Context, inc parser.GitLabI
 		Source:   key,
 		Path:     getDisplayPath(inc),
 		Type:     string(inc.Type),
-		Content:  content, // Store raw YAML before parsing
+		Content:  content,
 		Workflow: normalized,
 		Includes: nestedIncludes,
 	}, nil
 }
 
-// ResolveIncludes resolves multiple include directives
 func (r *IncludeResolver) ResolveIncludes(ctx context.Context, includes []parser.GitLabInclude) ([]*IncludedWorkflow, error) {
 	var resolved []*IncludedWorkflow
 
 	for _, inc := range includes {
 		result, err := r.resolveInclude(ctx, inc, 0)
 		if err != nil {
-			// Log warning but continue - graceful degradation
-			// In production, use structured logging
+			// Graceful degradation: skip the failed include.
 			continue
 		}
 
-		// Skip nil results (remote includes, already processed)
 		if result != nil {
 			resolved = append(resolved, result)
 		}

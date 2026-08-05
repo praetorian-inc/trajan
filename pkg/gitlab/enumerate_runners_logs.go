@@ -6,20 +6,17 @@ import (
 	"strings"
 )
 
-// AnalyzeProjectLogs analyzes recent pipeline logs to discover historical runner usage
 // Automatically filters GitLab SaaS shared runners on gitlab.com instances
 func (p *Platform) AnalyzeProjectLogs(ctx context.Context, projectID int, pipelineLimit int) ([]RunnerInfo, error) {
 	isSaaS := strings.Contains(strings.ToLower(p.client.baseURL), "gitlab.com")
-	runners := make(map[string]RunnerInfo) // Deduplicate by runner description
+	runners := make(map[string]RunnerInfo) // keyed by runner description
 
-	// Get recent pipelines
 	pipelines, err := p.client.ListRecentPipelines(ctx, projectID, pipelineLimit)
 	if err != nil {
 		return nil, fmt.Errorf("listing pipelines: %w", err)
 	}
 
 	for _, pipeline := range pipelines {
-		// Get jobs for this pipeline
 		jobs, err := p.client.ListPipelineJobs(ctx, projectID, pipeline.ID)
 		if err != nil {
 			// Don't fail entire analysis for one pipeline
@@ -31,12 +28,10 @@ func (p *Platform) AnalyzeProjectLogs(ctx context.Context, projectID int, pipeli
 			var runner RunnerInfo
 			needsTraceEnrichment := true
 
-			// Try to extract from job metadata first (fast path)
 			if job.Runner != nil {
 				if desc, ok := job.Runner["description"].(string); ok && desc != "" {
 					if baseRunner := p.createRunnerFromMetadata(*job, desc); baseRunner != nil {
 						runner = *baseRunner
-						// Check if metadata has enough details
 						if runner.Version != "" && runner.Executor != "" {
 							needsTraceEnrichment = false
 						}
@@ -44,7 +39,6 @@ func (p *Platform) AnalyzeProjectLogs(ctx context.Context, projectID int, pipeli
 				}
 			}
 
-			// Parse trace if we need more details or had no metadata
 			if needsTraceEnrichment {
 				trace, err := p.client.GetJobTrace(ctx, projectID, job.ID)
 				if err != nil {
@@ -52,29 +46,25 @@ func (p *Platform) AnalyzeProjectLogs(ctx context.Context, projectID int, pipeli
 					if IsGoneError(err) {
 						break
 					}
-					// Other errors (403, etc.) - skip this job, but keep metadata if we have it
 					if runner.Description != "" {
 						runners[runner.Description] = runner
 					}
 					continue
 				}
 
-				// Parse trace for runner info
 				logInfo, err := ParseJobTrace(trace)
 				if err != nil {
-					// Keep metadata-based info if we have it
 					if runner.Description != "" {
 						runners[runner.Description] = runner
 					}
 					continue
 				}
 
-				// Enrich with trace details
 				traceRunner := p.logInfoToRunnerInfo(logInfo, *job)
 				if runner.Description == "" {
 					runner = traceRunner
 				} else {
-					// Merge: keep metadata fields, enrich with trace details
+					// A non-empty trace value overrides the metadata value.
 					if traceRunner.Version != "" {
 						runner.Version = traceRunner.Version
 					}
@@ -93,13 +83,11 @@ func (p *Platform) AnalyzeProjectLogs(ctx context.Context, projectID int, pipeli
 		}
 	}
 
-	// Convert map to slice
 	result := make([]RunnerInfo, 0, len(runners))
 	for _, runner := range runners {
 		result = append(result, runner)
 	}
 
-	// Filter SaaS shared runners if on gitlab.com
 	if isSaaS {
 		result = filterSelfHostedRunners(result)
 	}
@@ -107,7 +95,6 @@ func (p *Platform) AnalyzeProjectLogs(ctx context.Context, projectID int, pipeli
 	return result, nil
 }
 
-// createRunnerFromMetadata creates RunnerInfo from job metadata
 func (p *Platform) createRunnerFromMetadata(job Job, description string) *RunnerInfo {
 	runner := &RunnerInfo{
 		Description: description,
@@ -116,7 +103,6 @@ func (p *Platform) createRunnerFromMetadata(job Job, description string) *Runner
 		Active:      true,  // Assume active if used recently
 	}
 
-	// Extract additional metadata if available
 	if job.Runner != nil {
 		if isShared, ok := job.Runner["is_shared"].(bool); ok {
 			runner.IsShared = isShared
@@ -131,7 +117,6 @@ func (p *Platform) createRunnerFromMetadata(job Job, description string) *Runner
 		}
 	}
 
-	// Set last seen timestamp from job
 	if job.FinishedAt != "" {
 		runner.LastSeenAt = job.FinishedAt
 	}
@@ -139,7 +124,6 @@ func (p *Platform) createRunnerFromMetadata(job Job, description string) *Runner
 	return runner
 }
 
-// logInfoToRunnerInfo converts parsed log info to RunnerInfo
 func (p *Platform) logInfoToRunnerInfo(logInfo *RunnerLogInfo, job Job) RunnerInfo {
 	return RunnerInfo{
 		Description: logInfo.RunnerName,

@@ -65,7 +65,6 @@ func TestAzureParser_CanParse(t *testing.T) {
 func TestAzureParser_Parse_PoolStringShorthand(t *testing.T) {
 	parser := NewAzureParser()
 
-	// Pipeline-level pool as string (common for self-hosted pools)
 	yaml := []byte(`
 pool: shire-self-hosted
 
@@ -93,7 +92,6 @@ jobs:
 func TestAzureParser_Parse_JobPoolStringShorthand(t *testing.T) {
 	parser := NewAzureParser()
 
-	// Job-level pool as string
 	yaml := []byte(`
 jobs:
   - job: Build
@@ -152,17 +150,14 @@ jobs:
 		t.Errorf("Expected 3 steps, got %d", len(job.Steps))
 	}
 
-	// Check script step
 	if job.Steps[0].Run != "echo \"Hello\"" {
 		t.Errorf("Step 0 Run = %q, want echo \"Hello\"", job.Steps[0].Run)
 	}
 
-	// Check task step
 	if job.Steps[1].Uses != "Docker@2" {
 		t.Errorf("Step 1 Uses = %q, want Docker@2", job.Steps[1].Uses)
 	}
 
-	// Check checkout step
 	if job.Steps[2].Uses != "checkout:self" {
 		t.Errorf("Step 2 Uses = %q, want checkout:self", job.Steps[2].Uses)
 	}
@@ -485,9 +480,8 @@ jobs:
 	}
 }
 
-// TestAzureParser_CapturesLineNumbers verifies that steps parsed from Azure pipeline
-// YAML have non-zero line numbers. Azure uses yaml.Unmarshal to map[string]interface{}
-// which discards position info; the parser must use yaml.Node to capture line numbers.
+// Unmarshalling to map[string]interface{} discards positions, so the parser has to
+// walk yaml.Node to recover line numbers.
 func TestAzureParser_CapturesLineNumbers(t *testing.T) {
 	content := []byte(`trigger:
   branches:
@@ -522,7 +516,6 @@ steps:
 	assert.Greater(t, secondStep.Line, firstStep.Line, "second step should be on a later line than first step")
 }
 
-// TestAzureParser_CapturesLineNumbers_FlatJobs verifies line numbers for steps in flat jobs.
 func TestAzureParser_CapturesLineNumbers_FlatJobs(t *testing.T) {
 	content := []byte(`trigger:
   - main
@@ -556,8 +549,6 @@ jobs:
 	assert.Greater(t, secondStep.Line, firstStep.Line, "second step should be on a later line than first step")
 }
 
-// TestAzureParser_CapturesWithAndEnvLines verifies that steps parsed from Azure pipeline YAML
-// have WithLines and EnvLines populated with the exact line numbers of individual input/env keys.
 func TestAzureParser_CapturesWithAndEnvLines(t *testing.T) {
 	content := []byte(`trigger:
   - main
@@ -589,7 +580,7 @@ jobs:
 
 	step := deployJob.Steps[0]
 
-	// WithLines: azureSubscription should point to its own line, not the step start
+	// Each key maps to its own line, not the line the step starts on.
 	require.NotNil(t, step.WithLines, "WithLines should be populated")
 	azureLine, ok := step.WithLines["azureSubscription"]
 	require.True(t, ok, "WithLines should contain 'azureSubscription'")
@@ -599,7 +590,6 @@ jobs:
 	require.True(t, ok, "WithLines should contain 'scriptType'")
 	assert.Greater(t, scriptTypeLine, azureLine, "scriptType should be on a later line than azureSubscription")
 
-	// EnvLines: MY_ENV should point to its own line, not the step start
 	require.NotNil(t, step.EnvLines, "EnvLines should be populated")
 	myEnvLine, ok := step.EnvLines["MY_ENV"]
 	require.True(t, ok, "EnvLines should contain 'MY_ENV'")
@@ -610,7 +600,6 @@ jobs:
 	assert.Greater(t, anotherEnvLine, myEnvLine, "ANOTHER_ENV should be on a later line than MY_ENV")
 }
 
-// TestAzureParser_CapturesLineNumbers_StagedJobs verifies line numbers for steps in staged jobs.
 func TestAzureParser_CapturesLineNumbers_StagedJobs(t *testing.T) {
 	content := []byte(`trigger:
   - main

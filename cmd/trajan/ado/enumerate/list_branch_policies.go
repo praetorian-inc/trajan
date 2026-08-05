@@ -57,10 +57,8 @@ func runListBranchPoliciesAzDO() error {
 
 	var projects []string
 	if enumProject != "" {
-		// Single project specified
 		projects = []string{enumProject}
 	} else {
-		// List all projects
 		projList, err := client.ListProjects(ctx)
 		if err != nil {
 			return err
@@ -70,7 +68,6 @@ func runListBranchPoliciesAzDO() error {
 		}
 	}
 
-	// Collect all policies across projects
 	type policyRow struct {
 		ID         int
 		Type       string
@@ -86,14 +83,12 @@ func runListBranchPoliciesAzDO() error {
 	var rows []policyRow
 
 	for _, proj := range projects {
-		// Get policies for this project
 		policies, err := client.ListPolicyConfigurations(ctx, proj)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to list policies for project %s: %v\n", proj, err)
 			continue
 		}
 
-		// Build repository name map
 		repoMap := make(map[string]string)
 		repos, err := client.ListRepositories(ctx, proj)
 		if err != nil {
@@ -104,21 +99,17 @@ func runListBranchPoliciesAzDO() error {
 			}
 		}
 
-		// Get policy type name map
 		typeMap := policyTypeNameMap()
 
-		// Process policies
 		for _, p := range policies {
-			// Filter for build-only if requested
 			if branchPoliciesBuildOnly && p.Type.ID != buildValidationPolicyTypeID {
 				continue
 			}
 
 			allPolicies = append(allPolicies, p)
 
-			// Expand scope entries into separate rows
 			if len(p.Settings.Scope) == 0 {
-				// No scope defined - applies to all repos
+				// No scope means the policy applies to every repository.
 				row := policyRow{
 					ID:         p.ID,
 					Type:       getPolicyTypeName(p.Type.ID, typeMap),
@@ -131,7 +122,6 @@ func runListBranchPoliciesAzDO() error {
 				}
 				rows = append(rows, row)
 			} else {
-				// Create a row for each scope entry
 				for _, scope := range p.Settings.Scope {
 					row := policyRow{
 						ID:         p.ID,
@@ -149,7 +139,6 @@ func runListBranchPoliciesAzDO() error {
 		}
 	}
 
-	// Output results
 	switch enumOutput {
 	case "json":
 		enc := json.NewEncoder(os.Stdout)
@@ -200,7 +189,6 @@ func runListBranchPoliciesAzDO() error {
 	}
 }
 
-// getRepoName returns a display name for a repository ID
 func getRepoName(repoID string, repoMap map[string]string) string {
 	if repoID == "" || repoID == "null" {
 		return "(all repos)"
@@ -208,41 +196,34 @@ func getRepoName(repoID string, repoMap map[string]string) string {
 	if name, ok := repoMap[repoID]; ok {
 		return name
 	}
-	// Truncate long IDs for display
 	if len(repoID) > 8 {
 		return repoID[:8] + "..."
 	}
 	return repoID
 }
 
-// formatBranchName formats a Git ref for display
 func formatBranchName(refName string) string {
 	if refName == "" {
 		return "*"
 	}
-	// Strip refs/heads/ prefix if present
 	if len(refName) > 11 && refName[:11] == "refs/heads/" {
 		return refName[11:]
 	}
 	return refName
 }
 
-// getPolicyTypeName returns a friendly name for a policy type ID
 func getPolicyTypeName(typeID string, typeMap map[string]string) string {
 	if name, ok := typeMap[typeID]; ok {
 		return name
 	}
-	// Truncate unknown type IDs
 	if len(typeID) > 8 {
 		return typeID[:8] + "..."
 	}
 	return typeID
 }
 
-// formatPolicyDetails returns a summary of policy-specific details
 func formatPolicyDetails(p azuredevops.PolicyConfiguration) string {
 	if p.Type.ID == buildValidationPolicyTypeID {
-		// For build validation, try to show build definition info
 		if p.Settings.BuildDefinitionID > 0 {
 			return fmt.Sprintf("Pipeline ID: %d", p.Settings.BuildDefinitionID)
 		}

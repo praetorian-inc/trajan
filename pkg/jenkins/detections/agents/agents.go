@@ -16,21 +16,18 @@ func init() {
 	})
 }
 
-// Detection detects insecure agent configurations in Jenkins pipelines.
-// Running builds on the Jenkins controller or with unrestricted agent labels
-// can expose the controller to arbitrary code execution.
+// Building on the Jenkins controller, or with no label restriction at all, exposes
+// the controller to arbitrary code execution.
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new agent security detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("agents", "jenkins", detections.SeverityMedium),
 	}
 }
 
-// insecureAgentLabels contains agent labels that indicate insecure configurations
 var insecureAgentLabels = []string{
 	"any",
 	"master",
@@ -38,7 +35,6 @@ var insecureAgentLabels = []string{
 	"controller",
 }
 
-// Detect finds insecure agent configurations in the workflow graph
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
@@ -68,7 +64,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// isInsecureAgent checks if an agent label is insecure
 func (d *Detection) isInsecureAgent(runsOn string) bool {
 	label := strings.TrimSpace(strings.ToLower(runsOn))
 
@@ -86,7 +81,6 @@ func (d *Detection) isInsecureAgent(runsOn string) bool {
 	return false
 }
 
-// createFinding creates a finding for insecure agent configuration
 func (d *Detection) createFinding(wf *graph.WorkflowNode, job *graph.JobNode) detections.Finding {
 	evidence := job.RunsOn
 	if evidence == "" {

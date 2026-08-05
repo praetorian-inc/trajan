@@ -14,28 +14,20 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// LocalScanConfig drives RunLocalScan. All fields are caller-supplied; the helper
-// encapsulates the common lib.Scan → Filter → Output flow used by every
-// platform's --path invocation.
 type LocalScanConfig struct {
-	Platform         string                                                                         // platforms.PlatformGitHub, etc.
-	Path             string                                                                         // user-supplied --path value
-	Concurrency      int                                                                            // worker count
-	Timeout          time.Duration                                                                  // 0 = 5m default (via lib.applyDefaults)
-	Capabilities     string                                                                         // --capabilities flag value
-	Severity         string                                                                         // --severity flag value
-	Detailed         bool                                                                           // --detailed flag value
-	Verbose          bool                                                                           // resolved via GetVerbose
-	Output           string                                                                         // resolved via GetOutput ("json"|"sarif"|"html"|"")
-	CapabilityFilter func(findings []detections.Finding, spec string) ([]detections.Finding, error) // platform-specific capability filter
-	WorkflowLabel    string                                                                         // human-readable noun for the verbose log line, e.g. "GitHub workflow", "Jenkins pipeline"
+	Platform         string
+	Path             string
+	Concurrency      int
+	Timeout          time.Duration // 0 defers to lib's own 5m default
+	Capabilities     string
+	Severity         string
+	Detailed         bool
+	Verbose          bool
+	Output           string // "json", "sarif", "html", or "" for the console table
+	CapabilityFilter func(findings []detections.Finding, spec string) ([]detections.Finding, error)
+	WorkflowLabel    string // singular noun for the log line: "GitHub workflow", "Jenkins pipeline"
 }
 
-// RunLocalScan executes the local-mode scan flow used by every platform CLI:
-//  1. lib.Scan (handles Walk → Partition → SetMetadata → Execute internally)
-//  2. capability filter (if Capabilities != "")
-//  3. severity filter (if Severity != "")
-//  4. output dispatch (json/sarif/html/default with --detailed branch)
 func RunLocalScan(cfg LocalScanConfig) error {
 	result, err := lib.Scan(context.Background(), lib.ScanConfig{
 		Platform:    cfg.Platform,

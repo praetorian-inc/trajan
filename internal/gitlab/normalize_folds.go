@@ -12,7 +12,6 @@ func yamlUnmarshal(b []byte, v any) error { return yaml.Unmarshal(b, v) }
 
 func nowUTC() time.Time { return time.Now().UTC() }
 
-// parseDatePrefix parses the YYYY-MM-DD prefix of an ISO date/timestamp.
 func parseDatePrefix(s string) time.Time {
 	if len(s) < 10 {
 		return time.Time{}
@@ -40,8 +39,8 @@ func duoBool(duo map[string]any, scope, key string) any {
 	return entBool(duoNode(duo, scope)[key])
 }
 
-// duoGuardrail returns promptInjectionProtectionLevel UPPERCASE verbatim
-// (LOG_ONLY/NO_CHECKS/INTERRUPT) — hard contract C-guardrail, never lowercased.
+// promptInjectionProtectionLevel is carried through UPPERCASE and verbatim
+// (LOG_ONLY, NO_CHECKS, INTERRUPT); the rules match on those exact strings.
 func duoGuardrail(duo map[string]any, scope string) any {
 	if duo == nil || entUnobserved(duo) {
 		return nil
@@ -53,11 +52,9 @@ func duoGuardrail(duo map[string]any, scope string) any {
 	return v
 }
 
-// ---- .gitlab-ci.yml text folds (project/credential derived booleans) ----
-//
-// These are cheap textual scans over the raw entrypoint sufficient for the
-// project/credential effective booleans. Full include-tree resolution and
-// per-job facts are the job normalizer's responsibility.
+// Cheap textual scans over the raw entrypoint, enough for the project and credential
+// booleans. Full include-tree resolution and per-job facts belong to the job
+// normalizer, not here.
 
 var (
 	reIDTokens    = regexp.MustCompile(`(?m)^\s*id_tokens\s*:`)

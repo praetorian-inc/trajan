@@ -12,7 +12,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// createFile creates a file at the given path, creating all parent directories.
 func createFile(t *testing.T, path string, content string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
@@ -50,13 +49,13 @@ func TestWalk_Directory_GitHub_MatchesAndSkipsDirs(t *testing.T) {
 	// Should be excluded (wrong extension)
 	createFile(t, filepath.Join(root, "README.md"), "")
 
-	// Should be skipped (skip dir .git)
+	// Should be skipped
 	createFile(t, filepath.Join(root, ".git", "HEAD"), "ref: refs/heads/main")
 
-	// Should be skipped (skip dir node_modules)
+	// Should be skipped
 	createFile(t, filepath.Join(root, "node_modules", ".github", "workflows", "sneaky.yml"), "")
 
-	// Should be skipped (skip dir vendor)
+	// Should be skipped
 	createFile(t, filepath.Join(root, "vendor", "x", ".github", "workflows", "v.yml"), "")
 
 	workflows, err := Walk(platforms.PlatformGitHub, root, "my-slug")
@@ -100,12 +99,12 @@ func TestWalk_Directory_Jenkins(t *testing.T) {
 	// Should be included
 	createFile(t, filepath.Join(root, "Jenkinsfile"), "")
 	createFile(t, filepath.Join(root, "services", "Jenkinsfile.prod"), "")
-	// Use separate directories to avoid case-insensitive filesystem collision
-	// on macOS (build.jenkinsfile vs BUILD.JENKINSFILE would resolve to same inode).
+	// Separate directories: on a case-insensitive filesystem build.jenkinsfile and
+	// BUILD.JENKINSFILE would be the same file.
 	createFile(t, filepath.Join(root, "legacy", "build.jenkinsfile"), "")
 	createFile(t, filepath.Join(root, "LEGACY_UPPER", "BUILD.JENKINSFILE"), "")
 	createFile(t, filepath.Join(root, "Jenkinsfile.bak"), "")
-	// Bare lowercase jenkinsfile in a separate directory to avoid macOS collision.
+	// Separate directory for the same case-insensitivity reason.
 	createFile(t, filepath.Join(root, "lowercase_bare", "jenkinsfile"), "")
 
 	// Should be excluded (underscore separator, not dot-prefix)
@@ -131,7 +130,7 @@ func TestWalk_Directory_Jenkins(t *testing.T) {
 func TestWalk_Directory_StableSortByPath(t *testing.T) {
 	root := t.TempDir()
 
-	// Create files in non-sorted on-disk order so sort.Slice is exercised.
+	// Created out of order so the sort is actually exercised.
 	createFile(t, filepath.Join(root, "z-service", "Jenkinsfile"), "")
 	createFile(t, filepath.Join(root, "a-service", "Jenkinsfile"), "")
 
@@ -175,7 +174,7 @@ func TestWalk_Directory_SkipsOversizedFiles(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(oversized), 0o755))
 	f, err := os.Create(oversized)
 	require.NoError(t, err)
-	// Write 11 MB to exceed MaxFileSize (10 MB).
+	// 11 MB exceeds MaxFileSize.
 	chunk := make([]byte, 1024*1024)
 	for i := 0; i < 11; i++ {
 		_, err = f.Write(chunk)
@@ -194,7 +193,7 @@ func TestWalk_SingleFile_RejectsOversized(t *testing.T) {
 	file := filepath.Join(tmp, "ci.yml")
 	f, err := os.Create(file)
 	require.NoError(t, err)
-	// Write 11 MB to exceed MaxFileSize (10 MB).
+	// 11 MB exceeds MaxFileSize.
 	chunk := make([]byte, 1024*1024)
 	for i := 0; i < 11; i++ {
 		_, err = f.Write(chunk)

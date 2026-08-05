@@ -152,9 +152,9 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 			return e
 		})
 	}
-	// includeSharedServiceEndpoints surfaces connections shared INTO this project
-	// (not just owned), so each consuming project's per-connection authorization
-	// and checks get collected — normalize dedups the shared node.
+	// includeSharedServiceEndpoints also surfaces connections shared INTO this project,
+	// so every consuming project's per-connection authorization and checks are
+	// collected; normalize dedups the shared node.
 	softSurface(timer, lbl("service-connections"), func() error {
 		items, status, e := softList(ctx, cl, "core", APIVersionSEP, "/"+pe+"/_apis/serviceendpoint/endpoints",
 			url.Values{"includeSharedServiceEndpoints": []string{"true"}})
@@ -181,9 +181,8 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 	collectList("agent-queues", "core", APIVersion, "/"+pe+"/_apis/distributedtask/queues",
 		engine.CollectADOAgentQueues(project), "agent-queues", "queue")
 
-	// deployment groups: the preview api-version is required (GA 400s); the
-	// $expand=machines option is no longer supported, so per-machine detail would
-	// need per-group queries (deferred — none exist in the target estate).
+	// The preview api-version is required here (GA 400s), and $expand=machines is no
+	// longer supported, so per-machine detail would need a query per group.
 	softSurface(timer, lbl("deployment-groups"), func() error {
 		items, status, e := softList(ctx, cl, "core", APIVersionPreview,
 			"/"+pe+"/_apis/distributedtask/deploymentgroups", nil)
@@ -198,8 +197,8 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 			"/"+pe+"/_apis/distributedtask/taskgroups", engine.CollectADOTaskGroups(project), "task-groups", "")
 		return e
 	})
-	// classic release definitions: list (summary) then fan out full detail —
-	// approvals/gates/artifacts live only on the per-definition GET (cat-14).
+	// The list is summaries only: approvals, gates and artifacts live on the
+	// per-definition GET, so the ids drive a detail fan-out.
 	var releaseIDs []int64
 	softSurface(timer, lbl("releases"), func() error {
 		items, status, e := softList(ctx, cl, "vsrm", APIVersion, "/"+pe+"/_apis/release/definitions", nil)
@@ -216,9 +215,8 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 		return nil
 	})
 
-	// Pipeline id set = /build/definitions (YAML type-2 AND classic/designer type-1
-	// builds) UNION /pipelines (newer abstraction), so a pipeline surfaced by only
-	// one endpoint is still collected.
+	// The id set unions /build/definitions (both YAML and classic builds) with
+	// /pipelines, so a pipeline surfaced by only one endpoint is still collected.
 	pipelineNames := map[int64]string{}
 	softSurface(timer, lbl("build-definitions"), func() error {
 		items, status, e := softList(ctx, cl, "core", APIVersion, "/"+pe+"/_apis/build/definitions", nil)
@@ -245,9 +243,8 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 		return nil
 	})
 
-	// per pipeline: full definition; YAML pipelines (process.type==2) additionally
-	// get preview + template closure; classic/designer pipelines (type 1) carry
-	// their steps in the full definition's process.phases, so nothing more is fetched.
+	// Only YAML pipelines (process.type 2) need preview and the template closure;
+	// a classic pipeline carries its steps in the full definition's process.phases.
 	for _, id := range sortedIDs(pipelineNames) {
 		softSurface(timer, lbl(fmt.Sprintf("pipeline/%d", id)), func() error {
 			full, e := collectBuildDefFull(ctx, cl, cp, project, id)
@@ -269,7 +266,6 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 		})
 	}
 
-	// per resource: pipeline permissions + checks
 	for _, r := range resources {
 		softSurface(timer, lbl("perms/"+r.Type+"/"+r.ID), func() error { return collectPipelinePermissions(ctx, cl, cp, project, r) })
 		softSurface(timer, lbl("checks/"+r.Type+"/"+r.ID), func() error { return collectChecks(ctx, cl, cp, project, r) })
@@ -283,7 +279,6 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 		}
 	}
 
-	// per repo: git ACL (skip others if a repo scope was requested)
 	for _, repo := range repos {
 		if scope.Repo != "" && !strings.EqualFold(repo.Name, scope.Repo) {
 			continue

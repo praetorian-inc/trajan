@@ -28,7 +28,6 @@ var (
 	confidenceOrder = []string{"high", "medium", "low"}
 )
 
-// present returns the levels in `order` that actually occur, preserving order.
 func present(counts map[string]int, order []string) []string {
 	var out []string
 	for _, lvl := range order {
@@ -78,8 +77,6 @@ func codeCaption(f finding.Finding) string {
 	}
 	return f.File
 }
-
-// ----- Markdown -----
 
 func renderMarkdown(meta reportMeta, findings []finding.Finding) []byte {
 	var b strings.Builder

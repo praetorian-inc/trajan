@@ -25,7 +25,6 @@ func TestServiceConnectionsDetection_Detect_DynamicConnectionFromParameter(t *te
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with dynamic service connection from parameter
 	step := graph.NewStepNode("step1", "azure-deploy", 10)
 	step.Uses = "task:AzureCLI@2"
 	step.With = map[string]string{
@@ -59,7 +58,6 @@ func TestServiceConnectionsDetection_Detect_StaticConnection(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with static (safe) service connection
 	step := graph.NewStepNode("step1", "azure-deploy-safe", 20)
 	step.Uses = "task:AzureCLI@2"
 	step.With = map[string]string{
@@ -72,7 +70,6 @@ func TestServiceConnectionsDetection_Detect_StaticConnection(t *testing.T) {
 
 	findings, err := d.Detect(ctx, g)
 	require.NoError(t, err)
-	// Static connections should not produce VulnServiceConnectionHijacking
 	for _, f := range findings {
 		assert.NotEqual(t, detections.VulnServiceConnectionHijacking, f.Type,
 			"Expected no hijacking finding for static connection")
@@ -92,7 +89,6 @@ func TestServiceConnectionsDetection_Detect_ConnectionInEnvVariable(t *testing.T
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with service connection in environment variable (potential secret leak)
 	step := graph.NewStepNode("step1", "deploy-with-env", 25)
 	step.Run = "echo 'Deploying...'"
 	step.Env = map[string]string{
@@ -124,7 +120,6 @@ func TestServiceConnectionsDetection_Detect_MultipleIssues(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Step 1: Dynamic connection from parameter
 	step1 := graph.NewStepNode("step1", "step1", 10)
 	step1.Uses = "task:AzureCLI@2"
 	step1.With = map[string]string{
@@ -134,7 +129,6 @@ func TestServiceConnectionsDetection_Detect_MultipleIssues(t *testing.T) {
 	g.AddNode(step1)
 	g.AddEdge(job.ID(), step1.ID(), graph.EdgeContains)
 
-	// Step 2: Connection in environment variable
 	step2 := graph.NewStepNode("step2", "step2", 20)
 	step2.Run = "deploy.sh"
 	step2.Env = map[string]string{
@@ -144,7 +138,6 @@ func TestServiceConnectionsDetection_Detect_MultipleIssues(t *testing.T) {
 	g.AddNode(step2)
 	g.AddEdge(job.ID(), step2.ID(), graph.EdgeContains)
 
-	// Step 3: Safe static connection (should not be flagged)
 	step3 := graph.NewStepNode("step3", "step3", 30)
 	step3.Uses = "task:AzureCLI@2"
 	step3.With = map[string]string{
@@ -172,7 +165,6 @@ func TestServiceConnectionsDetection_Detect_NoServiceConnection(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with no service connection
 	step := graph.NewStepNode("step1", "build", 5)
 	step.Run = "npm run build"
 	step.SetParent(job.ID())
@@ -197,7 +189,6 @@ func TestServiceConnectionsDetection_Detect_MultipleConnectionParameters(t *test
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with multiple connection-related parameters (test all known patterns)
 	step := graph.NewStepNode("step1", "complex-deploy", 15)
 	step.Uses = "task:CustomDeploy@1"
 	step.With = map[string]string{
@@ -215,8 +206,6 @@ func TestServiceConnectionsDetection_Detect_MultipleConnectionParameters(t *test
 	assert.GreaterOrEqual(t, len(findings), 3, "Expected at least 3 findings for multiple dynamic connections")
 }
 
-// TestServiceConnectionsDetection_Detect_DynamicConnectionFromStepOutput tests detection of
-// dynamic connections from step outputs, which can be attacker-controlled
 func TestServiceConnectionsDetection_Detect_DynamicConnectionFromStepOutput(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -230,7 +219,6 @@ func TestServiceConnectionsDetection_Detect_DynamicConnectionFromStepOutput(t *t
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Step output can be attacker-controlled if the step runs attacker code
 	step := graph.NewStepNode("step1", "deploy-with-step-output", 10)
 	step.Uses = "task:AzureCLI@2"
 	step.With = map[string]string{
@@ -262,7 +250,6 @@ func TestServiceConnectionsDetection_Detect_DynamicConnectionFromJobOutput(t *te
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Job output can be attacker-controlled
 	step := graph.NewStepNode("step1", "deploy-with-job-output", 15)
 	step.Uses = "task:AzureCLI@2"
 	step.With = map[string]string{
@@ -291,7 +278,6 @@ func TestServiceConnectionsDetection_Detect_DynamicConnectionFromEnv(t *testing.
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Environment variable references can be attacker-controlled
 	step := graph.NewStepNode("step1", "deploy-with-env", 20)
 	step.Uses = "task:AzureCLI@2"
 	step.With = map[string]string{
@@ -307,8 +293,6 @@ func TestServiceConnectionsDetection_Detect_DynamicConnectionFromEnv(t *testing.
 	assert.NotEmpty(t, findings, "Expected to find dynamic service connection from env reference")
 }
 
-// TestServiceConnectionsDetection_Detect_GenericEnvVariablesNotFlagged tests that generic
-// environment variables that aren't service connections should NOT be flagged
 func TestServiceConnectionsDetection_Detect_GenericEnvVariablesNotFlagged(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -322,7 +306,6 @@ func TestServiceConnectionsDetection_Detect_GenericEnvVariablesNotFlagged(t *tes
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Generic environment variables that aren't service connections should NOT be flagged
 	step := graph.NewStepNode("step1", "build-with-env", 25)
 	step.Run = "echo 'Building...'"
 	step.Env = map[string]string{
@@ -356,7 +339,6 @@ func TestServiceConnectionsDetection_Detect_ActualConnectionEnvFlagged(t *testin
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Actual service connection-related env vars SHOULD be flagged
 	step := graph.NewStepNode("step1", "deploy-with-connection-env", 30)
 	step.Run = "echo 'Deploying...'"
 	step.Env = map[string]string{
@@ -374,15 +356,12 @@ func TestServiceConnectionsDetection_Detect_ActualConnectionEnvFlagged(t *testin
 	assert.NotEmpty(t, findings, "Expected to find service connections in env variables")
 }
 
-// Overexposed (overpermissioned) service connection tests
-
 func TestServiceConnectionsDetection_Detect_ConnectionUsedByMultiplePipelines(t *testing.T) {
 	d := New()
 	ctx := context.Background()
 
 	g := graph.NewGraph()
 
-	// Create 4 workflows all using the same connection
 	for i := 1; i <= 4; i++ {
 		wf := graph.NewWorkflowNode("wf"+string(rune('0'+i)), "pipeline"+string(rune('0'+i))+".yml", "pipeline"+string(rune('0'+i))+".yml", "owner/repo", nil)
 		g.AddNode(wf)
@@ -420,7 +399,6 @@ func TestServiceConnectionsDetection_Detect_ConnectionUsedBy2Pipelines_NoFinding
 
 	g := graph.NewGraph()
 
-	// Create 2 workflows using the same connection (below the threshold of 3, should NOT trigger)
 	for i := 1; i <= 2; i++ {
 		wf := graph.NewWorkflowNode("wf"+string(rune('0'+i)), "pipeline"+string(rune('0'+i))+".yml", "pipeline"+string(rune('0'+i))+".yml", "owner/repo", nil)
 		g.AddNode(wf)
@@ -449,7 +427,6 @@ func TestServiceConnectionsDetection_Detect_MultipleConnections(t *testing.T) {
 
 	g := graph.NewGraph()
 
-	// Connection A used by 4 workflows (should be flagged)
 	for i := 1; i <= 4; i++ {
 		wf := graph.NewWorkflowNode("wfA"+string(rune('0'+i)), "pipelineA"+string(rune('0'+i))+".yml", "pipelineA"+string(rune('0'+i))+".yml", "owner/repo", nil)
 		g.AddNode(wf)
@@ -463,7 +440,6 @@ func TestServiceConnectionsDetection_Detect_MultipleConnections(t *testing.T) {
 		g.AddEdge(wf.ID(), step.ID(), graph.EdgeContains)
 	}
 
-	// Connection B used by 2 workflows (should NOT be flagged)
 	for i := 1; i <= 2; i++ {
 		wf := graph.NewWorkflowNode("wfB"+string(rune('0'+i)), "pipelineB"+string(rune('0'+i))+".yml", "pipelineB"+string(rune('0'+i))+".yml", "owner/repo", nil)
 		g.AddNode(wf)
@@ -496,7 +472,6 @@ func TestServiceConnectionsDetection_Detect_NoServiceConnections(t *testing.T) {
 
 	g := graph.NewGraph()
 
-	// Create workflows without service connections
 	for i := 1; i <= 5; i++ {
 		wf := graph.NewWorkflowNode("wf"+string(rune('0'+i)), "pipeline"+string(rune('0'+i))+".yml", "pipeline"+string(rune('0'+i))+".yml", "owner/repo", nil)
 		g.AddNode(wf)
@@ -513,8 +488,6 @@ func TestServiceConnectionsDetection_Detect_NoServiceConnections(t *testing.T) {
 	assert.Empty(t, findings, "Expected no findings without service connections")
 }
 
-// TestServiceConnectionsDetection_FindingLine_PointsToInputField verifies that the finding Line
-// points to the line of the vulnerable azureSubscription input field, not the step start line.
 func TestServiceConnectionsDetection_FindingLine_PointsToInputField(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -528,14 +501,13 @@ func TestServiceConnectionsDetection_FindingLine_PointsToInputField(t *testing.T
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Step starts at line 26, but the azureSubscription input is at line 29
+	// Step starts at 26; the azureSubscription input is at 29.
 	step := graph.NewStepNode("step1", "azure-deploy", 26)
 	step.Uses = "AzureCLI@2"
 	step.With = map[string]string{
 		"azureSubscription": "${{ parameters.connectionName }}",
 		"scriptType":        "bash",
 	}
-	// WithLines maps the input key to the exact line of that field
 	step.WithLines = map[string]int{
 		"azureSubscription": 29,
 		"scriptType":        30,
@@ -560,8 +532,6 @@ func TestServiceConnectionsDetection_FindingLine_PointsToInputField(t *testing.T
 		"Finding Line should point to the azureSubscription field (29), not the step start (26)")
 }
 
-// TestServiceConnectionsDetection_FindingLine_PointsToEnvKey verifies that the finding Line
-// for a service connection in env points to the specific env key line, not the step start.
 func TestServiceConnectionsDetection_FindingLine_PointsToEnvKey(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -575,7 +545,7 @@ func TestServiceConnectionsDetection_FindingLine_PointsToEnvKey(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Step starts at line 15, the AZURE_CONNECTION env key is at line 18
+	// Step starts at 15; the AZURE_CONNECTION env key is at 18.
 	step := graph.NewStepNode("step1", "deploy-with-env", 15)
 	step.Run = "echo 'Deploying...'"
 	step.Env = map[string]string{
@@ -604,8 +574,6 @@ func TestServiceConnectionsDetection_FindingLine_PointsToEnvKey(t *testing.T) {
 		"Finding Line should point to the AZURE_CONNECTION env key (18), not the step start (15)")
 }
 
-// TestServiceConnectionsDetection_FindingLine_FallsBackToStepLine verifies that when WithLines
-// is nil or missing a key, the finding falls back to the step start line.
 func TestServiceConnectionsDetection_FindingLine_FallsBackToStepLine(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -619,13 +587,12 @@ func TestServiceConnectionsDetection_FindingLine_FallsBackToStepLine(t *testing.
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Step has no WithLines — should fall back to step.Line
+	// Step at line 42, with no WithLines.
 	step := graph.NewStepNode("step1", "azure-deploy", 42)
 	step.Uses = "AzureCLI@2"
 	step.With = map[string]string{
 		"azureSubscription": "${{ parameters.connectionName }}",
 	}
-	// WithLines is nil (not set)
 	step.SetParent(job.ID())
 	g.AddNode(step)
 	g.AddEdge(job.ID(), step.ID(), graph.EdgeContains)
@@ -646,10 +613,7 @@ func TestServiceConnectionsDetection_FindingLine_FallsBackToStepLine(t *testing.
 		"Finding Line should fall back to step start (42) when WithLines is nil")
 }
 
-// TestServiceConnectionsDetection_Detect_OverexposedConnectionAcrossMultipleDetectCalls verifies
-// that the overexposed-connection finding fires when Detect is called 3 or more times on separate
-// single-workflow graphs that each reference the same service connection. This exercises the
-// cross-call accumulation behavior introduced by making connectionUsage a struct field.
+// Usage accumulates across Detect calls, so three single-workflow graphs cross the threshold.
 func TestServiceConnectionsDetection_Detect_OverexposedConnectionAcrossMultipleDetectCalls(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -668,7 +632,7 @@ func TestServiceConnectionsDetection_Detect_OverexposedConnectionAcrossMultipleD
 		return g
 	}
 
-	// First call: 1 workflow references the connection — below threshold, no overexposed finding
+	// 1 workflow total: below threshold.
 	findings1, err := d.Detect(ctx, buildGraph("wf1", "pipeline1"))
 	require.NoError(t, err)
 	for _, f := range findings1 {
@@ -676,7 +640,7 @@ func TestServiceConnectionsDetection_Detect_OverexposedConnectionAcrossMultipleD
 			"Expected no overexposed finding after first Detect call")
 	}
 
-	// Second call: 2 workflows total — still below threshold of 3
+	// 2 workflows total: still below.
 	findings2, err := d.Detect(ctx, buildGraph("wf2", "pipeline2"))
 	require.NoError(t, err)
 	for _, f := range findings2 {
@@ -684,7 +648,7 @@ func TestServiceConnectionsDetection_Detect_OverexposedConnectionAcrossMultipleD
 			"Expected no overexposed finding after second Detect call")
 	}
 
-	// Third call: 3 workflows total — meets the >= 3 threshold, finding must be returned
+	// 3 workflows total: threshold met, finding emitted.
 	findings3, err := d.Detect(ctx, buildGraph("wf3", "pipeline3"))
 	require.NoError(t, err)
 
@@ -701,7 +665,7 @@ func TestServiceConnectionsDetection_Detect_OverexposedConnectionAcrossMultipleD
 	}
 	assert.True(t, found, "Expected VulnOverexposedServiceConnections finding on 3rd Detect call")
 
-	// Fourth call: same connection in a 4th workflow — finding must NOT be emitted again (dedup)
+	// 4th workflow: must not emit the finding again.
 	findings4, err := d.Detect(ctx, buildGraph("wf4", "pipeline4"))
 	require.NoError(t, err)
 	for _, f := range findings4 {

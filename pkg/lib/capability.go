@@ -13,7 +13,7 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/match"
 )
 
-// Triage status strings matching the Chariot platform conventions.
+// Triage status codes as the Chariot platform spells them.
 const (
 	TriageHigh   = "TH"
 	TriageMedium = "TM"
@@ -21,14 +21,12 @@ const (
 	TriageInfo   = "TI"
 )
 
-// DetectPlatform delegates to match.DetectPlatform for backward compatibility.
+// DetectPlatform is an alias kept for existing SDK consumers.
 var DetectPlatform = match.DetectPlatform
 
-// SDKCapability implements capability.Capability[capmodel.Repository] for
-// the Trajan CI/CD security scanner.
+// SDKCapability adapts the Trajan scanner to the capability SDK.
 type SDKCapability struct{}
 
-// compile-time interface check
 var _ capability.Capability[capmodel.Repository] = (*SDKCapability)(nil)
 
 // NewSDKCapability returns a new SDKCapability instance.
@@ -48,8 +46,8 @@ func (c *SDKCapability) Match(ctx capability.ExecutionContext, input capmodel.Re
 	return match.Repository(ctx, input)
 }
 
-// InvokeScanFunc is the function used by Invoke to perform the actual scan.
-// Override in tests to avoid real API calls.
+// InvokeScanFunc is the scan Invoke performs; tests override it to avoid real
+// API calls.
 var InvokeScanFunc = defaultInvokeScan
 
 func defaultInvokeScan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
@@ -86,12 +84,10 @@ func (c *SDKCapability) Invoke(ctx capability.ExecutionContext, input capmodel.R
 		return fmt.Errorf("trajan scan %s/%s on %s: %w", input.Org, input.Name, platformName, err)
 	}
 
-	// Log non-fatal scan errors as warnings
 	for _, scanErr := range result.Errors {
 		slog.Warn("trajan: scan warning", "error", scanErr, "repo", input.URL)
 	}
 
-	// Emit discovered workflows as assets
 	for _, wf := range result.Workflows {
 		if err := output.Emit(capmodel.Asset{
 			DNS:  input.URL,
@@ -101,7 +97,6 @@ func (c *SDKCapability) Invoke(ctx capability.ExecutionContext, input capmodel.R
 		}
 	}
 
-	// Emit findings as risks
 	for _, finding := range result.Findings {
 		proof := BuildFindingProof(finding)
 		status := SeverityToStatus(finding.Severity)
@@ -136,7 +131,6 @@ func SeverityToStatus(severity detections.Severity) string {
 	}
 }
 
-// findingProof is the JSON structure stored in Risk.Proof.
 type findingProof struct {
 	Type         string `json:"type"`
 	Severity     string `json:"severity"`

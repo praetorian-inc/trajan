@@ -6,9 +6,9 @@ import (
 	"sync"
 )
 
-// RateLimiter tracks GitLab's RateLimit-* response headers (no X- prefix). The
-// request loop reacts to 429 with Retry-After; this only keeps the latest
-// limit/remaining snapshot for the whoami report.
+// GitLab's headers are RateLimit-*, with no X- prefix. This throttles nothing: the
+// request loop reacts to 429 with Retry-After, and this only keeps the latest snapshot
+// for the whoami report.
 type RateLimiter struct {
 	mu        sync.Mutex
 	limit     int

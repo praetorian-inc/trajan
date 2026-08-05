@@ -106,12 +106,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--org is required")
 	}
 
-	// Derive org name and base URL (accept short name or full URL)
+	// Accepts either a short org name or a full URL.
 	orgName := scanOrg
 	var baseURL string
 	if strings.HasPrefix(orgName, "https://") || strings.HasPrefix(orgName, "http://") {
 		baseURL = orgName
-		// Extract short name from URL tail for use as target value
 		parts := strings.Split(strings.TrimRight(orgName, "/"), "/")
 		orgName = parts[len(parts)-1]
 	} else {
@@ -188,7 +187,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	findings := execResult.Findings
 
-	// Filter findings by capabilities if specified (resolves plugin names to VulnerabilityTypes)
 	if capabilities != "" {
 		filteredFindings, err := cmdutil.FilterFindingsByADOCapabilities(execResult.Findings, capabilities)
 		if err != nil {
@@ -197,7 +195,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 		findings = filteredFindings
 	}
 
-	// Filter findings by severity if specified
 	if severity != "" {
 		filteredFindings, err := cmdutil.FilterFindingsBySeverity(findings, severity)
 		if err != nil {
@@ -232,7 +229,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 }
 
-// listActiveDetections lists all active detection capabilities
 func listActiveDetections() error {
 	allPlugins := registry.GetDetections("azuredevops")
 

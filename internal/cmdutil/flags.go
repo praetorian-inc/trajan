@@ -8,7 +8,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// GetToken reads the token from root persistent flags.
 func GetToken(cmd *cobra.Command) string {
 	if t, err := cmd.Root().PersistentFlags().GetString("token"); err == nil && t != "" {
 		return t
@@ -16,8 +15,6 @@ func GetToken(cmd *cobra.Command) string {
 	return ""
 }
 
-// GetTokenForPlatform retrieves authentication token for the specified platform.
-// Checks CLI flag first, then platform-specific environment variables.
 func GetTokenForPlatform(cmd *cobra.Command, platform string) string {
 	if t := GetToken(cmd); t != "" {
 		return t
@@ -43,31 +40,26 @@ func GetTokenForPlatform(cmd *cobra.Command, platform string) string {
 	return ""
 }
 
-// GetVerbose reads the verbose flag from root persistent flags.
 func GetVerbose(cmd *cobra.Command) bool {
 	v, _ := cmd.Root().PersistentFlags().GetBool("verbose")
 	return v
 }
 
-// GetOutput reads the output format flag from root persistent flags.
 func GetOutput(cmd *cobra.Command) string {
 	o, _ := cmd.Root().PersistentFlags().GetString("output")
 	return o
 }
 
-// GetHTTPProxy reads the HTTP proxy flag from root persistent flags.
 func GetHTTPProxy(cmd *cobra.Command) string {
 	p, _ := cmd.Root().PersistentFlags().GetString("proxy")
 	return p
 }
 
-// GetSOCKSProxy reads the SOCKS proxy flag from root persistent flags.
 func GetSOCKSProxy(cmd *cobra.Command) string {
 	p, _ := cmd.Root().PersistentFlags().GetString("socks-proxy")
 	return p
 }
 
-// GetUsernameForPlatform retrieves username for the specified platform.
 func GetUsernameForPlatform(cmd *cobra.Command, platform string) string {
 	if u, err := cmd.Root().PersistentFlags().GetString("username"); err == nil && u != "" {
 		return u
@@ -88,8 +80,6 @@ func GetUsernameForPlatform(cmd *cobra.Command, platform string) string {
 	return ""
 }
 
-// GetEmailForPlatform retrieves email for the specified platform.
-// Checks the --email flag first, then platform-specific environment variables.
 func GetEmailForPlatform(cmd *cobra.Command, platform string) string {
 	if e, err := cmd.Flags().GetString("email"); err == nil && e != "" {
 		return e
@@ -110,7 +100,6 @@ func GetEmailForPlatform(cmd *cobra.Command, platform string) string {
 	return ""
 }
 
-// ApplyProxyFlags reads proxy flags from the command and sets them on the config.
 func ApplyProxyFlags(cmd *cobra.Command, config *platforms.Config) {
 	config.HTTPProxy = GetHTTPProxy(cmd)
 	config.SOCKSProxy = GetSOCKSProxy(cmd)

@@ -25,7 +25,6 @@ func TestPipelineInjectionDetection_Detect_ParametersInScript(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with parameter interpolation in script
 	step := graph.NewStepNode("step1", "deploy", 10)
 	step.Run = "echo ${{ parameters.deployTarget }}"
 	step.SetParent(job.ID())
@@ -55,7 +54,6 @@ func TestPipelineInjectionDetection_Detect_VariablesInScript(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with variable interpolation in script
 	step := graph.NewStepNode("step1", "build", 15)
 	step.Run = "npm run ${{ variables.buildScript }}"
 	step.SetParent(job.ID())
@@ -88,7 +86,6 @@ func TestPipelineInjectionDetection_Detect_SafeStaticScript(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with safe static script
 	step := graph.NewStepNode("step1", "test", 20)
 	step.Run = "npm test"
 	step.SetParent(job.ID())
@@ -113,7 +110,7 @@ func TestPipelineInjectionDetection_Detect_SafeSystemVariables(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with safe system variables (runtime macro syntax, not template expression)
+	// Macro syntax $( ), not a ${{ }} template expression.
 	step := graph.NewStepNode("step1", "info", 25)
 	step.Run = "echo $(Build.BuildId)"
 	step.SetParent(job.ID())
@@ -138,7 +135,6 @@ func TestPipelineInjectionDetection_Detect_MacroInjection_InjectableVariable(t *
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Macro syntax with injectable variable should be flagged
 	step := graph.NewStepNode("step1", "build", 50)
 	step.Run = "echo $(Build.SourceBranch)"
 	step.SetParent(job.ID())
@@ -167,7 +163,6 @@ func TestPipelineInjectionDetection_Detect_DynamicTemplateReference(t *testing.T
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with template reference using parameters
 	step := graph.NewStepNode("step1", "deploy-step", 30)
 	step.Uses = "template:${{ parameters.templatePath }}"
 	step.SetParent(job.ID())
@@ -196,7 +191,6 @@ func TestPipelineInjectionDetection_Detect_MultipleInjections(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create multiple steps with different injection patterns
 	step1 := graph.NewStepNode("step1", "step1", 10)
 	step1.Run = "echo ${{ parameters.userInput }}"
 	step1.SetParent(job.ID())
@@ -233,7 +227,6 @@ func TestPipelineInjectionDetection_Detect_NoRunOrUses(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step with neither run nor uses (e.g., checkout step)
 	step := graph.NewStepNode("step1", "checkout", 5)
 	step.SetParent(job.ID())
 	g.AddNode(step)
@@ -244,8 +237,6 @@ func TestPipelineInjectionDetection_Detect_NoRunOrUses(t *testing.T) {
 	assert.Empty(t, findings, "Expected no findings for step without run/uses")
 }
 
-// TestPipelineInjectionDetection_Detect_SafeBuildIdVariable tests that safe system variables
-// using underscore notation (e.g., Build_BuildId) are NOT flagged
 func TestPipelineInjectionDetection_Detect_SafeBuildIdVariable(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -259,7 +250,6 @@ func TestPipelineInjectionDetection_Detect_SafeBuildIdVariable(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create a step using safe system variable with underscore notation
 	step := graph.NewStepNode("step1", "info", 25)
 	step.Run = "echo Build ID: ${{ variables.Build_BuildId }}"
 	step.SetParent(job.ID())
@@ -284,7 +274,6 @@ func TestPipelineInjectionDetection_Detect_SafeSystemVariables_MultipleSafe(t *t
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Test multiple safe system variables using underscore notation
 	safeVariables := []string{
 		"Build_BuildNumber",
 		"Build_Repository_Name",
@@ -319,7 +308,6 @@ func TestPipelineInjectionDetection_Detect_UnsafeUserDefinedVariable(t *testing.
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// User-defined variables (not system variables) should still be flagged
 	step := graph.NewStepNode("step1", "build", 35)
 	step.Run = "npm run ${{ variables.userDefinedScript }}"
 	step.SetParent(job.ID())
@@ -334,8 +322,6 @@ func TestPipelineInjectionDetection_Detect_UnsafeUserDefinedVariable(t *testing.
 	assert.Equal(t, detections.SeverityHigh, finding.Severity, "User-defined variable should be High severity")
 }
 
-// TestPipelineInjectionDetection_Detect_RuntimeExpressionWithParameter tests detection of
-// $[ ] runtime expression syntax with parameters
 func TestPipelineInjectionDetection_Detect_RuntimeExpressionWithParameter(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -349,7 +335,6 @@ func TestPipelineInjectionDetection_Detect_RuntimeExpressionWithParameter(t *tes
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Runtime expressions use $[ ] syntax and are evaluated at runtime
 	step := graph.NewStepNode("step1", "deploy", 40)
 	step.Run = "echo Deploying to $[ parameters.environment ]"
 	step.SetParent(job.ID())
@@ -377,7 +362,6 @@ func TestPipelineInjectionDetection_Detect_RuntimeExpressionInTemplateReference(
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Runtime expression in template reference is CRITICAL
 	step := graph.NewStepNode("step1", "deploy-with-template", 50)
 	step.Uses = "template:$[ parameters.templatePath ]"
 	step.SetParent(job.ID())
@@ -392,8 +376,6 @@ func TestPipelineInjectionDetection_Detect_RuntimeExpressionInTemplateReference(
 	assert.Equal(t, detections.SeverityCritical, finding.Severity, "Runtime expression in template reference should be Critical")
 	assert.Equal(t, detections.VulnDynamicTemplateInjection, finding.Type, "Runtime expression in template reference should be VulnDynamicTemplateInjection")
 }
-
-// Trigger exploitation tests
 
 func TestPipelineInjectionDetection_Detect_WildcardTrigger(t *testing.T) {
 	d := New()
@@ -438,7 +420,6 @@ func TestPipelineInjectionDetection_Detect_NoTrigger(t *testing.T) {
 
 	findings, err := d.Detect(ctx, g)
 	require.NoError(t, err)
-	// No trigger patterns to flag, no injection patterns — should be empty
 	triggerFindings := 0
 	for _, f := range findings {
 		if f.Type == detections.VulnTriggerExploitation {

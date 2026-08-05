@@ -11,30 +11,24 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms/shared/proxy"
 )
 
-// Platform implements the platforms.Platform interface for Azure DevOps
 type Platform struct {
 	client *Client
 	config platforms.Config
 }
 
-// NewPlatform creates a new Azure DevOps platform adapter
 func NewPlatform() *Platform {
 	return &Platform{}
 }
 
-// Name returns the platform identifier
 func (p *Platform) Name() string {
 	return "azuredevops"
 }
 
-// Init initializes the platform with configuration
 func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 	p.config = config
 
-	// Azure DevOps requires organization URL in BaseURL
 	orgURL := config.BaseURL
 	if orgURL == "" && config.AzureDevOps != nil {
-		// Construct from organization name
 		orgURL = fmt.Sprintf("https://dev.azure.com/%s", config.AzureDevOps.Organization)
 	}
 
@@ -42,24 +36,20 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 		return fmt.Errorf("missing Azure DevOps organization URL (set BaseURL or AzureDevOps.Organization)")
 	}
 
-	// Get PAT from config
 	pat := config.Token
 	if pat == "" && config.AzureDevOps != nil {
 		pat = config.AzureDevOps.PAT
 	}
 
-	// Check for bearer token (Entra ID OAuth)
 	var bearerToken string
 	if config.AzureDevOps != nil {
 		bearerToken = config.AzureDevOps.BearerToken
 	}
 
-	// Require at least one auth method
 	if pat == "" && bearerToken == "" {
 		return fmt.Errorf("missing Azure DevOps authentication (set Token, AzureDevOps.PAT, or AzureDevOps.BearerToken)")
 	}
 
-	// Build client options from config
 	var opts []ClientOption
 	if bearerToken != "" {
 		opts = append(opts, WithBearerToken(bearerToken))
@@ -70,7 +60,7 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 	if config.Concurrency > 0 {
 		opts = append(opts, WithConcurrency(int64(config.Concurrency)))
 	}
-	// Resolve proxy transport: explicit HTTPTransport takes precedence (WASM), then proxy config
+	// An explicit HTTPTransport (WASM) wins over the proxy config.
 	transport := config.HTTPTransport
 	if transport == nil {
 		t, err := proxy.NewTransport(proxy.Config{
@@ -90,12 +80,10 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 	return nil
 }
 
-// Client returns the underlying Azure DevOps client
 func (p *Platform) Client() *Client {
 	return p.client
 }
 
-// Scan retrieves repositories and workflows from the target
 func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platforms.ScanResult, error) {
 	result := &platforms.ScanResult{
 		Workflows: make(map[string][]platforms.Workflow),
@@ -105,7 +93,6 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 
 	switch target.Type {
 	case platforms.TargetRepo:
-		// Single repository: "project/repo"
 		parts := strings.SplitN(target.Value, "/", 2)
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("invalid repo format, expected project/repo: %s", target.Value)
@@ -120,7 +107,6 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 		repositories = []Repository{*repo}
 
 	case platforms.TargetOrg:
-		// Enumerate all projects in the organization, then repos per project
 		projects, err := p.client.ListProjects(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("listing projects: %w", err)
@@ -139,9 +125,7 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 		return nil, fmt.Errorf("unsupported target type for Azure DevOps: %s (use 'repo' or 'org')", target.Type)
 	}
 
-	// Convert to platform-agnostic types and fetch pipeline workflows.
 	for _, repo := range repositories {
-		// Extract default branch ref (refs/heads/main -> main)
 		defaultBranch := strings.TrimPrefix(repo.DefaultBranch, "refs/heads/")
 
 		result.Repositories = append(result.Repositories, platforms.Repository{
@@ -153,7 +137,6 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 			URL:           repo.WebURL,
 		})
 
-		// Discover all registered pipeline YAML files for this repository.
 		workflows, err := p.getWorkflowsFromDefs(ctx, repo.Project.Name, repo.Name, repo.ID, defaultBranch)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s/%s: %w", repo.Project.Name, repo.Name, err))
@@ -169,13 +152,12 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 	return result, nil
 }
 
-// getWorkflow retrieves the azure-pipelines.yml file for a repository
 func (p *Platform) getWorkflow(ctx context.Context, projectName, repoName, ref string) (*platforms.Workflow, error) {
 	const ciFile = "azure-pipelines.yml"
 
 	content, err := p.client.GetWorkflowFile(ctx, projectName, repoName, ciFile, ref)
 	if err != nil {
-		// If file doesn't exist, return nil (not all repositories have pipelines)
+		// Not every repository has a pipeline, so absence is not an error.
 		if strings.Contains(err.Error(), "404") {
 			return nil, nil
 		}
@@ -191,17 +173,10 @@ func (p *Platform) getWorkflow(ctx context.Context, projectName, repoName, ref s
 	}, nil
 }
 
-// getWorkflowsFromDefs discovers all pipeline YAML files for a repository by:
-// 1. Listing registered build definitions filtered by repositoryId
-// 2. Fetching the full definition for each to get process.yamlFilename
-// 3. Fetching the YAML file content for each unique path
-//
-// Falls back to azure-pipelines.yml if no definitions exist for the repo
-// or if the build definitions API is unavailable.
+// Falls back to azure-pipelines.yml when the repo has no definitions or the API is unavailable.
 func (p *Platform) getWorkflowsFromDefs(ctx context.Context, projectName, repoName, repoID, defaultBranch string) ([]platforms.Workflow, error) {
 	defs, err := p.client.ListBuildDefinitionsByRepo(ctx, projectName, repoID)
 	if err != nil {
-		// Non-fatal: fall back to azure-pipelines.yml
 		return p.getWorkflowFallback(ctx, projectName, repoName, defaultBranch)
 	}
 
@@ -210,7 +185,7 @@ func (p *Platform) getWorkflowsFromDefs(ctx context.Context, projectName, repoNa
 	repoSlug := fmt.Sprintf("%s/%s", projectName, repoName)
 
 	for _, def := range defs {
-		// Fetch full definition to get process.yamlFilename (absent from list response)
+		// process.yamlFilename is absent from the list response.
 		fullDef, err := p.client.GetBuildDefinition(ctx, projectName, def.ID)
 		if err != nil || fullDef.Process.YamlFilename == "" {
 			continue
@@ -240,8 +215,6 @@ func (p *Platform) getWorkflowsFromDefs(ctx context.Context, projectName, repoNa
 	return workflows, nil
 }
 
-// getWorkflowFallback fetches azure-pipelines.yml as a last resort when no
-// registered build definitions are found or the API is unavailable.
 func (p *Platform) getWorkflowFallback(ctx context.Context, projectName, repoName, defaultBranch string) ([]platforms.Workflow, error) {
 	wf, err := p.getWorkflow(ctx, projectName, repoName, defaultBranch)
 	if err != nil {
@@ -253,5 +226,4 @@ func (p *Platform) getWorkflowFallback(ctx context.Context, projectName, repoNam
 	return nil, nil
 }
 
-// Ensure Platform implements the interface
 var _ platforms.Platform = (*Platform)(nil)

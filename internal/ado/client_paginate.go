@@ -9,10 +9,9 @@ import (
 	"net/url"
 )
 
-// Paginate accumulates the `value` array across pages, following the
-// x-ms-continuationtoken response header (resent as the continuationToken query
-// param). A single-object (non-list) response is returned as one element so
-// callers stay uniform.
+// Pages are followed via the x-ms-continuationtoken response header, resent as the
+// continuationToken query param. A single-object response comes back as one element
+// so callers stay uniform.
 func (c *Client) Paginate(ctx context.Context, host, api, path string, params url.Values) ([]json.RawMessage, error) {
 	p := maps.Clone(params)
 	if p == nil {
@@ -20,8 +19,8 @@ func (c *Client) Paginate(ctx context.Context, host, api, path string, params ur
 	}
 	var items []json.RawMessage
 	prevCont := ""
-	// Page cap backstops a server that returns an unchanging continuation token
-	// (would otherwise loop forever); 10k pages * 100+/page far exceeds any real list.
+	// The page cap backstops a server returning an unchanging continuation token,
+	// which would otherwise loop forever; 10k pages far exceeds any real list.
 	for page := 0; page < 10000; page++ {
 		raw, hdr, err := c.Get(ctx, host, api, path, p, false)
 		if err != nil {
@@ -36,7 +35,6 @@ func (c *Client) Paginate(ctx context.Context, host, api, path string, params ur
 		if err := json.Unmarshal(raw, &env); err == nil && env.Count != nil && env.Value != nil {
 			items = append(items, env.Value...)
 		} else {
-			// not a list envelope: return the whole body as one item
 			items = append(items, raw)
 			return items, nil
 		}
@@ -58,8 +56,7 @@ func softStatus(err error) int {
 	return 0
 }
 
-// isSoft reports an optional-surface failure that should skip-and-mark rather
-// than abort: 401/403 (permission) or 404 (absent).
+// A soft failure skips and marks an optional surface instead of aborting the phase.
 func isSoft(err error) bool {
 	switch softStatus(err) {
 	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:

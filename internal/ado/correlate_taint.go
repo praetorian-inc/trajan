@@ -7,12 +7,9 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// deriveTaintEdges is the derived/attack-edge half of normalize (schema §5). It
-// reads back the structural corpus the earlier joins wrote and emits the taint
-// edges: READS (secret reach), QUEUE_TIME_INJECTION (cat-02),
-// LOGGING_COMMAND_INJECTION (cat-13), AGENT_INJECTION (cat-12 injection half),
-// and PIPELINE_POISONING (cat-01 injection half). The step-level sinks/sources
-// these key on are already collapsed onto each :Job by walkSteps.
+// The attack-edge half of normalize, reading back the structural corpus the earlier
+// joins wrote. The step-level sinks and sources these edges key on are already
+// collapsed onto each :Job by walkSteps.
 func deriveTaintEdges(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, jobs, pipelines []map[string]any) error {
 	validated, err := loadBuildValidated(prior)
 	if err != nil {
@@ -140,8 +137,8 @@ func deriveReads(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.
 			if mStr(e, "project") != project || mInt64(e, "pipeline_id") != pid {
 				continue
 			}
-			// a pipeline-level group reaches every job; a stage-level group every job
-			// in the stage; a job-level group only its own job (schema §5 READS).
+			// A pipeline-level group reaches every job; a stage-level group every job in
+			// the stage; a job-level group only its own job.
 			reaches := false
 			switch mStr(e, "level") {
 			case "pipeline":
@@ -186,12 +183,10 @@ func vgGateState(vg map[string]any) (strength, state, confidence string) {
 	return "none", "absent", "high"
 }
 
-// runtimeVarRedirectReachable reports whether a $[ variables['x'] ] expansion into a
-// compile-time keyword can actually be steered by a queuer. A variable declared settable
-// at queue time is reachable regardless of the "Limit variables settable at queue time"
-// toggle; otherwise it is reachable only when that limit is observed to be off. When the
-// general settings were not observed we fail closed — we do not assert a redirect path we
-// cannot confirm (an unconfirmed control must not manufacture a finding).
+// A variable declared settable at queue time is steerable regardless of the "Limit
+// variables settable at queue time" toggle; otherwise only when that limit is observed
+// to be off. Unobserved settings fail closed, because an unconfirmed control must not
+// manufacture a finding.
 func runtimeVarRedirectReachable(ps map[string]any, meta pipeInfo) bool {
 	if entBool(ps["is_declared_settable"]) {
 		return true
@@ -218,8 +213,8 @@ func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, 
 			"identity_scope": meta.identityScope, "confidence": confidence,
 			"target": target, "context": "azure_repos",
 		}
-		// Step and location are part of the key: one job can reference the same name
-		// from several steps and sink kinds, and they must not overwrite each other.
+		// Step and location belong in the key: one job can reference the same name from
+		// several steps and sink kinds, and they must not overwrite each other.
 		key := fmt.Sprintf("%s__%s__%s__%v__%s", jobKeyOf(j), adoSafe(via), adoSafe(name),
 			ms["step_index"], adoSafe(location))
 		return emit(cp, timer, engine.NormalizeADOEdges("queue-time-injection", key), rec)
@@ -305,7 +300,7 @@ func deriveLoggingInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j 
 			"identity_scope": meta.identityScope, "confidence": confidence,
 			"target": jobID(j), "context": "azure_repos",
 		}
-		// The resource is part of the key: one step can hold several consumers of the
+		// The resource belongs in the key: one step can hold several consumers of the
 		// same kind, and they must not overwrite each other.
 		key := fmt.Sprintf("%s__%s__%d__%v__%s", jobKeyOf(j), adoSafe(via), echoStep,
 			consumer["step_index"], adoSafe(entStr(consumer["resource"])))
@@ -407,10 +402,9 @@ func deriveAgentInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j ma
 }
 
 func derivePipelinePoisoning(cp engine.CurrentPhase, timer *engine.PhaseTimer, j map[string]any, meta pipeInfo, grants grantIndex, reads bool) error {
-	// Necessary conjuncts (schema §5): an execution trigger runs the repo's YAML,
-	// and the pipeline has an authorized blast radius worth stealing — a secret
-	// reach (READS), a service connection, the collection-scoped access token, or
-	// a deployment target. A resource-less `echo build` pipeline is not a finding.
+	// Both conjuncts are necessary: an execution trigger runs the repo's YAML, and the
+	// pipeline holds an authorized blast radius worth stealing. A resource-less
+	// `echo build` pipeline is not a finding.
 	trigger, via := poisonTrigger(meta)
 	if trigger == "" {
 		return nil
@@ -452,8 +446,8 @@ func poisonTrigger(meta pipeInfo) (trigger, via string) {
 	case meta.ciTrigger != nil && meta.ciTrigger != "none":
 		return "ci_push", "ci_trigger"
 	default:
-		// no CI trigger declared: a Contributor still pushes modified YAML to a
-		// branch and queues a build against it (schema §5 via: branch_queue).
+		// With no CI trigger declared a Contributor still pushes modified YAML to a
+		// branch and queues a build against it.
 		return "manual_queue", "branch_queue"
 	}
 }
@@ -468,9 +462,9 @@ type grantIndex struct {
 	byProjectAction map[string]map[string][]map[string]any
 }
 
-// loadGrants indexes HAS_ROLE edges by (project, namespace-tagged action) -> the
-// principal grants (descriptor + expanded leaf members) — the source side of the
-// injection edges (who holds Queue builds / Contribute).
+// Indexed by (project, namespace-tagged action) because an action name is only
+// meaningful within its namespace. This is the source side of the injection edges:
+// who holds Queue builds or Contribute.
 func loadGrants(prior engine.PriorPhase) (grantIndex, error) {
 	idx := grantIndex{byProjectAction: map[string]map[string][]map[string]any{}}
 	roles, err := loadRecords(prior, "10-normalize/edges/has-role")

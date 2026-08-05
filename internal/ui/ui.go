@@ -93,9 +93,8 @@ func severityColor(s string) int {
 	return plain
 }
 
-// stepColor grades an attack step by outcome. Green is spent only here, on the
-// one word that says what the step did, because a run where every line is
-// colored is a run where a failure no longer stands out.
+// Green is spent only here, on the one word that says what the step did, because a
+// run where every line is colored is a run where a failure no longer stands out.
 func stepColor(status string) int {
 	switch status {
 	case "ok":
@@ -235,9 +234,8 @@ func (p *Printer) row(indent string, cs ...cell) string {
 	return b.String()
 }
 
-// Head opens a run: a bold subject, then indented label/value rows whose labels
-// recede because the value is the news — the rule humanAttrs applies to an attr
-// key, in a shape a single line could not hold.
+// The labels recede because the value is the news, the rule humanAttrs applies to
+// an attr key, in a shape a single line could not hold.
 func (p *Printer) Head(subject string, fields ...[2]string) {
 	if p.tier != Human {
 		args := make([]any, 0, 2*len(fields))
@@ -258,8 +256,8 @@ func (p *Printer) Head(subject string, fields ...[2]string) {
 	}
 }
 
-// Section titles a block of rows. Debug carries the per-item records and has no
-// use for a heading to group them under.
+// Debug carries the per-item records and has no use for a heading to group them
+// under.
 func (p *Printer) Section(name string) {
 	if p.tier != Human {
 		return
@@ -268,11 +266,10 @@ func (p *Printer) Section(name string) {
 	p.raw(p.c(bold, clean(name)))
 }
 
-// StepLine is one row of an attack's step table. Resource is the object the step
-// acted on and carries the row; Note is a clause the caller has already reduced to
-// what a column can hold. Uses and Target reach only --debug, which keeps the
-// machine-parseable line it had before this renderer existed; ID reaches the table
-// itself on the rows another step can refer to.
+// Resource is the object the step acted on and carries the row; Note is a clause the
+// caller has already reduced to what a column can hold. Uses and Target reach only
+// --debug, which keeps the machine-parseable line it had before this renderer
+// existed; ID reaches the table itself on the rows another step can refer to.
 type StepLine struct {
 	Seq, Total int
 	ID, Uses   string
@@ -283,9 +280,8 @@ type StepLine struct {
 	Note       string
 }
 
-// Step renders one row of the table. Any status but ok also names itself: the color
-// on the action is decoration, and a log read without it still has to distinguish a
-// step that ran from one that did not.
+// Any status but ok also names itself: the color on the action is decoration, and a
+// log read without it still has to distinguish a step that ran from one that did not.
 func (p *Printer) Step(l StepLine) {
 	if p.tier != Human {
 		args := []any{"step", l.ID, "uses", l.Uses, "target", l.Target, "resource", l.Resource}
@@ -340,8 +336,7 @@ type Count struct {
 	N     int
 }
 
-// Outcome closes a run with its counts and a dim trailer. Zero counts go unsaid
-// for the same reason Severities drops them.
+// Zero counts go unsaid for the same reason Severities drops them.
 func (p *Printer) Outcome(subject string, counts []Count, trailer string) {
 	if p.tier != Human {
 		args := make([]any, 0, 2*len(counts))

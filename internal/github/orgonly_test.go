@@ -14,8 +14,7 @@ func TestOrgOnlyFilterSelectsExactlyOrgSubjects(t *testing.T) {
 	}
 
 	full := len(rules)
-	// exercise the production filter (--org-detections-only path) directly; clone
-	// first because orgOnlyRules mutates its input via slices.DeleteFunc.
+	// OrgOnlyRules mutates its input via slices.DeleteFunc, so clone first.
 	org := detect.OrgOnlyRules(slices.Clone(rules))
 	if len(org) == 0 {
 		t.Fatal("expected at least one subject==org rule")
@@ -29,7 +28,6 @@ func TestOrgOnlyFilterSelectsExactlyOrgSubjects(t *testing.T) {
 		}
 	}
 
-	// Every org-subject rule in the full corpus must survive the filter.
 	wantOrg := 0
 	for _, r := range rules {
 		if r.SubjectKind() == "org" {

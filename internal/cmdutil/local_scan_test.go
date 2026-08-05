@@ -168,7 +168,7 @@ func silenceStderr(t *testing.T) {
 	old := os.Stderr
 	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	if err != nil {
-		// If we can't open /dev/null, just leave stderr alone.
+		// Noisy output is not worth failing the test over.
 		return
 	}
 	os.Stderr = devNull

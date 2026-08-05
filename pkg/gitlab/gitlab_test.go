@@ -1,4 +1,3 @@
-// pkg/gitlab/gitlab_test.go
 package gitlab
 
 import (
@@ -184,8 +183,6 @@ func TestGitLabPlatform_InvalidProjectFormat(t *testing.T) {
 }
 
 func TestScanAttachesResolverMetadata(t *testing.T) {
-	// This test verifies metadata is attached to workflows
-	// Actual resolution is tested in builder tests
 
 	ciContent := "stages:\n  - build\n  - test"
 	encodedContent := base64.StdEncoding.EncodeToString([]byte(ciContent))
@@ -242,7 +239,6 @@ func TestScanAttachesResolverMetadata(t *testing.T) {
 	result, err := platform.Scan(ctx, target)
 	require.NoError(t, err)
 
-	// Check that workflows have metadata
 	for _, workflows := range result.Workflows {
 		for _, wf := range workflows {
 			require.NotNil(t, wf.Metadata, "expected metadata, got nil")

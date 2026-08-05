@@ -22,10 +22,6 @@ func findingsByType(findings []detections.Finding, t detections.VulnerabilityTyp
 	return result
 }
 
-// ---------------------------------------------------------------------------
-// Token Exfiltration
-// ---------------------------------------------------------------------------
-
 func TestTokenExfiltration_AITaskWithToken(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -82,10 +78,6 @@ func TestTokenExfiltration_NoToken(t *testing.T) {
 	assert.Empty(t, tokenFindings)
 }
 
-// ---------------------------------------------------------------------------
-// Code Injection
-// ---------------------------------------------------------------------------
-
 func TestCodeInjection_AITaskWithUntrustedInput(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -135,10 +127,6 @@ func TestCodeInjection_AITaskNoUntrustedInput(t *testing.T) {
 	assert.Empty(t, codeFindings)
 }
 
-// ---------------------------------------------------------------------------
-// MCP Abuse
-// ---------------------------------------------------------------------------
-
 func TestMCPAbuse_AITaskWithMCPAndToken(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -167,7 +155,6 @@ func TestMCPAbuse_AITaskWithMCPAndToken(t *testing.T) {
 	assert.Equal(t, detections.SeverityLow, mcpFindings[0].Severity)
 }
 
-// Finding 19: MCP + untrusted input only (no token) -> LOW severity
 func TestMCPAbuse_AITaskWithMCPAndUntrustedOnly(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -197,10 +184,6 @@ func TestMCPAbuse_AITaskWithMCPAndUntrustedOnly(t *testing.T) {
 		"MCP + untrusted input only (no token) should be LOW severity")
 	assert.Equal(t, detections.ConfidenceMedium, mcpFindings[0].Confidence)
 }
-
-// ---------------------------------------------------------------------------
-// Edge Cases
-// ---------------------------------------------------------------------------
 
 func TestNonAITask_NoFindings(t *testing.T) {
 	g := graph.NewGraph()

@@ -25,7 +25,7 @@ func TestAllDetectionsRunWithoutPanic(t *testing.T) {
 		t.Run(det.Name(), func(t *testing.T) {
 			findings, err := det.Detect(ctx, g)
 			assert.NoError(t, err, "Detection %s should not return error", det.Name())
-			_ = findings // Findings may be empty for minimal graph, that's ok
+			_ = findings // a minimal graph may legitimately produce none
 		})
 	}
 }

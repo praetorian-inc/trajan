@@ -1,4 +1,3 @@
-// Package parser provides workflow parsing for multiple CI/CD platforms
 package parser
 
 import (
@@ -8,31 +7,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// AzureParser implements WorkflowParser for Azure Pipelines
 type AzureParser struct{}
 
-// NewAzureParser creates a new Azure Pipelines parser
 func NewAzureParser() *AzureParser {
 	return &AzureParser{}
 }
 
-// Platform returns the platform identifier
 func (p *AzureParser) Platform() string {
 	return "azure"
 }
 
-// CanParse returns true if this parser can handle the given file path
 func (p *AzureParser) CanParse(path string) bool {
-	// Azure Pipelines files patterns:
-	// - azure-pipelines.yml / azure-pipelines.yaml (main)
-	// - *.azure-pipelines.yml / *.azure-pipelines.yaml
-	// - .azure-pipelines/*.yml / .azure-pipelines/*.yaml
 	return strings.Contains(path, "azure-pipelines.yml") ||
 		strings.Contains(path, "azure-pipelines.yaml") ||
 		strings.Contains(path, ".azure-pipelines/")
 }
 
-// Parse parses Azure Pipelines workflow content
 func (p *AzureParser) Parse(data []byte) (*NormalizedWorkflow, error) {
 	var node yaml.Node
 	if err := yaml.Unmarshal(data, &node); err != nil {
@@ -49,14 +39,12 @@ func (p *AzureParser) Parse(data []byte) (*NormalizedWorkflow, error) {
 	return p.convertWithLines(azPipeline, lineMap), nil
 }
 
-// extractLineNumbers walks the yaml.Node tree and builds a map of path keys to line numbers.
 func extractLineNumbers(node *yaml.Node) map[string]int {
 	lineMap := make(map[string]int)
 	walkNode(node, "", lineMap)
 	return lineMap
 }
 
-// walkNode recursively walks the YAML node tree to extract line numbers.
 func walkNode(node *yaml.Node, path string, lineMap map[string]int) {
 	if node == nil {
 		return
@@ -93,7 +81,6 @@ func walkNode(node *yaml.Node, path string, lineMap map[string]int) {
 	}
 }
 
-// parseAzurePipelines extracts Azure Pipelines structure from raw YAML
 func (p *AzureParser) parseAzurePipelines(raw map[string]interface{}) *AzurePipelines {
 	pipeline := &AzurePipelines{
 		Jobs:       make([]AzureJob, 0),
@@ -131,7 +118,7 @@ func (p *AzureParser) parseAzurePipelines(raw map[string]interface{}) *AzurePipe
 				pipeline.Jobs = p.parseJobs(jobs)
 			}
 		case "steps":
-			// Top-level steps (rare, but valid for simple pipelines)
+			// Top-level steps are legal: they form a single implicit job.
 			if steps, ok := value.([]interface{}); ok {
 				pipeline.Steps = p.parseSteps(steps)
 			}
@@ -145,7 +132,6 @@ func (p *AzureParser) parseAzurePipelines(raw map[string]interface{}) *AzurePipe
 	return pipeline
 }
 
-// parsePool parses Azure Pipelines pool configuration
 func (p *AzureParser) parsePool(poolMap map[string]interface{}) *AzurePool {
 	pool := &AzurePool{}
 
@@ -162,16 +148,14 @@ func (p *AzureParser) parsePool(poolMap map[string]interface{}) *AzurePool {
 	return pool
 }
 
-// parseVariables parses Azure Pipelines variables (can be map or array)
 func (p *AzureParser) parseVariables(raw interface{}) map[string]string {
 	vars := make(map[string]string)
 
 	switch v := raw.(type) {
 	case map[string]interface{}:
-		// Simple map format: variables: { key: value }
 		vars = interfaceMapToStringMap(v)
 	case []interface{}:
-		// Array format: variables: [{ name: key, value: val }, { group: name }, { template: path }]
+		// variables: as an array of {name,value}, {group} or {template}; only name/value is read.
 		for _, item := range v {
 			if varMap, ok := item.(map[string]interface{}); ok {
 				if name, ok := varMap["name"].(string); ok {
@@ -186,7 +170,6 @@ func (p *AzureParser) parseVariables(raw interface{}) map[string]string {
 	return vars
 }
 
-// parseParameters parses Azure Pipelines parameters
 func (p *AzureParser) parseParameters(params []interface{}) []AzureParameter {
 	result := make([]AzureParameter, 0, len(params))
 
@@ -211,7 +194,6 @@ func (p *AzureParser) parseParameters(params []interface{}) []AzureParameter {
 	return result
 }
 
-// parseStages parses Azure Pipelines stages
 func (p *AzureParser) parseStages(stages []interface{}) []AzureStage {
 	result := make([]AzureStage, 0, len(stages))
 
@@ -241,7 +223,6 @@ func (p *AzureParser) parseStages(stages []interface{}) []AzureStage {
 	return result
 }
 
-// parseJobs parses Azure Pipelines jobs
 func (p *AzureParser) parseJobs(jobs []interface{}) []AzureJob {
 	result := make([]AzureJob, 0, len(jobs))
 
@@ -252,7 +233,6 @@ func (p *AzureParser) parseJobs(jobs []interface{}) []AzureJob {
 				Variables: make(map[string]string),
 			}
 
-			// Check if this is a template reference
 			if template, ok := jobMap["template"].(string); ok {
 				job.Template = template
 				if params, ok := jobMap["parameters"].(map[string]interface{}); ok {
@@ -266,7 +246,7 @@ func (p *AzureParser) parseJobs(jobs []interface{}) []AzureJob {
 				job.Name = name
 			} else if name, ok := jobMap["deployment"].(string); ok {
 				job.Name = name
-				// Extract steps from deployment strategy
+				// A deployment job keeps its steps under strategy, not steps.
 				if strategy, ok := jobMap["strategy"].(map[string]interface{}); ok {
 					job.Steps = append(job.Steps, p.parseDeploymentStrategy(strategy)...)
 				}
@@ -300,7 +280,6 @@ func (p *AzureParser) parseJobs(jobs []interface{}) []AzureJob {
 	return result
 }
 
-// parseSteps parses Azure Pipelines steps
 func (p *AzureParser) parseSteps(steps []interface{}) []AzureStep {
 	result := make([]AzureStep, 0, len(steps))
 
@@ -311,7 +290,6 @@ func (p *AzureParser) parseSteps(steps []interface{}) []AzureStep {
 				Env:    make(map[string]string),
 			}
 
-			// Check for template reference
 			if template, ok := stepMap["template"].(string); ok {
 				step.Template = template
 				if params, ok := stepMap["parameters"].(map[string]interface{}); ok {
@@ -359,24 +337,20 @@ func (p *AzureParser) parseSteps(steps []interface{}) []AzureStep {
 	return result
 }
 
-// parseDeploymentStrategy extracts steps from deployment strategy phases
-// (runOnce/rolling/canary → preDeploy/deploy/routeTraffic/postRouteTraffic/on → steps)
+// Nesting is runOnce|rolling|canary -> preDeploy|deploy|routeTraffic|postRouteTraffic|on -> steps.
 func (p *AzureParser) parseDeploymentStrategy(strategy map[string]interface{}) []AzureStep {
 	var steps []AzureStep
-	// Strategy types: runOnce, rolling, canary
 	for _, strategyType := range []string{"runOnce", "rolling", "canary"} {
 		strategyMap, ok := strategy[strategyType].(map[string]interface{})
 		if !ok {
 			continue
 		}
-		// Lifecycle hooks
 		hooks := []string{"preDeploy", "deploy", "routeTraffic", "postRouteTraffic", "on"}
 		for _, hook := range hooks {
 			hookMap, ok := strategyMap[hook].(map[string]interface{})
 			if !ok {
 				continue
 			}
-			// "on" has sub-hooks: failure, success
 			if hook == "on" {
 				for _, subHook := range []string{"failure", "success"} {
 					subMap, ok := hookMap[subHook].(map[string]interface{})
@@ -397,7 +371,6 @@ func (p *AzureParser) parseDeploymentStrategy(strategy map[string]interface{}) [
 	return steps
 }
 
-// parseDependsOn parses dependsOn field (can be string or array)
 func (p *AzureParser) parseDependsOn(raw interface{}) []string {
 	switch v := raw.(type) {
 	case string:
@@ -409,11 +382,9 @@ func (p *AzureParser) parseDependsOn(raw interface{}) []string {
 	}
 }
 
-// getTriggers converts Azure Pipelines trigger/pr config to normalized trigger names
-// and includes raw branch patterns so detections can check for wildcards.
-// Azure defaults: if trigger is absent, CI triggers on all branches (wildcard *).
-// If trigger is "none", CI is explicitly disabled. Otherwise CI is enabled.
-// Branch patterns from trigger config are included alongside "ci"/"pr" names.
+// Azure defaults: an absent trigger means CI on every branch; "none" disables CI.
+// Raw branch patterns are returned alongside the "ci"/"pr" names so detections
+// can test for wildcards.
 func (p *AzureParser) getTriggers(pipeline *AzurePipelines) []string {
 	seen := make(map[string]bool)
 	var triggers []string
@@ -424,10 +395,8 @@ func (p *AzureParser) getTriggers(pipeline *AzurePipelines) []string {
 		}
 	}
 
-	// Handle CI trigger
 	switch v := pipeline.Trigger.(type) {
 	case nil:
-		// Absent trigger = Azure default: CI on all branches (wildcard)
 		add("ci")
 		add("*")
 	case string:
@@ -454,7 +423,6 @@ func (p *AzureParser) getTriggers(pipeline *AzurePipelines) []string {
 		add("ci")
 	}
 
-	// Handle PR trigger
 	if pipeline.PR != nil {
 		switch v := pipeline.PR.(type) {
 		case string:
@@ -481,7 +449,6 @@ func (p *AzureParser) getTriggers(pipeline *AzurePipelines) []string {
 	return triggers
 }
 
-// extractBranchPatterns extracts branch include patterns from a trigger/pr map.
 func (p *AzureParser) extractBranchPatterns(triggerMap map[string]interface{}) []string {
 	var patterns []string
 	if branches, ok := triggerMap["branches"].(map[string]interface{}); ok {
@@ -496,8 +463,6 @@ func (p *AzureParser) extractBranchPatterns(triggerMap map[string]interface{}) [
 	return patterns
 }
 
-// convertWithLines transforms an AzurePipelines to generic NormalizedWorkflow,
-// applying step line numbers from lineMap when available.
 func (p *AzureParser) convertWithLines(azPipeline *AzurePipelines, lineMap map[string]int) *NormalizedWorkflow {
 	wf := &NormalizedWorkflow{
 		Platform: "azure",
@@ -507,7 +472,6 @@ func (p *AzureParser) convertWithLines(azPipeline *AzurePipelines, lineMap map[s
 		Raw:      azPipeline,
 	}
 
-	// Populate trigger line numbers from YAML source positions
 	if len(lineMap) > 0 {
 		wf.TriggerLines = make(map[string]int)
 		if line, ok := lineMap["trigger"]; ok {
@@ -518,7 +482,6 @@ func (p *AzureParser) convertWithLines(azPipeline *AzurePipelines, lineMap map[s
 		}
 	}
 
-	// Convert jobs from stages
 	for stageIdx := range azPipeline.Stages {
 		stage := &azPipeline.Stages[stageIdx]
 		for jobIdx, azJob := range stage.Jobs {
@@ -527,11 +490,9 @@ func (p *AzureParser) convertWithLines(azPipeline *AzurePipelines, lineMap map[s
 			if stage.Condition != "" {
 				job.Condition = stage.Condition
 			}
-			// Apply job line number
 			if line, ok := lineMap[fmt.Sprintf("stages[%d].jobs[%d]", stageIdx, jobIdx)]; ok {
 				job.Line = line
 			}
-			// Apply line numbers to steps
 			for stepIdx, step := range job.Steps {
 				pathKey := fmt.Sprintf("stages[%d].jobs[%d].steps[%d]", stageIdx, jobIdx, stepIdx)
 				if line, ok := lineMap[pathKey]; ok {
@@ -558,7 +519,6 @@ func (p *AzureParser) convertWithLines(azPipeline *AzurePipelines, lineMap map[s
 		}
 	}
 
-	// Convert flat jobs (no stages)
 	for jobIdx := range azPipeline.Jobs {
 		azJob := &azPipeline.Jobs[jobIdx]
 		jobID := azJob.Name
@@ -566,11 +526,9 @@ func (p *AzureParser) convertWithLines(azPipeline *AzurePipelines, lineMap map[s
 			jobID = fmt.Sprintf("job-%d", len(wf.Jobs))
 		}
 		job := p.convertJob(*azJob, jobID, azPipeline)
-		// Apply job line number
 		if line, ok := lineMap[fmt.Sprintf("jobs[%d]", jobIdx)]; ok {
 			job.Line = line
 		}
-		// Apply line numbers to steps
 		for stepIdx, step := range job.Steps {
 			pathKey := fmt.Sprintf("jobs[%d].steps[%d]", jobIdx, stepIdx)
 			if line, ok := lineMap[pathKey]; ok {
@@ -596,10 +554,8 @@ func (p *AzureParser) convertWithLines(azPipeline *AzurePipelines, lineMap map[s
 		wf.Jobs[jobID] = job
 	}
 
-	// Convert top-level steps (rare, but valid)
 	if len(azPipeline.Steps) > 0 {
 		steps := p.convertSteps(azPipeline.Steps)
-		// Apply line numbers to top-level steps
 		for stepIdx, step := range steps {
 			pathKey := fmt.Sprintf("steps[%d]", stepIdx)
 			if line, ok := lineMap[pathKey]; ok {
@@ -634,7 +590,6 @@ func (p *AzureParser) convertWithLines(azPipeline *AzurePipelines, lineMap map[s
 	return wf
 }
 
-// convertJob converts an AzureJob to NormalizedJob
 func (p *AzureParser) convertJob(azJob AzureJob, jobID string, pipeline *AzurePipelines) *NormalizedJob {
 	job := &NormalizedJob{
 		ID:        jobID,
@@ -654,7 +609,6 @@ func (p *AzureParser) convertJob(azJob AzureJob, jobID string, pipeline *AzurePi
 	return job
 }
 
-// convertSteps converts AzureStep array to NormalizedStep array
 func (p *AzureParser) convertSteps(azSteps []AzureStep) []*NormalizedStep {
 	steps := make([]*NormalizedStep, 0, len(azSteps))
 
@@ -667,7 +621,6 @@ func (p *AzureParser) convertSteps(azSteps []AzureStep) []*NormalizedStep {
 			With:      azStep.Inputs,
 		}
 
-		// Determine step type
 		if azStep.Script != "" {
 			step.Run = azStep.Script
 		} else if azStep.Bash != "" {
@@ -681,7 +634,7 @@ func (p *AzureParser) convertSteps(azSteps []AzureStep) []*NormalizedStep {
 		} else if azStep.Checkout != "" {
 			step.Uses = "checkout:" + azStep.Checkout
 		} else if azStep.Template != "" {
-			// Template step - store template reference for detection
+			// Detections match on this synthesized prefix.
 			step.Uses = "template:" + azStep.Template
 		}
 
@@ -691,7 +644,6 @@ func (p *AzureParser) convertSteps(azSteps []AzureStep) []*NormalizedStep {
 	return steps
 }
 
-// getPoolName gets the pool name from job or pipeline level
 func (p *AzureParser) getPoolName(jobPool, pipelinePool *AzurePool) string {
 	if jobPool != nil {
 		if jobPool.VMImage != "" {
@@ -714,56 +666,50 @@ func (p *AzureParser) getPoolName(jobPool, pipelinePool *AzurePool) string {
 	return ""
 }
 
-// AzurePipelines represents a parsed Azure Pipelines configuration
 type AzurePipelines struct {
 	Trigger    interface{}       `yaml:"trigger"`
 	PR         interface{}       `yaml:"pr"`
 	Pool       *AzurePool        `yaml:"pool"`
-	Variables  map[string]string `yaml:"-"` // Parsed separately (can be map or array)
-	Parameters []AzureParameter  `yaml:"-"` // Parsed separately
-	Stages     []AzureStage      `yaml:"-"` // Parsed separately
-	Jobs       []AzureJob        `yaml:"-"` // Parsed separately (flat structure without stages)
-	Steps      []AzureStep       `yaml:"-"` // Parsed separately (rare, top-level steps)
+	Variables  map[string]string `yaml:"-"`
+	Parameters []AzureParameter  `yaml:"-"`
+	Stages     []AzureStage      `yaml:"-"`
+	Jobs       []AzureJob        `yaml:"-"`
+	Steps      []AzureStep       `yaml:"-"`
 	Extends    interface{}       `yaml:"extends"`
 	Resources  interface{}       `yaml:"resources"`
 }
 
-// AzurePool represents Azure Pipelines pool configuration
 type AzurePool struct {
 	VMImage string   `yaml:"vmImage"`
 	Name    string   `yaml:"name"`
 	Demands []string `yaml:"demands"`
 }
 
-// AzureParameter represents an Azure Pipelines parameter
 type AzureParameter struct {
 	Name    string `yaml:"name"`
 	Type    string `yaml:"type"`
 	Default string `yaml:"default"`
 }
 
-// AzureStage represents an Azure Pipelines stage
 type AzureStage struct {
 	Name        string     `yaml:"stage"`
 	DisplayName string     `yaml:"displayName"`
 	Condition   string     `yaml:"condition"`
-	Jobs        []AzureJob `yaml:"-"` // Parsed separately
+	Jobs        []AzureJob `yaml:"-"`
 }
 
-// AzureJob represents an Azure Pipelines job
 type AzureJob struct {
 	Name               string                 `yaml:"job"`
 	DisplayName        string                 `yaml:"displayName"`
 	Pool               *AzurePool             `yaml:"pool"`
-	DependsOn          []string               `yaml:"-"` // Parsed separately (can be string or array)
+	DependsOn          []string               `yaml:"-"`
 	Condition          string                 `yaml:"condition"`
-	Steps              []AzureStep            `yaml:"-"`                    // Parsed separately
-	Variables          map[string]string      `yaml:"-"`                    // Parsed separately
-	Template           string                 `yaml:"template"`             // Template reference
-	TemplateParameters map[string]interface{} `yaml:"parameters,omitempty"` // Template parameters
+	Steps              []AzureStep            `yaml:"-"`
+	Variables          map[string]string      `yaml:"-"`
+	Template           string                 `yaml:"template"`
+	TemplateParameters map[string]interface{} `yaml:"parameters,omitempty"`
 }
 
-// AzureStep represents an Azure Pipelines step
 type AzureStep struct {
 	DisplayName        string                 `yaml:"displayName"`
 	Script             string                 `yaml:"script"`
@@ -772,14 +718,13 @@ type AzureStep struct {
 	Pwsh               string                 `yaml:"pwsh"`
 	Task               string                 `yaml:"task"`
 	Checkout           string                 `yaml:"checkout"`
-	Inputs             map[string]string      `yaml:"-"` // Parsed separately
-	Env                map[string]string      `yaml:"-"` // Parsed separately
+	Inputs             map[string]string      `yaml:"-"`
+	Env                map[string]string      `yaml:"-"`
 	Condition          string                 `yaml:"condition"`
-	Template           string                 `yaml:"template"`             // Template reference
-	TemplateParameters map[string]interface{} `yaml:"parameters,omitempty"` // Template parameters
+	Template           string                 `yaml:"template"`
+	TemplateParameters map[string]interface{} `yaml:"parameters,omitempty"`
 }
 
-// init registers the Azure parser
 func init() {
 	RegisterParser(NewAzureParser())
 }

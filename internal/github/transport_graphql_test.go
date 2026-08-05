@@ -10,10 +10,8 @@ import (
 	"testing"
 )
 
-// gqlFixtureServer serves a canned GraphQL `data` payload (the shape GitHub
-// returns) so a mapper can be driven against a captured response and asserted to
-// equal the REST `data` shape the collectors expect. responses are consumed in
-// order, one per POST, so paginated mappers can be exercised across pages.
+// Responses are consumed one per POST, the last one repeating, so a paginated
+// mapper can be driven across pages.
 func gqlFixtureServer(t *testing.T, responses ...string) *graphqlTransport {
 	t.Helper()
 	i := 0
@@ -35,8 +33,7 @@ func gqlFixtureServer(t *testing.T, responses ...string) *graphqlTransport {
 	return newGraphQLTransport(NewClient("tok"))
 }
 
-// asMap parses a json.RawMessage to map[string]any for shape comparison (numbers
-// land as float64, matching what the normalizer's json decode would produce).
+// Numbers land as float64, matching what the normalizer's json decode produces.
 func asMap(t *testing.T, raw json.RawMessage) map[string]any {
 	t.Helper()
 	var m map[string]any
@@ -47,8 +44,7 @@ func asMap(t *testing.T, raw json.RawMessage) map[string]any {
 }
 
 func TestGraphQLRepoMetaMapsToRESTShape(t *testing.T) {
-	// captured GraphQL response for a private, non-archived repo with a default
-	// branch — uppercase visibility enum, databaseId numeric.
+	// Captured GraphQL response: visibility is an uppercase enum, databaseId numeric.
 	g := gqlFixtureServer(t, `{
       "repository": {
         "databaseId": 123456,
@@ -149,7 +145,6 @@ func TestGraphQLRepoTopicsEmptyIsArrayNotNull(t *testing.T) {
 }
 
 func TestGraphQLOrgMembersMapsToRESTShapeAndPaginates(t *testing.T) {
-	// two pages: page 1 hasNextPage true with an endCursor, page 2 terminal.
 	page1 := `{
       "organization": {
         "membersWithRole": {
@@ -175,7 +170,7 @@ func TestGraphQLOrgMembersMapsToRESTShapeAndPaginates(t *testing.T) {
 	if len(items) != 3 {
 		t.Fatalf("members count = %d, want 3 (paginated)", len(items))
 	}
-	// each must carry login/id/type exactly as loginIDType reads them.
+	// The shape has to be what loginIDType reads.
 	first := asMap(t, items[0])
 	want := map[string]any{"login": "alice", "id": float64(1), "type": "User"}
 	if !reflect.DeepEqual(first, want) {

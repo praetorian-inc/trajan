@@ -1,4 +1,3 @@
-// pkg/analysis/graph/node_test.go
 package graph
 
 import (
@@ -8,14 +7,12 @@ import (
 )
 
 func TestNode_AddTag_NilMap(t *testing.T) {
-	// Test the nil map initialization branch
 	node := &BaseNode{
 		id:       "test",
 		nodeType: NodeTypeWorkflow,
-		tags:     nil, // explicitly nil
+		tags:     nil,
 	}
 
-	// Should not panic, should initialize map
 	node.AddTag(TagPush)
 
 	assert.True(t, node.HasTag(TagPush))

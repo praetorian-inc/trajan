@@ -81,12 +81,10 @@ func runJobsEnumerate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("listing jobs: %w", err)
 	}
 
-	// Filter by folder if specified
 	if jobsFolder != "" {
 		var filtered []jenkins.Job
 		for _, j := range jobs {
 			if j.InFolder && len(j.FullName) > 0 {
-				// Check if job is in the specified folder
 				if len(j.FullName) > len(jobsFolder) && j.FullName[:len(jobsFolder)] == jobsFolder {
 					filtered = append(filtered, j)
 				}

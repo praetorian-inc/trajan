@@ -47,7 +47,6 @@ func runListAgentPools(cmd *cobra.Command, args []string) error {
 	}
 }
 
-// agentPoolWithAgents wraps an AgentPool with its agents for JSON output
 type agentPoolWithAgents struct {
 	azuredevops.AgentPool
 	Agents []azuredevops.Agent `json:"agents,omitempty"`
@@ -69,7 +68,6 @@ func runListAgentPoolsAzDO() error {
 		return err
 	}
 
-	// Enumerate agents within self-hosted pools if --agents flag is set
 	var agentsByPool map[int][]azuredevops.Agent
 	if listAgentPoolsShowAgents {
 		agentsByPool = make(map[int][]azuredevops.Agent)
@@ -104,7 +102,6 @@ func renderAgentPoolsJSON(pools []azuredevops.AgentPool, agentsByPool map[int][]
 		return enc.Encode(pools)
 	}
 
-	// Wrap pools with their agents
 	wrapped := make([]agentPoolWithAgents, len(pools))
 	for i, pool := range pools {
 		wrapped[i] = agentPoolWithAgents{
@@ -117,7 +114,6 @@ func renderAgentPoolsJSON(pools []azuredevops.AgentPool, agentsByPool map[int][]
 
 func renderAgentPoolsCSV(pools []azuredevops.AgentPool, agentsByPool map[int][]azuredevops.Agent) error {
 	if agentsByPool == nil {
-		// Original CSV format
 		headers := []string{"ID", "Name", "Hosted", "Pool Type", "Size", "Auto Provision"}
 		rows := make([][]string, len(pools))
 		for i, pool := range pools {
@@ -134,7 +130,6 @@ func renderAgentPoolsCSV(pools []azuredevops.AgentPool, agentsByPool map[int][]a
 		return output.RenderCSV(os.Stdout, headers, rows)
 	}
 
-	// Extended CSV with agent details
 	headers := []string{"Pool ID", "Pool Name", "Hosted", "Pool Type", "Size", "Auto Provision", "Agent Name", "Agent Status", "Agent OS", "Agent Version"}
 	var rows [][]string
 	for _, pool := range pools {
@@ -148,7 +143,6 @@ func renderAgentPoolsCSV(pools []azuredevops.AgentPool, agentsByPool map[int][]a
 		}
 		agents := agentsByPool[pool.ID]
 		if len(agents) == 0 {
-			// Pool row with no agents
 			rows = append(rows, []string{
 				fmt.Sprintf("%d", pool.ID), pool.Name, hosted, pool.PoolType, fmt.Sprintf("%d", pool.Size), autoProv,
 				"", "", "", "",
@@ -186,7 +180,6 @@ func renderAgentPoolsConsole(pools []azuredevops.AgentPool, agentsByPool map[int
 	}
 	_ = w.Flush()
 
-	// Print agent details under self-hosted pools
 	if agentsByPool != nil {
 		for _, pool := range pools {
 			if pool.IsHosted {
@@ -210,7 +203,6 @@ func renderAgentPoolsConsole(pools []azuredevops.AgentPool, agentsByPool map[int
 
 	fmt.Printf("\nTotal: %d agent pools\n", len(pools))
 
-	// Security analysis
 	analysis := analyzeAgentPoolsSecurity(pools, agentsByPool)
 	if analysis != "" {
 		fmt.Printf("\n%s\n", analysis)
@@ -219,7 +211,6 @@ func renderAgentPoolsConsole(pools []azuredevops.AgentPool, agentsByPool map[int
 	return nil
 }
 
-// analyzeAgentPoolsSecurity analyzes agent pools for security risks
 func analyzeAgentPoolsSecurity(pools []azuredevops.AgentPool, agentsByPool map[int][]azuredevops.Agent) string {
 	if len(pools) == 0 {
 		return ""
@@ -229,12 +220,10 @@ func analyzeAgentPoolsSecurity(pools []azuredevops.AgentPool, agentsByPool map[i
 	selfHostedCount := 0
 
 	for _, pool := range pools {
-		// Count self-hosted pools
 		if !pool.IsHosted {
 			selfHostedCount++
 		}
 
-		// Check for auto-provisioned pools
 		if pool.AutoProvision {
 			warnings = append(warnings, fmt.Sprintf("⚠️  Pool '%s' is auto-provisioned to all projects - cross-project contamination risk", pool.Name))
 		}
@@ -244,19 +233,16 @@ func analyzeAgentPoolsSecurity(pools []azuredevops.AgentPool, agentsByPool map[i
 	result += "\nSecurity Analysis:\n"
 	result += "==================\n"
 
-	// Report on self-hosted pools
 	if selfHostedCount > 0 {
 		result += fmt.Sprintf("⚠️  %d self-hosted agent pool(s) detected - potential lateral movement targets\n", selfHostedCount)
 	} else {
 		result += "✓ All pools are Microsoft-hosted (lower risk)\n"
 	}
 
-	// Add auto-provision warnings
 	for _, warning := range warnings {
 		result += warning + "\n"
 	}
 
-	// Add agent-level analysis if available
 	if agentsByPool != nil {
 		agentAnalysis := analyzeAgentDetails(agentsByPool)
 		if agentAnalysis != "" {
@@ -267,7 +253,6 @@ func analyzeAgentPoolsSecurity(pools []azuredevops.AgentPool, agentsByPool map[i
 	return result
 }
 
-// analyzeAgentDetails reports on agent-level security observations
 func analyzeAgentDetails(agentsByPool map[int][]azuredevops.Agent) string {
 	var lines []string
 
@@ -281,7 +266,6 @@ func analyzeAgentDetails(agentsByPool map[int][]azuredevops.Agent) string {
 		for _, agent := range agents {
 			totalAgents++
 
-			// OS breakdown
 			osLower := strings.ToLower(agent.OSDescription)
 			switch {
 			case strings.Contains(osLower, "linux"),
@@ -296,12 +280,10 @@ func analyzeAgentDetails(agentsByPool map[int][]azuredevops.Agent) string {
 				windowsCount++
 			}
 
-			// Offline agents
 			if agent.Status == "offline" {
 				offlineCount++
 			}
 
-			// Version tracking
 			if agent.Version != "" {
 				versions[agent.Version]++
 			}
@@ -314,7 +296,6 @@ func analyzeAgentDetails(agentsByPool map[int][]azuredevops.Agent) string {
 
 	lines = append(lines, "\nAgent Details:")
 
-	// OS breakdown
 	otherCount := totalAgents - linuxCount - windowsCount
 	var osParts []string
 	if linuxCount > 0 {
@@ -328,12 +309,10 @@ func analyzeAgentDetails(agentsByPool map[int][]azuredevops.Agent) string {
 	}
 	lines = append(lines, fmt.Sprintf("  Agent OS breakdown: %s (%d total across self-hosted pools)", strings.Join(osParts, ", "), totalAgents))
 
-	// Offline agents
 	if offlineCount > 0 {
 		lines = append(lines, fmt.Sprintf("  ⚠️  %d agent(s) offline - potential stale/abandoned agents", offlineCount))
 	}
 
-	// Version spread
 	if len(versions) > 1 {
 		var versionList []string
 		for v, count := range versions {

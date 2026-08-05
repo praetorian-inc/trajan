@@ -2,7 +2,6 @@ package detect
 
 import "github.com/praetorian-inc/trajan/internal/finding"
 
-// Provider supplies the per-platform specifics the shared detection engine needs.
 // Every func field is optional; the accessors below define the nil behavior.
 type Provider struct {
 	Name        string
@@ -14,7 +13,7 @@ type Provider struct {
 	Repo        func(subject map[string]any) string
 	File        func(subject map[string]any) string
 	// Names the finding file. A platform whose subjects lack a natural _id (ADO's
-	// derived-edge records) supplies this so distinct subjects don't collide to one.
+	// derived-edge records) supplies this so distinct subjects don't collide.
 	SubjectKey func(subject map[string]any) string
 }
 

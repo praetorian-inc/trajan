@@ -53,62 +53,49 @@ func runForkSecurityAzDO() error {
 
 	var projects []azuredevops.Project
 
-	// Get projects to scan
 	if enumProject != "" {
-		// Single project mode
 		proj, err := client.GetProject(ctx, enumProject)
 		if err != nil {
 			return fmt.Errorf("getting project: %w", err)
 		}
 		projects = []azuredevops.Project{*proj}
 	} else {
-		// All projects mode
 		projects, err = client.ListProjects(ctx)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Collect vulnerabilities across all projects
 	var vulnerabilities []azuredevops.ForkVulnerability
 
 	for _, project := range projects {
-		// Get build definitions for this project
 		definitions, err := client.ListBuildDefinitions(ctx, project.Name)
 		if err != nil {
-			// Log error but continue with other projects
 			fmt.Fprintf(os.Stderr, "Warning: failed to list build definitions for %s: %v\n", project.Name, err)
 			continue
 		}
 
-		// Check each definition
 		for _, def := range definitions {
-			// Get full definition details (includes triggers)
 			fullDef, err := client.GetBuildDefinition(ctx, project.Name, def.ID)
 			if err != nil {
-				// Log error but continue with other definitions
 				fmt.Fprintf(os.Stderr, "Warning: failed to get definition %d: %v\n", def.ID, err)
 				continue
 			}
 
-			// Only check GitHub and GitHubEnterprise repositories
+			// Fork build settings only exist for GitHub-hosted repositories.
 			if fullDef.Repository.Type != "GitHub" && fullDef.Repository.Type != "GitHubEnterprise" {
 				continue
 			}
 
-			// Check triggers for fork vulnerabilities
 			for _, trigger := range fullDef.Triggers {
-				// Only check pull request triggers
 				if trigger.TriggerType != "pullRequest" {
 					continue
 				}
 
-				// Skip if forks are not configured
 				if trigger.Forks == nil {
 					continue
 				}
 
-				// Check for critical vulnerability: secrets exposed to forks
 				if trigger.Forks.Enabled && trigger.Forks.AllowSecrets {
 					vulnerabilities = append(vulnerabilities, azuredevops.ForkVulnerability{
 						PipelineID:   fullDef.ID,
@@ -119,7 +106,6 @@ func runForkSecurityAzDO() error {
 					})
 				}
 
-				// Check for high severity vulnerability: no approval required for forks
 				if trigger.Forks.Enabled && !trigger.IsCommentRequiredForPullRequest && !trigger.RequireCommentsForNonTeamMembersOnly {
 					vulnerabilities = append(vulnerabilities, azuredevops.ForkVulnerability{
 						PipelineID:   fullDef.ID,
@@ -133,7 +119,6 @@ func runForkSecurityAzDO() error {
 		}
 	}
 
-	// Output results
 	switch enumOutput {
 	case "json":
 		enc := json.NewEncoder(os.Stdout)
@@ -173,7 +158,6 @@ func runForkSecurityAzDO() error {
 		}
 		_ = w.Flush()
 
-		// Count critical vulnerabilities for summary
 		criticalCount := 0
 		for _, vuln := range vulnerabilities {
 			if vuln.Severity == "Critical" {

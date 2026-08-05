@@ -19,19 +19,16 @@ func init() {
 	})
 }
 
-// Detection is the AI risk detection for Azure DevOps Pipelines.
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new AI risk detection for Azure DevOps.
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("ai-risk", platforms.PlatformAzureDevOps, detections.SeverityMedium),
 	}
 }
 
-// Detect walks each workflow graph and runs AI checks on every step.
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
@@ -61,10 +58,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	}
 	return findings, nil
 }
-
-// ---------------------------------------------------------------------------
-// Check 1: Token Exfiltration
-// ---------------------------------------------------------------------------
 
 func checkTokenExfiltration(wf *graph.WorkflowNode, step *graph.StepNode) []detections.Finding {
 	if !common.HasDangerousTrigger(wf.Triggers) {
@@ -101,10 +94,6 @@ func checkTokenExfiltration(wf *graph.WorkflowNode, step *graph.StepNode) []dete
 	}}
 }
 
-// ---------------------------------------------------------------------------
-// Check 2: Code Injection
-// ---------------------------------------------------------------------------
-
 func checkCodeInjection(wf *graph.WorkflowNode, step *graph.StepNode) []detections.Finding {
 	if !hasUntrustedInput(step) {
 		return nil
@@ -133,10 +122,6 @@ func checkCodeInjection(wf *graph.WorkflowNode, step *graph.StepNode) []detectio
 		},
 	}}
 }
-
-// ---------------------------------------------------------------------------
-// Check 3: MCP Abuse
-// ---------------------------------------------------------------------------
 
 func checkMCPAbuse(wf *graph.WorkflowNode, step *graph.StepNode) []detections.Finding {
 	if !aipatterns.CheckMCPIndicators(step) {
@@ -187,10 +172,6 @@ func checkMCPAbuse(wf *graph.WorkflowNode, step *graph.StepNode) []detections.Fi
 		},
 	}}
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 func hasTokenAccess(step *graph.StepNode) bool {
 	if step.Run != "" && common.ContainsDangerousToken(step.Run) {

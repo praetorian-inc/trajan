@@ -33,10 +33,9 @@ func repointHosts(t *testing.T, base string) {
 	}
 }
 
-// whoamiStub serves connectionData plus every probe surface as a non-empty 2xx
-// list, overriding individual path suffixes from status/body. An override that
-// never matches fails the test, so a changed probe path can't silently disarm
-// the case that relies on it.
+// Serves connectionData plus every probe surface as a non-empty 2xx list, with
+// individual path suffixes overridden. An override that never matches fails the test,
+// so a renamed probe path cannot silently disarm the case that relies on it.
 func whoamiStub(t *testing.T, status map[string]int, body map[string]string) func() []string {
 	t.Helper()
 	var mu sync.Mutex

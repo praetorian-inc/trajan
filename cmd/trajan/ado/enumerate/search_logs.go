@@ -61,7 +61,6 @@ func runSearchLogsAzDO() error {
 		return err
 	}
 
-	// Get recent builds
 	var builds []azuredevops.Build
 	var searchProject string
 
@@ -86,7 +85,6 @@ func runSearchLogsAzDO() error {
 		_ = searchProject // not used in org-wide mode
 	}
 
-	// Limit builds to search
 	if len(builds) > searchLogsLimit {
 		builds = builds[:searchLogsLimit]
 	}
@@ -102,7 +100,6 @@ func runSearchLogsAzDO() error {
 	var matches []logMatch
 
 	for _, build := range builds {
-		// Use the build's project for API calls (supports org-wide iteration)
 		buildProject := enumProject
 		if buildProject == "" && build.Project.Name != "" {
 			buildProject = build.Project.Name
@@ -120,7 +117,6 @@ func runSearchLogsAzDO() error {
 
 			logStr := string(content)
 
-			// If no query, report all logs
 			if searchLogsQuery == "" {
 				snippet := logStr
 				if len(snippet) > 100 {
@@ -138,7 +134,6 @@ func runSearchLogsAzDO() error {
 
 			// Case-insensitive substring search
 			if strings.Contains(strings.ToLower(logStr), strings.ToLower(searchLogsQuery)) {
-				// Find matching line
 				lines := strings.Split(logStr, "\n")
 				for _, line := range lines {
 					if strings.Contains(strings.ToLower(line), strings.ToLower(searchLogsQuery)) {

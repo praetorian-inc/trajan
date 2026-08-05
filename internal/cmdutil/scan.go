@@ -12,7 +12,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// OutputFindingsJSON outputs scan results with findings as JSON.
 func OutputFindingsJSON(result *platforms.ScanResult, findings []detections.Finding) error {
 	output := struct {
 		Summary struct {
@@ -38,7 +37,6 @@ func OutputFindingsJSON(result *platforms.ScanResult, findings []detections.Find
 	return enc.Encode(output)
 }
 
-// OutputFindingsSARIF outputs scan results in SARIF format.
 func OutputFindingsSARIF(result *platforms.ScanResult, findings []detections.Finding) error {
 	sarifBytes, err := outputpkg.GenerateSARIF(findings)
 	if err != nil {
@@ -49,7 +47,6 @@ func OutputFindingsSARIF(result *platforms.ScanResult, findings []detections.Fin
 	return err
 }
 
-// OutputFindingsHTML outputs scan results in HTML format.
 func OutputFindingsHTML(result *platforms.ScanResult, findings []detections.Finding) error {
 	htmlBytes, err := outputpkg.GenerateHTML(result, findings)
 	if err != nil {
@@ -59,7 +56,6 @@ func OutputFindingsHTML(result *platforms.ScanResult, findings []detections.Find
 	return err
 }
 
-// OutputFindingsConsole outputs scan results with findings in table format.
 func OutputFindingsConsole(result *platforms.ScanResult, findings []detections.Finding) error {
 	fmt.Printf("=== trajan Scan Results ===\n")
 	fmt.Printf("Repositories scanned: %d\n", len(result.Repositories))
@@ -100,7 +96,6 @@ func OutputFindingsConsole(result *platforms.ScanResult, findings []detections.F
 	return nil
 }
 
-// CountWorkflows returns the total number of workflows across all repositories.
 func CountWorkflows(workflows map[string][]platforms.Workflow) int {
 	count := 0
 	for _, wfs := range workflows {
@@ -109,8 +104,6 @@ func CountWorkflows(workflows map[string][]platforms.Workflow) int {
 	return count
 }
 
-// FilterFindingsBySeverity filters findings by exact severity levels.
-// Accepts comma-separated severity values (e.g., "critical,high").
 func FilterFindingsBySeverity(findings []detections.Finding, severitySpec string) ([]detections.Finding, error) {
 	if severitySpec == "" {
 		return findings, nil
@@ -149,9 +142,9 @@ func FilterFindingsBySeverity(findings []detections.Finding, severitySpec string
 	return filtered, nil
 }
 
-// ADOPluginVulnTypes maps each ADO plugin name (as shown by --list) to the
-// VulnerabilityType strings that plugin emits. Multiple plugins may share the
-// same VulnerabilityType; this map lets --capabilities resolve by plugin name.
+// Keys are the plugin names --list prints, which is what an operator passes to
+// --capabilities. Several plugins emit the same VulnerabilityType, so the
+// mapping only runs name to types, never back.
 var ADOPluginVulnTypes = map[string][]detections.VulnerabilityType{
 	"pipeline-injection":      {detections.VulnScriptInjection, detections.VulnTriggerExploitation, detections.VulnDynamicTemplateInjection},
 	"secrets-exposure":        {detections.VulnUnredactedSecrets, detections.VulnTokenExposure, detections.VulnPullRequestSecretsExposure},
@@ -161,16 +154,10 @@ var ADOPluginVulnTypes = map[string][]detections.VulnerabilityType{
 	"ai-risk":                 {detections.VulnAITokenExfiltration, detections.VulnAICodeInjection, detections.VulnAIMCPAbuse},
 }
 
-// GitLabPluginVulnTypes maps each GitLab plugin name (as shown by --list) to the
-// VulnerabilityType strings that plugin emits.
 var GitLabPluginVulnTypes = map[string][]detections.VulnerabilityType{
 	"ai-risk": {detections.VulnAITokenExfiltration, detections.VulnAICodeInjection, detections.VulnAIMCPAbuse},
 }
 
-// FilterFindingsByADOCapabilities filters ADO scan findings by capability name.
-// Each capability name is resolved to one or more VulnerabilityTypes via
-// ADOPluginVulnTypes; as a fallback the spec is also compared directly against
-// the finding's Type string so plain VulnerabilityType names still work.
 func FilterFindingsByADOCapabilities(findings []detections.Finding, capabilitiesSpec string) ([]detections.Finding, error) {
 	if capabilitiesSpec == "" {
 		return findings, nil
@@ -185,7 +172,7 @@ func FilterFindingsByADOCapabilities(findings []detections.Finding, capabilities
 				allowedTypes[vt] = true
 			}
 		} else {
-			// Fallback: treat as a direct VulnerabilityType string.
+			// Not a plugin name, so accept it as a raw VulnerabilityType.
 			allowedTypes[detections.VulnerabilityType(cap)] = true
 		}
 	}
@@ -200,8 +187,6 @@ func FilterFindingsByADOCapabilities(findings []detections.Finding, capabilities
 	return filtered, nil
 }
 
-// FilterFindingsByCapabilities filters findings by detection type.
-// Accepts comma-separated vulnerability type names or plugin names (for GitLab).
 func FilterFindingsByCapabilities(findings []detections.Finding, capabilitiesSpec string) ([]detections.Finding, error) {
 	if capabilitiesSpec == "" {
 		return findings, nil
@@ -213,13 +198,12 @@ func FilterFindingsByCapabilities(findings []detections.Finding, capabilitiesSpe
 	for _, cap := range capList {
 		cap = strings.TrimSpace(cap)
 
-		// Check if this is a GitLab plugin name (like "ai-risk")
 		if vulnTypes, ok := GitLabPluginVulnTypes[cap]; ok {
 			for _, vt := range vulnTypes {
 				allowedCaps[vt] = true
 			}
 		} else {
-			// Fallback: treat as a direct VulnerabilityType string
+			// Not a plugin name, so accept it as a raw VulnerabilityType.
 			allowedCaps[detections.VulnerabilityType(cap)] = true
 		}
 	}

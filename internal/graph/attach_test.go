@@ -67,10 +67,9 @@ func mustTarget(t *testing.T, s string) Target {
 	return tg
 }
 
-// fr-05-02 pairs an upstream test job with a downstream publish job over
-// workflow_run. attack() names no endpoint side, and the victim is the
-// downstream job: it is the one that runs the PR code. Its two trigger-class
-// lists differ, and both must survive onto the edge.
+// fr-05-02 pairs an upstream test job with a downstream publish job over workflow_run.
+// attack() names no endpoint side, and the victim is the downstream job — it runs the
+// PR code. Its two trigger-class lists differ and both must survive onto the edge.
 func TestAttackEdgeVictimizesTheDownstreamJob(t *testing.T) {
 	const repo = "fr-05-02-checkout-head-sha-execute"
 	up := map[string]any{
@@ -132,9 +131,8 @@ func jobEndpointFor(repo, workflow, jobID string) string {
 }
 
 // A chain subject.id is a slugged composite: BranchSlug turns "release/1.0" into
-// "release__1.0" and "__" is also the field separator, so the id cannot be
-// parsed. fr-11-05 carries both "sandbox-x" and "sandbox/x" — resolving by
-// lookup keeps them distinct and recovers the true names.
+// "release__1.0" and "__" is also the field separator, so the id cannot be parsed.
+// fr-11-05's "sandbox-x" and "sandbox/x" must stay distinct under lookup.
 func TestChainBranchAnchorNeverParsesTheSubjectID(t *testing.T) {
 	rows := []any{}
 	want := map[string]string{}

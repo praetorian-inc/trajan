@@ -10,32 +10,26 @@ import (
 	"strings"
 )
 
-// TokenType identifies the kind of Bitbucket credential.
 type TokenType string
 
 const (
-	// TokenTypeWorkspace is a workspace-scoped access token.
 	TokenTypeWorkspace TokenType = "workspace_access_token"
-	// TokenTypeProject is a project-scoped access token.
-	TokenTypeProject TokenType = "project_access_token"
-	// TokenTypeRepo is a repository-scoped access token.
-	TokenTypeRepo TokenType = "repo_access_token"
-	// TokenTypeAPIToken is a user-level API token (ATATT3x prefix).
+	TokenTypeProject   TokenType = "project_access_token"
+	TokenTypeRepo      TokenType = "repo_access_token"
+	// ATATT3x prefix.
 	TokenTypeAPIToken TokenType = "api_token"
-	// TokenTypeUnknown is returned when the credential type header is missing or unrecognized.
+	// The x-credential-type header was missing or unrecognized.
 	TokenTypeUnknown TokenType = "unknown"
 )
 
-// TokenInfo holds metadata about a Bitbucket authentication token,
-// derived from the response headers of the /2.0/user endpoint.
+// Derived from the /2.0/user response headers.
 type TokenInfo struct {
 	Type       TokenType `json:"type"`
 	AuthMethod string    `json:"auth_method"` // "bearer" or "basic"
-	Scopes     *Scopes   `json:"-"`           // Parsed scopes (excluded from JSON)
-	RawScopes  []string  `json:"scopes"`      // Raw scope strings for JSON output
+	Scopes     *Scopes   `json:"-"`
+	RawScopes  []string  `json:"scopes"`
 }
 
-// mapCredentialType converts the x-credential-type header value to a TokenType constant.
 func mapCredentialType(value string) TokenType {
 	switch value {
 	case "workspace_access_token":
@@ -51,11 +45,9 @@ func mapCredentialType(value string) TokenType {
 	}
 }
 
-// GetTokenInfo retrieves token metadata by calling the /2.0/user endpoint
-// and inspecting the response headers. For API tokens (Basic auth) the
-// endpoint returns 200 with user information. For access tokens (Bearer auth)
-// it returns 403, but the headers still contain scope and credential type data.
-// A 401 response indicates an invalid token.
+// Basic auth (API token) gets 200 with a user body; Bearer auth (access token)
+// gets 403 whose headers still carry the scope and credential-type data.
+// A 401 means the token itself is invalid.
 func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, *User, *RateLimitInfo, error) {
 	resp, err := c.getRawResponse(ctx, "GET", "/2.0/user")
 	if err != nil {
@@ -63,11 +55,9 @@ func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, *User, *RateLimi
 	}
 	defer resp.Body.Close()
 
-	// Parse response headers
 	credType := resp.Header.Get("x-credential-type")
 	scopeHeader := resp.Header.Get("x-oauth-scopes")
 
-	// Build raw scopes list from header
 	var rawScopes []string
 	if scopeHeader != "" {
 		for _, s := range strings.Split(scopeHeader, ",") {
@@ -81,7 +71,7 @@ func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, *User, *RateLimi
 		rawScopes = []string{}
 	}
 
-	// Parse rate limit info (only present when Bitbucket enforces limits)
+	// The rate-limit headers appear only while Bitbucket is enforcing a limit.
 	var rateLimit *RateLimitInfo
 	if limitStr := resp.Header.Get("x-ratelimit-limit"); limitStr != "" {
 		rateLimit = &RateLimitInfo{}
@@ -96,7 +86,6 @@ func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, *User, *RateLimi
 		}
 	}
 
-	// Determine scope format based on auth mode
 	var format ScopeFormat
 	switch c.authMode {
 	case AuthBasic:
@@ -105,19 +94,15 @@ func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, *User, *RateLimi
 		format = ScopeFormatLegacy
 	}
 
-	// Parse scopes
 	scopes := ParseScopes(scopeHeader, format)
 
-	// Determine auth method string
 	authMethod := "bearer"
 	if c.authMode == AuthBasic {
 		authMethod = "basic"
 	}
 
-	// Handle response based on status code
 	switch resp.StatusCode {
 	case http.StatusOK:
-		// API token — parse user from body
 		body, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
 			return nil, nil, nil, fmt.Errorf("reading response body: %w", readErr)
@@ -137,7 +122,6 @@ func (c *Client) GetTokenInfo(ctx context.Context) (*TokenInfo, *User, *RateLimi
 		return info, &user, rateLimit, nil
 
 	case http.StatusForbidden:
-		// Access token — no user info but headers are valid
 		info := &TokenInfo{
 			Type:       mapCredentialType(credType),
 			AuthMethod: authMethod,

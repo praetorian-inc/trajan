@@ -14,7 +14,6 @@ func TestWriteListOrMark(t *testing.T) {
 	dir := t.TempDir()
 	cp := engine.CurrentPhase{RunDir: dir}
 
-	// soft fail -> marker
 	if err := writeListOrMark(cp, engine.CollectADOServiceConnections("P"), "service-connections", "/p", nil, 403); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +26,6 @@ func TestWriteListOrMark(t *testing.T) {
 		t.Errorf("soft-fail list did not write _unobserved marker: %v", env["data"])
 	}
 
-	// success -> the list (never nil)
 	if err := writeListOrMark(cp, engine.CollectADOVariableGroups("P"), "variable-groups", "/p", nil, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +46,6 @@ func TestPipelineYAMLPathNoTraversal(t *testing.T) {
 	if strings.Contains(rel, "..") && strings.Contains(rel, "/..") {
 		t.Errorf("traversal not flattened: %q", rel)
 	}
-	// the whole reconstructed name collapses to a single path segment (no separators)
 	if c := strings.Count(strings.TrimPrefix(rel, "00-collect/pipeline-yaml/"), "/"); c != 1 {
 		t.Errorf("template name introduced extra path segments: %q", rel)
 	}

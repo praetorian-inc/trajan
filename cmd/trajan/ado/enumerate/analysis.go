@@ -5,9 +5,6 @@ import (
 	"strings"
 )
 
-// analyzeBranchFilters checks if branch filters allow exploitation by attackers.
-// Returns (isExploitable, reason).
-// Ported from ADOScan's internal/api/triggers.go
 func analyzeBranchFilters(filters []string) (bool, string) {
 	if len(filters) == 0 {
 		return true, "no filters (all branches trigger)"
@@ -31,7 +28,7 @@ func analyzeBranchFilters(filters []string) (bool, string) {
 			continue
 		}
 
-		// Skip exclude filters
+		// A leading "-" marks an exclude filter.
 		if filter[0] == '-' {
 			continue
 		}
@@ -40,7 +37,6 @@ func analyzeBranchFilters(filters []string) (bool, string) {
 			onlyProtectedBranches = false
 		}
 
-		// Check for broad wildcards
 		if filter == "*" || filter == "+*" || filter == "+refs/heads/*" {
 			hasWildcardInclude = true
 		}
@@ -72,7 +68,6 @@ func analyzeBranchFilters(filters []string) (bool, string) {
 	return false, ""
 }
 
-// containsWildcard checks if a pattern contains wildcard characters
 func containsWildcard(pattern string) bool {
 	for _, r := range pattern {
 		if r == '*' || r == '?' {
@@ -82,7 +77,6 @@ func containsWildcard(pattern string) bool {
 	return false
 }
 
-// containsUserBranchPattern checks if a pattern includes user-controllable branch prefixes
 func containsUserBranchPattern(pattern string) bool {
 	userPatterns := []string{
 		"users/", "user/", "feature/", "feat/",
@@ -98,7 +92,6 @@ func containsUserBranchPattern(pattern string) bool {
 	return false
 }
 
-// isProtectedWildcard checks if a wildcard pattern only matches protected branches
 func isProtectedWildcard(pattern string) bool {
 	protected := []string{
 		"+refs/heads/release/*",
@@ -114,7 +107,6 @@ func isProtectedWildcard(pattern string) bool {
 	return false
 }
 
-// formatBranchFilters truncates a filter list for display
 func formatBranchFilters(filters []string, maxDisplay int) string {
 	if len(filters) == 0 {
 		return "*"
@@ -126,7 +118,6 @@ func formatBranchFilters(filters []string, maxDisplay int) string {
 	return fmt.Sprintf("%s +%d more", displayed, len(filters)-maxDisplay)
 }
 
-// policyTypeNameMap returns a mapping of well-known policy type UUIDs to display names
 func policyTypeNameMap() map[string]string {
 	return map[string]string{
 		"0609b952-1397-4640-95ec-e00a01b2c241": "Build",
@@ -136,7 +127,6 @@ func policyTypeNameMap() map[string]string {
 	}
 }
 
-// buildValidationPolicyTypeID is the UUID for build validation policies
 const buildValidationPolicyTypeID = "0609b952-1397-4640-95ec-e00a01b2c241"
 
 // Security namespace IDs for permission checks
@@ -145,14 +135,12 @@ const (
 	gitNamespaceID   = "2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87"
 )
 
-// Build permission bits
 const (
 	buildPermQueueBuilds     = 128
 	buildPermViewBuilds      = 1
 	buildPermViewDefinitions = 1024
 )
 
-// Git permission bits
 const (
 	gitPermContribute         = 4
 	gitPermForcePush          = 8
@@ -160,7 +148,6 @@ const (
 	gitPermBypassPoliciesPR   = 32768
 )
 
-// Extended build permission bits for detailed analysis
 const (
 	buildPermEditBuildDefinition   = 2048
 	buildPermDeleteBuilds          = 8
@@ -168,7 +155,6 @@ const (
 	buildPermAdministerPermissions = 16384
 )
 
-// Extended git permission bits for detailed analysis
 const (
 	gitPermAdminister     = 1
 	gitPermRead           = 2
@@ -176,7 +162,6 @@ const (
 	gitPermContributeToPR = 16384
 )
 
-// formatBool returns "Yes" or "No" for a boolean value
 func formatBool(b bool) string {
 	if b {
 		return "Yes"

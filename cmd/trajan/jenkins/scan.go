@@ -17,10 +17,9 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/praetorian-inc/trajan/pkg/scanner"
 
-	// Import all platforms to trigger init() registration
+	// Blank imports: platform and detection init registration.
 	_ "github.com/praetorian-inc/trajan/pkg/platforms/all"
 
-	// All detections (triggers init() registration)
 	_ "github.com/praetorian-inc/trajan/pkg/detections/all"
 )
 
@@ -134,7 +133,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 	return executeScanAndOutput(ctx, platform, target, verbose, output)
 }
 
-// executeScanAndOutput performs vulnerability scan and outputs results.
 func executeScanAndOutput(ctx context.Context, platform platforms.Platform, target platforms.Target, verbose bool, output string) error {
 	if verbose {
 		fmt.Fprintf(os.Stderr, "Scanning %s %s...\n", target.Type, target.Value)

@@ -21,7 +21,6 @@ const (
 	MaxConcurrentRequests = 20
 )
 
-// Client is a Jenkins REST API client
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
@@ -34,7 +33,7 @@ type Client struct {
 	crumbFetched bool
 }
 
-// String implements fmt.Stringer to prevent token leakage in logs
+// Exists to keep the token out of logs.
 func (c *Client) String() string {
 	if c == nil {
 		return "Client{nil}"
@@ -42,7 +41,7 @@ func (c *Client) String() string {
 	return fmt.Sprintf("Client{baseURL: %q, token: [REDACTED]}", c.baseURL)
 }
 
-// GoString implements fmt.GoStringer to prevent token leakage with %#v format
+// Exists to keep the token out of %#v output.
 func (c *Client) GoString() string {
 	if c == nil {
 		return "(*Client)(nil)"
@@ -50,17 +49,14 @@ func (c *Client) GoString() string {
 	return fmt.Sprintf("&Client{baseURL: %q, token: [REDACTED]}", c.baseURL)
 }
 
-// ClientOption configures a Client
 type ClientOption func(*Client)
 
-// WithTimeout sets the HTTP client timeout
 func WithTimeout(timeout time.Duration) ClientOption {
 	return func(c *Client) {
 		c.httpClient.Timeout = timeout
 	}
 }
 
-// WithConcurrency sets the maximum concurrent requests
 func WithConcurrency(maxVal int64) ClientOption {
 	return func(c *Client) {
 		if maxVal > 0 {
@@ -69,7 +65,6 @@ func WithConcurrency(maxVal int64) ClientOption {
 	}
 }
 
-// WithHTTPTransport sets a custom HTTP transport on the underlying client.
 // The cookie jar on the client is preserved.
 func WithHTTPTransport(transport http.RoundTripper) ClientOption {
 	return func(c *Client) {
@@ -77,23 +72,19 @@ func WithHTTPTransport(transport http.RoundTripper) ClientOption {
 	}
 }
 
-// WithUsername sets the username for HTTP Basic authentication
 func WithUsername(username string) ClientOption {
 	return func(c *Client) {
 		c.username = username
 	}
 }
 
-// setAuth sets the appropriate authentication header on the request.
-// If both username and token are set, HTTP Basic auth is used.
-// Otherwise, no auth header is set (anonymous access).
+// Basic auth only when both username and token are set; otherwise anonymous.
 func (c *Client) setAuth(req *http.Request) {
 	if c.username != "" && c.token != "" {
 		req.SetBasicAuth(c.username, c.token)
 	}
 }
 
-// NewClient creates a new Jenkins API client
 func NewClient(baseURL, token string, opts ...ClientOption) *Client {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
@@ -117,7 +108,6 @@ func NewClient(baseURL, token string, opts ...ClientOption) *Client {
 	return c
 }
 
-// getJSON performs a GET request and decodes the JSON response
 func (c *Client) getJSON(ctx context.Context, path string, v interface{}) error {
 	if err := c.semaphore.Acquire(ctx, 1); err != nil {
 		return fmt.Errorf("acquiring semaphore: %w", err)
@@ -149,7 +139,6 @@ func (c *Client) getJSON(ctx context.Context, path string, v interface{}) error 
 	return nil
 }
 
-// getRaw performs a GET request and returns the raw response body
 func (c *Client) getRaw(ctx context.Context, path string) ([]byte, error) {
 	if err := c.semaphore.Acquire(ctx, 1); err != nil {
 		return nil, fmt.Errorf("acquiring semaphore: %w", err)
@@ -182,8 +171,8 @@ func (c *Client) getRaw(ctx context.Context, path string) ([]byte, error) {
 	return body, nil
 }
 
-// fetchCrumb retrieves and caches the CSRF crumb. Safe for concurrent use.
-// Retries on transient errors; caches success and 404 permanently.
+// A 404 (CSRF disabled) is cached permanently; a transient error is not, so the
+// next call retries. Safe for concurrent use.
 func (c *Client) fetchCrumb(ctx context.Context) (*CrumbInfo, error) {
 	c.crumbMu.Lock()
 	defer c.crumbMu.Unlock()
@@ -212,10 +201,8 @@ func (c *Client) CSRFDisabled() bool {
 	return c.crumbFetched && c.crumb == nil
 }
 
-// postForm performs a POST request with form data, auto-attaching crumb.
 func (c *Client) postForm(ctx context.Context, path string, data map[string]string) ([]byte, error) {
-	// Fetch crumb before acquiring semaphore to avoid double-acquire deadlock
-	// (fetchCrumb -> getJSON also acquires the semaphore)
+	// Before the semaphore: fetchCrumb -> getJSON acquires it too, which would deadlock.
 	crumb, err := c.fetchCrumb(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetching crumb: %w", err)
@@ -262,10 +249,8 @@ func (c *Client) postForm(ctx context.Context, path string, data map[string]stri
 	return body, nil
 }
 
-// postRaw performs a POST request with raw body data, auto-attaching crumb.
 func (c *Client) postRaw(ctx context.Context, path, contentType string, data []byte) ([]byte, error) {
-	// Fetch crumb before acquiring semaphore to avoid double-acquire deadlock
-	// (fetchCrumb -> getJSON also acquires the semaphore)
+	// Before the semaphore: fetchCrumb -> getJSON acquires it too, which would deadlock.
 	crumb, err := c.fetchCrumb(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetching crumb: %w", err)
@@ -306,8 +291,7 @@ func (c *Client) postRaw(ctx context.Context, path, contentType string, data []b
 	return body, nil
 }
 
-// GetServerInfo returns Jenkins server metadata.
-// Parses version from X-Jenkins response header.
+// The version comes from the X-Jenkins response header, not the JSON body.
 func (c *Client) GetServerInfo(ctx context.Context) (*ServerInfo, error) {
 	if err := c.semaphore.Acquire(ctx, 1); err != nil {
 		return nil, fmt.Errorf("acquiring semaphore: %w", err)
@@ -340,7 +324,6 @@ func (c *Client) GetServerInfo(ctx context.Context) (*ServerInfo, error) {
 	return &info, nil
 }
 
-// GetWhoAmI returns the authenticated user's identity.
 func (c *Client) GetWhoAmI(ctx context.Context) (*WhoAmI, error) {
 	var who WhoAmI
 	if err := c.getJSON(ctx, "/whoAmI/api/json", &who); err != nil {
@@ -349,7 +332,6 @@ func (c *Client) GetWhoAmI(ctx context.Context) (*WhoAmI, error) {
 	return &who, nil
 }
 
-// ListNodes returns all build agents/nodes.
 func (c *Client) ListNodes(ctx context.Context) ([]Node, error) {
 	var resp NodesResponse
 	if err := c.getJSON(ctx, "/computer/api/json?tree=computer[displayName,offline,temporarilyOffline,idle,numExecutors,assignedLabels[name]]", &resp); err != nil {
@@ -358,7 +340,6 @@ func (c *Client) ListNodes(ctx context.Context) ([]Node, error) {
 	return resp.Computer, nil
 }
 
-// ListPlugins returns all installed plugins.
 func (c *Client) ListPlugins(ctx context.Context) ([]PluginInfo, error) {
 	var resp PluginsResponse
 	if err := c.getJSON(ctx, "/pluginManager/api/json?tree=plugins[shortName,version,active,enabled,hasUpdate,longName]&depth=1", &resp); err != nil {
@@ -367,8 +348,6 @@ func (c *Client) ListPlugins(ctx context.Context) ([]PluginInfo, error) {
 	return resp.Plugins, nil
 }
 
-// PostScript executes a Groovy script via the script console.
-// Returns the script output text.
 func (c *Client) PostScript(ctx context.Context, script string) (string, error) {
 	body, err := c.postForm(ctx, "/scriptText", map[string]string{"script": script})
 	if err != nil {
@@ -377,8 +356,6 @@ func (c *Client) PostScript(ctx context.Context, script string) (string, error) 
 	return string(body), nil
 }
 
-// CheckScriptConsole probes whether /script is accessible.
-// Returns (accessible bool, statusCode int, error).
 func (c *Client) CheckScriptConsole(ctx context.Context) (bool, int, error) {
 	if err := c.semaphore.Acquire(ctx, 1); err != nil {
 		return false, 0, fmt.Errorf("acquiring semaphore: %w", err)
@@ -402,7 +379,6 @@ func (c *Client) CheckScriptConsole(ctx context.Context) (bool, int, error) {
 	return resp.StatusCode == http.StatusOK, resp.StatusCode, nil
 }
 
-// ListJobsRecursive returns all jobs including those in folders.
 func (c *Client) ListJobsRecursive(ctx context.Context) ([]Job, error) {
 	var resp JobsResponse
 	if err := c.getJSON(ctx, "/api/json?tree=jobs[name,url,color,fullName,_class,jobs[name,url,color,fullName,_class]]", &resp); err != nil {
@@ -411,7 +387,6 @@ func (c *Client) ListJobsRecursive(ctx context.Context) ([]Job, error) {
 	return flattenJobs(resp.Jobs, ""), nil
 }
 
-// CreateJob creates a new Jenkins job with the given config XML.
 func (c *Client) CreateJob(ctx context.Context, name, configXML string) error {
 	_, err := c.postRaw(ctx, "/createItem?name="+url.QueryEscape(name), "application/xml", []byte(configXML))
 	if err != nil {
@@ -420,8 +395,7 @@ func (c *Client) CreateJob(ctx context.Context, name, configXML string) error {
 	return nil
 }
 
-// encodeJobPath encodes a Jenkins job name for use in URLs.
-// Splits on "/" (folder separators), URL-encodes each segment, and rejoins with "/job/".
+// Folder segments are URL-encoded individually and rejoined with "/job/".
 func encodeJobPath(name string) string {
 	segments := strings.Split(name, "/")
 	for i, seg := range segments {
@@ -430,21 +404,18 @@ func encodeJobPath(name string) string {
 	return strings.Join(segments, "/job/")
 }
 
-// DeleteJob deletes a Jenkins job by name.
 func (c *Client) DeleteJob(ctx context.Context, name string) error {
 	jobPath := encodeJobPath(name)
 	_, err := c.postForm(ctx, fmt.Sprintf("/job/%s/doDelete", jobPath), nil)
 	return err
 }
 
-// TriggerBuild triggers a build for the named job.
 func (c *Client) TriggerBuild(ctx context.Context, name string) error {
 	jobPath := encodeJobPath(name)
 	_, err := c.postForm(ctx, fmt.Sprintf("/job/%s/build", jobPath), nil)
 	return err
 }
 
-// GetBuildConsole returns console output for a specific build.
 func (c *Client) GetBuildConsole(ctx context.Context, name string, buildNum int) (string, error) {
 	jobPath := encodeJobPath(name)
 	body, err := c.getRaw(ctx, fmt.Sprintf("/job/%s/%d/consoleText", jobPath, buildNum))
@@ -454,7 +425,6 @@ func (c *Client) GetBuildConsole(ctx context.Context, name string, buildNum int)
 	return string(body), nil
 }
 
-// GetLastBuild returns info about the last build of a job.
 func (c *Client) GetLastBuild(ctx context.Context, name string) (*BuildInfo, error) {
 	jobPath := encodeJobPath(name)
 	var info BuildInfo
@@ -464,12 +434,10 @@ func (c *Client) GetLastBuild(ctx context.Context, name string) (*BuildInfo, err
 	return &info, nil
 }
 
-// flattenJobs recursively flattens nested folder jobs into a single slice.
 func flattenJobs(jobs []Job, prefix string) []Job {
 	var result []Job
 	for _, j := range jobs {
 		if len(j.Jobs) > 0 {
-			// This is a folder — recurse
 			folderPath := j.Name
 			if prefix != "" {
 				folderPath = prefix + "/" + j.Name

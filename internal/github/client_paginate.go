@@ -123,7 +123,8 @@ func asGhError(err error, target **GhError) bool {
 	return errors.As(err, target)
 }
 
-// percent-encodes a ref path while keeping "/" literal (urllib quote(safe="/"))
+// A ref carries slashes ("refs/heads/main") that must reach the API as path
+// separators, so every other reserved byte is percent-encoded and "/" is not.
 func quoteKeepSlash(ref string) string {
 	var b strings.Builder
 	for i := 0; i < len(ref); i++ {

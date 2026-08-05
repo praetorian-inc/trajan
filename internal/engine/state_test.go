@@ -73,8 +73,8 @@ func TestRecordPhaseWatermark(t *testing.T) {
 	}
 }
 
-// Every phase downstream of p reads p's output, so re-running p invalidates all
-// of them — including the graph, which carries a copy of the findings.
+// Every phase downstream of p reads p's output, so re-running p invalidates all of
+// them — the graph included, since it carries a copy of the findings.
 func TestStaleDirs(t *testing.T) {
 	s := &State{}
 	tests := []struct {

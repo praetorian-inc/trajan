@@ -2,7 +2,6 @@ package gitlab
 
 import "github.com/praetorian-inc/trajan/pkg/platforms"
 
-// TokenEnumerateResult contains GitLab token validation results
 type TokenEnumerateResult struct {
 	User             *User                `json:"user,omitempty"`
 	Token            *PersonalAccessToken `json:"token,omitempty"`
@@ -16,20 +15,17 @@ type TokenEnumerateResult struct {
 	Errors           []string             `json:"errors,omitempty"`
 }
 
-// GroupInfo contains group summary for token enumerate
 type GroupInfo struct {
 	Name     string `json:"name"`
 	FullPath string `json:"full_path"`
 	ID       int    `json:"id"`
 }
 
-// RateLimitInfo contains GitLab rate limit status
 type RateLimitInfo struct {
 	Limit     int `json:"limit"`
 	Remaining int `json:"remaining"`
 }
 
-// ProjectWithPermissions extends Repository with GitLab access level
 type ProjectWithPermissions struct {
 	platforms.Repository
 	AccessLevel  int    `json:"access_level"` // 10-50
@@ -37,14 +33,12 @@ type ProjectWithPermissions struct {
 	LastActivity string `json:"last_activity,omitempty"`
 }
 
-// ProjectsEnumerateResult contains project enumeration results
 type ProjectsEnumerateResult struct {
 	Projects []ProjectWithPermissions `json:"projects"`
 	Summary  ProjectsSummary          `json:"summary"`
 	Errors   []string                 `json:"errors,omitempty"`
 }
 
-// ProjectsSummary provides statistics about enumerated projects
 type ProjectsSummary struct {
 	Total       int `json:"total"`
 	Private     int `json:"private"`
@@ -55,7 +49,6 @@ type ProjectsSummary struct {
 	ReadAccess  int `json:"read_access"`
 }
 
-// GroupWithAccess contains group info with user's access level
 type GroupWithAccess struct {
 	Group
 	AccessLevel int    `json:"access_level"`
@@ -63,13 +56,11 @@ type GroupWithAccess struct {
 	SharedVia   string `json:"shared_via,omitempty"` // parent group path
 }
 
-// GroupsEnumerateResult contains group enumeration results
 type GroupsEnumerateResult struct {
 	Groups []GroupWithAccess `json:"groups"`
 	Errors []string          `json:"errors,omitempty"`
 }
 
-// SecretsEnumerateResult contains CI/CD variable enumeration results
 type SecretsEnumerateResult struct {
 	ProjectVariables  map[string][]Variable `json:"project_variables,omitempty"`
 	GroupVariables    map[string][]Variable `json:"group_variables,omitempty"`
@@ -78,7 +69,6 @@ type SecretsEnumerateResult struct {
 	Errors            []string              `json:"errors,omitempty"`
 }
 
-// BranchProtection represents a protected branch configuration
 type BranchProtection struct {
 	Name                      string        `json:"name"`
 	AllowForcePush            bool          `json:"allow_force_push"`
@@ -88,7 +78,6 @@ type BranchProtection struct {
 	UnprotectAccessLevels     []AccessLevel `json:"unprotect_access_levels"`
 }
 
-// AccessLevel represents GitLab access level for branch protection
 type AccessLevel struct {
 	AccessLevel            int    `json:"access_level"`
 	AccessLevelDescription string `json:"access_level_description"`
@@ -96,7 +85,6 @@ type AccessLevel struct {
 	GroupID                *int   `json:"group_id,omitempty"`
 }
 
-// BranchProtectionsEnumerateResult contains branch protection enumeration results
 type BranchProtectionsEnumerateResult struct {
 	Project       string             `json:"project"`
 	ProjectID     int                `json:"project_id"`
@@ -105,7 +93,6 @@ type BranchProtectionsEnumerateResult struct {
 	Errors        []string           `json:"errors,omitempty"`
 }
 
-// RunnerInfo represents a GitLab runner
 type RunnerInfo struct {
 	ID           int      `json:"id"`
 	Description  string   `json:"description"`
@@ -126,7 +113,6 @@ type RunnerInfo struct {
 	LastSeenAt   string   `json:"last_seen_at,omitempty"`  // For historical runners - last pipeline execution
 }
 
-// WorkflowTagAnalysis contains analysis of workflow runner tag requirements
 type WorkflowTagAnalysis struct {
 	RequiredTags     []string `json:"required_tags"`
 	AvailableTags    []string `json:"available_tags"`
@@ -134,7 +120,6 @@ type WorkflowTagAnalysis struct {
 	ProjectsAnalyzed int      `json:"projects_analyzed"`
 }
 
-// RunnerSummary provides statistics about enumerated runners
 type RunnerSummary struct {
 	Total    int `json:"total"`
 	Online   int `json:"online"`
@@ -144,7 +129,6 @@ type RunnerSummary struct {
 	Project  int `json:"project_runners"`
 }
 
-// RunnersEnumerateResult contains runner enumeration results
 type RunnersEnumerateResult struct {
 	ProjectRunners    []RunnerInfo        `json:"project_runners,omitempty"`
 	GroupRunners      []RunnerInfo        `json:"group_runners,omitempty"`

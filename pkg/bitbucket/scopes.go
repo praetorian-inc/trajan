@@ -5,17 +5,15 @@ import (
 	"strings"
 )
 
-// ScopeFormat distinguishes between the two Bitbucket scope systems.
 type ScopeFormat string
 
 const (
-	// ScopeFormatLegacy is the access token scope format (e.g., "repository:admin").
+	// Access-token format, e.g. "repository:admin".
 	ScopeFormatLegacy ScopeFormat = "legacy"
-	// ScopeFormatFineGrained is the API token scope format (e.g., "read:repository:bitbucket").
+	// API-token format, e.g. "read:repository:bitbucket".
 	ScopeFormatFineGrained ScopeFormat = "fine_grained"
 )
 
-// ScopeLevel represents the permission level within a scope category.
 type ScopeLevel string
 
 const (
@@ -26,23 +24,19 @@ const (
 	ScopeLevelVariable ScopeLevel = "variable"
 )
 
-// Scopes represents parsed OAuth scopes from a Bitbucket token.
 type Scopes struct {
 	raw          string
 	format       ScopeFormat
 	capabilities map[string]map[ScopeLevel]bool
 }
 
-// scopeEntry pairs a category with a level for the implication table.
 type scopeEntry struct {
 	category string
 	level    ScopeLevel
 }
 
-// legacyImplications is a pre-computed transitive closure of scope implications.
-// Each key maps to ALL capabilities it grants, including transitive ones.
-// The x-oauth-scopes header only reports the highest granted level, so the
-// parser must expand each scope to its full set of implied capabilities.
+// Transitive closure: the x-oauth-scopes header reports only the highest granted
+// level, so each scope must expand to every capability it implies.
 var legacyImplications = map[string][]scopeEntry{
 	"project":           {{category: "project", level: ScopeLevelRead}, {category: "repository", level: ScopeLevelRead}},
 	"project:admin":     {{category: "project", level: ScopeLevelAdmin}},
@@ -70,8 +64,6 @@ var legacyImplications = map[string][]scopeEntry{
 	"account":      {{category: "account", level: ScopeLevelRead}},
 }
 
-// ParseScopes parses the x-oauth-scopes header value into a Scopes object.
-// The format parameter determines how scope strings are interpreted.
 func ParseScopes(header string, format ScopeFormat) *Scopes {
 	s := &Scopes{
 		raw:          header,
@@ -95,8 +87,6 @@ func ParseScopes(header string, format ScopeFormat) *Scopes {
 	return s
 }
 
-// parseLegacy processes legacy-format scopes by expanding each through
-// the implication graph.
 func (s *Scopes) parseLegacy(scopes []string) {
 	for _, scope := range scopes {
 		scope = strings.TrimSpace(scope)
@@ -113,8 +103,7 @@ func (s *Scopes) parseLegacy(scopes []string) {
 	}
 }
 
-// parseFineGrained processes fine-grained scopes in the format
-// "{action}:{resource}:bitbucket". Each scope is independent with no implications.
+// Scopes are "{action}:{resource}:bitbucket" and imply nothing further.
 func (s *Scopes) parseFineGrained(scopes []string) {
 	for _, scope := range scopes {
 		scope = strings.TrimSpace(scope)
@@ -131,7 +120,6 @@ func (s *Scopes) parseFineGrained(scopes []string) {
 	}
 }
 
-// addCapability records a capability in the internal map.
 func (s *Scopes) addCapability(category string, level ScopeLevel) {
 	if s.capabilities[category] == nil {
 		s.capabilities[category] = make(map[ScopeLevel]bool)
@@ -139,7 +127,6 @@ func (s *Scopes) addCapability(category string, level ScopeLevel) {
 	s.capabilities[category][level] = true
 }
 
-// HasCapability reports whether the token has a specific capability.
 func (s *Scopes) HasCapability(category string, level ScopeLevel) bool {
 	if s == nil || s.capabilities == nil {
 		return false
@@ -151,7 +138,6 @@ func (s *Scopes) HasCapability(category string, level ScopeLevel) bool {
 	return levels[level]
 }
 
-// Categories returns a sorted list of all scope categories.
 func (s *Scopes) Categories() []string {
 	if s == nil || s.capabilities == nil {
 		return nil
@@ -164,7 +150,6 @@ func (s *Scopes) Categories() []string {
 	return cats
 }
 
-// Levels returns the permission levels granted for a specific category.
 func (s *Scopes) Levels(category string) []ScopeLevel {
 	if s == nil || s.capabilities == nil {
 		return nil
@@ -183,7 +168,6 @@ func (s *Scopes) Levels(category string) []ScopeLevel {
 	return result
 }
 
-// Raw returns the original unparsed scope header value.
 func (s *Scopes) Raw() string {
 	if s == nil {
 		return ""
@@ -191,7 +175,6 @@ func (s *Scopes) Raw() string {
 	return s.raw
 }
 
-// Format returns the scope format (legacy or fine-grained).
 func (s *Scopes) Format() ScopeFormat {
 	if s == nil {
 		return ""

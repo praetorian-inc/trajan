@@ -85,7 +85,6 @@ func TestPlatform_EnumerateRunners_ProjectRunners(t *testing.T) {
 				FullPath: "my-org",
 			})
 		case "/api/v4/projects/123/runners":
-			// Handle pagination
 			json.NewEncoder(w).Encode([]RunnerInfo{
 				{
 					ID:          1,
@@ -98,7 +97,6 @@ func TestPlatform_EnumerateRunners_ProjectRunners(t *testing.T) {
 				},
 			})
 		case "/api/v4/groups/10/runners":
-			// Handle pagination
 			json.NewEncoder(w).Encode([]RunnerInfo{
 				{
 					ID:          2,
@@ -111,7 +109,6 @@ func TestPlatform_EnumerateRunners_ProjectRunners(t *testing.T) {
 				},
 			})
 		case "/api/v4/runners/all":
-			// Simulate admin access
 			json.NewEncoder(w).Encode([]RunnerInfo{
 				{
 					ID:          100,
@@ -139,12 +136,10 @@ func TestPlatform_EnumerateRunners_ProjectRunners(t *testing.T) {
 	result, err := p.EnumerateRunners(context.Background(), "my-org/my-repo", true, true)
 	require.NoError(t, err)
 
-	// Should have all three types of runners
 	assert.Len(t, result.ProjectRunners, 1)
 	assert.Len(t, result.GroupRunners, 1)
 	assert.Len(t, result.InstanceRunners, 1)
 
-	// Verify summary
 	assert.Equal(t, 3, result.Summary.Total)
 	assert.Equal(t, 3, result.Summary.Online)
 	assert.Equal(t, 1, result.Summary.Project)
@@ -191,10 +186,8 @@ func TestPlatform_EnumerateRunners_AdminRequired(t *testing.T) {
 	result, err := p.EnumerateRunners(context.Background(), "my-org/my-repo", false, true)
 	require.NoError(t, err)
 
-	// Should not have instance runners
 	assert.Empty(t, result.InstanceRunners)
 
-	// Should have permission error message
 	assert.Len(t, result.Errors, 1)
 	assert.Contains(t, result.Errors[0], "403")
 	assert.Contains(t, result.Errors[0], "admin")
@@ -297,11 +290,9 @@ deploy:
 			analysis, err := p.AnalyzeWorkflowTags(context.Background(), []byte(tt.yamlContent), tt.availableRunners)
 			require.NoError(t, err)
 
-			// Sort for consistent comparison
 			assert.ElementsMatch(t, tt.expectedRequired, analysis.RequiredTags)
 			assert.ElementsMatch(t, tt.expectedMissing, analysis.MissingTags)
 
-			// Available tags should be from runners
 			allAvailable := make(map[string]bool)
 			for _, r := range tt.availableRunners {
 				for _, tag := range r.Tags {

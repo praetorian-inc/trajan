@@ -1,20 +1,16 @@
-// pkg/gitlab/types.go
 package gitlab
 
 import "time"
 
-// ProjectPermissions represents the user's access permissions to a project
 type ProjectPermissions struct {
 	ProjectAccess *AccessInfo `json:"project_access"`
 	GroupAccess   *AccessInfo `json:"group_access"`
 }
 
-// AccessInfo represents access level information
 type AccessInfo struct {
 	AccessLevel int `json:"access_level"`
 }
 
-// Project represents a GitLab project (repository)
 type Project struct {
 	ID                int                 `json:"id"`
 	Name              string              `json:"name"`
@@ -30,22 +26,19 @@ type Project struct {
 	Permissions       *ProjectPermissions `json:"permissions,omitempty"`
 }
 
-// Namespace represents a GitLab namespace (user or group)
 type Namespace struct {
 	Name     string `json:"name"`
 	FullPath string `json:"full_path"` // e.g., "groupname" or "username"
 }
 
-// FileResponse represents a GitLab file API response
 type FileResponse struct {
 	FileName string `json:"file_name"`
 	FilePath string `json:"file_path"`
-	Content  string `json:"content"`  // Base64-encoded content
+	Content  string `json:"content"`
 	Encoding string `json:"encoding"` // "base64" or "text"
 	BlobID   string `json:"blob_id"`  // SHA
 }
 
-// User represents a GitLab user from /user endpoint
 type User struct {
 	ID               int    `json:"id"`
 	Username         string `json:"username"`
@@ -60,7 +53,6 @@ type User struct {
 	CanCreateProject bool   `json:"can_create_project"`
 }
 
-// PersonalAccessToken represents token info from /personal_access_tokens/self
 type PersonalAccessToken struct {
 	ID        int       `json:"id"`
 	Name      string    `json:"name"`
@@ -72,7 +64,6 @@ type PersonalAccessToken struct {
 	ExpiresAt *string   `json:"expires_at"` // Can be null
 }
 
-// Group represents a GitLab group
 type Group struct {
 	ID         int    `json:"id"`
 	Name       string `json:"name"`
@@ -83,7 +74,6 @@ type Group struct {
 	ParentID   *int   `json:"parent_id"` // nil for top-level groups
 }
 
-// SharedGroup represents a group shared with another group
 type SharedGroup struct {
 	ID               int    `json:"id"`
 	Name             string `json:"name"`
@@ -92,7 +82,6 @@ type SharedGroup struct {
 	GroupAccessLevel int    `json:"group_access_level"`
 }
 
-// Member represents a project or group member with access level
 type Member struct {
 	ID          int    `json:"id"`
 	Username    string `json:"username"`
@@ -101,7 +90,6 @@ type Member struct {
 	AccessLevel int    `json:"access_level"` // 10=Guest, 20=Reporter, etc.
 }
 
-// ProjectMember represents a project member with access level
 type ProjectMember struct {
 	ID          int    `json:"id"`
 	Username    string `json:"username"`
@@ -110,7 +98,6 @@ type ProjectMember struct {
 	RoleName    string `json:"-"`            // Computed from AccessLevel
 }
 
-// Pipeline represents a CI/CD pipeline
 type Pipeline struct {
 	ID        int    `json:"id"`
 	Status    string `json:"status"`
@@ -120,7 +107,6 @@ type Pipeline struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// Variable represents a CI/CD variable
 type Variable struct {
 	Key              string `json:"key"`
 	Value            string `json:"value"`
@@ -128,10 +114,9 @@ type Variable struct {
 	Masked           bool   `json:"masked"`
 	EnvironmentScope string `json:"environment_scope"`
 	VariableType     string `json:"variable_type"` // "env_var" or "file"
-	Hidden           bool   `json:"hidden"`        // true if variable is masked
+	Hidden           bool   `json:"hidden"`
 }
 
-// Branch represents a Git branch
 type Branch struct {
 	Name   string `json:"name"`
 	Commit struct {
@@ -140,13 +125,12 @@ type Branch struct {
 	Protected bool `json:"protected"`
 }
 
-// Job represents a CI/CD pipeline job
 type Job struct {
 	ID         int                    `json:"id"`
 	Name       string                 `json:"name"`
 	Status     string                 `json:"status"`
 	Stage      string                 `json:"stage"`
-	Runner     map[string]interface{} `json:"runner,omitempty"` // From log analysis branch
+	Runner     map[string]interface{} `json:"runner,omitempty"`
 	Ref        string                 `json:"ref"`
 	CreatedAt  string                 `json:"created_at"`
 	StartedAt  string                 `json:"started_at"`
@@ -155,14 +139,12 @@ type Job struct {
 	// Pipeline field omitted - can be object or int depending on endpoint
 }
 
-// CommitAction represents an action in a commit (create, update, delete file)
 type CommitAction struct {
 	Action   string `json:"action"` // "create", "update", "delete"
 	FilePath string `json:"file_path"`
 	Content  string `json:"content,omitempty"`
 }
 
-// Commit represents a Git commit
 type Commit struct {
 	ID        string `json:"id"`
 	ShortID   string `json:"short_id"`

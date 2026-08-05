@@ -1,14 +1,7 @@
 // Package dsl is the predicate and path evaluator shared by detection rules'
-// where: blocks and attack plans' when: gates, so both read a decoded subject
-// through one operator set.
-//
-// Coercion and rendering here reproduce the semantics of the implementation this
-// replaced: a scalar compared against a set is wrapped as a one-element set,
-// booleans render as True/False and nil as None. Rule evidence and the findings
-// built from it are compared against that output byte for byte, so a change to
-// either is a diff in a customer's report rather than a cosmetic edit — which is
-// the whole reason these conversions are spelled out instead of left to Go's own
-// formatting.
+// where: blocks and attack plans' when: gates. Its coercions and True/False/None
+// rendering reproduce the implementation this replaced, which rule evidence is
+// compared against byte for byte.
 package dsl
 
 import (
@@ -23,8 +16,7 @@ type operator struct {
 	op     string
 }
 
-// Order is precedence at each scan position (first match wins): >=/<= must
-// precede >/< so the two-char forms win.
+// Tried in order at each scan position, so >= and <= must precede > and <.
 var operators = []operator{
 	{"==", "eq"},
 	{"!=", "ne"},
@@ -40,18 +32,13 @@ var operators = []operator{
 	{" in ", "in"},
 }
 
-// ValidPredicate reports whether a predicate carries an operator, and so whether
-// EvaluatePredicate can decide it at all. It exists so a caller holding the text
-// before it holds a subject — a plan validated offline — can refuse the same
-// string the evaluator would, rather than discovering it mid-run.
+// Lets a caller holding predicate text but no subject — a plan validated offline —
+// refuse exactly what EvaluatePredicate would, instead of discovering it mid-run.
 func ValidPredicate(predicate string) bool {
 	_, _, _, ok := splitPredicate(predicate)
 	return ok
 }
 
-// EvaluatePredicate evaluates one bare predicate ("field == 'x'") against a
-// decoded subject. It is the single operator set shared by detection where: and
-// attack when:.
 func EvaluatePredicate(predicate string, subject any) (bool, error) {
 	field, op, rhs, ok := splitPredicate(predicate)
 	if !ok {
@@ -133,8 +120,8 @@ func EvaluatePredicate(predicate string, subject any) (bool, error) {
 	}
 }
 
-// Advances by rune so the multi-byte glyphs (∋/⊆) stay aligned to a real
-// position; an operator is detected by byte-prefix on the substring at i.
+// Advances by rune so the multi-byte glyphs (∋/⊆) stay aligned to a real position;
+// operators are matched by byte prefix at i.
 func splitPredicate(predicate string) (field, op, rhs string, ok bool) {
 	var quote byte
 	for i := 0; i < len(predicate); {

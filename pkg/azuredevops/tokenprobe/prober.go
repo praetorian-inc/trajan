@@ -1,4 +1,3 @@
-// pkg/platforms/azuredevops/tokenprobe/prober.go
 package tokenprobe
 
 import (
@@ -10,7 +9,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 )
 
-// AzureDevOpsClient defines the interface required by TokenProber
 type AzureDevOpsClient interface {
 	GetConnectionData(ctx context.Context) (*azuredevops.ConnectionData, error)
 	ListProjects(ctx context.Context) ([]azuredevops.Project, error)
@@ -22,31 +20,25 @@ type AzureDevOpsClient interface {
 	ListArtifactFeeds(ctx context.Context) ([]azuredevops.ArtifactFeed, error)
 }
 
-// TokenProber probes Azure DevOps PAT capabilities via API calls
 type TokenProber struct {
 	client      AzureDevOpsClient
-	feedsClient AzureDevOpsClient // optional: client for feeds.dev.azure.com; if nil, uses client
+	feedsClient AzureDevOpsClient // feeds.dev.azure.com; nil falls back to client
 }
 
-// NewProber creates a new Azure DevOps token prober
 func NewProber(client AzureDevOpsClient) *TokenProber {
 	return &TokenProber{client: client}
 }
 
-// SetFeedsClient sets a separate client for artifact feeds (feeds.dev.azure.com).
-// If not set, the main client is used.
 func (p *TokenProber) SetFeedsClient(fc AzureDevOpsClient) {
 	p.feedsClient = fc
 }
 
-// Probe enumerates the capabilities of the configured PAT
 func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 	result := &ProbeResult{
 		Capabilities: make([]Capability, 0),
 		Projects:     make([]Project, 0),
 	}
 
-	// Step 1: Validate PAT and get user info
 	connData, err := p.client.GetConnectionData(ctx)
 	if err != nil {
 		result.Valid = false
@@ -60,7 +52,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		DisplayName: connData.AuthenticatedUser.ProviderDisplayName,
 	}
 
-	// Step 2: List projects
 	projects, err := p.client.ListProjects(ctx)
 	if err == nil && len(projects) > 0 {
 		result.addCapability(CapabilityProjectsRead)
@@ -74,12 +65,10 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		}
 	}
 
-	// Step 3: Probe organization-level resources concurrently
 	var mu sync.Mutex
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(10)
 
-	// Agent pools
 	g.Go(func() error {
 		pools, err := p.client.ListAgentPools(gctx)
 		if err == nil {
@@ -97,7 +86,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 		return nil
 	})
 
-	// Artifact feeds (uses feedsClient if set, otherwise main client)
 	g.Go(func() error {
 		fc := p.client
 		if p.feedsClient != nil {
@@ -115,14 +103,12 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 
 	_ = g.Wait()
 
-	// Step 4: Probe per-project resources (ALL projects)
 	if len(projects) > 0 {
 		g2, gctx2 := errgroup.WithContext(ctx)
 		g2.SetLimit(10)
 
-		// Enumerate repositories across ALL projects
 		for _, proj := range projects {
-			projName := proj.Name // capture for closure
+			projName := proj.Name
 			g2.Go(func() error {
 				repos, err := p.client.ListRepositories(gctx2, projName)
 				if err == nil && len(repos) > 0 {
@@ -137,9 +123,8 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 			})
 		}
 
-		// Enumerate pipelines across ALL projects
 		for _, proj := range projects {
-			projName := proj.Name // capture for closure
+			projName := proj.Name
 			g2.Go(func() error {
 				pipelines, err := p.client.ListPipelines(gctx2, projName)
 				if err == nil && len(pipelines) > 0 {
@@ -154,9 +139,8 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 			})
 		}
 
-		// Enumerate variable groups across ALL projects
 		for _, proj := range projects {
-			projName := proj.Name // capture for closure
+			projName := proj.Name
 			g2.Go(func() error {
 				groups, err := p.client.ListVariableGroups(gctx2, projName)
 				if err == nil && len(groups) > 0 {
@@ -182,9 +166,8 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 			})
 		}
 
-		// Enumerate service connections across ALL projects
 		for _, proj := range projects {
-			projName := proj.Name // capture for closure
+			projName := proj.Name
 			g2.Go(func() error {
 				conns, err := p.client.ListServiceConnections(gctx2, projName)
 				if err == nil && len(conns) > 0 {
@@ -205,7 +188,6 @@ func (p *TokenProber) Probe(ctx context.Context) (*ProbeResult, error) {
 	return result, nil
 }
 
-// addCapability adds a capability to the result if not already present
 func (r *ProbeResult) addCapability(cp Capability) {
 	if !r.HasCapability(cp) {
 		r.Capabilities = append(r.Capabilities, cp)

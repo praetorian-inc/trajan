@@ -1,4 +1,3 @@
-// pkg/search/github_test.go
 package search
 
 import (
@@ -13,16 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test GitHub search with single page of results
 func TestGitHubSearchProvider_SinglePage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request
 		assert.Equal(t, "GET", r.Method)
 		assert.Contains(t, r.URL.Path, "/search/code")
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 		assert.Contains(t, r.URL.Query().Get("q"), "self-hosted")
 
-		// Return mock response
 		response := map[string]interface{}{
 			"total_count":        2,
 			"incomplete_results": false,
@@ -60,14 +56,12 @@ func TestGitHubSearchProvider_SinglePage(t *testing.T) {
 	assert.Contains(t, result.Repositories, "owner/repo2")
 }
 
-// Test GitHub search with pagination
 func TestGitHubSearchProvider_Pagination(t *testing.T) {
 	page := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page++
 
 		if page == 1 {
-			// First page with Link header
 			response := map[string]interface{}{
 				"total_count":        2,
 				"incomplete_results": false,
@@ -84,7 +78,7 @@ func TestGitHubSearchProvider_Pagination(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(response)
 		} else {
-			// Second page without Link header (last page)
+			// Last page: no Link header is what stops pagination.
 			response := map[string]interface{}{
 				"total_count":        2,
 				"incomplete_results": false,
@@ -110,13 +104,11 @@ func TestGitHubSearchProvider_Pagination(t *testing.T) {
 	result, err := provider.Search(context.Background(), "self-hosted")
 	require.NoError(t, err)
 	assert.Len(t, result.Repositories, 2)
-	assert.Equal(t, 2, page) // Verify two requests were made
+	assert.Equal(t, 2, page)
 }
 
-// Test GitHub search with deduplication
 func TestGitHubSearchProvider_Deduplication(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Return duplicate repositories
 		response := map[string]interface{}{
 			"total_count":        3,
 			"incomplete_results": false,
@@ -151,11 +143,10 @@ func TestGitHubSearchProvider_Deduplication(t *testing.T) {
 
 	result, err := provider.Search(context.Background(), "self-hosted")
 	require.NoError(t, err)
-	assert.Len(t, result.Repositories, 2) // Should deduplicate
-	assert.Equal(t, 3, result.TotalCount) // But preserve total count
+	assert.Len(t, result.Repositories, 2) // deduplicated
+	assert.Equal(t, 3, result.TotalCount) // TotalCount stays the raw match count
 }
 
-// Test GitHub search with API error
 func TestGitHubSearchProvider_APIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -169,13 +160,11 @@ func TestGitHubSearchProvider_APIError(t *testing.T) {
 
 	result, err := provider.Search(context.Background(), "self-hosted")
 	assert.Error(t, err)
-	assert.NotNil(t, result) // Should still return partial result
+	assert.NotNil(t, result) // partial result survives the error
 }
 
-// Test GitHub search with context cancellation
 func TestGitHubSearchProvider_ContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Simulate slow response
 		time.Sleep(2 * time.Second)
 	}))
 	defer server.Close()
@@ -189,5 +178,5 @@ func TestGitHubSearchProvider_ContextCancellation(t *testing.T) {
 
 	result, err := provider.Search(ctx, "self-hosted")
 	assert.Error(t, err)
-	assert.NotNil(t, result) // Should return partial result
+	assert.NotNil(t, result) // partial result survives the cancellation
 }

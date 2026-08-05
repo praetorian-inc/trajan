@@ -10,11 +10,6 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// normalizeEntities emits the ten non-job subject records (project, group,
-// instance, merge_request, environment, runner, agent, credential, integration,
-// plus the instance singleton) from the collected surfaces. Resource-scoped
-// facts fold onto their owning subject. Per-item failures are recorded in
-// timer.Errors and skipped; only IO / contract violations abort.
 func normalizeEntities(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, projs []projectMeta, timer *engine.PhaseTimer) error {
 	if err := normalizeInstance(prior, cp, timer); err != nil {
 		return err
@@ -43,8 +38,6 @@ func normalizeEntities(ctx context.Context, prior engine.PriorPhase, cp engine.C
 	}
 	return nil
 }
-
-// ---- project ----
 
 func normalizeProject(prior engine.PriorPhase, cp engine.CurrentPhase, p projectMeta, timer *engine.PhaseTimer) error {
 	fp := p.FullPath
@@ -97,8 +90,8 @@ func normalizeProject(prior engine.PriorPhase, cp engine.CurrentPhase, p project
 		"_provenance": prov(engine.CollectGLProject(fp)),
 	}
 
-	// Derived existentials / effective booleans (hard contracts C3/C4). The engine
-	// cannot express these joins/existentials in a predicate.
+	// Precomputed because the rule engine has no way to express an existential or a
+	// join inside a predicate.
 	devPushRef := developerPushableUnprotectedRef(protBranches)
 	rec["has_guest_member"] = hasMemberAtLevel(members, accessGuest)
 	rec["has_developer_pushable_unprotected_ref"] = devPushRef
@@ -160,12 +153,10 @@ func normalizeProject(prior engine.PriorPhase, cp engine.CurrentPhase, p project
 	return emit(cp, timer, engine.NormalizeGLProject(fp), rec)
 }
 
-// projectHasMemberOwnedSchedule reports whether a pipeline schedule exists whose
-// owner is a project member — the cat-04 triggerer signal that the identity
-// starting the scheduled run is a project member (schedules run in the owner's
-// context). When the owner id cannot be matched to a member (owner or members
-// absent), fall back to "any schedule exists" so the participant is not silently
-// forced false on a token that could not read the members list.
+// A schedule runs in its owner's context, so a member-owned schedule means a member's
+// identity starts the run. When the owner cannot be matched to the member list, this
+// falls back to "any schedule exists" rather than silently reporting false on a token
+// that simply could not read the members.
 func projectHasMemberOwnedSchedule(prior engine.PriorPhase, fp string, members []any) bool {
 	schedules := entLoadList(prior, engine.CollectGLPipelineSchedules(fp))
 	if len(schedules) == 0 {
@@ -346,8 +337,6 @@ func firstMCPEndpoint(m map[string]any) any {
 	return m["url"]
 }
 
-// ---- group ----
-
 func normalizeGroups(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, projs []projectMeta, timer *engine.PhaseTimer) error {
 	groups := groupRoster(prior, org)
 	for _, g := range groups {
@@ -361,7 +350,6 @@ func normalizeGroups(ctx context.Context, prior engine.PriorPhase, cp engine.Cur
 	return nil
 }
 
-// groupRoster is the top-level group plus its collected subgroups.
 func groupRoster(prior engine.PriorPhase, org string) []string {
 	out := []string{org}
 	for _, raw := range entLoadList(prior, engine.CollectGLSubgroups(org)) {
@@ -408,11 +396,10 @@ func normalizeGroup(prior engine.PriorPhase, cp engine.CurrentPhase, gpath strin
 
 func groupVarRecs(vars []any) []map[string]any { return normalizeVariables(vars, "group") }
 
-// groupBranchProtection maps the group default-branch protection to the enum the
-// cat-03 rule reads: "none" | "partial" | "full". GitLab exposes this either as
-// the legacy integer default_branch_protection (0 none, 1 partial, 2+ full) or
-// the newer default_branch_protection_defaults object; a Developer-inclusive push
-// grant is "partial", a Maintainer-only (or force-push-blocked) grant is "full".
+// GitLab exposes this either as the legacy integer default_branch_protection (0 none,
+// 1 partial, 2+ full) or as the newer default_branch_protection_defaults object. Both
+// collapse to none/partial/full: a Developer-inclusive push grant is partial, a
+// Maintainer-only or force-push-blocked grant is full.
 func groupBranchProtection(detail map[string]any) any {
 	if d := entMap(detail["default_branch_protection_defaults"]); d != nil {
 		push := accessLevelValues(d["allowed_to_push"])
@@ -460,8 +447,6 @@ func groupOpenCreation(projectCreationRole, subgroupCreation string) bool {
 	return permits(projectCreationRole) || permits(subgroupCreation)
 }
 
-// ---- instance ----
-
 func normalizeInstance(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer) error {
 	settings := entLoadData(prior, engine.CollectGLInstanceSettings())
 	duo := entLoadData(prior, engine.CollectGLInstanceDuo())
@@ -469,8 +454,8 @@ func normalizeInstance(prior engine.PriorPhase, cp engine.CurrentPhase, timer *e
 	instVars := entLoadList(prior, engine.CollectGLInstanceVariables())
 	obs := settings != nil && !entUnobserved(settings)
 
-	// Soft-failed instance surface (gitlab.com, or no admin token): emit the
-	// record with the observable keys null so absence is never read as false.
+	// On gitlab.com or without an admin token this surface soft-fails, so the record is
+	// still emitted with those keys null and absence is never read as false.
 	rec := map[string]any{
 		"_id":                                         "instance",
 		"allow_local_requests_from_webhooks":          boolOrNil(obs, settings, "allow_local_requests_from_web_hooks_and_services"),
@@ -514,8 +499,8 @@ func projectCreationUnrestricted(observed bool, settings map[string]any) any {
 	if !observed {
 		return nil
 	}
-	// default_project_creation is a numeric role code; 0 (nobody) or a specific
-	// role restricts, any other authenticated user is the unrestricted case.
+	// default_project_creation is a role code: 0 is nobody and the other values name a
+	// role, so only 2 (any authenticated user) is unrestricted.
 	if v, ok := settings["default_project_creation"]; ok {
 		return entInt64(v) == 2
 	}
@@ -528,8 +513,6 @@ func outboundAllowlistEffective(observed bool, settings map[string]any) any {
 	}
 	return len(entListOrEmpty(settings["outbound_local_requests_whitelist"])) > 0
 }
-
-// ---- merge_request ----
 
 func normalizeMergeRequest(prior engine.PriorPhase, cp engine.CurrentPhase, p projectMeta, timer *engine.PhaseTimer) error {
 	fp := p.FullPath
@@ -617,12 +600,9 @@ func loadCodeowners(prior engine.PriorPhase, fp string) map[string]any {
 	}
 }
 
-// requiredJobsEvadable reports whether the resolved pipeline can legitimately
-// produce a skipped/empty pipeline that still satisfies "pipelines must succeed"
-// (cat-06/13, doc line 309): every job is gated behind an author-controllable
-// rules:/only:/except:/when: condition, or the workflow: itself carries a
-// when: never branch, so an MR can yield no jobs. An unconditional job always runs,
-// so nothing is evadable.
+// An empty pipeline satisfies "pipelines must succeed", so a pipeline whose every job
+// hides behind an author-controllable condition — or whose workflow: has a when: never
+// branch — can be made to gate nothing. One unconditional job defeats this.
 func requiredJobsEvadable(prior engine.PriorPhase, fp string) bool {
 	pipeline, err := parseCIPipeline(entLoadRaw(prior, engine.CollectGLCIConfig(fp, ".gitlab-ci.yml")))
 	if err != nil || pipeline == nil {
@@ -678,9 +658,8 @@ func approvalPolicy(prior engine.PriorPhase, fp string) map[string]any {
 		for _, s := range policyScanners(spec) {
 			scanners = append(scanners, s)
 		}
-		// fallback_behavior: {fail: open|closed}. GitLab's default is fail_closed;
-		// only an explicit fail:open weakens the gate. Report the first policy that
-		// declares one so the fail-open rule reads a literal.
+		// GitLab defaults fallback_behavior to fail_closed, so only an explicit fail:open
+		// weakens the gate. The first policy declaring one wins, so a rule reads a literal.
 		if fallback == nil {
 			if fb := entMap(spec["fallback_behavior"]); fb != nil {
 				switch entStr(fb["fail"]) {
@@ -691,8 +670,8 @@ func approvalPolicy(prior engine.PriorPhase, fp string) map[string]any {
 				}
 			}
 		}
-		// enforcement_type: a require_approval action asking for zero approvals is a
-		// self-dismissable warning; a positive count is the blocking mode.
+		// A require_approval action asking for zero approvals is a self-dismissable
+		// warning; only a positive count blocks.
 		if enforcement == nil && en {
 			if warnMode(spec) {
 				enforcement = "warn"
@@ -718,12 +697,9 @@ func approvalPolicy(prior engine.PriorPhase, fp string) map[string]any {
 	}
 }
 
-// namedScannerAbsent reports whether any scanner the approval policy names has no
-// corresponding job/include in the target project's resolved .gitlab-ci.yml, so the
-// scan_finding rule can never evaluate (cat-06/09, doc line 303). With no named
-// scanners there is nothing that can be absent. A scanner is present when a pipeline
-// job name matches it, a GitLab security template include names it, or Auto DevOps
-// (which wires the full scanner suite) is on.
+// A policy naming a scanner the pipeline never runs can never evaluate, so the gate is
+// decorative. A scanner counts as present when a job name matches it, a GitLab security
+// template include names it, or Auto DevOps (which wires the full suite) is on.
 func namedScannerAbsent(prior engine.PriorPhase, fp string, scanners []any) bool {
 	if len(scanners) == 0 {
 		return false
@@ -738,9 +714,8 @@ func namedScannerAbsent(prior engine.PriorPhase, fp string, scanners []any) bool
 	return false
 }
 
-// scannerTemplateFrag maps a GitLab scanner id to the distinctive fragment of the
-// managed CI template that wires it (matched case-insensitively against include:
-// template: strings and job names).
+// The distinctive fragment of each managed CI template, matched case-insensitively
+// against include: template: strings and job names.
 var scannerTemplateFrag = map[string]string{
 	"sast":                   "sast",
 	"secret_detection":       "secret-detection",
@@ -844,9 +819,8 @@ func hasRequireApproval(spec map[string]any) bool {
 	return false
 }
 
-// bypassActorBroad reports whether bypass_settings exempts a broadly-held actor
-// (a group, a service account/token, or a branch pattern) rather than naming a
-// single break-glass identity.
+// A group, a service account or token, or a branch pattern is a broadly-held exemption;
+// a single named identity is a break-glass one.
 func bypassActorBroad(spec map[string]any) bool {
 	bs := entMap(spec["bypass_settings"])
 	if bs == nil {
@@ -880,8 +854,6 @@ func independentApprovers(rules []any, members []any) int64 {
 	}
 	return maxSet
 }
-
-// ---- environment ----
 
 func normalizeEnvironments(prior engine.PriorPhase, cp engine.CurrentPhase, p projectMeta, timer *engine.PhaseTimer) error {
 	fp := p.FullPath
@@ -986,10 +958,8 @@ func tierEscaped(tier string, groupTiers []string, pe map[string]any) bool {
 	return true
 }
 
-// ---- runner ----
-
-// normalizeRunners emits one record per distinct runner across project, group,
-// and instance scope, deduplicated by id.
+// One record per runner id: the same runner is listed at project, group and instance
+// scope, so the three passes must dedup.
 func normalizeRunners(prior engine.PriorPhase, cp engine.CurrentPhase, org string, projs []projectMeta, timer *engine.PhaseTimer) error {
 	settings := entLoadData(prior, engine.CollectGLInstanceSettings())
 	reusable := !entUnobserved(settings) && settings != nil && entBool(settings["allow_runner_registration_token"])
@@ -1058,20 +1028,16 @@ func runnerRecord(r map[string]any, scope string, coResident []any, reusable boo
 
 func runnerID(r map[string]any) string { return fmt.Sprintf("%d", entInt64(r["id"])) }
 
-// runnerReachFolds computes the cat-08 runner effective folds (normalizer-computed
-// per the field contract) from the runner's reachable projects and the jobs those
-// projects target the runner with:
-//   - spans_trust_boundary: reachable projects straddle a trust boundary (≥1 holds
-//     protected resources AND ≥1 is a broad/low-trust project).
-//   - serves_protected_ref_only_jobs / serves_untrusted_ref_jobs: the runner is
-//     targeted (by matching tags / run_untagged) by protected-ref-only jobs and/or
-//     untrusted-ref jobs — both true means trusted and untrusted workloads share it.
-//   - untrusted_ref_job_matches_tags: an untrusted-ref job on an attacker-writable
-//     ref carries tags: matching this runner (can be steered onto it).
+// The folds, in the order they are set:
+//   - spans_trust_boundary: the reachable projects straddle a boundary, one holding
+//     protected resources and another being broad or low-trust.
+//   - serves_protected_ref_only_jobs / serves_untrusted_ref_jobs: both true means
+//     trusted and untrusted workloads share this runner.
+//   - untrusted_ref_job_matches_tags: a job on an attacker-writable ref carries tags
+//     that would steer it onto this runner.
 //
-// Reachable projects are the co-resident list from /runners/:id/projects; an
-// instance/group runner with an empty list falls back to the roster projects in
-// its scope.
+// Reachable projects come from /runners/:id/projects; an instance or group runner with
+// an empty list falls back to the roster projects in its scope.
 func runnerReachFolds(prior engine.PriorPhase, rec map[string]any, coResident []any, scope string, projs []projectMeta) {
 	reach := runnerReachProjects(coResident, scope, projs)
 	tags := strListOf(listOrEmptyGL(rec, "tags"))
@@ -1122,8 +1088,8 @@ func runnerReachProjects(coResident []any, scope string, projs []projectMeta) []
 	if len(out) > 0 {
 		return out
 	}
-	// Instance/group runner with no co-resident list: fall back to the roster
-	// projects in scope (all roster for instance, subtree for group:<path>).
+	// With no co-resident list, fall back to the roster projects in scope: everything for
+	// an instance runner, the subtree for group:<path>.
 	prefix := strings.TrimPrefix(scope, "group:")
 	for _, p := range projs {
 		if scope == "instance" || strings.HasPrefix(scope, "instance") ||
@@ -1134,9 +1100,8 @@ func runnerReachProjects(coResident []any, scope string, projs []projectMeta) []
 	return out
 }
 
-// runnerTargetedBy reports whether a job with jobTags can land on a runner with
-// runnerTags: an untagged job needs run_untagged; a tagged job needs the runner to
-// carry every tag it requests.
+// GitLab's matching rule: an untagged job needs run_untagged, and a tagged job needs
+// the runner to carry every tag it asks for.
 func runnerTargetedBy(runnerTags []string, runUntagged bool, jobTags []any) bool {
 	jt := strListOf(jobTags)
 	if len(jt) == 0 {
@@ -1154,9 +1119,8 @@ func runnerTargetedBy(runnerTags []string, runUntagged bool, jobTags []any) bool
 	return true
 }
 
-// forEachJobRef parses a project's entrypoint and yields each job's protected-ref
-// gate, untrusted-ref reachability, and tags. Parse failures are skipped (the
-// runner folds degrade to false for that project, not an abort).
+// A parse failure is skipped, so the runner folds degrade to false for that one
+// project rather than sinking the pass.
 func forEachJobRef(prior engine.PriorPhase, proj string, fn func(gate string, untrusted bool, jobTags []any)) {
 	raw := entLoadRaw(prior, engine.CollectGLCIConfig(proj, ".gitlab-ci.yml"))
 	if raw == nil {
@@ -1176,17 +1140,14 @@ func forEachJobRef(prior engine.PriorPhase, proj string, fn func(gate string, un
 	}
 }
 
-// sourceCIWritableForRunner reports the project's CI config / refs are writable by
-// a lower-trust member (no protection, or a Developer-writable protected branch).
 func sourceCIWritableForRunner(branches []map[string]any) bool {
 	return developerPushableUnprotectedRef(branches) || anyBranch(branches, func(b map[string]any) bool {
 		return grantsDeveloper(mList(b, "push_access_levels")) || grantsDeveloper(mList(b, "merge_access_levels"))
 	})
 }
 
-// classifySelfManaged is the load-bearing self_managed classifier. GitLab.com
-// shared SaaS runners carry a saas platform / gitlab-hosted description; anything
-// else (operator-run) is self-managed.
+// GitLab.com's shared SaaS runners are identifiable only by a saas platform or a
+// gitlab-hosted description, so everything else is treated as operator-run.
 func classifySelfManaged(r map[string]any) bool {
 	desc := strings.ToLower(entStr(r["description"]))
 	platform := strings.ToLower(entStr(r["platform"]))
@@ -1200,9 +1161,8 @@ func classifySelfManaged(r map[string]any) bool {
 	return true
 }
 
-// reachableRunners returns project-scope runner records (project runners plus
-// inherited group/instance). Used only for project derived booleans; the full
-// runner subject records are emitted by normalizeRunners.
+// Only for the project's own derived booleans; the runner subject records themselves
+// come from normalizeRunners.
 func reachableRunners(prior engine.PriorPhase, fp string) []map[string]any {
 	out := []map[string]any{}
 	for _, raw := range entLoadList(prior, engine.CollectGLProjectRunners(fp)) {
@@ -1229,8 +1189,6 @@ func reachableRunnerList(runners []any) []map[string]any {
 	return out
 }
 
-// ---- agent ----
-
 func normalizeAgents(prior engine.PriorPhase, cp engine.CurrentPhase, p projectMeta, projs []projectMeta, timer *engine.PhaseTimer) error {
 	fp := p.FullPath
 	data := entLoadData(prior, engine.CollectGLClusterAgents(fp))
@@ -1250,9 +1208,8 @@ func normalizeAgents(prior engine.PriorPhase, cp engine.CurrentPhase, p projectM
 		targets, scope := agentTargets(node)
 		envFilter := entListOrEmpty(cfg["environments"])
 		protOnly := entBool(cfg["protected_branches_only"])
-		// The grant's reachable target projects: explicit ci_access targets
-		// (projects, or every project under a group target), else the config
-		// project itself when the grant is implicit.
+		// An implicit grant reaches only the config project; an explicit one reaches its
+		// named projects, or every project under a named group.
 		reach := agentReachProjects(targets, fp, projs)
 		folds := agentGrantFolds(prior, reach, envFilter, protOnly)
 		rec := map[string]any{
@@ -1283,9 +1240,8 @@ func normalizeAgents(prior engine.PriorPhase, cp engine.CurrentPhase, p projectM
 	return nil
 }
 
-// agentImpersonation returns the access_as impersonation config, or NIL when no
-// access_as is configured (cat-15: rules read impersonation == null; an empty
-// {} would never match that predicate).
+// Nil rather than an empty object when access_as is absent: the rules test
+// impersonation == null, which an empty {} would never satisfy.
 func agentImpersonation(cfg map[string]any) any {
 	m := entMap(cfg["access_as"])
 	if len(m) == 0 {
@@ -1294,9 +1250,7 @@ func agentImpersonation(cfg map[string]any) any {
 	return m
 }
 
-// agentReachProjects resolves the project paths a ci_access grant authorizes:
-// each explicit project target, every roster project under a group target, or
-// the agent's own config project when the grant is implicit.
+// A grant with no targets is implicit and reaches only the agent's own project.
 func agentReachProjects(targets []any, configProject string, projs []projectMeta) []string {
 	if len(targets) == 0 {
 		return []string{configProject}
@@ -1319,7 +1273,6 @@ func agentReachProjects(targets []any, configProject string, projs []projectMeta
 			add(t)
 			continue
 		}
-		// Group target: every roster project inside the group subtree.
 		for _, p := range projs {
 			if p.FullPath == t || strings.HasPrefix(p.FullPath, t+"/") {
 				add(p.FullPath)
@@ -1338,10 +1291,8 @@ type agentFolds struct {
 	protectedRefDeveloperWritable  bool
 }
 
-// agentGrantFolds computes the cat-15 agent-ci-access effective folds from each
-// reachable target project's collected membership, protected-branch/tag, and
-// protected-environment data. These are the correlation the DSL cannot express
-// (agent grant → per-target membership + ref/env protection).
+// Correlating an agent grant against each target's membership and ref/environment
+// protection is beyond the DSL, so it is precomputed here.
 func agentGrantFolds(prior engine.PriorPhase, reach []string, envFilter []any, protectedBranchesOnly bool) agentFolds {
 	var f agentFolds
 	for _, tgt := range reach {
@@ -1360,9 +1311,8 @@ func agentGrantFolds(prior engine.PriorPhase, reach []string, envFilter []any, p
 			f.developerPushableUnprotected = true
 			f.developerReachable = true
 		}
-		// A protected ref a Developer can land on satisfies protected_branches_only:
-		// a Developer-writable protected branch, a Developer-creatable wildcard
-		// branch, or a Developer-creatable protected tag.
+		// protected_branches_only is satisfied by any protected ref a Developer can land
+		// on: a writable protected branch, a creatable wildcard branch, or a creatable tag.
 		if hasDeveloper && (anyBranch(branches, func(b map[string]any) bool {
 			return grantsDeveloper(mList(b, "push_access_levels")) || grantsDeveloper(mList(b, "merge_access_levels"))
 		}) || anyTag(tags, func(t map[string]any) bool {
@@ -1370,15 +1320,14 @@ func agentGrantFolds(prior engine.PriorPhase, reach []string, envFilter []any, p
 		})) {
 			f.protectedRefDeveloperWritable = true
 		}
-		// A fixed (non-wildcard) filter name absent from the target's protected
-		// environments (or protected with a Developer-inclusive deployer) gates
-		// nothing.
+		// A fixed filter name that is not a protected environment — or is protected with a
+		// Developer-inclusive deployer list — gates nothing.
 		if agentEnvFilterUnprotected(envFilter, protEnvs) {
 			f.envFilterUnprotected = true
 		}
-		// A Developer can author a job binding environment: to a filter-matching
-		// value while running on a ref they can reach: unprotected when the grant
-		// is not protected_branches_only, else a Developer-landable protected ref.
+		// A Developer authors a job binding environment: to a filter-matching value on a
+		// ref they can reach — any unprotected ref, or a Developer-landable protected one
+		// when the grant is protected_branches_only.
 		if hasDeveloper && len(envFilter) > 0 {
 			refReachable := devPushUnprot
 			if protectedBranchesOnly {
@@ -1392,9 +1341,8 @@ func agentGrantFolds(prior engine.PriorPhase, reach []string, envFilter []any, p
 	return f
 }
 
-// agentEnvFilterUnprotected: at least one fixed (non-wildcard) filter name is not
-// covered by an exact protected-environment entry, or is protected only with a
-// Developer-inclusive deployer list, so the name is not a real boundary.
+// At least one fixed filter name is either not a protected environment or is protected
+// only with a Developer-inclusive deployer list, so the name is not a real boundary.
 func agentEnvFilterUnprotected(envFilter []any, protEnvs []any) bool {
 	prot := map[string]map[string]any{}
 	for _, raw := range protEnvs {
@@ -1448,8 +1396,8 @@ func parseAgentConfig(raw []byte) map[string]any {
 		return map[string]any{}
 	}
 	ci := entMap(cfg["ci_access"])
-	// ci_access holds project/group entries whose shared shape carries
-	// environments/protected_branches_only/default_namespace access_as.
+	// The project and group entries under ci_access share one shape, so either can
+	// supply these fields.
 	out := map[string]any{}
 	if pb, ok := firstAccessField(ci, "protected_branches_only"); ok {
 		out["protected_branches_only"] = pb
@@ -1507,8 +1455,6 @@ func namespacePlan(prior engine.PriorPhase, fp string) any {
 	return entStr(ns["plan"])
 }
 
-// ---- credential ----
-
 func normalizeCredentials(prior engine.PriorPhase, cp engine.CurrentPhase, p projectMeta, timer *engine.PhaseTimer) error {
 	fp := p.FullPath
 	settings := entLoadData(prior, engine.CollectGLInstanceSettings())
@@ -1553,11 +1499,10 @@ func normalizeCredentials(prior engine.PriorPhase, cp engine.CurrentPhase, p pro
 			return err
 		}
 	}
-	// static_cloud_cred (cat-11): P2 collects variable KEYS (values stripped), so a
-	// cloud-cred-shaped variable key is a collected source for a static cloud
-	// credential. The credential IS the variable, so in_unprotected_variable is
-	// directly derivable (the variable's own protected flag). PATs have no P2
-	// collect source and are a documented known-gap — not fabricated here.
+	// Only variable keys are collected, never values, so a cloud-cred-shaped key is the
+	// evidence a static cloud credential exists. The credential IS the variable, which is
+	// why its exposure is just the variable's own protected flag. Personal access tokens
+	// have no collect source at all and are deliberately not invented here.
 	for i, raw := range entLoadList(prior, engine.CollectGLProjectVariables(fp)) {
 		v := entMap(raw)
 		key := entStr(v["key"])
@@ -1571,10 +1516,6 @@ func normalizeCredentials(prior engine.PriorPhase, cp engine.CurrentPhase, p pro
 	return nil
 }
 
-// staticCloudCredRec builds a static_cloud_cred credential from a cloud-cred-shaped
-// CI/CD variable. The credential's reachability via the variable is not a deferred
-// leg here (the variable IS the credential), so in_unprotected_variable is the
-// variable's own protected flag.
 func staticCloudCredRec(v map[string]any, scopeLevel string) map[string]any {
 	unprotected := !entBool(v["protected"])
 	return map[string]any{
@@ -1604,8 +1545,8 @@ var cloudCredFrags = []string{
 	"DIGITALOCEAN_ACCESS_TOKEN", "DO_TOKEN", "ALIYUN_ACCESS_KEY",
 }
 
-// cloudCredKey matches a variable key that names a static cloud credential (a
-// long-lived cloud key), narrower than the generic secret heuristic.
+// Deliberately narrower than secretShapedKey: this must name a long-lived cloud key,
+// not any secret.
 func cloudCredKey(key string) bool {
 	u := strings.ToUpper(key)
 	for _, frag := range cloudCredFrags {
@@ -1687,7 +1628,8 @@ func deployKeyRec(k map[string]any) map[string]any {
 }
 
 func accessTokenBreadth(t map[string]any) []any {
-	// user-memberships is collected per backing user id; absent → [] (C1).
+	// The user-memberships surface is keyed by backing user id, which a token record does
+	// not carry, so the breadth is unresolvable and stays [] rather than null.
 	return []any{}
 }
 
@@ -1707,8 +1649,8 @@ func boolDefaultTrue(v any) bool {
 	return true
 }
 
-// longLived: expires_at null OR ≥ ~330 days out (covers legacy non-expiring and
-// the ~1-year default). Dates are ISO8601 (YYYY-MM-DD or full timestamp).
+// A null expiry is a legacy non-expiring token; the ~330-day threshold catches the
+// one-year default without tripping on shorter deliberate lifetimes.
 func longLived(expiresAt any, expEnforced bool) bool {
 	s := entStr(expiresAt)
 	if s == "" {
@@ -1721,18 +1663,15 @@ func longLived(expiresAt any, expEnforced bool) bool {
 	return exp.Sub(nowUTC()).Hours() >= 330*24
 }
 
-// ---- integration ----
-
 func normalizeIntegrations(prior engine.PriorPhase, cp engine.CurrentPhase, p projectMeta, timer *engine.PhaseTimer) error {
 	fp := p.FullPath
 	detail := entLoadData(prior, engine.CollectGLProject(fp))
 	settings := entLoadData(prior, engine.CollectGLInstanceSettings())
 	allowLocal := !entUnobserved(settings) && settings != nil && entBool(settings["allow_local_requests_from_web_hooks_and_services"])
 
-	// A Maintainer can edit a project hook/integration's delivery URL but sits below
-	// the Owner-trust of whoever set the write-only credential (doc line 418). Its
-	// presence, ANDed per-record with an attached write credential, is the
-	// editor_below_credential_trust fold the cat-14 recapture rules read.
+	// A Maintainer can repoint an integration's delivery URL while sitting below the
+	// Owner trust of whoever set its write-only credential. ANDed per record with an
+	// attached write credential, that is the recapture precondition.
 	hasEditorBelowTrust := hasMemberAtLevel(entLoadList(prior, engine.CollectGLProjectMembers(fp)), accessMaintainer)
 
 	emitInt := func(kind, key string, rec map[string]any) error {
@@ -1811,9 +1750,8 @@ func integrationRec(i map[string]any, allowLocal, hasEditorBelowTrust bool) map[
 	}
 }
 
-// pullMirrorRec normalizes the cat-14 pull-mirror surface. Pull mirroring is a
-// project-detail attribute (mirror==true + import_url), not a /remote_mirrors
-// entry — those are push mirrors and stay empty for pull-only projects.
+// Pull mirroring is a project-detail attribute (mirror plus import_url), not a
+// /remote_mirrors entry: those are push mirrors and stay empty on a pull-only project.
 func pullMirrorRec(detail map[string]any, prior engine.PriorPhase, fp string, hasEditorBelowTrust bool) map[string]any {
 	importURL := entStr(detail["import_url"])
 	triggerPipelines := entBool(detail["mirror_trigger_builds"])
@@ -1859,10 +1797,9 @@ func mirrorRec(m, detail map[string]any, prior engine.PriorPhase, fp string, has
 		defaultBranch = entStr(detail["default_branch"])
 	}
 	defaultProtected := anyBranch(branches, func(b map[string]any) bool { return globMatch(mStr(b, "pattern"), defaultBranch) })
-	// The auto-triggered mirror pipeline runs on the mirrored branch(es). A
-	// protected CI/CD variable is reachable only when the mirror pipeline runs on
-	// a protected branch (default branch protected, or mirror confined to protected
-	// branches); an unprotected/masked variable is reachable on any mirrored branch.
+	// The auto-triggered pipeline runs on the mirrored branches, so a protected variable
+	// is only reachable when those branches are themselves protected. An unprotected
+	// variable is reachable on any of them.
 	vars := mirrorReachableVars(prior, fp)
 	protectedBranchPipeline := triggerPipelines && (defaultProtected || !allBranches)
 	mirror := map[string]any{
@@ -1888,8 +1825,8 @@ func mirrorRec(m, detail map[string]any, prior engine.PriorPhase, fp string, has
 	}
 }
 
-// mirrorReachableVars is the project's own CI/CD variables plus the parent
-// group's inherited variables — the set a mirror-triggered pipeline can read.
+// A mirror-triggered pipeline reads the project's own variables and the parent group's
+// inherited ones.
 func mirrorReachableVars(prior engine.PriorPhase, fp string) []map[string]any {
 	out := normalizeVariables(entLoadList(prior, engine.CollectGLProjectVariables(fp)), "project")
 	if group := parentGroup(fp); group != "" {
@@ -1919,8 +1856,6 @@ func pagesRec(detail map[string]any) map[string]any {
 		"pages":                         map[string]any{"reads_secret": false},
 	}
 }
-
-// ---- shared helpers over normalized shapes ----
 
 func orEmptyObj(m map[string]any) map[string]any {
 	if m == nil || entUnobserved(m) {
@@ -2003,8 +1938,8 @@ func isWildcard(pattern string) bool {
 	return strings.ContainsAny(pattern, "*?[")
 }
 
-// globMatch is a minimal wildcard match (only '*' wildcards, GitLab
-// protected-branch semantics) sufficient for default-branch coverage checks.
+// Only '*' wildcards, which is all GitLab protected-branch patterns use and all the
+// default-branch coverage checks need.
 func globMatch(pattern, name string) bool {
 	if pattern == name {
 		return true
@@ -2033,8 +1968,8 @@ func globMatch(pattern, name string) bool {
 	return true
 }
 
-// shadowedByPermissive: ≥2 rules match a common branch and the union of their
-// access grants a lower-trust actor than the narrowest matching rule intended.
+// Two or more rules match one branch and their union admits a lower-trust actor than
+// the narrowest of them intended.
 func shadowedByPermissive(branches []map[string]any, levelKey string) bool {
 	for i := range branches {
 		matches := []map[string]any{branches[i]}
@@ -2046,9 +1981,8 @@ func shadowedByPermissive(branches []map[string]any, levelKey string) bool {
 		if len(matches) < 2 {
 			continue
 		}
-		// The narrowest matching rule's intent vs the most-permissive (lowest
-		// numeric) grant across all matching rules: a gap means a broader rule
-		// shadows the tighter one.
+		// A gap between the narrowest rule's intent and the lowest grant any matching rule
+		// makes means a broader rule shadows the tighter one.
 		grants := make([]int64, 0, len(matches))
 		for _, m := range matches {
 			if lo := lowestGrant(mList(m, levelKey)); lo > 0 {

@@ -30,13 +30,13 @@ func renderEvidence(template string, subject any) string {
 	})
 }
 
-// salientKeys are the identifier fields evidence should lead with when rendering
-// a record (secret name, app slug, collaborator login, …), in preference order.
+// The identifier fields evidence leads with when rendering a record, in preference
+// order.
 var salientKeys = []string{"name", "login", "slug", "app_slug", "id", "uses", "_id"}
 
-// Renders recursively so no Go map[...]/[...] syntax reaches the output. The
-// "_"-prefixed internal keys are dropped here because they belong in provenance,
-// which keeps the full structured value, not in a sentence.
+// Renders recursively so no Go map[...]/[...] syntax reaches the output.
+// "_"-prefixed internal keys are dropped: they belong in provenance, which keeps the
+// full structured value, not in a sentence.
 func humanValue(v any) string {
 	switch t := v.(type) {
 	case map[string]any:
@@ -69,8 +69,7 @@ func humanValue(v any) string {
 	}
 }
 
-// evidenceRefs returns the unique {{ path }} expressions in a template, in
-// first-seen order, so provenance can resolve and carry the values they render.
+// The unique {{ path }} expressions in first-seen order, for provenance to resolve.
 func evidenceRefs(template string) []string {
 	var refs []string
 	seen := map[string]bool{}

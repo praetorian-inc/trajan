@@ -33,8 +33,6 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if err != nil {
 		return "", err
 	}
-	// Router decorator: dispatches each surface to its preferred capable
-	// transport, synthesizing REST-shaped results so collectors stay unchanged.
 	gh := newRouter(NewClient(token))
 	defer closeRouter(gh)
 
@@ -166,8 +164,6 @@ func collectOneRepo(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	return written, nil
 }
 
-// With git active, scan ALL branches; otherwise fall back to the cost-driven
-// REST selection. Both honor TRAJAN_DEFAULT_BRANCH_ONLY.
 func selectBranchesToScan(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	org, repo, def string) ([]string, []string) {
 	if defaultBranchOnly() {
@@ -199,7 +195,7 @@ func defaultBranchOnly() bool {
 	return v != "" && v != "0" && v != "false"
 }
 
-// gitActive gates the all-branches path: false under forced-REST or when git is
+// Gates the all-branches path: false under forced-REST or when git is
 // unavailable, so those runs keep the cost-driven REST branch selection.
 func gitActive(gh GitHub) bool {
 	r, ok := gh.(*router)

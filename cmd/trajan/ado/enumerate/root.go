@@ -59,7 +59,6 @@ This command supports subcommands for different enumeration operations:
 	return cmd
 }
 
-// GetTokenForPlatform retrieves authentication token for the specified platform.
 func GetTokenForPlatform(platform string) string {
 	if enumToken != "" {
 		return enumToken
@@ -90,9 +89,7 @@ func GetBearerToken() string {
 	return os.Getenv("AZURE_BEARER_TOKEN")
 }
 
-// NewEnumerateClient creates an Azure DevOps client configured with the appropriate
-// auth method (bearer token or PAT). Bearer token takes precedence when both are set.
-// Returns an error if neither auth method is provided.
+// A bearer token takes precedence over a PAT when both are set.
 func NewEnumerateClient(orgURL, pat string) (*azuredevops.Client, error) {
 	bt := GetBearerToken()
 	if pat == "" && bt == "" {

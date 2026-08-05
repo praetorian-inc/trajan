@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// captureStdout calls fn while capturing everything written to os.Stdout,
-// then returns the captured output as a string.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 

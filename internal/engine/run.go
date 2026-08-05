@@ -8,9 +8,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Run fans fn over items with at most limit concurrent calls; the first error
-// cancels the group. Results are in completion order, not input order — embed the
-// key in the result if pairing is needed.
+// The first error cancels the group. Results are in completion order, not input
+// order — embed the key in the result if pairing is needed.
 func Run[I, O any](ctx context.Context, limit int, items []I, fn func(context.Context, I) (O, error)) ([]O, error) {
 	if limit < 1 {
 		limit = 1
@@ -37,8 +36,8 @@ func Run[I, O any](ctx context.Context, limit int, items []I, fn func(context.Co
 	return out, nil
 }
 
-// RunPartial is like Run but routes a per-item failure to onError and drops the
-// item instead of aborting the batch. Results are in completion order.
+// Like Run, but a per-item failure — including a panic — goes to onError and the
+// item is dropped instead of aborting the batch. Results are in completion order.
 func RunPartial[I, O any](ctx context.Context, limit int, items []I,
 	fn func(context.Context, I) (O, error), onError func(I, error)) []O {
 	if limit < 1 {

@@ -22,10 +22,10 @@ type Mutator interface {
 
 var _ Mutator = (*Client)(nil)
 
-// Mutate issues one non-idempotent request. Unlike Get's six-iteration loop it
-// retries at most once, and only on a rejection that provably did not apply — a
-// secondary- or primary-limit 403/429 the client slept for. A 5xx is never
-// retried: a retried POST /pulls opens two pull requests.
+// One non-idempotent request. Unlike Get's six-iteration loop it retries at most
+// once, and only on a rejection that provably did not apply — a secondary- or
+// primary-limit 403/429 the client slept for. A 5xx is never retried: a retried
+// POST /pulls opens two pull requests.
 func (c *Client) Mutate(ctx context.Context, method, pathOrURL string, body any) (json.RawMessage, int, error) {
 	u := resolveURL(pathOrURL)
 	var payload []byte

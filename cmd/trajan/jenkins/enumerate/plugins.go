@@ -89,7 +89,6 @@ func runPluginsEnumerate(cmd *cobra.Command, args []string) error {
 func outputPluginsConsole(plugins []jenkins.PluginInfo) error {
 	fmt.Printf("=== Jenkins Plugins (%d) ===\n\n", len(plugins))
 
-	// Calculate column widths from data
 	nameWidth := len("NAME")
 	verWidth := len("VERSION")
 	for _, p := range plugins {
@@ -104,7 +103,6 @@ func outputPluginsConsole(plugins []jenkins.PluginInfo) error {
 			verWidth = len(p.Version)
 		}
 	}
-	// Add padding
 	nameWidth += 2
 	verWidth += 2
 

@@ -22,11 +22,9 @@ func mintSlugs(mintable map[string]any) []string {
 	return out
 }
 
-// anthropics/claude-code-action authenticates as its own published App and takes
-// no app-id input, so the app-id lookup that resolves the generic minters cannot
-// reach it. Its identity is the fixed slug — but only where that App is actually
-// installed: without the installation the action uses whatever token the
-// workflow handed it, which is not an out-of-band mint.
+// anthropics/claude-code-action takes no app-id input, so the lookup that resolves
+// the generic minters cannot reach it; its identity is the fixed slug, and only
+// where that App is installed — otherwise it just reuses the workflow's token.
 func TestFixedSlugMinterResolvesOnlyAgainstAnInstalledApp(t *testing.T) {
 	claude := map[string]any{"_id": "claude", "app_slug": "claude", "app_id": float64(1236702),
 		"repository_selection": "selected",
@@ -80,10 +78,9 @@ func TestAppIDMinterStillResolvesThroughItsInput(t *testing.T) {
 	}
 }
 
-// A "selected" installation's repository list is never collected. Fanning it
-// over every repo would invent blast radius; skipping it entirely severed the
-// only write capability the flagship chain runs through. The repositories where
-// a job actually mints the token are the scope that needs no extra API call.
+// A "selected" installation's repository list is never collected: fanning it over
+// every repo would invent blast radius, and dropping it severs a real write
+// capability. The repos where a job mints the token need no extra API call.
 func TestSelectedInstallationLandsCodeOnlyWhereItMints(t *testing.T) {
 	repos := []map[string]any{bareRepo(), {"repo": "other", "default_branch": "main"}}
 	app := map[string]any{"_id": "claude", "app_slug": "claude", "app_id": float64(1236702),

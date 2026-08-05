@@ -49,8 +49,8 @@ func Scan(ctx context.Context, runDir string, p Provider, opts ScanOptions) erro
 	return nil
 }
 
-// OrgOnlyRules filters on SubjectKind, not folder, so it holds even though
-// cat-13-org rules keep their original cat-NN IDs.
+// Filters on SubjectKind, not folder, so it holds even though cat-13-org rules keep
+// their original cat-NN IDs.
 func OrgOnlyRules(rules []Rule) []Rule {
 	return slices.DeleteFunc(rules, func(r Rule) bool { return r.SubjectKind() != "org" })
 }
@@ -86,8 +86,8 @@ func runScan(ctx context.Context, runDir string, state *engine.State, p Provider
 		subjectsByKind[kind] = subs
 	}
 
-	// Clearing output only once every fatal input check has passed keeps a scan
-	// that aborts from destroying the previous run's findings and graph.
+	// Clearing output only after every fatal input check has passed keeps a scan that
+	// aborts from destroying the previous run's findings and graph.
 	for _, d := range append([]string{"20-scan"}, state.StaleDirs(engine.PhaseScan)...) {
 		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
 			return nil, fmt.Errorf("clear %s: %w", d, err)
@@ -139,7 +139,6 @@ func runScan(ctx context.Context, runDir string, state *engine.State, p Provider
 	return bySeverity, nil
 }
 
-// A malformed record is a normalize contract violation and aborts the phase.
 func loadSubjects(prior engine.PriorPhase, p Provider, kind string) ([]map[string]any, error) {
 	dir, ok := p.SubjectDirs[kind]
 	if !ok {

@@ -5,13 +5,9 @@ import (
 	"testing"
 )
 
-// Oracle: fr-05-06-workflow-run-chain. midstream.yml declares `name: B`,
-// downstream.yml is `on: workflow_run: workflows: ["B"]`, and the scenario exists
-// to demonstrate that B triggers C. GitHub matches the `workflows:` literal against
-// the workflow's declared name, so workflow_name must be the `name:` key verbatim
-// and nothing else — path-ifying it deletes the chain. upstream.yml in the same
-// scenario shows the other half: fr-01-01-checkout-head-and-execute/main.yml
-// declares no name at all, and the field is then empty rather than a second form.
+// Oracle fr-05-06-workflow-run-chain: GitHub matches a workflow_run `workflows:`
+// entry against the upstream's declared `name:`, so workflow_name must be that key
+// verbatim — path-ifying it deletes the chain — and empty where none is declared.
 func TestWorkflowNameIsTheDeclaredNameAndPairsWorkflowRun(t *testing.T) {
 	files := map[string]string{
 		"midstream.yml": `

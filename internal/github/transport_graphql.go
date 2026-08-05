@@ -10,10 +10,9 @@ import (
 	"strings"
 )
 
-// graphqlTransport serves the graphql-mappable surfaces (repo metadata, repo
-// topics, org members) by synthesizing the exact REST `data` shape each collector
-// expects. Any unmapped surface or graphql error yields errUnservable so the
-// router falls through to REST — graphql is a pure optimization that drains the
+// Serves the graphql-mappable surfaces by synthesizing the exact REST `data` shape
+// each collector expects. Any unmapped surface or graphql error yields errUnservable
+// so the router falls through: graphql is a pure optimization that drains the
 // separate GraphQL budget instead of the binding REST core budget.
 type graphqlTransport struct {
 	gql *gqlClient
@@ -27,7 +26,7 @@ func newGraphQLTransport(c *Client) *graphqlTransport {
 	return &graphqlTransport{gql: &gqlClient{c: c}}
 }
 
-// errNotMapped wraps errUnservable so the router falls through to REST.
+// Wraps errUnservable so the router falls through to REST.
 var errNotMapped = fmt.Errorf("%w: graphql surface not mapped", errUnservable)
 
 func (g *graphqlTransport) Get(ctx context.Context, p string, _ url.Values, _ bool) (json.RawMessage, http.Header, error) {
@@ -65,8 +64,8 @@ func (g *graphqlTransport) ResolveRefCommitSHA(context.Context, string, string, 
 	return "", errNotMapped
 }
 
-// gqlFallthrough marks any graphql failure as unservable so the router falls
-// through to REST; allow404 and permission divergence are handled there.
+// Marks any graphql failure unservable so the router falls through to REST, where
+// allow404 and permission divergence are handled.
 func gqlFallthrough(err error) error {
 	if err == nil || errors.Is(err, errUnservable) {
 		return err
@@ -87,8 +86,8 @@ func orgSubResource(p, sub string) bool {
 	return strings.HasPrefix(tail[j+1:], sub)
 }
 
-// repoMeta maps a repo to the fields normalizeRepos reads. visibility is
-// lowercased to match REST; default_branch is null on an empty repo.
+// Maps a repo to the fields normalizeRepos reads: visibility lowercased to match
+// REST, default_branch null on an empty repo.
 func (g *graphqlTransport) repoMeta(ctx context.Context, p string) (json.RawMessage, error) {
 	owner, repo, err := parseRepoPath(p)
 	if err != nil {
@@ -167,8 +166,8 @@ func (g *graphqlTransport) repoTopics(ctx context.Context, p string) (json.RawMe
 	return marshalRaw(map[string]any{"names": names})
 }
 
-// orgMembers maps /orgs/{org}/members to {login, id, type}, paginating the
-// connection fully; type is always "User" for org membership.
+// Maps /orgs/{org}/members to {login, id, type}, paginating the connection fully;
+// type is always "User" for org membership.
 func (g *graphqlTransport) orgMembers(ctx context.Context, p string) ([]json.RawMessage, error) {
 	org, err := parseOrgPath(p)
 	if err != nil {

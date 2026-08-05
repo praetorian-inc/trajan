@@ -21,7 +21,6 @@ func (m *mockDetection) Detect(ctx context.Context, g *graph.Graph) ([]Finding, 
 	return nil, nil
 }
 
-// mockAPIDetection embeds mockDetection and implements APIRequirer, returning true.
 type mockAPIDetection struct {
 	mockDetection
 }

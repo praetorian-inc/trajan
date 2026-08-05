@@ -5,14 +5,11 @@ import (
 	"strings"
 )
 
-// GitLab .gitlab-ci.yml parsing for the job normalizer. P2 collects only the raw
-// entrypoint at the default branch (collectCIConfig) — included file bodies
-// (local/project/remote/component/template) are not on disk — so job discovery is
-// entrypoint-only and include: declarations are parsed for classification (cat-02)
-// rather than expanded into new jobs. rules:/workflow: are read structurally to
-// derive the job's trigger set and ref-protection gate.
+// Only the raw entrypoint is on disk — no included file bodies — so job discovery is
+// entrypoint-only and include: declarations are classified rather than expanded into
+// new jobs. rules: and workflow: are read structurally for the trigger set and the
+// ref-protection gate.
 
-// reserved is the set of top-level keys that are pipeline configuration, not jobs.
 var reserved = map[string]bool{
 	"include": true, "variables": true, "stages": true, "workflow": true,
 	"default": true, "image": true, "services": true, "cache": true,
@@ -20,12 +17,9 @@ var reserved = map[string]bool{
 	"spec": true, ".pre": true, ".post": true,
 }
 
-// parseCIPipeline decodes the raw entrypoint into a pipeline map. A `spec:` header
-// document (used for `inputs:` in reusable configs) precedes a `---` separator;
-// the pipeline is the last mapping document. Anchors/hidden `.templates` are left
-// in place — hidden keys (leading `.`) are filtered at job discovery. A
-// well-formed but empty/comment-only config returns (nil, nil): no jobs, not an
-// error. Only a YAML syntax error returns a non-nil error.
+// A `spec:` header document precedes a `---` separator, so the pipeline is the last
+// mapping document. Hidden `.template` keys stay in place and are filtered at job
+// discovery. An empty or comment-only config is (nil, nil): no jobs, not an error.
 func parseCIPipeline(raw []byte) (map[string]any, error) {
 	if raw == nil {
 		return nil, nil
@@ -58,8 +52,7 @@ func splitYAMLDocs(raw []byte) [][]byte {
 	return out
 }
 
-// jobNames returns the top-level job keys in stable (sorted) order: entries that
-// are maps, not reserved config keys, and not hidden templates (leading `.`).
+// Sorted, because a job record's identity must not depend on map iteration order.
 func jobNames(pipeline map[string]any) []string {
 	out := []string{}
 	for k, v := range pipeline {
@@ -82,9 +75,8 @@ func sortStrings(s []string) {
 	}
 }
 
-// asStrList coerces a YAML scalar-or-sequence (script:, tags:, artifacts:paths:)
-// into a []string. Nested sequences are flattened one level (script blocks may
-// nest).
+// Nested sequences are flattened one level because a script: block may itself hold
+// lists.
 func asStrList(v any) []string {
 	switch x := v.(type) {
 	case string:
@@ -108,8 +100,8 @@ func asStrList(v any) []string {
 	return nil
 }
 
-// jobScriptText concatenates every script phase (before_script/script/after_script,
-// and a run: step block) into one blob for attacker-input and sink analysis.
+// Every phase is concatenated into one blob because attacker input reaching any of
+// them reaches the same execution context.
 func jobScriptText(job map[string]any) string {
 	var b strings.Builder
 	for _, k := range []string{"before_script", "script", "after_script"} {
@@ -131,9 +123,8 @@ func jobScriptText(job map[string]any) string {
 	return b.String()
 }
 
-// mergeDefault overlays the pipeline `default:` block onto a job for keys the job
-// does not set itself (image, cache, tags, before/after_script). GitLab applies
-// default: to every job unless overridden.
+// GitLab applies the pipeline `default:` block to every job unless the job overrides
+// the key, so the job's own values win here.
 func mergeDefault(job, def map[string]any) map[string]any {
 	if len(def) == 0 {
 		return job

@@ -16,22 +16,19 @@ func init() {
 	})
 }
 
-// Detection detects script injection in Jenkins pipeline definitions.
-// Jenkins pipelines using string interpolation in shell steps can allow
-// attackers to inject arbitrary commands via user-controlled parameters.
+// String interpolation in a shell step lets a user-controlled parameter inject
+// arbitrary commands.
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new Jenkins script injection detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("injection", "jenkins", detections.SeverityHigh),
 	}
 }
 
-// injectablePatterns contains patterns that indicate unsafe parameter
-// interpolation in Jenkinsfile shell steps.
+// Unsafe parameter interpolation inside Jenkinsfile shell steps.
 var injectablePatterns = []string{
 	"${params.",
 	"${env.",
@@ -44,7 +41,6 @@ var injectablePatterns = []string{
 	"${GIT_COMMIT}",
 }
 
-// Detect finds script injection vulnerabilities in the workflow graph
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
@@ -84,7 +80,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// createFinding creates a finding for script injection with all matched patterns
 func (d *Detection) createFinding(wf *graph.WorkflowNode, step *graph.StepNode, patterns []string) detections.Finding {
 	return detections.Finding{
 		Type:        detections.VulnScriptInjection,

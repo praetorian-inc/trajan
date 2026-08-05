@@ -63,7 +63,6 @@ func runListConnectionsAzDO() error {
 		return err
 	}
 
-	// Perform YAML discovery if --scan-yaml is set OR if API returned 0 connections
 	var discovered []azuredevops.DiscoveredServiceConnection
 	if scanYAML || len(connections) == 0 {
 		discovered, err = client.DiscoverServiceConnectionsFromYAML(ctx, enumProject)
@@ -122,7 +121,6 @@ func runListConnectionsAzDO() error {
 			return nil
 		}
 
-		// Display API connections
 		if len(connections) > 0 {
 			fmt.Println("=== API Service Connections ===")
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -142,7 +140,6 @@ func runListConnectionsAzDO() error {
 			fmt.Printf("\nTotal: %d service connections\n", len(connections))
 		}
 
-		// Display YAML-discovered connections
 		if len(discovered) > 0 {
 			if len(connections) > 0 {
 				fmt.Println() // blank line between sections

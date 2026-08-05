@@ -13,10 +13,7 @@ const (
 	dirNormalize = "10-normalize"
 	dirScan      = "20-scan"
 	dirGraph     = "30-graph"
-	// Verification runs after the phases that decide what is worth verifying, and the
-	// ordinal says so. 30 was taken by the graph phase on main while this branch was
-	// open; nothing reads an attack directory by a hardcoded name, so the number moved
-	// rather than the phase.
+	// Verification runs after the phases that decide what is worth verifying.
 	dirAttack = "40-attack"
 )
 
@@ -87,15 +84,14 @@ func CollectWorkflowMeta(repo, filename string) string {
 	return path.Join(dirCollect, "workflows", repo, filename+".meta.json")
 }
 
-// BranchSlug strips a leading "refs/heads/" then maps "/" -> "__". Non-injective,
-// matching safeRef: "release/1.0" -> "release__1.0".
+// Non-injective, matching safeRef: "release/1.0" and "release__1.0" collide.
 func BranchSlug(ref string) string {
 	ref = strings.TrimPrefix(ref, "refs/heads/")
 	return strings.ReplaceAll(ref, "/", "__")
 }
 
-// repoBranchDir keeps the bare "<repo>" segment for the default branch so legacy
-// paths stay byte-stable; non-default branches get "<repo>@<BranchSlug>".
+// The default branch keeps the bare "<repo>" segment so existing paths stay
+// byte-stable; other branches get "<repo>@<BranchSlug>".
 func repoBranchDir(repo, ref string, isDefault bool) string {
 	if isDefault {
 		return repo
@@ -126,17 +122,16 @@ func CollectRefResolution(owner, actionRepo, ref string) string {
 		fmt.Sprintf("%s__%s@%s.json", owner, actionRepo, safeRef(ref)))
 }
 
-// adoKey sanitizes an ADO project/repo/host name for use as a path segment:
-// anything outside [A-Za-z0-9._-] becomes '-'. ADO names are already restricted,
-// so this only guards the rare space/slash.
+// adoKey maps anything outside [A-Za-z0-9.-] to '-' so an ADO project/repo/host
+// name is safe as one path segment.
 func adoKey(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		// '_' is deliberately NOT preserved: the NormalizeADO*/CollectADO* helpers
-		// join sanitized components with "__", so a component containing "_" would
-		// make that delimiter ambiguous (X + Y__Z vs X__Y + Z collide).
+		// '_' is deliberately NOT preserved: the helpers join sanitized components
+		// with "__", so a component containing "_" would make that delimiter
+		// ambiguous (X + Y__Z vs X__Y + Z collide).
 		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' {
 			b.WriteByte(c)
 		} else {
@@ -153,7 +148,6 @@ func adoCollect(parts ...string) string {
 	return path.Join(append([]string{dirCollect}, parts...)...)
 }
 
-// Org-scope surfaces (key = org).
 func CollectADOConnectionData(org string) string {
 	return adoCollect("connection-data", adoKey(org)+".json")
 }
@@ -168,7 +162,6 @@ func CollectADOServiceHooks(org string) string {
 }
 func CollectADOFeeds(org string) string { return adoCollect("feeds", adoKey(org)+".json") }
 
-// Org agent pools (key = poolID).
 func CollectADOPool(poolID int64) string {
 	return adoCollect("pools", fmt.Sprintf("%d.json", poolID))
 }
@@ -182,7 +175,6 @@ func CollectADOEndpointACL(project, connID string) string {
 	return adoCollect("acl-endpoint", adoKey(project), adoKey(connID)+".json")
 }
 
-// Project-scope surfaces (key = project).
 func CollectADOProject(project string) string { return adoCollect("project", adoKey(project)+".json") }
 func CollectADOGeneralSettings(project string) string {
 	return adoCollect("general-settings", adoKey(project)+".json")
@@ -234,7 +226,6 @@ func CollectADOBuildACL(project string) string {
 	return adoCollect("acl-build", adoKey(project)+".json")
 }
 
-// Per-pipeline / per-resource / per-repo (nested under project).
 func CollectADOBuildDefFull(project string, id int64) string {
 	return adoCollect("build-definition", adoKey(project), fmt.Sprintf("%d.json", id))
 }
@@ -314,11 +305,9 @@ func NormalizeADOPrincipal(kind, descriptor string) string {
 	return adoNorm("principals", adoKey(kind), adoKey(descriptor)+".json")
 }
 
-// NormalizeADOEdges hashes the composite key into a fixed-length, collision-free
-// stem. Callers build keys by joining components with "__", but adoKey folds "_"
-// to "-", which would both flatten that delimiter and overflow the 255-byte path
-// limit for long branch/connection/input names. The readable components stay as
-// fields on the edge record; the filename only has to be unique.
+// Hashes the composite key into a fixed-length stem: adoKey folds "_" to "-",
+// which both flattens the "__" callers join with and can overflow the 255-byte path
+// limit for long names. The readable components stay as fields on the edge record.
 func NormalizeADOEdges(kind, key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return adoNorm("edges", adoKey(kind), hex.EncodeToString(sum[:16])+".json")
@@ -333,9 +322,8 @@ func NormalizeADOProjectAgentPool(project string, poolID int64) string {
 	return adoNorm("project-agent-pools", fmt.Sprintf("%s__%d.json", adoKey(project), poolID))
 }
 
-// glKey sanitizes a GitLab group/project full path (slash-separated) for use as a
-// single path segment: anything outside [A-Za-z0-9.-] becomes '-'. '_' is folded
-// too, since multi-component keys are joined with "__" (adoKey's rationale).
+// glKey maps anything outside [A-Za-z0-9.-] to '-' so a slash-separated GitLab full
+// path is safe as one path segment; '_' is folded too, for adoKey's reason.
 func glKey(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -357,7 +345,7 @@ func glCollect(parts ...string) string {
 	return path.Join(append([]string{dirCollect}, parts...)...)
 }
 
-// Group-scope surfaces (key = group full path).
+// Keyed by the group's full path.
 func CollectGLGroup(g string) string        { return glCollect("group", glKey(g)+".json") }
 func CollectGLSubgroups(g string) string    { return glCollect("subgroups", glKey(g)+".json") }
 func CollectGLSharedGroups(g string) string { return glCollect("shared-groups", glKey(g)+".json") }
@@ -392,7 +380,7 @@ func CollectGLNamespace(g string) string {
 	return glCollect("namespace", glKey(g)+".json")
 }
 
-// Project-scope surfaces (key = project full path).
+// Keyed by the project's full path.
 func CollectGLProject(p string) string { return glCollect("project", glKey(p)+".json") }
 func CollectGLProjectMembers(p string) string {
 	return glCollect("members", "project", glKey(p)+".json")
@@ -459,7 +447,7 @@ func CollectGLAgentConfig(p, name string) string {
 func CollectGLCIConfig(p, rel string) string { return glCollect("ci-config", glKey(p), rel) }
 func CollectGLRepoFile(p, rel string) string { return glCollect("repo-files", glKey(p), rel) }
 
-// Instance-scope surfaces (self-hosted / admin token).
+// Instance scope: self-hosted / admin token.
 func CollectGLInstanceVariables() string { return glCollect("variables", "instance.json") }
 func CollectGLInstanceRunners() string   { return glCollect("runners", "instance.json") }
 func CollectGLInstanceSettings() string  { return glCollect("instance-settings.json") }
@@ -469,9 +457,6 @@ func CollectGLUserMemberships(id int64) string {
 	return glCollect("user-memberships", fmt.Sprintf("%d.json", id))
 }
 
-// Node records key by glKey(subjectKey); jobs by project + workflow stem + job
-// name; chains one file per join. NormalizeGLChain is the GitLab analog of the
-// GitHub unexported chainPath.
 func glNormalize(parts ...string) string {
 	return path.Join(append([]string{dirNormalize}, parts...)...)
 }
@@ -507,14 +492,14 @@ func NormalizeJobBranch(repo, ref string, isDefault bool, workflow, jobID string
 	return path.Join(dirNormalize, "jobs", JobKey(repo, ref, isDefault, workflow, jobID)+".json")
 }
 
-// JobKey is a job's identity and its NormalizeJobBranch filename stem, derived
-// once so the two can never disagree.
+// A job's identity and its NormalizeJobBranch filename stem, derived once so the
+// two cannot disagree.
 func JobKey(repo, ref string, isDefault bool, workflow, jobID string) string {
 	return fmt.Sprintf("%s__%s__%s", repoBranchDir(repo, ref, isDefault), wfStem(workflow), jobID)
 }
 
-// kind is "user" or "team"; kind prefixes the key so a user and a team sharing a
-// name land in different files.
+// kind ("user" or "team") prefixes the key so a user and a team sharing a name land
+// in different files.
 func NormalizePrincipal(kind, key string) string {
 	return path.Join(dirNormalize, "principals", kind+"__"+key+".json")
 }
@@ -528,8 +513,8 @@ func NormalizeRunnerGroup(groupID int64) string {
 	return path.Join(dirNormalize, "runner-groups", fmt.Sprintf("%d.json", groupID))
 }
 
-// scopeKey is "<repo>" or "<repo>__<env>"; bucket is "actions", "codespaces", or
-// "dependabot", which distinguishes same-named secrets in different buckets.
+// scopeKey is "<repo>" or "<repo>__<env>"; bucket ("actions", "codespaces" or
+// "dependabot") separates same-named secrets in different buckets.
 func NormalizeSecret(scopeKey, bucket, name string) string {
 	return path.Join(dirNormalize, "secrets", scopeKey+"__"+bucket+"__"+name+".json")
 }
@@ -542,12 +527,10 @@ func Finding(ruleID, subjectHash string) string {
 	return path.Join(dirScan, "findings", ruleID+"__"+subjectHash+".json")
 }
 
-// AttackRoot is the phase directory every plan's own directory sits under.
 func AttackRoot() string { return dirAttack }
 
-// AttackDir is one plan's directory. A plan id carries the template's path
-// ("github/pwn-request"), so safePath folds the slash and one plan stays one
-// directory.
+// A plan id carries the template's path ("github/pwn-request"), so safePath folds
+// the slash and one plan stays one directory.
 func AttackDir(planID string) string { return path.Join(dirAttack, safePath(planID)) }
 
 func AttackPlan(planID string) string { return path.Join(AttackDir(planID), "_plan.json") }
@@ -582,8 +565,8 @@ func GraphSummary() string { return path.Join(dirGraph, "_summary.json") }
 
 func RunMeta() string { return "_meta.json" }
 
-// safePath reproduces Python's path.replace("/","__").lstrip("__"): lstrip uses
-// char-set semantics, so it strips ANY leading '_', not just the "__" pair.
+// Reproduces Python's path.replace("/","__").lstrip("__"): lstrip is char-set
+// based, so ANY leading '_' is stripped, not just the "__" pair.
 func safePath(p string) string {
 	s := strings.ReplaceAll(p, "/", "__")
 	s = strings.TrimLeft(s, "_")
@@ -595,8 +578,8 @@ func safePath(p string) string {
 
 func safeRef(ref string) string { return strings.ReplaceAll(ref, "/", "__") }
 
-// wfStem strips ".yml" then ".yaml", each at most once and in that order, to
-// match Python's chained removesuffix.
+// Strips ".yml" then ".yaml", each at most once and in that order, matching
+// Python's chained removesuffix.
 func wfStem(wf string) string {
 	wf = strings.TrimSuffix(wf, ".yml")
 	wf = strings.TrimSuffix(wf, ".yaml")

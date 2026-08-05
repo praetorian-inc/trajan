@@ -72,8 +72,7 @@ func TestFilterAndOrderTieBreaksByRuleThenSubject(t *testing.T) {
 	}
 }
 
-// json/jsonl used to stream to stdout whenever --out was unset, so the default
-// invocation dumped every finding into the terminal.
+// json and jsonl once streamed to stdout whenever --out was unset.
 func TestDefaultOutputGoesToDiskNotStdout(t *testing.T) {
 	for _, format := range []string{"jsonl", "json", "md", "html"} {
 		t.Run(format, func(t *testing.T) {

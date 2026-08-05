@@ -49,14 +49,12 @@ func runListReposAzDO() error {
 	var allRepos []azuredevops.Repository
 
 	if enumProject != "" {
-		// List repos for specified project
 		repos, err := client.ListRepositories(ctx, enumProject)
 		if err != nil {
 			return err
 		}
 		allRepos = repos
 	} else {
-		// List repos for all projects
 		projects, err := client.ListProjects(ctx)
 		if err != nil {
 			return err
@@ -72,7 +70,6 @@ func runListReposAzDO() error {
 		}
 	}
 
-	// Render based on output format
 	switch enumOutput {
 	case "json":
 		enc := json.NewEncoder(os.Stdout)

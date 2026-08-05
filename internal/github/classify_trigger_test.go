@@ -63,7 +63,6 @@ func TestClassifyTriggerCaseInsensitive(t *testing.T) {
 }
 
 func TestClassifyTriggerUnknownDefaultsToMedium(t *testing.T) {
-	// Unknown triggers are conservatively medium, not low or high.
 	for _, unknown := range []string{"deployment_review", "merge_group", "totally_made_up", ""} {
 		if got := classifyTrigger(unknown); got != "medium" {
 			t.Errorf("classifyTrigger(%q) = %q, want medium (unknown->conservative)", unknown, got)
@@ -137,7 +136,6 @@ func TestExtractInterpolations(t *testing.T) {
 		{"no interpolation here", []string{}},
 		{"${{ github.event.pull_request.title }}", []string{"github.event.pull_request.title"}},
 		{"x ${{   github.actor   }} y", []string{"github.actor"}},
-		// duplicates NOT deduped, order preserved.
 		{"${{ a }} ${{ b }} ${{ a }}", []string{"a", "b", "a"}},
 		// non-greedy: first }} closes the match, so the second token is its own match.
 		{"${{ inputs.x }}${{ inputs.y }}", []string{"inputs.x", "inputs.y"}},

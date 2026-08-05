@@ -47,12 +47,10 @@ func runTokenEnumerate(cmd *cobra.Command, args []string) error {
 
 	email := getEmail(cmd)
 
-	// Validate: ATATT3x token without email
 	if strings.HasPrefix(token, "ATATT3x") && email == "" {
 		return fmt.Errorf("--email is required for API token auth (use --email or set BITBUCKET_EMAIL/BB_EMAIL env var)")
 	}
 
-	// Warn: access token with email provided
 	if strings.HasPrefix(token, "ATCTT3x") && email != "" {
 		fmt.Fprintf(os.Stderr, "Warning: email ignored for access tokens (Bearer auth used)\n")
 	}
@@ -60,7 +58,6 @@ func runTokenEnumerate(cmd *cobra.Command, args []string) error {
 	output := cmdutil.GetOutput(cmd)
 	ctx := context.Background()
 
-	// Initialize platform
 	platform, err := registry.GetPlatform("bitbucket")
 	if err != nil {
 		return fmt.Errorf("getting platform: %w", err)
@@ -132,7 +129,7 @@ func outputTokenConsole(result *bitbucket.TokenEnumerateResult) error {
 
 	info := result.TokenInfo
 
-	// User info (API tokens only)
+	// Only an API token returns a user.
 	if result.User != nil {
 		fmt.Printf("User: %s", result.User.Username)
 		if result.User.DisplayName != "" {
@@ -148,17 +145,13 @@ func outputTokenConsole(result *bitbucket.TokenEnumerateResult) error {
 		fmt.Println()
 	}
 
-	// Token type
 	fmt.Printf("Type: %s\n", formatTokenType(info.Type))
 
-	// Scopes
 	if info.Scopes != nil && len(info.RawScopes) > 0 {
 		fmt.Printf("\nScopes (%d):\n", len(info.RawScopes))
 		if info.Scopes.Format() == bitbucket.ScopeFormatFineGrained {
-			// Grouped display for fine-grained (API token) scopes
 			outputFineGrainedScopes(info.Scopes)
 		} else {
-			// Bullet list with implication annotations for legacy (access token) scopes
 			for _, scope := range info.RawScopes {
 				annotation := legacyScopeAnnotations[scope]
 				if annotation != "" {
@@ -170,13 +163,11 @@ func outputTokenConsole(result *bitbucket.TokenEnumerateResult) error {
 		}
 	}
 
-	// Note for API tokens
 	if info.Type == bitbucket.TokenTypeAPIToken {
 		fmt.Printf("\nNote: Scopes show maximum token permissions.\n")
 		fmt.Printf("Actual access depends on user's workspace and repository roles.\n")
 	}
 
-	// Rate limit
 	if result.RateLimit != nil && result.RateLimit.Limit > 0 {
 		nearLimit := "no"
 		if result.RateLimit.NearLimit {
@@ -185,7 +176,6 @@ func outputTokenConsole(result *bitbucket.TokenEnumerateResult) error {
 		fmt.Printf("\nRate Limit: %d (near limit: %s)\n", result.RateLimit.Limit, nearLimit)
 	}
 
-	// Errors
 	if len(result.Errors) > 0 {
 		fmt.Printf("\nErrors:\n")
 		for _, e := range result.Errors {
@@ -196,8 +186,7 @@ func outputTokenConsole(result *bitbucket.TokenEnumerateResult) error {
 	return nil
 }
 
-// legacyScopeAnnotations maps scopes to their human-readable annotation text.
-// Bare scope names (e.g., "project") mean read-level access, so we annotate them.
+// A bare scope name such as "project" means read-level access, which the annotation spells out.
 var legacyScopeAnnotations = map[string]string{
 	"account":           "read",
 	"project":           "read; implies repository:read",
@@ -218,7 +207,6 @@ var legacyScopeAnnotations = map[string]string{
 	"test:write":        "implies test:read",
 }
 
-// categoryDisplayNames maps scope categories to human-readable display names.
 var categoryDisplayNames = map[string]string{
 	"repository":  "Repositories",
 	"pullrequest": "Pull Requests",

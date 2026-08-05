@@ -7,10 +7,10 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// A repo's DEPLOY_TOKEN and its production environment's DEPLOY_TOKEN are
-// different secrets with different values and blast radius, so identity is scope
-// plus name. ScopeKey is the engine.CollectSecrets key, which is also what
-// SecretRef.ScopeKey carries, so a job's secrets_referenced joins onto these.
+// A repo's DEPLOY_TOKEN and its production environment's DEPLOY_TOKEN are different
+// secrets with different values and blast radius, so identity is scope plus name.
+// ScopeKey is the engine.CollectSecrets key, which SecretRef.ScopeKey also carries,
+// so a job's secrets_referenced joins onto these.
 type SecretFact struct {
 	ID          string  `json:"_id"`
 	Scope       string  `json:"scope"`

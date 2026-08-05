@@ -1,4 +1,3 @@
-// pkg/platforms/azuredevops/client_probe.go
 package azuredevops
 
 import (
@@ -7,8 +6,6 @@ import (
 	"net/url"
 )
 
-// GetConnectionData retrieves connection data to validate PAT and get authenticated user
-// Endpoint: /_apis/connectionData
 func (c *Client) GetConnectionData(ctx context.Context) (*ConnectionData, error) {
 	path := fmt.Sprintf("/_apis/connectionData?api-version=%s", APIVersionPreview)
 
@@ -20,8 +17,6 @@ func (c *Client) GetConnectionData(ctx context.Context) (*ConnectionData, error)
 	return &data, nil
 }
 
-// ListProjects lists all accessible projects in the organization
-// Endpoint: /_apis/projects
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	path := fmt.Sprintf("/_apis/projects?api-version=%s", APIVersion)
 
@@ -33,8 +28,6 @@ func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	return result.Value, nil
 }
 
-// ListPipelines lists all pipelines in a project
-// Endpoint: /{project}/_apis/pipelines
 func (c *Client) ListPipelines(ctx context.Context, projectNameOrID string) ([]Pipeline, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/pipelines?api-version=%s", encodedProject, APIVersion)
@@ -47,8 +40,6 @@ func (c *Client) ListPipelines(ctx context.Context, projectNameOrID string) ([]P
 	return result.Value, nil
 }
 
-// ListAgentPools lists all agent pools in the organization
-// Endpoint: /_apis/distributedtask/pools
 func (c *Client) ListAgentPools(ctx context.Context) ([]AgentPool, error) {
 	path := fmt.Sprintf("/_apis/distributedtask/pools?api-version=%s", APIVersion)
 
@@ -60,8 +51,6 @@ func (c *Client) ListAgentPools(ctx context.Context) ([]AgentPool, error) {
 	return result.Value, nil
 }
 
-// ListVariableGroups lists all variable groups in a project
-// Endpoint: /{project}/_apis/distributedtask/variablegroups
 func (c *Client) ListVariableGroups(ctx context.Context, projectNameOrID string) ([]VariableGroup, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/distributedtask/variablegroups?api-version=%s", encodedProject, APIVersion)
@@ -74,8 +63,6 @@ func (c *Client) ListVariableGroups(ctx context.Context, projectNameOrID string)
 	return result.Value, nil
 }
 
-// ListServiceConnections lists all service connections in a project
-// Endpoint: /{project}/_apis/serviceendpoint/endpoints
 func (c *Client) ListServiceConnections(ctx context.Context, projectNameOrID string) ([]ServiceConnection, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/serviceendpoint/endpoints?api-version=%s", encodedProject, APIVersion)
@@ -88,9 +75,7 @@ func (c *Client) ListServiceConnections(ctx context.Context, projectNameOrID str
 	return result.Value, nil
 }
 
-// ListArtifactFeeds lists all artifact feeds in the organization
-// Endpoint: /_apis/packaging/feeds (on feeds.dev.azure.com)
-// Note: In production, the caller should invoke this on FeedsClient() for the correct host.
+// Feeds live on feeds.dev.azure.com, so callers must invoke this on FeedsClient().
 func (c *Client) ListArtifactFeeds(ctx context.Context) ([]ArtifactFeed, error) {
 	path := fmt.Sprintf("/_apis/packaging/feeds?api-version=%s", APIVersion)
 

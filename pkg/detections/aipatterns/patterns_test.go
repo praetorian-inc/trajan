@@ -96,13 +96,11 @@ func TestHasAIEnvVars(t *testing.T) {
 }
 
 func TestIsAIStep_WithEnvVars(t *testing.T) {
-	// Step with no AI action/run but AI env var should still be detected
 	step := graph.NewStepNode("s1", "step", 1)
 	step.Uses = "actions/checkout@v4"
 	step.Env = map[string]string{"OPENAI_API_KEY": "sk-..."}
 	assert.True(t, IsAIStep(step))
 
-	// Step with no AI signals at all
 	step2 := graph.NewStepNode("s2", "step", 2)
 	step2.Uses = "actions/checkout@v4"
 	step2.Env = map[string]string{"GITHUB_TOKEN": "ghp_..."}

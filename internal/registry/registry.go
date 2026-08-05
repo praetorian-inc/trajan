@@ -1,5 +1,3 @@
-// Package registry provides platform registration
-// Detection and exploit registration are in detections.go and exploits.go
 package registry
 
 import (
@@ -15,14 +13,12 @@ var (
 	platformRegistry = make(map[string]platforms.PlatformFactory)
 )
 
-// RegisterPlatform registers a platform factory
 func RegisterPlatform(name string, factory platforms.PlatformFactory) {
 	mu.Lock()
 	defer mu.Unlock()
 	platformRegistry[name] = factory
 }
 
-// GetPlatform returns a new instance of the named platform
 func GetPlatform(name string) (platforms.Platform, error) {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -33,7 +29,6 @@ func GetPlatform(name string) (platforms.Platform, error) {
 	return factory(), nil
 }
 
-// ListPlatforms returns all registered platform names
 func ListPlatforms() []string {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -45,7 +40,7 @@ func ListPlatforms() []string {
 	return names
 }
 
-// ResetPlatforms clears all registered platforms (for testing)
+// For tests only.
 func ResetPlatforms() {
 	mu.Lock()
 	defer mu.Unlock()

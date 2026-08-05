@@ -14,7 +14,6 @@ var (
 	detectionIDs      = make(map[string]bool)
 )
 
-// RegisterDetection registers a detection factory for a platform
 func RegisterDetection(platform, name string, factory detections.DetectionFactory) {
 	detectionMu.Lock()
 	defer detectionMu.Unlock()
@@ -28,7 +27,6 @@ func RegisterDetection(platform, name string, factory detections.DetectionFactor
 	detectionRegistry[platform] = append(detectionRegistry[platform], factory)
 }
 
-// GetDetections returns new instances of all detections for a platform
 func GetDetections(platform string) []detections.Detection {
 	detectionMu.RLock()
 	defer detectionMu.RUnlock()
@@ -40,18 +38,16 @@ func GetDetections(platform string) []detections.Detection {
 	return result
 }
 
-// GetDetectionsForPlatform returns detections for a specific platform plus "all" (cross-platform)
+// Also includes detections registered under the "all" platform (cross-platform).
 func GetDetectionsForPlatform(platform string) []detections.Detection {
 	detectionMu.RLock()
 	defer detectionMu.RUnlock()
 
-	// Get platform-specific detections
 	platformDets := make([]detections.Detection, 0)
 	for _, factory := range detectionRegistry[platform] {
 		platformDets = append(platformDets, factory())
 	}
 
-	// Add cross-platform detections
 	for _, factory := range detectionRegistry["all"] {
 		platformDets = append(platformDets, factory())
 	}
@@ -59,7 +55,6 @@ func GetDetectionsForPlatform(platform string) []detections.Detection {
 	return platformDets
 }
 
-// ListDetectionPlatforms returns all platforms with registered detections
 func ListDetectionPlatforms() []string {
 	detectionMu.RLock()
 	defer detectionMu.RUnlock()
@@ -71,7 +66,7 @@ func ListDetectionPlatforms() []string {
 	return names
 }
 
-// ResetDetections clears the detection registry (for testing)
+// For tests only.
 func ResetDetections() {
 	detectionMu.Lock()
 	defer detectionMu.Unlock()

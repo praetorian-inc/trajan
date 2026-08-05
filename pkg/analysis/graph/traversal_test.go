@@ -1,4 +1,3 @@
-// pkg/analysis/graph/traversal_test.go
 package graph
 
 import (
@@ -35,7 +34,7 @@ func TestDFS(t *testing.T) {
 	var visited []string
 	DFS(g, "wf", func(node Node) bool {
 		visited = append(visited, node.ID())
-		return true // continue
+		return true
 	})
 
 	assert.Contains(t, visited, "wf")
@@ -50,7 +49,7 @@ func TestDFS_StopEarly(t *testing.T) {
 	var visited []string
 	DFS(g, "wf", func(node Node) bool {
 		visited = append(visited, node.ID())
-		return node.ID() != "job" // stop at job
+		return node.ID() != "job"
 	})
 
 	assert.Contains(t, visited, "wf")

@@ -8,19 +8,15 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// Job is the resolved-job record handle produced by normalizeJobs. correlate
-// re-reads jobs from disk rather than the returned slice, so this carries only
-// the record's id and project for the orchestrator's call convention.
+// correlate re-reads the job records from disk rather than using the returned slice,
+// so this only needs to carry enough to satisfy the orchestrator's signature.
 type Job struct {
 	ID      string
 	Project string
 }
 
-// jobContext folds the project/group/instance effective properties a job's fields
-// depend on (runner reachability, variable posture, protected-ref model, includes,
-// Duo, OIDC). Read once per project from the already-written normalized records
-// (normalizeEntities runs before normalizeJobs) so job fields stay consistent with
-// the subject records the same rules read.
+// Read once per project from the records normalizeEntities already wrote, so a job's
+// folded fields cannot disagree with the project subject the same rule reads.
 type jobContext struct {
 	project    map[string]any
 	group      map[string]any
@@ -35,11 +31,8 @@ type jobContext struct {
 	duoMCP     []byte
 }
 
-// normalizeJobs parses each project's .gitlab-ci.yml entrypoint, evaluates
-// rules:/workflow: for triggers and ref-protection, classifies includes/sinks/
-// reachability, and emits one job record per resolved job into 10-normalize/jobs.
-// P2 collects only the raw entrypoint, so job discovery is entrypoint-only and
-// include: bodies are classified (cat-02) rather than expanded into new jobs.
+// Only the raw entrypoint is on disk, so job discovery is entrypoint-only and include:
+// bodies are classified rather than expanded into further jobs.
 func normalizeJobs(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, projs []projectMeta, timer *engine.PhaseTimer) ([]Job, error) {
 	var out []Job
 	for _, p := range projs {
@@ -79,8 +72,7 @@ func normalizeJobs(ctx context.Context, prior engine.PriorPhase, cp engine.Curre
 	return out, nil
 }
 
-// dotenvProducers pre-scans the pipeline for jobs emitting a dotenv artifact so a
-// consumer's consumes_dotenv can be resolved without a second full pass.
+// Pre-scanned so a consumer's consumes_dotenv resolves without a second full pass.
 func dotenvProducers(pipeline map[string]any) map[string]bool {
 	out := map[string]bool{}
 	def := entMap(pipeline["default"])
@@ -92,8 +84,7 @@ func dotenvProducers(pipeline map[string]any) map[string]bool {
 	return out
 }
 
-// crossNeedJobNames is the set of jobs whose needs: pull a cross-project
-// artifact, used to detect a child pipeline generated from that artifact (cat-02).
+// Needed to spot a child pipeline generated from an artifact one of these jobs pulled.
 func crossNeedJobNames(pipeline, def map[string]any) map[string]bool {
 	out := map[string]bool{}
 	for _, name := range jobNames(pipeline) {
@@ -128,7 +119,6 @@ func readRecord(prior engine.PriorPhase, rel string) map[string]any {
 	return rec
 }
 
-// buildJobRecord assembles one job record with every field root from the contract.
 func buildJobRecord(p projectMeta, name string, job map[string]any, jc jobContext, producers, crossNeedJobs map[string]bool) map[string]any {
 	scriptText := jobScriptText(job)
 	triggers := resolveTriggers(job, jc.workflow)
@@ -205,12 +195,10 @@ func buildJobRecord(p projectMeta, name string, job map[string]any, jc jobContex
 		"_provenance":                                jobProvenance(p.FullPath),
 	}
 
-	// Runner reachability folds (cat-01/08): the project's runner posture drives
-	// which runner class this job can land on.
+	// The project's runner posture decides which runner class this job can land on.
 	rec["targets_self_managed_runner"] = mBool(proj, "has_self_managed_runner")
 	rec["targets_protected_runner"] = mBool(proj, "has_protected_self_managed_runner")
 
-	// Secret / OIDC / Pages / Duo effective folds.
 	rec["env_scoped_secret_reachable"] = deploysEnv && envScopedSecretReachable(proj, envName)
 	rec["sub_claim_omits_ref"] = subClaimOmitsRef(proj)
 	rec["non_member_readable_pipelines"] = nonMemberReadablePipelines(proj)
@@ -220,33 +208,30 @@ func buildJobRecord(p projectMeta, name string, job map[string]any, jc jobContex
 	rec["developer_controls_mr_branches"] = mBool(proj, "developer_writable_protected_branch")
 	rec["runs_on_cross_trust_shared_runner"] = mBool(proj, "has_self_managed_runner") && untrustedRef
 
-	// Cross-project artifact consumer folds (cat-09): the producer-project trust
-	// posture that gates the fetch is resolved by the cross-project-artifact join;
-	// the literal fields the job carries are its own consumer-side signals plus a
-	// conservative default for the source-side (join refines them).
+	// Only the consumer-side signals are knowable here; the producer project's posture is
+	// resolved by the cross-project-artifact join, which refines these defaults.
 	rec["on_consumer_job_token_allowlist"] = false
 	rec["source_ref_developer_pushable"] = artifactSourceRefMutable(job)
 	rec["artifact_source_visibility"] = nil
 	rec["upstream_pipeline_untrusted_ref_reachable"] = consumesCrossPipelineArtifact(job)
 
-	// Registry / package protection folds (cat-09): the covering-rule and
-	// default-permission checks the join resolves against the source project;
-	// carried on the job so the rule reads a literal. Absent covering rule / broad
-	// default is the vulnerable state, so these default to the conservative value.
+	// Carried on the job so a rule reads a literal, then refined by the join against the
+	// source project. An absent covering rule is the vulnerable state, so the defaults
+	// here lean that way rather than assuming protection.
 	rec["registry_tag_protection_covers_consumed_tag"] = registryTagCovers(proj)
 	rec["registry_push_reachable_by_developer"] = mBool(proj, "developer_writable_protected_branch") || mBool(proj, "has_developer_pushable_unprotected_ref")
 	rec["package_protection_covers_consumed_name"] = len(mList(proj, "registry_protection_rules")) > 0
 	rec["package_publish_reachable_by_developer"] = mBool(proj, "has_developer_pushable_unprotected_ref")
 	rec["write_registry_token_reachable_low_trust"] = writeRegistryTokenLowTrust(proj)
 
-	// Consumer inheritance / collision folds (cat-09 dotenv variable shadowing).
+	// Dotenv variable shadowing: an inherited key overwriting a declared one.
 	rec["inherited_var_in_exec_sink"] = inheritedVarInExecSink(job, scriptText, imgRef)
 	declared := declaredVarKeys(job, jc.globalVars)
 	collides, inSink := dotenvCollision(producers, name, job, declared, scriptText, imgRef)
 	rec["dotenv_key_collides_declared_var"] = collides
 	rec["colliding_var_in_exec_sink"] = inSink
 
-	// Duo folds (cat-13): flow context/scope/autonomy + group/instance governance.
+	// A Duo flow's own wiring plus the group and instance governance over it.
 	duoFlow := isDuoFlow(job, jc)
 	rec["is_duo_flow"] = duoFlow
 	rec["duo_flow_context_sources"] = duoFlowContextSources(duoFlow, jc)
@@ -268,8 +253,8 @@ func jobProvenance(project string) []provenance {
 	return []provenance{{"config_file": ".gitlab-ci.yml", "project_path": project}}
 }
 
-// toSet returns a stable, deduplicated slice for a set-typed field, always [] not
-// nil (contract C1).
+// Deduplicated, insertion-ordered, and never nil: the engine treats null and [] as
+// different values.
 func toSet(items []string) []any {
 	seen := map[string]bool{}
 	out := []any{}
@@ -292,8 +277,8 @@ func strListOf(list []any) []string {
 	return out
 }
 
-// referencesAnyVariable reports whether the job references a $VAR or declares
-// variables:, i.e. exposes ≥1 CI/CD variable to its script/env.
+// Either a $VAR reference or its own variables: block means at least one CI/CD variable
+// reaches this job's script or environment.
 func referencesAnyVariable(scriptText string, job map[string]any) bool {
 	if strings.Contains(scriptText, "$") {
 		return true
@@ -301,8 +286,8 @@ func referencesAnyVariable(scriptText string, job map[string]any) bool {
 	return entMap(job["variables"]) != nil
 }
 
-// jobReadsProtectedVar reports a protected variable is reachable by the job: the
-// project has a protected cicd_variable and the job references a variable.
+// Reachability, not use: the project holds a protected variable and this job is in a
+// position to read one.
 func jobReadsProtectedVar(proj map[string]any, scriptText string, job map[string]any) bool {
 	if !referencesAnyVariable(scriptText, job) {
 		return false
@@ -332,7 +317,7 @@ func envScopedSecretReachable(proj map[string]any, envName string) bool {
 func subClaimOmitsRef(proj map[string]any) bool {
 	comps := strListOf(mList(entMap(mGet(proj, "oidc")), "sub_claim_components"))
 	if len(comps) == 0 {
-		return false // default includes ref
+		return false // GitLab's default sub claim already includes the ref
 	}
 	for _, c := range comps {
 		if c == "ref" || c == "ref_type" {
@@ -367,9 +352,8 @@ func pagesReferencesSecret(job, proj map[string]any) bool {
 	return false
 }
 
-// sourceCIWritable reports the executed CI config / ref is writable by a
-// lower-trust member: the job is not gated to a protected ref and the project has
-// a developer-pushable unprotected ref (or a developer-writable protected branch).
+// The config this job executes is writable by a lower-trust member: no protected-ref
+// gate, and a ref such a member can push.
 func sourceCIWritable(proj map[string]any, gate string) bool {
 	if gate == "strong" {
 		return false
@@ -385,8 +369,7 @@ func jobTokenBroad(proj map[string]any) bool {
 	return mStr(allow, "mode") == "open" || mStr(allow, "mode") == "disabled"
 }
 
-// isDuoFlow reports the job runs a Duo flow/agent in CI: the project has Duo
-// config present (folded onto the project record) and the job wires it.
+// Both halves are required: the project has Duo config on disk and this job wires it.
 func isDuoFlow(job map[string]any, jc jobContext) bool {
 	duo := mMap(jc.project, "duo")
 	if !mBool(duo, "config_present") {
@@ -410,15 +393,12 @@ func writeRegistryTokenLowTrust(proj map[string]any) bool {
 	return mBool(proj, "has_developer_reachable_secret")
 }
 
-// inheritedVarInExecSink: the consumer references any $VAR in an execution
-// sink (image:, script command). Without dotenv/global-var provenance on disk the
-// conservative literal is: a variable reaches a sink. The join narrows to the
-// inherited-only case.
+// Variable provenance is not on disk, so this can only report that some variable
+// reaches a sink. The join narrows it to the inherited-only case.
 func inheritedVarInExecSink(job map[string]any, scriptText, imgRef string) bool {
 	return imageFromVariable(imgRef) || reCmdSubst.MatchString(scriptText)
 }
 
-// declaredVarKeys returns the union of the job-level and global variables: keys.
 func declaredVarKeys(job, globalVars map[string]any) map[string]bool {
 	out := map[string]bool{}
 	for k := range entMap(job["variables"]) {
@@ -430,17 +410,14 @@ func declaredVarKeys(job, globalVars map[string]any) map[string]bool {
 	return out
 }
 
-// dotenvCollision reports whether a reachable dotenv producer emits a key that
-// collides with a variable the consumer declares, and whether that colliding key
-// is used in an exec sink.
+// Returns (collides, reaches an exec sink).
 func dotenvCollision(producers map[string]bool, name string, job map[string]any, declared map[string]bool, scriptText, imgRef string) (bool, bool) {
 	if len(declared) == 0 || !consumesDotenv(job, producers) {
 		return false, false
 	}
-	// Producer dotenv keys are not resolvable from the entrypoint alone (producer
-	// may be another project); a same-pipeline producer's keys collide when the
-	// consumer declares a key the producer could emit. Conservatively: a collision
-	// exists when the consumer declares a variable AND consumes dotenv.
+	// The producer's dotenv keys are not resolvable from the entrypoint alone, and the
+	// producer may even be another project, so any consumer that both declares a variable
+	// and consumes dotenv is treated as colliding.
 	collides := true
 	inSink := false
 	for k := range declared {
@@ -451,8 +428,6 @@ func dotenvCollision(producers map[string]bool, name string, job map[string]any,
 	}
 	return collides, inSink
 }
-
-// ---- Duo flow signals (cat-13) ----
 
 func duoFlowContextSources(duoFlow bool, jc jobContext) []any {
 	out := []any{}

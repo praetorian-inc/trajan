@@ -15,12 +15,10 @@ import (
 	"sync"
 )
 
-// gitTransport serves the git-preferred surfaces (workflow files across all
-// branches, local composite actions, branch list, marketplace ref->SHA) from a
-// shallow all-branches clone. It synthesizes REST-shaped responses, and the git
-// blob SHA equals the Contents-API `sha`, so on-disk data/.meta.json stay
-// byte-compatible. A repo/path git cannot serve yields errUnservable (router
-// falls through to REST); a path absent in a cloned tree yields ok=false.
+// Serves the git-preferred surfaces from a shallow all-branches clone, synthesizing
+// REST-shaped responses whose blob SHA equals the Contents-API `sha` so on-disk data
+// stays byte-compatible. What git cannot serve yields errUnservable, not a 404; a
+// path absent from a cloned tree yields ok=false.
 type gitTransport struct {
 	token string
 	base  string
@@ -46,8 +44,8 @@ func gitAvailable() bool {
 	return err == nil
 }
 
-// sourceAPI is the provenance string for the transport serving s; it is
-// github_rest unless gh is the router with a non-REST preference for s.
+// The provenance string for the transport serving s: github_rest unless gh is the
+// router with a non-REST preference for s.
 func sourceAPI(gh GitHub, s surface) string {
 	if r, ok := gh.(*router); ok {
 		return r.sourceAPIFor(s)
@@ -71,8 +69,7 @@ func (g *gitTransport) close() {
 	}
 }
 
-// notServable wraps errUnservable so the router falls through to REST; it is not
-// a genuine 404.
+// Wraps errUnservable so the router falls through to REST; not a genuine 404.
 func notServable(repoOrPath string) error {
 	return fmt.Errorf("%w: %s", errUnservable, repoOrPath)
 }
@@ -88,8 +85,8 @@ func (g *gitTransport) githubURL(owner, repo string) string {
 	return fmt.Sprintf("https://github.com/%s/%s.git", owner, repo)
 }
 
-// ensureClone shallow-clones every branch once, caching the dir or the clone
-// error so a failed repo is not retried.
+// Shallow-clones every branch once, caching the dir or the clone error so a failed
+// repo is not retried.
 func (g *gitTransport) ensureClone(ctx context.Context, owner, repo string) (string, error) {
 	key := owner + "/" + repo
 	g.mu.Lock()
@@ -141,7 +138,7 @@ func (g *gitTransport) redact(s string) string {
 	return strings.ReplaceAll(s, g.token, "***")
 }
 
-// gitRef maps a branch to its remote-tracking ref; "" means the default branch.
+// An empty branch means the default branch.
 func gitRef(branch string) string {
 	if branch == "" {
 		return "origin/HEAD"
@@ -215,8 +212,8 @@ func (g *gitTransport) ResolveRefCommitSHA(ctx context.Context, owner, repo, ref
 	return parseLsRemoteSHA(string(out)), nil
 }
 
-// parseLsRemoteSHA prefers the peeled "<ref>^{}" line (an annotated tag's commit)
-// over the tag object's line; empty when the ref is unknown.
+// Prefers the peeled "<ref>^{}" line (an annotated tag's commit) over the tag
+// object's own line; empty when the ref is unknown.
 func parseLsRemoteSHA(out string) string {
 	var direct string
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
@@ -360,8 +357,7 @@ func (g *gitTransport) lsTree(ctx context.Context, cloneDir, ref, dirInRepo stri
 	return entries, nil
 }
 
-// readBlob returns a file's bytes + git blob SHA at ref. A missing path, dir,
-// symlink, or submodule is ok=false with no error (no 404 probe), matching
+// A missing path, dir, symlink or submodule is ok=false with no error, matching
 // GetContentWithSHA's contract.
 func (g *gitTransport) readBlob(ctx context.Context, owner, repo, pathInRepo, branch string) ([]byte, string, bool, error) {
 	dir, err := g.ensureClone(ctx, owner, repo)

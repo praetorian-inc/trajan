@@ -15,10 +15,9 @@ import (
 	jfProbe "github.com/praetorian-inc/trajan/pkg/jfrog/tokenprobe"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 
-	// Import all platforms to trigger init() registration
+	// Blank imports: platform and detection init registration.
 	_ "github.com/praetorian-inc/trajan/pkg/platforms/all"
 
-	// All detections (triggers init() registration)
 	_ "github.com/praetorian-inc/trajan/pkg/detections/all"
 )
 
@@ -59,7 +58,7 @@ func init() {
 func runScan(cmd *cobra.Command, args []string) error {
 	jfrogURL, _ := cmd.Root().PersistentFlags().GetString("url")
 	if jfrogURL == "" {
-		// Also check the subcommand's persistent flag on JFrogCmd
+		// --url may be bound on JFrogCmd rather than on the root.
 		jfrogURL, _ = cmd.Parent().PersistentFlags().GetString("url")
 	}
 
@@ -76,7 +75,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// JFrog allows username/password authentication without a token
 	if t == "" {
 		if jfrogUsername != "" && jfrogPassword != "" {
-			// Valid JFrog username/password auth - proceed without token
 			t = ""
 		} else {
 			return fmt.Errorf("no authentication provided (use --token/JFROG_TOKEN or --username/-u and --password/-p)")
@@ -111,7 +109,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 	return handleJFrogSpecificFeatures(ctx, platform, jfrogURL, verbose, output)
 }
 
-// handleJFrogSpecificFeatures processes JFrog-specific features (secrets/token-info).
 func handleJFrogSpecificFeatures(ctx context.Context, platform platforms.Platform, jfrogURL string, verbose bool, output string) error {
 	jfPlatform, ok := platform.(*jfrog.Platform)
 	if !ok {
@@ -129,7 +126,6 @@ func handleJFrogSpecificFeatures(ctx context.Context, platform platforms.Platfor
 	return nil
 }
 
-// runJFrogTokenInfo retrieves JFrog token/credential capabilities.
 func runJFrogTokenInfo(ctx context.Context, platform *jfrog.Platform, jfrogURL string, verbose bool) error {
 	if verbose {
 		fmt.Fprintf(os.Stderr, "Retrieving JFrog token information...\n")
@@ -211,7 +207,6 @@ func runJFrogTokenInfo(ctx context.Context, platform *jfrog.Platform, jfrogURL s
 	return nil
 }
 
-// runJFrogSecrets enumerates JFrog secrets (build secrets, remote repo creds, ML secrets).
 func runJFrogSecrets(ctx context.Context, platform *jfrog.Platform, jfrogURL string, verbose bool, output string) error {
 	if verbose {
 		fmt.Fprintf(os.Stderr, "Enumerating JFrog secrets...\n")
@@ -221,7 +216,6 @@ func runJFrogSecrets(ctx context.Context, platform *jfrog.Platform, jfrogURL str
 		Instance: jfrogURL,
 	}
 
-	// 1. Artifact secrets
 	artifactSecrets, err := platform.ScanArtifactsForSecrets(ctx, "", "selective")
 	if err != nil {
 		if verbose {
@@ -232,7 +226,6 @@ func runJFrogSecrets(ctx context.Context, platform *jfrog.Platform, jfrogURL str
 		result.TotalSecrets += len(artifactSecrets)
 	}
 
-	// 2. Build secrets
 	buildSecrets, err := platform.ScanBuildsForSecrets(ctx, 10)
 	if err != nil {
 		if verbose {
@@ -243,7 +236,6 @@ func runJFrogSecrets(ctx context.Context, platform *jfrog.Platform, jfrogURL str
 		result.TotalSecrets += len(buildSecrets)
 	}
 
-	// 3. Remote repository credentials
 	remoteCreds, err := platform.ExtractRemoteRepoCredentials(ctx)
 	if err != nil {
 		if verbose {
@@ -258,7 +250,6 @@ func runJFrogSecrets(ctx context.Context, platform *jfrog.Platform, jfrogURL str
 		}
 	}
 
-	// 4. ML Secrets (JFrog ML Secret Management)
 	mlSecrets, err := platform.GetMLSecrets(ctx)
 	if err != nil {
 		if verbose {
@@ -281,21 +272,18 @@ func runJFrogSecrets(ctx context.Context, platform *jfrog.Platform, jfrogURL str
 	}
 }
 
-// outputJFrogSecretsJSON outputs JFrog secrets results as JSON.
 func outputJFrogSecretsJSON(result *JFrogSecretsResult) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(result)
 }
 
-// outputJFrogSecretsConsole outputs JFrog secrets results in console format.
 func outputJFrogSecretsConsole(result *JFrogSecretsResult) error {
 	fmt.Printf("=== JFrog Secrets Enumeration ===\n")
 	if result.Instance != "" {
 		fmt.Printf("Instance: %s\n\n", result.Instance)
 	}
 
-	// 1. Artifact secrets
 	if len(result.ArtifactSecrets) > 0 {
 		fmt.Printf("Artifact Secrets (%d found in artifacts):\n", len(result.ArtifactSecrets))
 		for _, secret := range result.ArtifactSecrets {
@@ -318,7 +306,6 @@ func outputJFrogSecretsConsole(result *JFrogSecretsResult) error {
 		fmt.Printf("Artifact secrets: 0 found\n")
 	}
 
-	// 2. Build secrets
 	if len(result.BuildSecrets) > 0 {
 		fmt.Printf("Build Secrets (%d found in recent builds):\n", len(result.BuildSecrets))
 		for _, secret := range result.BuildSecrets {
@@ -336,7 +323,6 @@ func outputJFrogSecretsConsole(result *JFrogSecretsResult) error {
 		fmt.Printf("Build secrets: 0 found\n")
 	}
 
-	// 3. Remote repository credentials
 	if len(result.RemoteRepoCredentials) > 0 {
 		fmt.Printf("Remote Repository Credentials (%d repositories):\n", len(result.RemoteRepoCredentials))
 		for _, cred := range result.RemoteRepoCredentials {
@@ -356,7 +342,6 @@ func outputJFrogSecretsConsole(result *JFrogSecretsResult) error {
 		fmt.Printf("Remote repository credentials: 0 found\n")
 	}
 
-	// 4. ML Secrets
 	if len(result.MLSecrets) > 0 {
 		fmt.Printf("ML Secrets (%d secrets):\n", len(result.MLSecrets))
 		for _, secret := range result.MLSecrets {
@@ -380,7 +365,6 @@ func outputJFrogSecretsConsole(result *JFrogSecretsResult) error {
 	return nil
 }
 
-// JFrogSecretsResult holds all JFrog secrets for JSON output.
 type JFrogSecretsResult struct {
 	Instance              string                        `json:"instance"`
 	ArtifactSecrets       []jfrog.ArtifactSecret        `json:"artifactSecrets"`

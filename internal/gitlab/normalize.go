@@ -10,21 +10,18 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// projectMeta is the per-project roster GitLab lacks as a single surface: it is
-// rebuilt by scanning 00-collect/project/ (each project = one CollectGLProject
-// file) and reading path_with_namespace / id / default_branch off the detail.
+// GitLab exposes no single project-roster surface, so the roster is rebuilt from the
+// one-file-per-project detail collect wrote.
 type projectMeta struct {
 	FullPath      string
 	ID            int64
 	DefaultBranch string
 }
 
-// Normalize turns the raw collected JSON (00-collect) into per-subject fact
-// records and cross-entity chain joins (10-normalize) per the GitLab normalized
-// field contract (docs/gitlab/gitlab-normalized-fields.md). Structural entity
-// records first, then the resolved-job records, then the correlation joins the
-// chain rules read. Per-item failures accumulate in timer.Errors and are skipped;
-// only IO / contract violations abort the phase.
+// Entity records must land before the job records, which must land before the
+// correlation joins, because each stage reads back what the previous one wrote.
+// Per-item failures accumulate in timer.Errors; only IO or a contract violation
+// aborts the phase.
 func Normalize(ctx context.Context, runDir string) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
@@ -73,8 +70,7 @@ func Normalize(ctx context.Context, runDir string) error {
 	return nil
 }
 
-// emit writes one normalized record and counts it. Normalize is sequential, so
-// no locking is needed on the timer.
+// Normalize is sequential, so the timer needs no locking.
 func emit(cp engine.CurrentPhase, timer *engine.PhaseTimer, rel string, rec any) error {
 	if err := cp.Write(rel, rec); err != nil {
 		return err
@@ -83,13 +79,11 @@ func emit(cp engine.CurrentPhase, timer *engine.PhaseTimer, rel string, rec any)
 	return nil
 }
 
-// itemErr records a per-item failure without aborting the phase.
 func itemErr(timer *engine.PhaseTimer, subject string, err error) {
 	timer.Errors = append(timer.Errors, fmt.Sprintf("%s: %v", subject, err))
 }
 
-// projects rebuilds the project roster from 00-collect/project/. Order is stable
-// (directory iteration) so re-runs produce identical output.
+// Directory iteration order is stable, so re-runs produce identical output.
 func projects(prior engine.PriorPhase) []projectMeta {
 	files, err := prior.IterJSON("00-collect/project")
 	if err != nil {

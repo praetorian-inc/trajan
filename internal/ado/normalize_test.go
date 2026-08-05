@@ -63,11 +63,9 @@ func TestServiceConnectionDedup(t *testing.T) {
 	}
 }
 
-// The VG dedup path mirrors the SC one. ADO does not currently permit
-// cross-project VG sharing (the endpoint returns "Sharing of variable group is
-// not allowed"), so this exercises the collapse logic against synthetic shared
-// input the same way TestServiceConnectionDedup does — proving the machinery is
-// correct if such data ever appears.
+// ADO does not currently permit cross-project VG sharing (the endpoint answers
+// "Sharing of variable group is not allowed"), so the shared input here is synthetic
+// and only the collapse logic is under test.
 func TestVariableGroupDedup(t *testing.T) {
 	dir := t.TempDir()
 	cp, prior := engineCP(dir), engine.PriorPhase{RunDir: dir}
@@ -188,8 +186,8 @@ func readRec(t *testing.T, dir, rel string) map[string]any {
 	return rec
 }
 
-// JOIN #1: the job-auth clamp. projectCollection is clamped to project when the
-// project enforces; passes through otherwise.
+// projectCollection is clamped to project when the project enforces, and passes
+// through otherwise.
 func TestDeriveRunsAs_Clamp(t *testing.T) {
 	cp := engineCP(t.TempDir())
 	pipelines := []map[string]any{
@@ -244,8 +242,8 @@ func TestEffectiveAllowMask(t *testing.T) {
 	}
 }
 
-// JOIN #2: policy-by-scope. A repositoryId scope attributes to that repo only; a
-// null repositoryId attributes to every repo in the project.
+// A repositoryId scope attributes to that repo only; a null repositoryId attributes
+// to every repo in the project.
 func TestDerivePolicyAttribution(t *testing.T) {
 	cp := engineCP(t.TempDir())
 	repos := []map[string]any{
@@ -288,9 +286,9 @@ func TestDerivePolicyAttribution(t *testing.T) {
 	}
 }
 
-// JOIN #3: effectiveAllow bit-decode (sorted, deterministic) + the SID bridge
-// that translates ACL identity descriptors to graph descriptors so nested-group
-// expansion actually resolves against real-shaped data.
+// The effectiveAllow bit-decode is sorted and deterministic; the SID bridge translates
+// ACL identity descriptors to graph descriptors so nested-group expansion resolves
+// against real-shaped data.
 func TestDecodeActions(t *testing.T) {
 	actions := map[int64]string{1: "ViewBuilds", 128: "QueueBuilds", 32768: "CreateBuildDefinition", 2048: "EditBuildDefinition"}
 	got := decodeActions(1|128|32768, actions)
@@ -320,8 +318,8 @@ func TestSIDBridgeAndExpand(t *testing.T) {
 	if got := aceGraphDescriptor("Microsoft.TeamFoundation.Identity;"+sid, idIndex); got != gdesc {
 		t.Fatalf("aceGraphDescriptor(group) = %q, want %q", got, gdesc)
 	}
-	// ServiceIdentity ACE bridges to the emitted svc. build-service node — the
-	// principal node exists, so this must resolve (was previously dropped).
+	// A ServiceIdentity ACE bridges to the emitted svc. build-service node, which
+	// exists, so this must resolve rather than drop.
 	if got := aceGraphDescriptor("Microsoft.TeamFoundation.ServiceIdentity;"+svcInner, idIndex); got != svcDesc {
 		t.Fatalf("aceGraphDescriptor(service identity) = %q, want %q", got, svcDesc)
 	}

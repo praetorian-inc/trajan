@@ -1,14 +1,8 @@
 //go:build js
 // +build js
 
-// Package storage provides browser storage adapters for IndexedDB persistence.
-//
-// This package replaces file I/O operations with IndexedDB storage for:
-//   - Audit logging: Attack execution logs for compliance
-//   - Session management: Attack session state for deferred cleanup
-//   - Scan caching: Cached scan results with TTL
-//
-// All storage operations use syscall/js to interface with browser IndexedDB API.
+// Package storage persists audit logs, sessions, and scan caches in browser
+// IndexedDB, standing in for the file I/O a native build would use.
 package storage
 
 import (
@@ -20,7 +14,6 @@ import (
 	"time"
 )
 
-// IndexedDBStorage implements Storage using browser IndexedDB
 type IndexedDBStorage struct {
 	dbName      string
 	dbVersion   int
@@ -29,13 +22,11 @@ type IndexedDBStorage struct {
 }
 
 const (
-	// Store names in IndexedDB
 	storeAuditLogs = "audit_logs"
 	storeSessions  = "sessions"
 	storeScanCache = "scan_cache"
 )
 
-// NewIndexedDBStorage creates a new IndexedDB storage adapter
 func NewIndexedDBStorage(dbName string, dbVersion int) *IndexedDBStorage {
 	return &IndexedDBStorage{
 		dbName:    dbName,
@@ -43,13 +34,11 @@ func NewIndexedDBStorage(dbName string, dbVersion int) *IndexedDBStorage {
 	}
 }
 
-// Initialize initializes the IndexedDB database
 func (s *IndexedDBStorage) Initialize(ctx context.Context) error {
 	if s.initialized {
 		return nil
 	}
 
-	// Get IndexedDB from global window object
 	indexedDB := js.Global().Get("indexedDB")
 	if indexedDB.IsUndefined() {
 		return errors.New("IndexedDB not available in this browser")
@@ -103,7 +92,6 @@ func (s *IndexedDBStorage) Initialize(ctx context.Context) error {
 		return nil
 	}))
 
-	// Wait for completion or context cancellation
 	select {
 	case err := <-done:
 		return err
@@ -112,7 +100,6 @@ func (s *IndexedDBStorage) Initialize(ctx context.Context) error {
 	}
 }
 
-// LogAudit stores an audit log entry
 func (s *IndexedDBStorage) LogAudit(ctx context.Context, entry *AuditEntry) error {
 	if !s.initialized {
 		return errors.New("storage not initialized")
@@ -120,7 +107,7 @@ func (s *IndexedDBStorage) LogAudit(ctx context.Context, entry *AuditEntry) erro
 
 	entryMap := map[string]interface{}{
 		"key":       fmt.Sprintf("%d_%s", entry.Timestamp.UnixNano(), entry.SessionID),
-		"timestamp": entry.Timestamp.UnixNano() / int64(time.Millisecond), // Store as milliseconds
+		"timestamp": entry.Timestamp.UnixNano() / int64(time.Millisecond),
 		"sessionID": entry.SessionID,
 		"plugin":    entry.Plugin,
 		"action":    entry.Action,
@@ -161,7 +148,6 @@ func (s *IndexedDBStorage) LogAudit(ctx context.Context, entry *AuditEntry) erro
 	}
 }
 
-// SaveSession persists an attack session
 func (s *IndexedDBStorage) SaveSession(ctx context.Context, session *Session) error {
 	if !s.initialized {
 		return errors.New("storage not initialized")
@@ -202,7 +188,6 @@ func (s *IndexedDBStorage) SaveSession(ctx context.Context, session *Session) er
 	}
 }
 
-// LoadSession retrieves a session by ID
 func (s *IndexedDBStorage) LoadSession(ctx context.Context, id string) (*Session, error) {
 	if !s.initialized {
 		return nil, errors.New("storage not initialized")
@@ -254,7 +239,6 @@ func (s *IndexedDBStorage) LoadSession(ctx context.Context, id string) (*Session
 	}
 }
 
-// DeleteSession removes a session
 func (s *IndexedDBStorage) DeleteSession(ctx context.Context, id string) error {
 	if !s.initialized {
 		return errors.New("storage not initialized")
@@ -286,7 +270,6 @@ func (s *IndexedDBStorage) DeleteSession(ctx context.Context, id string) error {
 	}
 }
 
-// ListSessions retrieves all sessions
 func (s *IndexedDBStorage) ListSessions(ctx context.Context) ([]*Session, error) {
 	if !s.initialized {
 		return nil, errors.New("storage not initialized")
@@ -307,8 +290,8 @@ func (s *IndexedDBStorage) ListSessions(ctx context.Context) ([]*Session, error)
 		event := args[0]
 		cursor := event.Get("target").Get("result")
 
+		// A null cursor is IndexedDB's end-of-iteration signal.
 		if cursor.IsNull() || cursor.IsUndefined() {
-			// No more results
 			done <- result{sessions, nil}
 			return nil
 		}
@@ -324,7 +307,6 @@ func (s *IndexedDBStorage) ListSessions(ctx context.Context) ([]*Session, error)
 
 		sessions = append(sessions, &session)
 
-		// Continue to next record
 		cursor.Call("continue")
 		return nil
 	}))
@@ -344,7 +326,6 @@ func (s *IndexedDBStorage) ListSessions(ctx context.Context) ([]*Session, error)
 	}
 }
 
-// SaveScanCache stores scan results in cache
 func (s *IndexedDBStorage) SaveScanCache(ctx context.Context, cache *ScanCache) error {
 	if !s.initialized {
 		return errors.New("storage not initialized")
@@ -386,7 +367,6 @@ func (s *IndexedDBStorage) SaveScanCache(ctx context.Context, cache *ScanCache) 
 	}
 }
 
-// LoadScanCache retrieves cached scan results
 func (s *IndexedDBStorage) LoadScanCache(ctx context.Context, key string) (*ScanCache, error) {
 	if !s.initialized {
 		return nil, errors.New("storage not initialized")
@@ -419,7 +399,6 @@ func (s *IndexedDBStorage) LoadScanCache(ctx context.Context, key string) (*Scan
 			return nil
 		}
 
-		// Check if cache has expired
 		if time.Now().After(cache.ExpiresAt) {
 			done <- result{nil, fmt.Errorf("cache expired: %s", key)}
 			return nil
@@ -444,7 +423,6 @@ func (s *IndexedDBStorage) LoadScanCache(ctx context.Context, key string) (*Scan
 	}
 }
 
-// Close closes the storage connection
 func (s *IndexedDBStorage) Close() error {
 	if !s.initialized {
 		return nil

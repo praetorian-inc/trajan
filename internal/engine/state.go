@@ -34,8 +34,8 @@ type PhaseRecord struct {
 	InputFiles  int      `json:"input_files"`
 	OutputFiles int      `json:"output_files"`
 	Errors      []string `json:"errors"`
-	// Errors also carries soft-fail per-item messages from a phase that succeeded,
-	// so only Failed tells you the phase aborted.
+	// Errors also carries soft-fail messages from a phase that succeeded; only
+	// Failed means the phase aborted.
 	Failed bool `json:"failed"`
 }
 
@@ -57,9 +57,9 @@ var (
 	PhaseAttack    = Phase{PhaseUnnumbered, "attack"}
 )
 
-// CheckPhase permits a numbered phase to run only when it is at or within one
-// step of the watermark; a skip-ahead of more than one is ErrPhaseBackStep.
-// Re-running an earlier phase is allowed. Un-numbered phases are never gated.
+// A numbered phase may run only at or one step past the watermark; a bigger skip
+// ahead is ErrPhaseBackStep. Re-running an earlier phase is allowed, and
+// un-numbered phases are never gated.
 func (s *State) CheckPhase(p Phase) error {
 	if p.Num == PhaseUnnumbered {
 		return nil
@@ -71,11 +71,9 @@ func (s *State) CheckPhase(p Phase) error {
 	return nil
 }
 
-// RecordPhase sets the watermark to a numbered phase's own number — so re-running
-// collect LOWERS it and forces downstream phases to re-run — and leaves it alone
-// for un-numbered phases. A failed phase drops the watermark below itself: its
-// output is missing or partial, so nothing downstream may run on it. The record is
-// always appended.
+// A numbered phase sets the watermark to its own number, so re-running collect
+// LOWERS it and forces downstream phases to re-run; a failed one drops it below
+// itself, its output being missing or partial. Un-numbered phases never move it.
 func (s *State) RecordPhase(rec PhaseRecord) {
 	if rec.Num != PhaseUnnumbered {
 		if rec.Failed {
@@ -94,8 +92,8 @@ func PhaseDone(rec PhaseRecord, attrs ...any) {
 	PhaseIssues(rec)
 }
 
-// PhaseIssues is the announcement on its own, for a phase that renders its own
-// completion line and still owes the operator its soft failures.
+// For a phase that renders its own completion line and still owes the operator its
+// soft failures.
 func PhaseIssues(rec PhaseRecord) {
 	if len(rec.Errors) == 0 {
 		return
@@ -116,9 +114,8 @@ func phaseLabel(phase string) string {
 	return name
 }
 
-// StaleDirs returns the downstream phase directories invalidated when phase p
-// re-runs, so a run dir never mixes layers from different inputs. A phase's own
-// output dir is its own to clear.
+// The downstream phase directories invalidated when p re-runs, so a run dir never
+// mixes layers from different inputs. A phase's own output dir is its own to clear.
 func (s *State) StaleDirs(p Phase) []string {
 	switch {
 	case p.Num == PhaseCollect.Num:
@@ -148,9 +145,8 @@ func (s *State) Save(runDir string) error {
 	return WriteJSON(filepath.Join(runDir, "_meta.json"), s)
 }
 
-// IsoformatUTC matches Python's datetime.now(timezone.utc).isoformat(): a
-// "+00:00" offset (not "Z"), with the 6-digit microsecond fraction omitted when
-// the time lands exactly on a second.
+// Matches Python's datetime.now(timezone.utc).isoformat(): a "+00:00" offset (not
+// "Z"), with the microsecond fraction omitted on a whole second.
 func IsoformatUTC(t time.Time) string {
 	t = t.UTC()
 	if t.Nanosecond() == 0 {

@@ -7,8 +7,6 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
 )
 
-// --- extractNeedsOutputRefs: the cross-job needs.<job>.outputs.<var> extractor ---
-
 func TestExtractNeedsOutputRefs(t *testing.T) {
 	t.Run("plain-ref", func(t *testing.T) {
 		got := extractNeedsOutputRefs("echo ${{ needs.build.outputs.tag }}")
@@ -56,19 +54,12 @@ func TestExtractNeedsOutputRefs(t *testing.T) {
 	})
 }
 
-// --- deriveJobOutputFlow: producer->consumer single-hop edges ---
-//
-// These build normalized-record maps in the same map[string]any shape correlate
-// reads off disk (the .get()-keyed shapes), mirroring the fr-01-12 firing-range
-// scenario: one producer job declaring an output, one consumer job referencing
-// needs.<producer>.outputs.<var>.
+// The fixtures below are normalized-record maps in the same map[string]any shape
+// correlate reads off disk, mirroring fr-01-12: one producer job declaring an
+// output, one consumer job referencing needs.<producer>.outputs.<var>.
 
 type jobMap = map[string]any
 
-// producerJob builds a normalized producer-job record with one output. The
-// output is attacker-influenced via contextFields (output expression interpolates
-// an attacker context field) and/or execRefs (the producing step wrote attacker
-// data to $GITHUB_OUTPUT).
 func producerJob(repo, wf, jobID, outputName string, triggers []string, contextFields, execRefs []string) jobMap {
 	return jobMap{
 		"_id":               repo + "__" + wf + "__" + jobID,
@@ -86,9 +77,6 @@ func producerJob(repo, wf, jobID, outputName string, triggers []string, contextF
 	}
 }
 
-// consumerJob builds a consumer-job record with a single step referencing
-// needs.<producerJobID>.outputs.<outputName> in the given context ("exec" or
-// "binding").
 func consumerJob(repo, wf, jobID, producerJobID, outputName, context string, triggers []string) jobMap {
 	refKey := "needs_output_refs_binding"
 	if context == "exec" {
@@ -108,11 +96,9 @@ func consumerJob(repo, wf, jobID, producerJobID, outputName, context string, tri
 	}
 }
 
-// strategyConsumerJob builds a consumer-job record whose only
-// needs.<producer>.outputs.<var> reference lives in the job-level strategy/matrix
-// block: it surfaces as a job-level needs_output_refs_exec ref (step_index -1)
-// with no step carrying it, mirroring what normalizeJob produces for
-// `strategy: { matrix: ${{ fromJSON(needs.<producer>.outputs.matrix) }} }`.
+// Mirrors what normalizeJob produces for
+// `strategy: { matrix: ${{ fromJSON(needs.<producer>.outputs.matrix) }} }`: the ref
+// is job-level only, carried by no step.
 func strategyConsumerJob(repo, wf, jobID, producerJobID, outputName string, triggers []string) jobMap {
 	ref := jobMap{"job_id": producerJobID, "output_name": outputName}
 	return jobMap{
@@ -145,8 +131,6 @@ func edgesOf(t *testing.T, result map[string]any) []map[string]any {
 }
 
 func TestDeriveJobOutputFlowBenignProducer(t *testing.T) {
-	// (a) producer output carries no attacker influence -> edge exists but
-	// attacker_influenced == false.
 	prod := producerJob("o/r", "ci.yml", "build", "tag", []string{"push"}, nil, nil)
 	cons := consumerJob("o/r", "ci.yml", "deploy", "build", "tag", "exec", []string{"push"})
 
@@ -160,8 +144,6 @@ func TestDeriveJobOutputFlowBenignProducer(t *testing.T) {
 }
 
 func TestDeriveJobOutputFlowAttackerInfluencedViaContextField(t *testing.T) {
-	// (b1) producer output expression interpolates github.event.pull_request.title,
-	// consumed in another job's run: (exec) -> attacker_influenced == true.
 	prod := producerJob("o/r", "ci.yml", "meta", "title", []string{"pull_request_target"},
 		[]string{"github.event.pull_request.title"}, nil)
 	cons := consumerJob("o/r", "ci.yml", "use", "meta", "title", "exec", []string{"pull_request_target"})
@@ -179,9 +161,8 @@ func TestDeriveJobOutputFlowAttackerInfluencedViaContextField(t *testing.T) {
 }
 
 func TestDeriveJobOutputFlowAttackerInfluencedViaProducingStepExec(t *testing.T) {
-	// (b2) a producing step wrote attacker data to $GITHUB_OUTPUT (captured as
-	// producing_step_attacker_exec_refs) -> attacker_influenced == true even
-	// though the output's own value_expression referenced nothing.
+	// The output expression references nothing; the influence comes from the
+	// producing step writing attacker data to $GITHUB_OUTPUT.
 	prod := producerJob("o/r", "ci.yml", "meta", "data", []string{"issue_comment"},
 		nil, []string{"github.event.comment.body"})
 	cons := consumerJob("o/r", "ci.yml", "use", "meta", "data", "exec", []string{"issue_comment"})
@@ -196,8 +177,7 @@ func TestDeriveJobOutputFlowAttackerInfluencedViaProducingStepExec(t *testing.T)
 }
 
 func TestDeriveJobOutputFlowCrossWorkflowNoEdge(t *testing.T) {
-	// (c) producer lives in a different workflow file; needs is intra-workflow,
-	// so the (repo, workflow_filename, job_id) join key misses -> NO edge.
+	// needs is intra-workflow, so workflow_filename is part of the join key.
 	prod := producerJob("o/r", "producer.yml", "build", "tag", []string{"pull_request"},
 		[]string{"github.event.pull_request.title"}, nil)
 	cons := consumerJob("o/r", "consumer.yml", "deploy", "build", "tag", "exec", []string{"pull_request"})
@@ -209,7 +189,6 @@ func TestDeriveJobOutputFlowCrossWorkflowNoEdge(t *testing.T) {
 }
 
 func TestDeriveJobOutputFlowSameRepoDifferentRepoNoEdge(t *testing.T) {
-	// Same workflow filename and job id but different repos must not join.
 	prod := producerJob("o/r1", "ci.yml", "build", "tag", []string{"pull_request"},
 		[]string{"github.event.pull_request.title"}, nil)
 	cons := consumerJob("o/r2", "ci.yml", "deploy", "build", "tag", "exec", []string{"pull_request"})
@@ -220,11 +199,6 @@ func TestDeriveJobOutputFlowSameRepoDifferentRepoNoEdge(t *testing.T) {
 }
 
 func TestDeriveJobOutputFlowStrategyMatrixJobLevel(t *testing.T) {
-	// The classic dynamic-matrix-from-PR sink: a producer under a low-trust
-	// trigger emits an attacker-influenced output consumed via
-	// fromJSON(needs.<producer>.outputs.matrix) in a job-level strategy block.
-	// The consumer ref is job-level (no step), so the edge must carry
-	// step_index -1 and context exec, and be attacker_influenced.
 	prod := producerJob("o/r", "ci.yml", "setup", "matrix", []string{"pull_request_target"},
 		[]string{"github.event.pull_request.title"}, nil)
 	cons := strategyConsumerJob("o/r", "ci.yml", "build", "setup", "matrix", []string{"pull_request_target"})
@@ -247,9 +221,6 @@ func TestDeriveJobOutputFlowStrategyMatrixJobLevel(t *testing.T) {
 }
 
 func TestDeriveJobOutputFlowStrategyMatrixBenignNoFire(t *testing.T) {
-	// Negative: a benign producer output (no attacker influence) consumed via a
-	// job-level strategy matrix still emits an edge, but attacker_influenced is
-	// false so the rule will not fire.
 	prod := producerJob("o/r", "ci.yml", "setup", "matrix", []string{"push"}, nil, nil)
 	cons := strategyConsumerJob("o/r", "ci.yml", "build", "setup", "matrix", []string{"push"})
 
@@ -263,8 +234,8 @@ func TestDeriveJobOutputFlowStrategyMatrixBenignNoFire(t *testing.T) {
 }
 
 func TestDeriveJobOutputFlowStrategyMatrixNoDoubleEdge(t *testing.T) {
-	// A ref present in BOTH a step and the job-level exec list (the union case)
-	// must emit a single step-level edge, not an extra spurious step -1 edge.
+	// The ref sits in both a step and the job-level union list, which must not
+	// produce a second step -1 edge.
 	prod := producerJob("o/r", "ci.yml", "setup", "tag", []string{"pull_request_target"},
 		[]string{"github.event.pull_request.title"}, nil)
 	cons := consumerJob("o/r", "ci.yml", "build", "setup", "tag", "exec", []string{"pull_request_target"})
@@ -278,8 +249,6 @@ func TestDeriveJobOutputFlowStrategyMatrixNoDoubleEdge(t *testing.T) {
 	}
 }
 
-// normalizeJob must lift a needs.<job>.outputs.<var> ref appearing only in the
-// job-level strategy/matrix block into the job-level exec/union ref lists.
 func TestNormalizeJobStrategyMatrixNeedsRef(t *testing.T) {
 	wf := `
 name: ci
@@ -320,7 +289,6 @@ jobs:
 	if !reflect.DeepEqual(build.NeedsOutputRefs, []NeedsOutputRef{want}) {
 		t.Errorf("strategy matrix ref not in union: %v", build.NeedsOutputRefs)
 	}
-	// The ref lives in no step, so no step carries it.
 	for _, s := range build.Steps {
 		if len(s.NeedsOutputRefsExec) != 0 || len(s.NeedsOutputRefsBinding) != 0 {
 			t.Errorf("step unexpectedly carries a needs ref: %+v", s)
@@ -328,9 +296,6 @@ jobs:
 	}
 }
 
-// --- chain rule via EvaluateChainRule on a job-output-flow chain ---
-
-// loadCrossJobRule loads the embedded cross-job-output chain rule by its id.
 func loadCrossJobRule(t *testing.T) *detect.Rule {
 	t.Helper()
 	rules, err := detect.LoadRules("github", nil)
@@ -346,8 +311,7 @@ func loadCrossJobRule(t *testing.T) *detect.Rule {
 	return nil
 }
 
-// jobOutputChain wraps a single edge into the chain document shape correlate
-// writes (chain=job-output-flow, edges=[...]), as JSON-decoded maps.
+// Mirrors the chain document shape correlate writes, as JSON-decoded maps.
 func jobOutputChain(edge map[string]any) map[string]any {
 	return map[string]any{
 		"chain": "job-output-flow",
@@ -387,7 +351,6 @@ func TestCrossJobOutputRuleFiresOnExecAttackerLowTrust(t *testing.T) {
 	})
 
 	t.Run("low-trust-on-producer", func(t *testing.T) {
-		// any_of: producer.triggers low-trust also satisfies the trigger clause.
 		edge := crossJobEdge(true, "exec", []string{"push"}, []string{"issue_comment"})
 		matched := detect.EvaluateChainRule(rule, jobOutputChain(edge), failOnErr)
 		if len(matched) != 1 {
@@ -397,9 +360,8 @@ func TestCrossJobOutputRuleFiresOnExecAttackerLowTrust(t *testing.T) {
 }
 
 func TestCrossJobOutputRuleFiresOnStrategyMatrixEdge(t *testing.T) {
-	// End-to-end: a job-level strategy-matrix edge (step_index -1) derived by
-	// deriveJobOutputFlow must satisfy the chain rule, since the where clause
-	// keys on attacker_influenced/context/triggers, not on step_index.
+	// The where clause keys on attacker_influenced/context/triggers, not on
+	// step_index, so a job-level edge (step_index -1) still satisfies it.
 	rule := loadCrossJobRule(t)
 	failOnErr := func(err error) { t.Fatalf("eval error: %v", err) }
 
@@ -427,17 +389,14 @@ func TestCrossJobOutputRuleDoesNotFire(t *testing.T) {
 		edge map[string]any
 	}{
 		{
-			// benign: not attacker-influenced.
 			name: "not-attacker-influenced",
 			edge: crossJobEdge(false, "exec", []string{"pull_request_target"}, []string{"pull_request_target"}),
 		},
 		{
-			// binding-only consumption is not an exec sink.
 			name: "binding-context",
 			edge: crossJobEdge(true, "binding", []string{"pull_request_target"}, []string{"pull_request_target"}),
 		},
 		{
-			// attacker-influenced + exec but neither side has a low-trust trigger.
 			name: "no-low-trust-trigger",
 			edge: crossJobEdge(true, "exec", []string{"push"}, []string{"schedule"}),
 		},

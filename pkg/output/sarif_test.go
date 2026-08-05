@@ -81,15 +81,12 @@ func TestGenerateSARIF_EmptyFindings(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
-	// Verify it's valid JSON
 	var parsed map[string]interface{}
 	err = json.Unmarshal(result, &parsed)
 	assert.NoError(t, err)
 
-	// Check SARIF version
 	assert.Equal(t, "2.1.0", parsed["version"])
 
-	// Check runs array exists
 	runs, ok := parsed["runs"].([]interface{})
 	assert.True(t, ok)
 	assert.Len(t, runs, 1)
@@ -113,7 +110,6 @@ func TestGenerateSARIF_WithProperties(t *testing.T) {
 	result, err := GenerateSARIF(findings)
 	assert.NoError(t, err)
 
-	// Parse and check properties
 	var parsed map[string]interface{}
 	json.Unmarshal(result, &parsed)
 
@@ -141,7 +137,6 @@ func TestGenerateSARIF_ValidatesSchema(t *testing.T) {
 		},
 	}
 
-	// GenerateSARIF should validate before returning
 	result, err := GenerateSARIF(findings)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, result)
@@ -197,14 +192,12 @@ func TestGenerateSARIF_MultiPlatformFindings(t *testing.T) {
 	runs := parsed["runs"].([]interface{})
 	run := runs[0].(map[string]interface{})
 
-	// Should have separate rules for each platform+type combination
 	rules := run["tool"].(map[string]interface{})["driver"].(map[string]interface{})["rules"].([]interface{})
 	assert.GreaterOrEqual(t, len(rules), 4, "Should have rules for each platform+type")
 
 	results := run["results"].([]interface{})
 	assert.Len(t, results, 4)
 
-	// Verify each result has correct platform prefix
 	ruleIDs := make([]string, len(results))
 	for i, r := range results {
 		result := r.(map[string]interface{})

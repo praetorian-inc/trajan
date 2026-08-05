@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// pipelineXML wraps a Groovy pipeline script in a config.xml flow-definition structure
 func pipelineXML(script string) []byte {
 	return []byte(`<?xml version="1.0" encoding="UTF-8"?>
 <flow-definition>
@@ -15,7 +14,6 @@ func pipelineXML(script string) []byte {
 </flow-definition>`)
 }
 
-// freestyleXML builds a freestyle config.xml from an agent label and shell commands
 func freestyleXML(agentLabel string, commands []string) []byte {
 	var shellElems strings.Builder
 	for _, cmd := range commands {
@@ -31,7 +29,6 @@ func freestyleXML(agentLabel string, commands []string) []byte {
 </project>`)
 }
 
-// TestJenkinsParser_CanParse verifies CanParse for known and unknown paths
 func TestJenkinsParser_CanParse(t *testing.T) {
 	p := NewJenkinsParser()
 	tests := []struct {
@@ -53,8 +50,6 @@ func TestJenkinsParser_CanParse(t *testing.T) {
 	}
 }
 
-// TestJenkinsParser_PipelineConfigXML verifies parsing of a pipeline config.xml with
-// two stages and shell commands.
 func TestJenkinsParser_PipelineConfigXML(t *testing.T) {
 	script := `
 pipeline {
@@ -84,21 +79,18 @@ pipeline {
 		t.Errorf("expected 2 jobs (one per stage), got %d", len(wf.Jobs))
 	}
 
-	// Verify both jobs have agent = "any"
 	for _, job := range wf.Jobs {
 		if job.RunsOn != "any" {
 			t.Errorf("job %q RunsOn = %q, want %q", job.Name, job.RunsOn, "any")
 		}
 	}
 
-	// Verify sh commands appear in step.Run
 	allRuns := collectAllRuns(wf)
 	assertContainsRun(t, allRuns, "mvn clean package")
 	assertContainsRun(t, allRuns, "echo build done")
 	assertContainsRun(t, allRuns, "kubectl apply -f deployment.yaml")
 }
 
-// TestJenkinsParser_FreestyleConfigXML verifies parsing of a freestyle config.xml
 func TestJenkinsParser_FreestyleConfigXML(t *testing.T) {
 	data := freestyleXML("linux-builder", []string{"make clean", "make test"})
 	p := NewJenkinsParser()
@@ -120,8 +112,7 @@ func TestJenkinsParser_FreestyleConfigXML(t *testing.T) {
 	assertContainsRun(t, allRuns, "make test")
 }
 
-// TestJenkinsParser_InjectionPattern verifies that interpolation patterns are
-// preserved in step.Run so the injection detector can find them.
+// Interpolation must survive parsing or the injection detector has nothing to match.
 func TestJenkinsParser_InjectionPattern(t *testing.T) {
 	script := `
 pipeline {
@@ -153,8 +144,6 @@ pipeline {
 	}
 }
 
-// TestJenkinsParser_EnvironmentBlock verifies that environment blocks are parsed
-// into workflow or job Env maps.
 func TestJenkinsParser_EnvironmentBlock(t *testing.T) {
 	script := `
 pipeline {
@@ -177,10 +166,8 @@ pipeline {
 		t.Fatalf("Parse() error: %v", err)
 	}
 
-	// Check workflow-level env or job-level env
 	apiKey := wf.Env["API_KEY"]
 	if apiKey == "" {
-		// Fall back to checking job env
 		for _, job := range wf.Jobs {
 			if job.Env["API_KEY"] != "" {
 				apiKey = job.Env["API_KEY"]
@@ -193,7 +180,6 @@ pipeline {
 	}
 }
 
-// TestJenkinsParser_MultiStage verifies that 3 stages produce 3 jobs with correct names.
 func TestJenkinsParser_MultiStage(t *testing.T) {
 	script := `
 pipeline {
@@ -231,8 +217,6 @@ pipeline {
 	}
 }
 
-// TestJenkinsParser_RawJenkinsfile verifies parsing of a raw Groovy Jenkinsfile
-// (not XML-wrapped).
 func TestJenkinsParser_RawJenkinsfile(t *testing.T) {
 	script := `pipeline {
     agent any
@@ -258,7 +242,6 @@ func TestJenkinsParser_RawJenkinsfile(t *testing.T) {
 	assertContainsRun(t, allRuns, "go build ./...")
 }
 
-// TestJenkinsParser_EmptyConfig verifies that empty input returns an error.
 func TestJenkinsParser_EmptyConfig(t *testing.T) {
 	p := NewJenkinsParser()
 	_, err := p.Parse([]byte{})
@@ -267,8 +250,6 @@ func TestJenkinsParser_EmptyConfig(t *testing.T) {
 	}
 }
 
-// TestJenkinsParser_ScriptedPipeline verifies scripted pipeline parsing:
-// node('linux') { sh 'make' }
 func TestJenkinsParser_ScriptedPipeline(t *testing.T) {
 	script := `
 node('linux') {
@@ -294,8 +275,6 @@ node('linux') {
 	assertContainsRun(t, allRuns, "make test")
 }
 
-// TestJenkinsParser_AgentLabel verifies that agent { label 'my-agent' } is
-// correctly parsed into RunsOn.
 func TestJenkinsParser_AgentLabel(t *testing.T) {
 	script := `
 pipeline {
@@ -326,8 +305,6 @@ pipeline {
 	}
 }
 
-// TestJenkinsParser_StageAgentOverride verifies that a stage-level agent overrides
-// the global agent.
 func TestJenkinsParser_StageAgentOverride(t *testing.T) {
 	script := `
 pipeline {
@@ -372,11 +349,6 @@ pipeline {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// collectAllRuns gathers all step.Run values across all jobs in a workflow.
 func collectAllRuns(wf *NormalizedWorkflow) []string {
 	var runs []string
 	for _, job := range wf.Jobs {
@@ -389,7 +361,6 @@ func collectAllRuns(wf *NormalizedWorkflow) []string {
 	return runs
 }
 
-// assertContainsRun fails the test if none of the run strings contain the expected value.
 func assertContainsRun(t *testing.T, runs []string, want string) {
 	t.Helper()
 	for _, r := range runs {

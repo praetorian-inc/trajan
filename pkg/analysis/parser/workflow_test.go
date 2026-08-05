@@ -1,4 +1,3 @@
-// pkg/analysis/parser/workflow_test.go
 package parser
 
 import (
@@ -75,7 +74,6 @@ jobs:
 }
 
 func TestJob_IsSelfHostedRunner_MatrixStrategy(t *testing.T) {
-	// Matrix with all GitHub-hosted runners — should NOT be flagged
 	yaml := `
 name: Matrix
 on: push
@@ -92,7 +90,6 @@ jobs:
 	require.NoError(t, err)
 	assert.False(t, wf.Jobs["test"].IsSelfHostedRunner(), "all GitHub-hosted matrix values should not be self-hosted")
 
-	// Matrix with self-hosted runner — should be flagged
 	yaml2 := `
 name: Matrix Self-Hosted
 on: push
@@ -109,7 +106,6 @@ jobs:
 	require.NoError(t, err)
 	assert.True(t, wf2.Jobs["test"].IsSelfHostedRunner(), "matrix with self-hosted value should be flagged")
 
-	// Matrix with custom runner label — should be flagged
 	yaml3 := `
 name: Matrix Custom
 on: push
@@ -126,7 +122,6 @@ jobs:
 	require.NoError(t, err)
 	assert.True(t, wf3.Jobs["test"].IsSelfHostedRunner(), "matrix with custom runner should be flagged")
 
-	// Expression without matrix (e.g. inputs) — should be flagged (conservative)
 	yaml4 := `
 name: Input Runner
 on:
@@ -146,7 +141,6 @@ jobs:
 }
 
 func TestJob_IsSelfHostedRunner_ReusableWorkflowCaller(t *testing.T) {
-	// Cross-repo reusable workflow caller — has uses but no runs-on
 	yaml1 := `
 name: CI
 on: push
@@ -160,7 +154,6 @@ jobs:
 }
 
 func TestJob_IsSelfHostedRunner_LocalReusableWorkflowCaller(t *testing.T) {
-	// Local reusable workflow caller — has uses with ./ prefix
 	yaml1 := `
 name: CI
 on: push

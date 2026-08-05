@@ -12,17 +12,14 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// hashKey produces a bounded, collision-safe filename stem for edges whose
-// natural key (ACL token + identity descriptor) can exceed the 255-byte path
-// limit. The readable components stay as fields on the record.
+// An edge's natural key (ACL token plus identity descriptor) can exceed the 255-byte
+// path limit, so the filename stem is a hash and the readable components stay as
+// fields on the record.
 func hashKey(parts ...string) string {
 	h := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(h[:16])
 }
 
-// correlate reads the normalized corpus back as generic maps and derives the
-// structural edges plus the three settings-resolution joins. Derived/attack
-// (taint) edges are a later pass.
 func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) error {
 	pipelines, err := loadRecords(prior, "10-normalize/pipelines")
 	if err != nil {
@@ -65,9 +62,9 @@ func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPh
 	return nil
 }
 
-// clampScope resolves the job-auth scope: effective = "project" when the project
-// enforces (or enforcement is unobserved — fail closed), else the requested scope.
-// Shared by the :Pipeline node (identity_scope) and the RUNS_AS edge.
+// The effective scope is "project" when the project enforces, and also when
+// enforcement was not observed, because failing closed must not overstate reach.
+// Shared by the :Pipeline node's identity_scope and the RUNS_AS edge.
 func clampScope(requested string, enforced, observed bool) (effective, identityScope, provenance string) {
 	effective = requested
 	if enforced || !observed {
@@ -84,9 +81,6 @@ func clampScope(requested string, enforced, observed bool) (effective, identityS
 	return
 }
 
-// deriveRunsAs — JOIN #1: 3-level job-auth clamp. effective = "project" if the
-// project (or org, unknown) enforces enforceJobAuthScope, else the pipeline's
-// requested scope. Emits a runs-as edge per pipeline.
 func deriveRunsAs(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines, projectsRec []map[string]any) error {
 	type enf struct{ enforced, observed bool }
 	enforceByProject := map[string]enf{}
@@ -117,9 +111,6 @@ func deriveRunsAs(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines, p
 	return nil
 }
 
-// derivePolicyAttribution — JOIN #2: attach each BranchPolicy to repos by scope
-// (repositoryId, null=all in project); materialize the branch from refName; emit
-// BUILD_VALIDATES for build-validation policies.
 func derivePolicyAttribution(cp engine.CurrentPhase, timer *engine.PhaseTimer, policies, repos []map[string]any) error {
 	reposByProject := map[string][]map[string]any{}
 	for _, r := range repos {
@@ -147,8 +138,8 @@ func derivePolicyAttribution(cp engine.CurrentPhase, timer *engine.PhaseTimer, p
 					// stripped to match the :Branch node/DEFINED_BY join key.
 					"branch":    branch,
 					"branch_id": branchID,
-					// Prefix => refName is a subtree prefix (protects the whole
-					// subtree), not a concrete branch — load-bearing for attribution.
+					// Prefix means refName protects a whole subtree rather than one
+					// concrete branch, which attribution depends on.
 					"match_kind":   matchKind,
 					"is_prefix":    matchKind == "Prefix",
 					"policy_type":  mStr(pol, "policy_type"),
@@ -199,9 +190,8 @@ func filterReposByID(repos []map[string]any, id string) []map[string]any {
 	return out
 }
 
-// deriveEffectiveRoles — JOIN #3: decode each ACL's effectiveAllow bitmask into
-// action names (per its security namespace) and expand group descriptors to
-// leaf members via graph memberships. Emits a HAS_ROLE edge per ACE.
+// A permission bit's meaning is scoped to its security namespace, so each ACL source
+// is decoded against its own namespace's action table.
 func deriveEffectiveRoles(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, org string) error {
 	nsActions := loadNamespaceActions(prior, org)
 	memberships := loadMemberships(prior, org)
@@ -264,8 +254,6 @@ func deriveEffectiveRoles(ctx context.Context, prior engine.PriorPhase, cp engin
 	return nil
 }
 
-// roleTokenIndexes builds the lookups that resolve a HAS_ROLE ACL token to the
-// node it grants on: repos by GUID, service connections by id, projects by GUID.
 func roleTokenIndexes(prior engine.PriorPhase) (repoIdx, scIdx, projIdx map[string]string, err error) {
 	repoIdx, scIdx, projIdx = map[string]string{}, map[string]string{}, map[string]string{}
 	repos, err := loadRecords(prior, "10-normalize/repos")
@@ -292,10 +280,9 @@ func roleTokenIndexes(prior engine.PriorPhase) (repoIdx, scIdx, projIdx map[stri
 	return repoIdx, scIdx, projIdx, nil
 }
 
-// resolveRoleToken maps a security-namespace ACL token to the emitted node _id it
-// scopes: "repoV2/<projGuid>/<repoGuid>" -> Repository, "endpoints/<projGuid>/<id>"
-// -> ServiceConnection, a bare "<projGuid>" -> Project. Unresolvable (collection
-// root, deleted resource) returns "".
+// "repoV2/<projGuid>/<repoGuid>" scopes a Repository, "endpoints/<projGuid>/<id>" a
+// ServiceConnection, a bare "<projGuid>" a Project. A collection root or a deleted
+// resource is unresolvable and returns "".
 func resolveRoleToken(token string, repoIdx, scIdx, projIdx map[string]string) (kind, nodeID string) {
 	parts := strings.Split(token, "/")
 	switch {
@@ -311,9 +298,8 @@ func resolveRoleToken(token string, repoIdx, scIdx, projIdx map[string]string) (
 	return "", ""
 }
 
-// effectiveAllowMask selects an ACE's effective permission bits. Only fall back
-// to the local allow when effectiveAllow is ABSENT — a present effectiveAllow of
-// 0 is a real deny, not an unknown.
+// Only fall back to the local allow when effectiveAllow is absent: a present
+// effectiveAllow of 0 is a real deny, not an unknown.
 func effectiveAllowMask(ace map[string]any) int64 {
 	if e := entGetIn(ace, "extendedInfo", "effectiveAllow"); e != nil {
 		return entInt64(e)
@@ -321,15 +307,14 @@ func effectiveAllowMask(ace map[string]any) int64 {
 	return entInt64(ace["allow"])
 }
 
-// aceIdentityIndex maps an ACL ACE identity (the token after ";") to the graph
-// subject descriptor that carries it, for both forms that resolve to an emitted
-// principal node:
+// Maps an ACL ACE identity (the token after ";") to the graph subject descriptor that
+// carries it. Two forms reach an emitted principal node:
 //   - group SIDs (S-1-…), base64-encoded in the vssgp./aadgp. group descriptor;
 //   - service identities (<org>:Build:<guid>), base64-encoded in the svc. user
 //     descriptor a Microsoft.TeamFoundation.ServiceIdentity ACE references.
 //
 // Built-in server SIDs the Graph API does not enumerate resolve to "" and stay
-// unexpanded (the raw descriptor is still kept on the HAS_ROLE record).
+// unexpanded; the raw descriptor is still kept on the HAS_ROLE record.
 func aceIdentityIndex(prior engine.PriorPhase, org string) map[string]string {
 	graph := entLoadData(prior, engine.CollectADOGraph(org))
 	idx := map[string]string{}
@@ -348,8 +333,8 @@ func aceIdentityIndex(prior engine.PriorPhase, org string) map[string]string {
 		if inner := decodeSubjectDescriptor(desc); inner != "" {
 			idx[inner] = desc
 		}
-		// A direct AAD-user ACE is a ClaimsIdentity keyed by UPN/mail, not a SID —
-		// index those (lowercased) so the user's HAS_ROLE resolves to its node.
+		// A direct AAD-user ACE is a ClaimsIdentity keyed by UPN or mail rather than a
+		// SID, so index those lowercased for the user's HAS_ROLE to resolve.
 		for _, k := range []string{entStr(u["principalName"]), entStr(u["mailAddress"]), entStr(u["domain"]) + "\\" + entStr(u["principalName"])} {
 			if k != "" && k != "\\" {
 				idx[strings.ToLower(k)] = desc
@@ -376,8 +361,7 @@ func decodeGraphSID(desc string) string {
 	return ""
 }
 
-// decodeSubjectDescriptor returns the identity string a graph user descriptor
-// (<prefix>.<base64>) encodes — a svc. build-service descriptor decodes to
+// A graph user descriptor is <prefix>.<base64>; a svc. build-service one decodes to
 // "<org>:Build:<guid>", exactly the id a ServiceIdentity ACE references.
 func decodeSubjectDescriptor(desc string) string {
 	i := strings.IndexByte(desc, '.')
@@ -393,9 +377,6 @@ func decodeSubjectDescriptor(desc string) string {
 	return ""
 }
 
-// aceGraphDescriptor translates an ACL ACE identity descriptor to the graph
-// descriptor of the principal it names (group SID or service identity), or ""
-// when the identity is not present in the collected graph.
 func aceGraphDescriptor(aceDesc string, idIndex map[string]string) string {
 	i := strings.Index(aceDesc, ";")
 	if i < 0 {
@@ -454,8 +435,8 @@ func loadMemberships(prior engine.PriorPhase, org string) map[string][]string {
 	return out
 }
 
-// expandMembers walks memberships (direction=down) to the leaf descriptors under
-// a group, with cycle detection. A non-group (leaf) descriptor returns itself.
+// Walks memberships downward to the leaf descriptors under a group. The group itself
+// is never in the result, so a leaf descriptor expands to nothing.
 func expandMembers(desc string, memberships map[string][]string) []any {
 	seen := map[string]bool{}
 	var leaves []string
@@ -485,8 +466,6 @@ func expandMembers(desc string, memberships map[string][]string) []any {
 	return out
 }
 
-// deriveJobResourceEdges resolves the job-level YAML references (variable-group
-// names, service-connection names) to their concrete resource ids.
 func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, jobs []map[string]any) error {
 	type vgRef struct {
 		id    int64
@@ -499,10 +478,10 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 	if err != nil {
 		return fmt.Errorf("correlate: load variable-groups: %w", err)
 	}
-	// A shared resource is visible (and referable by name) in every project it is
-	// shared into, so register its name under all of them, resolving to the single
-	// canonical (owner-keyed) node — carrying owner_project so the edge binds to
-	// the node _id "owner/id" rather than the consuming project.
+	// A shared resource is referable by name from every project it is shared into, so
+	// its name is registered under all of them, all resolving to the one owner-keyed
+	// node. owner_project rides along so the edge binds to _id "owner/id" rather than to
+	// the consuming project.
 	for _, g := range vgs {
 		for _, proj := range visibleProjects(g) {
 			if vgByProjectName[proj] == nil {
@@ -548,9 +527,9 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 		poolByProjectName[proj][mStr(p, "name")] = mInt64(p, "id")
 	}
 
-	// CONSUMES_GROUP is emitted at the level a group is DECLARED (schema: a
-	// pipeline-level group reaches every job; a stage-level group every job in the
-	// stage). The Pipeline/Stage/Job nodes each carry only their own declarations.
+	// The edge is emitted at the level the group is declared, because a pipeline-level
+	// group reaches every job and a stage-level group every job in the stage. Each
+	// Pipeline/Stage/Job node carries only its own declarations.
 	emitConsumesGroup := func(level, project string, pipelineID int64, stage, job, name string) error {
 		ref := vgByProjectName[project][name]
 		rec := map[string]any{
@@ -661,18 +640,16 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 	return nil
 }
 
-// deriveBranches materializes :Branch nodes and DEFINED_BY edges. A branch is
-// referenced two ways: as a YAML pipeline's entry point (Pipeline -> Branch,
-// carrying the yaml_path) and as a branch-policy scope's protected ref. Nodes are
-// deduped by id; the pipeline pass runs first so a branch that is a repo default
-// keeps is_default=true.
+// A branch is referenced two ways: as a YAML pipeline's entry point, carrying the
+// yaml_path, and as a branch-policy scope's protected ref. Both passes feed one
+// id-keyed map so the two references collapse to a single node.
 func deriveBranches(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines, policies, repos []map[string]any) error {
 	branches := map[string]map[string]any{}
 	add := func(project, repo, repoID, branch string, isDefault, isPrefix bool) {
 		id := project + "/" + repo + "@" + branch
 		if b, ok := branches[id]; ok {
-			// a branch reached by more than one reference (pipeline default + policy
-			// scope, or several policies) keeps every flag that any reference set.
+			// A branch reached by more than one reference keeps every flag any of them set,
+			// so the merge order does not matter.
 			if isDefault {
 				b["is_default"] = true
 			}
@@ -753,8 +730,8 @@ func deriveBranches(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines,
 	return nil
 }
 
-// visibleProjects lists every project a (possibly shared) resource can be
-// referenced from: its owner plus everyone it is shared into.
+// Every project a resource can be referenced by name from: its owner plus everyone
+// it is shared into.
 func visibleProjects(rec map[string]any) []string {
 	set := map[string]bool{}
 	if o := mStr(rec, "owner_project"); o != "" {
@@ -791,8 +768,8 @@ func listOrEmpty(m map[string]any, key string) []any {
 	return []any{}
 }
 
-// deriveMemberOf emits a MEMBER_OF edge per direct group membership (graph
-// memberships, direction=down), so nested-group traversal has explicit edges.
+// One edge per direct membership, so nested-group traversal has explicit edges to
+// walk rather than having to re-read the graph bundle.
 func deriveMemberOf(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, org string) error {
 	for group, members := range loadMemberships(prior, org) {
 		for _, member := range members {

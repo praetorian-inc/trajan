@@ -158,7 +158,6 @@ func TestFlattenJobs_NestedFolders(t *testing.T) {
 		t.Fatalf("expected 3 jobs, got %d", len(result))
 	}
 
-	// Check that nested jobs have FullName set and InFolder=true
 	nestedCount := 0
 	for _, j := range result {
 		if j.InFolder {
@@ -192,7 +191,7 @@ func TestClient_StringRedactsToken(t *testing.T) {
 		t.Error("GoString() should contain REDACTED")
 	}
 
-	// Also test through fmt to ensure the interface works
+	// Through fmt, so the interface dispatch is exercised too.
 	formatted := fmt.Sprintf("client=%v", c)
 	if strings.Contains(formatted, "super-secret-token") {
 		t.Error("fmt.Sprintf with percent-v should not contain the actual token")
@@ -271,8 +270,7 @@ func TestClient_FetchCrumbRetriesAfterTransientError(t *testing.T) {
 		t.Fatal("expected error on first postForm when crumb returns 500")
 	}
 
-	// Second postForm should succeed because fetchCrumb retries (crumbFetched
-	// was not set on the transient error).
+	// The second succeeds: a transient error must not set crumbFetched.
 	_, err = c.postForm(context.Background(), "/script", map[string]string{"script": "x"})
 	if err != nil {
 		t.Fatalf("second postForm should succeed after crumb retry: %v", err)
@@ -304,7 +302,6 @@ func TestClient_CSRFDisabled(t *testing.T) {
 
 		c := NewClient(srv.URL, "tok", WithUsername("admin"))
 
-		// Trigger crumb fetch via postForm.
 		_, err := c.postForm(context.Background(), "/script", map[string]string{"script": "x"})
 		if err != nil {
 			t.Fatalf("postForm error: %v", err)

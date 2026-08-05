@@ -1,4 +1,4 @@
-// Package azure registers all Azure DevOps Pipelines detections
+// Package detections registers the Azure DevOps detections.
 package detections
 
 import (

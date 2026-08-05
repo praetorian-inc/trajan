@@ -11,9 +11,8 @@ import (
 	"github.com/praetorian-inc/trajan/internal/finding"
 )
 
-// provider wires GitHub into the shared detection engine (internal/engine/detect):
-// the subject-kind → normalize-dir map, the "github" rule subtree, and the
-// finding-construction hooks that read GitHub-specific fields.
+// Wires GitHub into the shared detection engine: the subject-kind → normalize-dir
+// map, the rule subtree, and the hooks that read GitHub-specific fields.
 var provider = detect.Provider{
 	Name:        "github",
 	RuleSubtree: "github",
@@ -33,8 +32,8 @@ var provider = detect.Provider{
 	File:    workflowFilePath,
 }
 
-// workflowFilePath is the repo-relative locator that finding.code's line range
-// indexes into. workflow_name is the author-declared `name:` and is not a path.
+// The repo-relative locator that finding.code's line range indexes into.
+// workflow_name is the author-declared `name:` and is not a path.
 func workflowFilePath(subject map[string]any) string {
 	if f := detect.StringField(subject, "workflow_filename"); f != "" {
 		return ".github/workflows/" + f
@@ -42,15 +41,15 @@ func workflowFilePath(subject map[string]any) string {
 	return ""
 }
 
-// Scan and ScanOptions are aliases: the scan is generic over platforms and lives
-// in detect, while callers reach it through the platform package they collected with.
+// The scan itself is generic over platforms and lives in detect; callers reach it
+// through the platform package they collected with.
 type ScanOptions = detect.ScanOptions
 
 func Scan(ctx context.Context, runDir string, opts ScanOptions) error {
 	return detect.Scan(ctx, runDir, provider, opts)
 }
 
-// subjectDisplay is a pre-rendered label so the renderer never parses subject.id.
+// A pre-rendered label, so the renderer never parses subject.id.
 func subjectDisplay(kind string, subject map[string]any) string {
 	if kind == "job" {
 		var parts []string
@@ -66,10 +65,9 @@ func subjectDisplay(kind string, subject map[string]any) string {
 	return detect.StringField(subject, "_id")
 }
 
-// buildCode embeds the exact YAML window the subject points at, read from the
-// collected workflow, so the finding is self-contained. It is best-effort: a
-// subject without a code location, or an unreadable file, yields nil (code stays
-// null) — never a scan failure.
+// Embeds the exact YAML window the subject points at, read from the collected
+// workflow, so the finding is self-contained. Best-effort: a subject without a code
+// location, or an unreadable file, yields nil rather than a scan failure.
 func buildCode(runDir string, subject map[string]any) *finding.Code {
 	prov, ok := subject["_provenance"].(map[string]any)
 	if !ok {
@@ -105,7 +103,7 @@ func readSnippet(path string, start, end int) (string, error) {
 	return strings.Join(lines[start-1:end], "\n"), nil
 }
 
-// intPair coerces a [start,end] range from JSON (float64 elements) or native ints.
+// Coerces a [start,end] range from JSON (float64 elements) or native ints.
 func intPair(v any) []int {
 	list, ok := v.([]any)
 	if !ok || len(list) != 2 {

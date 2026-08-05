@@ -145,11 +145,9 @@ func subjectTriples(subject string) []string {
 	return out
 }
 
-// gaps.empty_edge_triples is the accounting the register has to discharge, so a
-// row pointing at a relation the schema does not declare is stale — the failure
-// mode after a triple is deleted from edgeEndpoints. The one legitimate case is
-// represented_elsewhere, which exists precisely to say the pair is not declared
-// because the fact it carries lives on another edge.
+// A row naming a relation the schema does not declare is stale — the failure mode after
+// a triple is deleted from edgeEndpoints. represented_elsewhere is the one legitimate
+// case: it says the pair is undeclared because the fact lives on another edge.
 func TestRegisterSubjectsNameDeclaredTriples(t *testing.T) {
 	declared := map[string]bool{}
 	for _, et := range EdgeTypes() {
@@ -185,10 +183,9 @@ func TestRegisterClaimsEachTargetOnce(t *testing.T) {
 	}
 }
 
-// The register is the artifact that discloses what the graph does not cover, so
-// no row may report a label or edge type absent that this same run builds.
-// fr-06-01 is the oracle: a job assuming an AWS role through OIDC must reach the
-// graph as a CloudRole and a CAN_ASSUME edge.
+// No register row may report a label or edge type absent that this same run builds.
+// fr-06-01 is the oracle: a job assuming an AWS role through OIDC must reach the graph
+// as a CloudRole and a CAN_ASSUME edge.
 func TestRegisterDoesNotDisclaimWhatTheRunBuilds(t *testing.T) {
 	c, n := fixture(t, map[string]any{
 		"org/ghektestorg.json": map[string]any{"_id": "ghektestorg", "org": "ghektestorg"},
@@ -254,9 +251,9 @@ func buildInto(t *testing.T, runDir string) error {
 	return runBuild(t.Context(), &engine.Config{Concurrency: 2}, runDir, nil, timer)
 }
 
-// A record that fails to parse is dropped and the phase continues, so the count
-// of what was offered has to survive into the summary: without it a graph built
-// on 91% of its inputs is indistinguishable from a complete one.
+// A record that fails to parse is dropped and the phase continues, so the count of what
+// was offered has to reach the summary: without it a graph built on part of its inputs
+// is indistinguishable from a complete one.
 func TestBuildReportsDroppedInputs(t *testing.T) {
 	dir := runDirWith(t, map[string]any{
 		normalizeDir + "/org/ghektestorg.json": map[string]any{"_id": "ghektestorg", "org": "ghektestorg"},

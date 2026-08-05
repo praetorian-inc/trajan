@@ -11,9 +11,8 @@ import (
 	"strings"
 )
 
-// router implements GitHub by dispatching each call to the highest-preference
-// transport capable of serving its surface, falling through to the REST floor on
-// failure.
+// Dispatches each call to the highest-preference transport capable of serving its
+// surface, falling through to the REST floor on failure.
 type router struct {
 	transports map[transportKind]transport
 	forceREST  bool
@@ -50,8 +49,8 @@ func closeRouter(gh GitHub) {
 	}
 }
 
-// sourceAPIFor reports the provenance of the preferred transport for s. It
-// ignores per-call fall-through, which only affects this cosmetic field.
+// Reports the preferred transport for s, ignoring per-call fall-through: this feeds
+// the cosmetic provenance field only.
 func (r *router) sourceAPIFor(s surface) string {
 	cands := r.candidates(s)
 	if len(cands) == 0 {
@@ -67,8 +66,8 @@ func (r *router) sourceAPIFor(s surface) string {
 	}
 }
 
-// localRetries is the per-transport retry budget before fall-through, kept small:
-// the transports' own clients already back off on Retry-After/x-ratelimit-reset.
+// Per-transport retry budget before fall-through, kept small because the transports'
+// own clients already back off on Retry-After/x-ratelimit-reset.
 const localRetries = 2
 
 func (r *router) candidates(s surface) []transport {
@@ -104,8 +103,8 @@ func isUnservable(err error) bool {
 	return errors.Is(err, errUnservable)
 }
 
-// isTransient reports errors worth a local retry (429, 5xx, secondary-rate-limit,
-// or a bare transport error). A definitive 404/permission-403 is not transient.
+// Worth a local retry: 429, 5xx, secondary rate limit, or a bare transport error. A
+// definitive 404 or permission 403 is not.
 func isTransient(err error) bool {
 	if err == nil || isUnservable(err) {
 		return false
@@ -133,9 +132,9 @@ func backoff(ctx context.Context, attempt int) {
 	sleepFn(ctx, sec)
 }
 
-// dispatch tries each candidate transport for s: an unservable error falls
-// through at once, a transient one retries with capped backoff then falls
-// through, and a definitive error is returned as-is for the collector to handle.
+// An unservable error falls through to the next transport at once, a transient one
+// retries with capped backoff then falls through, and a definitive error is returned
+// as-is for the collector to handle.
 func dispatch[T any](ctx context.Context, r *router, s surface, zero T, call func(transport) (T, error)) (T, error) {
 	cands := r.candidates(s)
 	if len(cands) == 0 {
@@ -215,8 +214,7 @@ func (r *router) Paginate(ctx context.Context, p string, params url.Values, perP
 	})
 }
 
-// classifyGet maps a REST path to its surface; anything not explicitly
-// offloadable defaults to the REST floor.
+// Anything not explicitly offloadable defaults to the REST floor.
 func classifyGet(p string) surface {
 	switch {
 	case strings.Contains(p, "/contents/.github/workflows"):
@@ -236,9 +234,8 @@ func classifyGet(p string) surface {
 	}
 }
 
-// classifyContent keeps workflow files and local actions on git, but routes a
-// ref-pinned remote read to the REST floor: the shallow all-branches clone does
-// not hold arbitrary tags/SHAs.
+// Workflow files and local actions stay on git, but a ref-pinned read goes to the
+// REST floor: the shallow all-branches clone does not hold arbitrary tags/SHAs.
 func classifyContent(p, ref string) surface {
 	switch {
 	case strings.Contains(p, "/contents/.github/workflows"):

@@ -1,9 +1,6 @@
-// pkg/analysis/graph/traversal.go
 package graph
 
-// DFS performs depth-first search starting from the given node.
-// The visitor function is called for each node.
-// Return false from visitor to stop traversal.
+// The visitor returns false to stop the traversal.
 func DFS(g *Graph, startID string, visitor func(node Node) bool) {
 	visited := make(map[string]bool)
 	dfs(g, startID, visited, visitor)

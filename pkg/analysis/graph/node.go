@@ -1,7 +1,5 @@
-// pkg/analysis/graph/node.go
 package graph
 
-// NodeType represents the type of node in the workflow graph
 type NodeType string
 
 const (
@@ -11,7 +9,6 @@ const (
 	NodeTypeAction   NodeType = "action"
 )
 
-// Tag represents a property tag on a node
 type Tag string
 
 const (
@@ -44,13 +41,11 @@ const (
 	TagCacheRestore     Tag = "cache_restore"
 	TagWritePermissions Tag = "write_permissions"
 
-	// Context tags
 	TagGitHubContext Tag = "github_context"
 	TagInputsContext Tag = "inputs_context"
 	TagEnvContext    Tag = "env_context"
 )
 
-// Node is the interface for all nodes in the workflow graph
 type Node interface {
 	ID() string
 	Type() NodeType
@@ -61,7 +56,6 @@ type Node interface {
 	SetParent(id string)
 }
 
-// BaseNode provides common functionality for all node types
 type BaseNode struct {
 	id       string
 	nodeType NodeType
@@ -94,30 +88,27 @@ func (n *BaseNode) Tags() []Tag {
 	return tags
 }
 
-// Include represents a CI/CD workflow include directive
 type Include struct {
-	Type     string `json:"type"`     // local, remote, project, template
-	Path     string `json:"path"`     // File path (local/project)
-	Remote   string `json:"remote"`   // Remote URL (if remote type)
-	Project  string `json:"project"`  // Project path (if project type)
-	Ref      string `json:"ref"`      // Branch/tag reference
-	Template string `json:"template"` // Template name (if template type)
+	Type     string `json:"type"` // local, remote, project, template
+	Path     string `json:"path"`
+	Remote   string `json:"remote"`
+	Project  string `json:"project"`
+	Ref      string `json:"ref"`
+	Template string `json:"template"`
 }
 
-// WorkflowNode represents a GitHub Actions workflow file
 type WorkflowNode struct {
 	BaseNode
 	Name     string
 	Path     string
 	Triggers []string
 	RepoSlug string
-	Env      map[string]string // Workflow-level environment variables
+	Env      map[string]string
 
-	// TriggerLines maps YAML trigger key names (e.g. "trigger", "pr") to their line numbers
+	// Keyed by the YAML key as authored ("trigger", "pr"), not the normalized trigger name.
 	TriggerLines map[string]int
 
-	// Includes contains platform-specific include/import directives
-	// Used for detecting include injection vulnerabilities
+	// Consumed by include-injection detections.
 	Includes []Include `json:"includes,omitempty"`
 }
 
@@ -135,7 +126,6 @@ func NewWorkflowNode(id, name, path, repoSlug string, triggers []string) *Workfl
 	}
 }
 
-// JobNode represents a job within a workflow
 type JobNode struct {
 	BaseNode
 	Name             string
@@ -144,11 +134,11 @@ type JobNode struct {
 	Needs            []string
 	If               string
 	Permissions      map[string]string
-	Environment      string            // GitHub environment name for deployment protection
-	Env              map[string]string // Job-level environment variables
+	Environment      string // GitHub environment name for deployment protection
+	Env              map[string]string
 	Line             int
-	ComputedTriggers []string // Triggers that would cause this job to run (computed from workflow + job rules)
-	RunnerTags       []string // Runner tags for runner selection (GitLab tags, GitHub runs-on)
+	ComputedTriggers []string
+	RunnerTags       []string // GitLab job tags; GitHub runs-on labels.
 }
 
 func NewJobNode(id, name, runsOn string) *JobNode {
@@ -163,20 +153,17 @@ func NewJobNode(id, name, runsOn string) *JobNode {
 	}
 }
 
-// StepNode represents a step within a job
 type StepNode struct {
 	BaseNode
-	Name string
-	Uses string // Action reference (actions/checkout@v4)
-	Run  string // Shell command
-	With map[string]string
-	Env  map[string]string
-	If   string
-	Line int // Line number in YAML
-	// WithLines maps input parameter names to their line numbers in the source YAML
+	Name      string
+	Uses      string // Action reference (actions/checkout@v4)
+	Run       string
+	With      map[string]string
+	Env       map[string]string
+	If        string
+	Line      int
 	WithLines map[string]int
-	// EnvLines maps environment variable names to their line numbers in the source YAML
-	EnvLines map[string]int
+	EnvLines  map[string]int
 }
 
 func NewStepNode(id, name string, line int) *StepNode {
@@ -191,7 +178,6 @@ func NewStepNode(id, name string, line int) *StepNode {
 	}
 }
 
-// ActionNode represents a referenced GitHub Action
 type ActionNode struct {
 	BaseNode
 	Owner string

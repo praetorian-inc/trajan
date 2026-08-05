@@ -92,19 +92,16 @@ func TestPlatform_EnumerateBranchProtections(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Project info
 	assert.Equal(t, "company/api", result.Project)
 	assert.Equal(t, 1, result.ProjectID)
 	assert.Equal(t, "main", result.DefaultBranch)
 
-	// Protected branches
 	assert.Len(t, result.Protections, 2)
 	assert.Equal(t, "main", result.Protections[0].Name)
 	assert.True(t, result.Protections[0].CodeOwnerApprovalRequired)
 	assert.Equal(t, "release/*", result.Protections[1].Name)
 	assert.Equal(t, 0, result.Protections[1].PushAccessLevels[0].AccessLevel)
 
-	// No errors
 	assert.Empty(t, result.Errors)
 }
 
@@ -161,7 +158,6 @@ func TestPlatform_EnumerateBranchProtections_Forbidden(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Should handle 403 gracefully
 	assert.NotEmpty(t, result.Errors)
 	assert.Contains(t, result.Errors[0], "listing protected branches")
 	assert.Contains(t, result.Errors[0], "403")

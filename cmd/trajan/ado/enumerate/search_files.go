@@ -66,17 +66,14 @@ func runSearchFilesAzDO() error {
 
 	var matches []fileMatch
 
-	// Get projects
 	var projects []azuredevops.Project
 	if enumProject != "" {
-		// Single project mode
 		proj, err := client.GetProject(ctx, enumProject)
 		if err != nil {
 			return fmt.Errorf("getting project: %w", err)
 		}
 		projects = []azuredevops.Project{*proj}
 	} else {
-		// All projects mode
 		allProjects, err := client.ListProjects(ctx)
 		if err != nil {
 			return err
@@ -84,7 +81,6 @@ func runSearchFilesAzDO() error {
 		projects = allProjects
 	}
 
-	// Search each project's repositories
 	for _, project := range projects {
 		repos, err := client.ListRepositories(ctx, project.ID)
 		if err != nil {
@@ -97,7 +93,6 @@ func runSearchFilesAzDO() error {
 				continue // Skip repos we can't access
 			}
 
-			// Match each item's path against query (case-insensitive)
 			for _, item := range items {
 				if !item.IsFolder && strings.Contains(strings.ToLower(item.Path), strings.ToLower(searchFilesQuery)) {
 					matches = append(matches, fileMatch{

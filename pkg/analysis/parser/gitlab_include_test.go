@@ -50,14 +50,6 @@ func TestParseIncludeMap_ProjectNoFile(t *testing.T) {
 func TestParseIncludes_MixedWithMultiFile(t *testing.T) {
 	p := &GitLabParser{}
 
-	// Simulates:
-	// include:
-	//   - local: /templates/build.yml
-	//   - project: devops/ci-cd/pipelines
-	//     ref: latest
-	//     file:
-	//       - terraform/terraform.yml
-	//       - terraform/deploy/continuous.yml
 	raw := []interface{}{
 		map[string]interface{}{
 			"local": "/templates/build.yml",

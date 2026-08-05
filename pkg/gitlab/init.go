@@ -1,4 +1,3 @@
-// pkg/gitlab/init.go
 package gitlab
 
 import (

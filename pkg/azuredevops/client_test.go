@@ -11,39 +11,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestClient_String tests String() method for safe logging (no token exposure)
 func TestClient_String(t *testing.T) {
 	client := NewClient("https://dev.azure.com/test-org", "super-secret-token-12345")
 
 	str := client.String()
 
-	// Should contain org URL
 	assert.Contains(t, str, "https://dev.azure.com/test-org")
-	// Should NOT contain actual token
 	assert.NotContains(t, str, "super-secret-token-12345")
-	// Should indicate token is redacted
 	assert.Contains(t, str, "[REDACTED]")
 }
 
-// TestClient_GoString tests GoString() method for %#v format (no token exposure)
 func TestClient_GoString(t *testing.T) {
 	client := NewClient("https://dev.azure.com/test-org", "super-secret-token-12345")
 
 	str := client.GoString()
 
-	// Should contain org URL
 	assert.Contains(t, str, "https://dev.azure.com/test-org")
-	// Should NOT contain actual token
 	assert.NotContains(t, str, "super-secret-token-12345")
-	// Should indicate token is redacted
 	assert.Contains(t, str, "[REDACTED]")
 }
 
-// TestClient_NilClient tests that nil client doesn't panic when formatted
 func TestClient_NilClient(t *testing.T) {
 	var client *Client
 
-	// Should not panic
 	assert.NotPanics(t, func() {
 		_ = client.String()
 		_ = client.GoString()
@@ -53,7 +43,6 @@ func TestClient_NilClient(t *testing.T) {
 	assert.Contains(t, client.GoString(), "nil")
 }
 
-// TestClient_PrepareRequest_JSONAcceptHeader tests that JSON requests use application/json Accept header
 func TestClient_PrepareRequest_JSONAcceptHeader(t *testing.T) {
 	client := NewClient("https://dev.azure.com/test-org", "test-token")
 

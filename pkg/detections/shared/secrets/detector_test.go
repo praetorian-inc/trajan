@@ -1,4 +1,3 @@
-// modules/trajan/pkg/detections/shared/secrets/detector_test.go
 package secrets
 
 import (

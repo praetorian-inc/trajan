@@ -1,7 +1,6 @@
 package taintsources
 
-// GitHubTaintedContexts is the single canonical list of user-controllable
-// GitHub Actions context paths that can lead to injection vulnerabilities.
+// The single canonical list of user-controllable GitHub Actions context paths.
 var GitHubTaintedContexts = []string{
 	"github.event.comment.body",
 	"github.event.pull_request.title",
@@ -39,5 +38,5 @@ var GitHubTaintedContexts = []string{
 	"github.event.pull_request.head.repo.default_branch",
 }
 
-// InputsPrefix is the wildcard pattern for user-controllable workflow inputs.
+// Any inputs.* value is user-controllable, so the prefix alone is a taint source.
 const InputsPrefix = "inputs."

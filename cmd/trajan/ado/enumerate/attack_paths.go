@@ -13,7 +13,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/azuredevops"
 )
 
-// Local data structures for attack path analysis
 type permissionAnalysis struct {
 	CanQueueBuilds     bool
 	CanContribute      bool
@@ -97,12 +96,10 @@ Use --project to scope to a single project, or omit to analyze all projects.`,
 }
 
 func runAttackPaths(cmd *cobra.Command, args []string) error {
-	// Validate required flags
 	if enumOrg == "" {
 		return fmt.Errorf("--org is required")
 	}
 
-	// Platform dispatch
 	switch enumPlatform {
 	case "azuredevops":
 		return runAttackPathsAzDO(cmd.Context())
@@ -112,7 +109,6 @@ func runAttackPaths(cmd *cobra.Command, args []string) error {
 }
 
 func runAttackPathsAzDO(ctx context.Context) error {
-	// Create client
 	orgURL := fmt.Sprintf("https://dev.azure.com/%s", enumOrg)
 	client, err := NewEnumerateClient(orgURL, GetTokenForPlatform(enumPlatform))
 	if err != nil {
@@ -133,7 +129,6 @@ func runAttackPathsAzDO(ctx context.Context) error {
 		}
 	}
 
-	// Aggregate analysis across all projects
 	var allPerms permissionAnalysis
 	var allTriggers triggerAnalysis
 	var allPolicies policyAnalysis
@@ -143,7 +138,6 @@ func runAttackPathsAzDO(ctx context.Context) error {
 		triggers := analyzeTriggersAzDO(ctx, client, proj)
 		policies := analyzePoliciesAzDO(ctx, client, proj)
 
-		// Merge permissions (use most permissive)
 		if perms.CanQueueBuilds {
 			allPerms.CanQueueBuilds = true
 		}
@@ -168,7 +162,6 @@ func runAttackPathsAzDO(ctx context.Context) error {
 		allPerms.BuildPerms = append(allPerms.BuildPerms, perms.BuildPerms...)
 		allPerms.GitPerms = append(allPerms.GitPerms, perms.GitPerms...)
 
-		// Merge triggers
 		allTriggers.CITriggers = append(allTriggers.CITriggers, triggers.CITriggers...)
 		allTriggers.PRTriggers = append(allTriggers.PRTriggers, triggers.PRTriggers...)
 		allTriggers.ScheduledTriggers = append(allTriggers.ScheduledTriggers, triggers.ScheduledTriggers...)
@@ -177,23 +170,18 @@ func runAttackPathsAzDO(ctx context.Context) error {
 		allTriggers.ExploitablePRTriggers = append(allTriggers.ExploitablePRTriggers, triggers.ExploitablePRTriggers...)
 		allTriggers.TotalPipelines += triggers.TotalPipelines
 
-		// Merge policies
 		allPolicies.BuildValidationPolicies = append(allPolicies.BuildValidationPolicies, policies.BuildValidationPolicies...)
 		allPolicies.TotalPolicies += policies.TotalPolicies
 	}
 
-	// Identify attack paths
 	paths := identifyAttackPaths(allPerms, allTriggers, allPolicies)
 
-	// Output results
 	return outputAttackPaths(allPerms, allTriggers, allPolicies, paths)
 }
 
-// Phase 1: Analyze permissions using dedicated permissions API
 func analyzePermissionsAzDO(ctx context.Context, client *azuredevops.Client, project string) permissionAnalysis {
 	var pa permissionAnalysis
 
-	// Resolve project to get its ID for scoped permission checks
 	// Empty token = org-level check (wrong), project ID = project-level (correct)
 	proj, err := client.GetProject(ctx, project)
 	if err != nil {
@@ -202,7 +190,6 @@ func analyzePermissionsAzDO(ctx context.Context, client *azuredevops.Client, pro
 	buildToken := proj.ID
 	gitToken := "repoV2/" + proj.ID
 
-	// Detailed build permission checks
 	buildPerms := []struct {
 		bit  int
 		name string
@@ -226,7 +213,6 @@ func analyzePermissionsAzDO(ctx context.Context, client *azuredevops.Client, pro
 			Bit:     perm.bit,
 			Allowed: allowed,
 		})
-		// Set convenience flags
 		if allowed {
 			switch perm.bit {
 			case buildPermQueueBuilds:
@@ -239,7 +225,6 @@ func analyzePermissionsAzDO(ctx context.Context, client *azuredevops.Client, pro
 		}
 	}
 
-	// Detailed git permission checks
 	gitPerms := []struct {
 		bit  int
 		name string
@@ -264,7 +249,6 @@ func analyzePermissionsAzDO(ctx context.Context, client *azuredevops.Client, pro
 			Bit:     perm.bit,
 			Allowed: allowed,
 		})
-		// Set convenience flags
 		if allowed {
 			switch perm.bit {
 			case gitPermContribute:
@@ -281,11 +265,9 @@ func analyzePermissionsAzDO(ctx context.Context, client *azuredevops.Client, pro
 	return pa
 }
 
-// Phase 2: Analyze triggers
 func analyzeTriggersAzDO(ctx context.Context, client *azuredevops.Client, project string) triggerAnalysis {
 	var ta triggerAnalysis
 
-	// List all build definitions
 	defs, err := client.ListBuildDefinitions(ctx, project)
 	if err != nil {
 		return ta
@@ -293,14 +275,12 @@ func analyzeTriggersAzDO(ctx context.Context, client *azuredevops.Client, projec
 
 	ta.TotalPipelines = len(defs)
 
-	// Get full details for each definition
 	for _, defSummary := range defs {
 		def, err := client.GetBuildDefinition(ctx, project, defSummary.ID)
 		if err != nil {
 			continue
 		}
 
-		// Classify triggers
 		hasCITrigger := false
 		hasPRTrigger := false
 		hasScheduled := false
@@ -316,7 +296,6 @@ func analyzeTriggersAzDO(ctx context.Context, client *azuredevops.Client, projec
 				RawFilters:    trigger.BranchFilters,
 			}
 
-			// Analyze branch filters for exploitability
 			isExploitable, reason := analyzeBranchFilters(trigger.BranchFilters)
 			summary.IsExploitable = isExploitable
 			summary.ExploitReason = reason
@@ -342,7 +321,6 @@ func analyzeTriggersAzDO(ctx context.Context, client *azuredevops.Client, projec
 			}
 		}
 
-		// If no explicit triggers, check if YAML pipeline (implicit CI)
 		if !hasCITrigger && !hasPRTrigger && !hasScheduled {
 			if def.Process.Type == 2 {
 				// YAML pipelines have implicit CI triggers on all branches
@@ -373,11 +351,9 @@ func analyzeTriggersAzDO(ctx context.Context, client *azuredevops.Client, projec
 	return ta
 }
 
-// Phase 3: Analyze policies
 func analyzePoliciesAzDO(ctx context.Context, client *azuredevops.Client, project string) policyAnalysis {
 	var pa policyAnalysis
 
-	// List policy configurations
 	configs, err := client.ListPolicyConfigurations(ctx, project)
 	if err != nil {
 		return pa
@@ -385,19 +361,17 @@ func analyzePoliciesAzDO(ctx context.Context, client *azuredevops.Client, projec
 
 	pa.TotalPolicies = len(configs)
 
-	// Filter to build validation policies
 	for _, config := range configs {
 		if config.Type.ID == buildValidationPolicyTypeID {
 			for _, scope := range config.Settings.Scope {
 				policy := buildValidationPolicy{
 					PipelineID:   config.Settings.BuildDefinitionID,
-					PipelineName: "", // Will need separate lookup to get name
+					PipelineName: "", // Needs a separate lookup.
 					Branch:       scope.RefName,
 					IsEnabled:    config.IsEnabled,
 					Project:      project,
 				}
 
-				// Extract repository name if available
 				if scope.RepositoryID != "" {
 					policy.Repository = scope.RepositoryID
 				}
@@ -410,11 +384,9 @@ func analyzePoliciesAzDO(ctx context.Context, client *azuredevops.Client, projec
 	return pa
 }
 
-// Phase 4: Identify attack paths
 func identifyAttackPaths(perms permissionAnalysis, triggers triggerAnalysis, policies policyAnalysis) []attackPath {
 	var paths []attackPath
 
-	// Attack Path 1: Direct Pipeline Execution
 	if perms.CanQueueBuilds {
 		paths = append(paths, attackPath{
 			Risk:    "High",
@@ -423,7 +395,6 @@ func identifyAttackPaths(perms permissionAnalysis, triggers triggerAnalysis, pol
 		})
 	}
 
-	// Attack Path 2: CI Trigger Hijack (exploitable triggers)
 	if perms.CanContribute && len(triggers.ExploitableCITriggers) > 0 {
 		paths = append(paths, attackPath{
 			Risk:    "Critical",
@@ -432,7 +403,6 @@ func identifyAttackPaths(perms permissionAnalysis, triggers triggerAnalysis, pol
 		})
 	}
 
-	// Attack Path 3: CI Trigger via Code Push
 	if perms.CanContribute && len(triggers.CITriggers) > 0 {
 		paths = append(paths, attackPath{
 			Risk:    "High",
@@ -441,7 +411,6 @@ func identifyAttackPaths(perms permissionAnalysis, triggers triggerAnalysis, pol
 		})
 	}
 
-	// Attack Path 4: PR Trigger Attack
 	if perms.CanCreatePR && (len(triggers.PRTriggers) > 0 || len(policies.BuildValidationPolicies) > 0) {
 		risk := "Medium"
 		if len(triggers.ExploitablePRTriggers) > 0 {
@@ -455,7 +424,6 @@ func identifyAttackPaths(perms permissionAnalysis, triggers triggerAnalysis, pol
 		})
 	}
 
-	// Attack Path 5: Policy Bypass
 	if perms.CanBypassPolicies {
 		paths = append(paths, attackPath{
 			Risk:    "High",
@@ -464,7 +432,6 @@ func identifyAttackPaths(perms permissionAnalysis, triggers triggerAnalysis, pol
 		})
 	}
 
-	// Attack Path 6: Scheduled Trigger Poisoning
 	if perms.CanContribute && len(triggers.ScheduledTriggers) > 0 {
 		paths = append(paths, attackPath{
 			Risk:    "Medium",
@@ -473,7 +440,6 @@ func identifyAttackPaths(perms permissionAnalysis, triggers triggerAnalysis, pol
 		})
 	}
 
-	// Sort by risk level (Critical > High > Medium)
 	sort.Slice(paths, func(i, j int) bool {
 		riskOrder := map[string]int{"Critical": 0, "High": 1, "Medium": 2}
 		return riskOrder[paths[i].Risk] < riskOrder[paths[j].Risk]
@@ -482,7 +448,6 @@ func identifyAttackPaths(perms permissionAnalysis, triggers triggerAnalysis, pol
 	return paths
 }
 
-// Output functions
 func outputAttackPaths(perms permissionAnalysis, triggers triggerAnalysis, policies policyAnalysis, paths []attackPath) error {
 	switch enumOutput {
 	case "json":
@@ -495,7 +460,6 @@ func outputAttackPaths(perms permissionAnalysis, triggers triggerAnalysis, polic
 }
 
 func outputAttackPathsConsole(perms permissionAnalysis, triggers triggerAnalysis, policies policyAnalysis, paths []attackPath) error {
-	// Permission Analysis
 	fmt.Println("=== Permission Analysis ===")
 	fmt.Printf("Queue builds:      %s\n", formatBool(perms.CanQueueBuilds))
 	fmt.Printf("Contribute code:   %s\n", formatBool(perms.CanContribute))
@@ -504,7 +468,6 @@ func outputAttackPathsConsole(perms permissionAnalysis, triggers triggerAnalysis
 	fmt.Printf("Bypass policies:   %s\n", formatBool(perms.CanBypassPolicies))
 	fmt.Println()
 
-	// Trigger Analysis
 	fmt.Println("=== Trigger Analysis ===")
 	exploitableCICount := len(triggers.ExploitableCITriggers)
 	exploitablePRCount := len(triggers.ExploitablePRTriggers)
@@ -526,12 +489,10 @@ func outputAttackPathsConsole(perms permissionAnalysis, triggers triggerAnalysis
 	fmt.Printf("Total pipelines:    %d\n", triggers.TotalPipelines)
 	fmt.Println()
 
-	// Policy Analysis
 	fmt.Println("=== Policy Analysis ===")
 	fmt.Printf("Build Validation:   %d policies\n", len(policies.BuildValidationPolicies))
 	fmt.Println()
 
-	// Attack Paths
 	fmt.Println("=== Attack Paths ===")
 	if len(paths) == 0 {
 		fmt.Println("No attack paths identified")
@@ -545,7 +506,6 @@ func outputAttackPathsConsole(perms permissionAnalysis, triggers triggerAnalysis
 	}
 	fmt.Println()
 
-	// Summary
 	critical, high, medium := 0, 0, 0
 	for _, path := range paths {
 		switch path.Risk {
@@ -596,12 +556,10 @@ func outputAttackPathsCSV(paths []attackPath) error {
 	writer := csv.NewWriter(os.Stdout)
 	defer writer.Flush()
 
-	// Write header
 	if err := writer.Write([]string{"Risk", "Attack Path", "Details"}); err != nil {
 		return err
 	}
 
-	// Write rows
 	for _, path := range paths {
 		if err := writer.Write([]string{path.Risk, path.Name, path.Details}); err != nil {
 			return err

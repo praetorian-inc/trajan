@@ -29,7 +29,6 @@ func TestClampScope(t *testing.T) {
 	}
 }
 
-// resolveRoleToken maps ACL namespace tokens to the emitted node they scope.
 func TestResolveRoleToken(t *testing.T) {
 	repoIdx := map[string]string{"repo-guid": "org/P/myrepo"}
 	scIdx := map[string]string{"conn-1": "Owner/conn-1"}
@@ -49,7 +48,6 @@ func TestResolveRoleToken(t *testing.T) {
 	}
 }
 
-// policySettings projects raw camelCase branch-policy settings to schema snake_case.
 func TestPolicySettings(t *testing.T) {
 	got := policySettings(map[string]any{
 		"creatorVoteCounts": true, "minimumApproverCount": float64(2),
@@ -111,9 +109,8 @@ func TestConsumesGroupLevels(t *testing.T) {
 	}
 }
 
-// resolveTemplateSources resolves a resources.repositories alias to its source
-// repo, flagging cross-project and unpinned (default-branch) sources — the cat-08
-// poisoned-template surface that was previously an opaque alias string.
+// A resources.repositories alias resolves to its source repo, with cross-project and
+// unpinned sources flagged: the cat-08 poisoned-template surface.
 func TestResolveTemplateSources(t *testing.T) {
 	root := map[string]any{
 		"resources": map[string]any{
@@ -137,8 +134,8 @@ func TestResolveTemplateSources(t *testing.T) {
 	}
 }
 
-// normalizeParameters flags a queue-time-settable string/number/object param with
-// no values allowlist as freeform — the cat-02 injection surface.
+// A string, number or object param with no values allowlist is freeform, the cat-02
+// injection surface.
 func TestNormalizeParameters(t *testing.T) {
 	got := normalizeParameters([]any{
 		map[string]any{"name": "tag", "type": "string"},                                 // freeform

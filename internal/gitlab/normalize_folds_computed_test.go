@@ -6,9 +6,8 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// These cover the effective-fold booleans that were previously hardcoded false
-// while a non-deferred rule reads them true (LAB-4288 fold sweep). Each fold has a
-// firing case AND a benign twin, so a regression to constant-true is caught too.
+// Each fold gets a firing case and a benign twin, so a regression to a constant value
+// is caught in either direction rather than only the false one.
 
 func writeCIConfig(t *testing.T, prior engine.PriorPhase, fp, yaml string) {
 	t.Helper()

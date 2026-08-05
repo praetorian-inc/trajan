@@ -20,14 +20,12 @@ import (
 )
 
 var (
-	// Global flags
 	verbose bool
 	debug   bool
 	noColor bool
 	output  string
 	token   string
 
-	// Proxy flags
 	httpProxy  string
 	socksProxy string
 )
@@ -38,7 +36,6 @@ var rootCmd = &cobra.Command{
 	Long:  `Trajan - CI/CD Security Scanner`,
 }
 
-// Execute runs the root command
 func Execute(ctx context.Context) {
 	err := rootCmd.ExecuteContext(ctx)
 	if err == nil {
@@ -81,13 +78,12 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&httpProxy, "proxy", "", "HTTP proxy URL (e.g., http://proxy:8080)")
 	rootCmd.PersistentFlags().StringVar(&socksProxy, "socks-proxy", "", "SOCKS5 proxy URL (e.g., socks5://proxy:1080)")
 
-	// Command groups
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "platforms", Title: "Platforms:"},
 		&cobra.Group{ID: "utilities", Title: "Utilities:"},
 	)
 
-	// Platform commands (ordered)
+	// Registration order is the help order: command sorting is disabled above.
 	ghcmd.GitHubCmd.GroupID = "platforms"
 	gitlab.GitLabCmd.GroupID = "platforms"
 	ado.AdoCmd.GroupID = "platforms"
@@ -102,14 +98,12 @@ func init() {
 	rootCmd.AddCommand(jenkins.JenkinsCmd)
 	rootCmd.AddCommand(jfrog.JFrogCmd)
 
-	// Utility commands
 	searchCmd.Hidden = true
 	versionCmd.GroupID = "utilities"
 
 	rootCmd.AddCommand(searchCmd)
 	rootCmd.AddCommand(versionCmd)
 
-	// Move built-in help and completion into utilities group
 	rootCmd.SetHelpCommandGroupID("utilities")
 	rootCmd.SetCompletionCommandGroupID("utilities")
 }

@@ -23,8 +23,8 @@ func collectOneProject(ctx context.Context, cl GitLab, cp engine.CurrentPhase, p
 			return err
 		}
 		projRaw = raw
-		// MR settings, mirror fields, id-token sub-claim, pages access level are all
-		// carried on the project detail — no extra file (spec §5 "folded").
+		// The MR settings, mirror fields, id-token sub-claim and pages access level all
+		// ride on the project detail, so none of them needs a surface of its own.
 		return writeOrMark(cp, engine.CollectGLProject(fp), "project", base, raw, status)
 	})
 
@@ -81,8 +81,8 @@ func collectOneProject(ctx context.Context, cl GitLab, cp engine.CurrentPhase, p
 	return nil
 }
 
-// collectProjectVariables strips value before write — variable values are never
-// collected (spec §5 / fields doc).
+// A variable's value is stripped before the write: this tool records that a secret
+// exists and how it is exposed, never its contents.
 func collectProjectVariables(ctx context.Context, cl GitLab, cp engine.CurrentPhase, fp, base string) error {
 	apiPath := base + "/variables"
 	items, status, err := softList(ctx, cl, apiPath, nil)
@@ -108,10 +108,8 @@ func collectProjectVariables(ctx context.Context, cl GitLab, cp engine.CurrentPh
 	return writeListOrMark(cp, rel, "project-variables", apiPath, stripped, 0)
 }
 
-// collectProjectRunners lists project runners, enriches each with per-runner detail
-// (run_untagged, access_level, locked, tag_list — the runner-subject rule fields),
-// and captures its co-residency project set. A flaky per-runner call marks that
-// runner and continues.
+// The co-residency project set is fetched per runner, so a flaky call marks that one
+// runner and continues rather than losing the whole list.
 func collectProjectRunners(ctx context.Context, cl GitLab, cp engine.CurrentPhase, fp, base string, timer *engine.PhaseTimer) error {
 	apiPath := base + "/runners"
 	items, status, err := softList(ctx, cl, apiPath, nil)
@@ -143,12 +141,10 @@ func collectProjectRunners(ctx context.Context, cl GitLab, cp engine.CurrentPhas
 	return nil
 }
 
-// enrichRunners fetches GET /runners/:id per listed runner and merges the detail
-// over the list record, so the ref_protected (access_level), run_untagged, locked,
-// and tag_list fields the runner-subject rules key on are present. The list record
-// alone omits them. A soft per-runner failure keeps the bare list entry; a transport
-// error is recorded and the bare entry kept. Bounded by the same concurrency as the
-// fan-out via a small fixed cap since the runner set per scope is tiny.
+// The list record omits access_level, run_untagged, locked and tag_list, which the
+// runner rules key on, so each runner's detail is fetched and merged over it. Any
+// per-runner failure keeps the bare list entry. The concurrency is a small fixed cap
+// because the runner set per scope is tiny.
 func enrichRunners(ctx context.Context, cl GitLab, items []json.RawMessage, timer *engine.PhaseTimer, scope string) []json.RawMessage {
 	if len(items) == 0 {
 		return items
@@ -191,8 +187,8 @@ func indexed(items []json.RawMessage) []idxRaw {
 	return out
 }
 
-// mergeRaw overlays detail's keys onto base (detail wins). Returns nil if either
-// side is not a JSON object so the caller can keep the original list record.
+// detail wins on a key collision. Nil when either side is not a JSON object, so the
+// caller can fall back to the original list record.
 func mergeRaw(base, detail json.RawMessage) json.RawMessage {
 	var b, d map[string]json.RawMessage
 	if json.Unmarshal(base, &b) != nil || json.Unmarshal(detail, &d) != nil {
@@ -212,13 +208,10 @@ const projectCICdQuery = `query($fullPath: ID!) {
   }
 }`
 
-// collectProjectCISettings folds the GraphQL ciCdSettings job-token toggles
-// (including crossProjectPushForJobTokenAllowed) together with the REST
-// job_token_scope booleans and the inbound allowlist entries — both the
-// project-scoped (/allowlist) and group-scoped (/groups_allowlist) lists — into
-// one file. The entries feed job_token_allowlist{mode,entries,fine_grained} and
-// the target.job_token_allowlist chain participant, which the inbound/outbound
-// booleans alone cannot express.
+// The job-token posture is split across GraphQL toggles, REST booleans and two
+// separate allowlists, so all four are bundled into one file. The allowlist entries
+// are what a chain rule needs: the inbound/outbound booleans cannot say who is
+// allowed.
 func collectProjectCISettings(ctx context.Context, cl GitLab, cp engine.CurrentPhase, fp, base string) error {
 	data, gstatus, err := graphQLSoft(ctx, cl, projectCICdQuery, map[string]any{"fullPath": fp})
 	if err != nil {
@@ -258,10 +251,9 @@ const clusterAgentsQuery = `query($fullPath: ID!) {
   }
 }`
 
-// collectClusterAgents writes the GraphQL agent grant graph, then fetches each
-// agent's .gitlab/agents/<name>/config.yaml (config_path, protected_branches_only,
-// ci_access.environments filter, access_as impersonation, default_permissions —
-// none of which the clusterAgents query exposes). Config fetch is soft per agent.
+// The clusterAgents query exposes the grant graph but none of the agent's own
+// controls — protected_branches_only, the ci_access.environments filter, access_as
+// impersonation, default_permissions — so each agent's config.yaml is fetched too.
 func collectClusterAgents(ctx context.Context, cl GitLab, cp engine.CurrentPhase, fp, base string, projRaw json.RawMessage) error {
 	data, status, err := graphQLSoft(ctx, cl, clusterAgentsQuery, map[string]any{"fullPath": fp})
 	if err != nil {
@@ -297,9 +289,8 @@ func agentNames(data json.RawMessage) []string {
 	return names
 }
 
-// collectAgentConfig fetches the raw config.yaml at the config path. The agent's
-// config lives at .gitlab/agents/<name>/config.yaml on the default branch. Absent
-// config (a bare registration) soft-404s and is skipped.
+// An agent's config lives at .gitlab/agents/<name>/config.yaml on the default branch.
+// A bare registration has none, which soft-404s and is skipped.
 func collectAgentConfig(ctx context.Context, cl GitLab, cp engine.CurrentPhase, fp, base, name string, projRaw json.RawMessage) error {
 	ref := defaultBranch(projRaw)
 	cfgPath := ".gitlab/agents/" + name + "/config.yaml"
@@ -317,9 +308,8 @@ func collectAgentConfig(ctx context.Context, cl GitLab, cp engine.CurrentPhase, 
 	return cp.WriteRaw(engine.CollectGLAgentConfig(fp, name), b)
 }
 
-// collectCIConfig fetches the raw .gitlab-ci.yml at the default branch. Full
-// include-tree resolution (local/project/template/component) is P3's job; the raw
-// entrypoint is captured here.
+// Only the raw entrypoint on the default branch; resolving the include tree is the
+// job normalizer's work, not collect's.
 func collectCIConfig(ctx context.Context, cl GitLab, cp engine.CurrentPhase, fp, base string, projRaw json.RawMessage) error {
 	ref := defaultBranch(projRaw)
 	p := base + "/repository/files/" + url.PathEscape(".gitlab-ci.yml") + "/raw"

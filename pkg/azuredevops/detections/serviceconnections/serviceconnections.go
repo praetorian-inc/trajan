@@ -15,7 +15,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// exprRegex matches ${{ }} Azure template expressions
 var exprRegex = regexp.MustCompile(`\$\{\{\s*(.+?)\s*\}\}`)
 
 func init() {
@@ -24,15 +23,13 @@ func init() {
 	})
 }
 
-// Detection detects service connection vulnerabilities in Azure Pipelines
 type Detection struct {
 	base.BaseDetection
 	mu              sync.Mutex
 	connectionUsage map[string]map[string]bool // connection name -> set of workflow IDs that use it
-	emitted         map[string]bool            // connections already emitted as findings
+	emitted         map[string]bool            // connection names already reported
 }
 
-// New creates a new service connections detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection:   base.NewBaseDetection("service-connections", platforms.PlatformAzureDevOps, detections.SeverityCritical),
@@ -41,7 +38,6 @@ func New() *Detection {
 	}
 }
 
-// Detect analyzes the graph for service connection vulnerabilities
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
@@ -66,7 +62,7 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			return true
 		})
 
-		// Accumulate connection usage across all Detect calls and check threshold under the mutex
+		// Usage accumulates across Detect calls, so the threshold check must hold the mutex.
 		d.mu.Lock()
 		for conn := range connectionsInWorkflow {
 			if d.connectionUsage[conn] == nil {
@@ -97,11 +93,9 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// checkDynamicServiceConnections checks for dynamic service connection references
 func checkDynamicServiceConnections(wf *graph.WorkflowNode, step *graph.StepNode) []detections.Finding {
 	var findings []detections.Finding
 
-	// List of known service connection parameter names in Azure DevOps tasks
 	connectionParams := []string{
 		"azureSubscription",
 		"connectedServiceName",
@@ -112,10 +106,8 @@ func checkDynamicServiceConnections(wf *graph.WorkflowNode, step *graph.StepNode
 		"gcpConnection",
 	}
 
-	// Check each connection parameter
 	for _, param := range connectionParams {
 		if value, exists := step.With[param]; exists {
-			// Check if value contains dynamic template expressions
 			if hasDynamicExpression(value) {
 				scLine := common.LineForKey(step.WithLines, param, step.Line)
 				findings = append(findings, detections.Finding{
@@ -150,29 +142,25 @@ func checkDynamicServiceConnections(wf *graph.WorkflowNode, step *graph.StepNode
 	return findings
 }
 
-// checkServiceConnectionInEnv checks for service connections exposed in environment variables
 func checkServiceConnectionInEnv(wf *graph.WorkflowNode, step *graph.StepNode) []detections.Finding {
 	var findings []detections.Finding
 
-	// Specific patterns that indicate actual service connections
-	// These are more precise to reduce false positives on generic env vars
+	// Deliberately narrow to avoid matching generic env vars.
 	connectionPatterns := []string{
 		"service_connection",
 		"serviceconnection",
-		"_connection",     // Matches AZURE_CONNECTION, K8S_CONNECTION, etc.
-		"connection_",     // Matches CONNECTION_STRING, etc.
-		"_conn",           // Matches REGISTRY_CONN, DB_CONN, etc.
-		"subscription_id", // Azure subscription IDs
+		"_connection",
+		"connection_",
+		"_conn",
+		"subscription_id",
 		"subscriptionid",
 		"registry_conn",
 		"registryconn",
 	}
 
-	// Check environment variables
 	for envKey, envValue := range step.Env {
 		envKeyLower := strings.ToLower(envKey)
 
-		// Check if env var name matches a service connection pattern
 		isConnectionEnv := false
 		for _, pattern := range connectionPatterns {
 			if strings.Contains(envKeyLower, pattern) {
@@ -181,7 +169,6 @@ func checkServiceConnectionInEnv(wf *graph.WorkflowNode, step *graph.StepNode) [
 			}
 		}
 
-		// If env var matches connection pattern and contains dynamic expression
 		if isConnectionEnv && hasDynamicExpression(envValue) {
 			envLine := common.LineForKey(step.EnvLines, envKey, step.Line)
 			findings = append(findings, detections.Finding{
@@ -212,20 +199,13 @@ func checkServiceConnectionInEnv(wf *graph.WorkflowNode, step *graph.StepNode) [
 	return findings
 }
 
-// hasDynamicExpression checks if a value contains ${{ }} template expressions
-// Any dynamic expression is potentially dangerous because:
-// - parameters.* can be controlled by pipeline invocation
-// - variables.* can come from PR context or previous steps
-// - steps.*.outputs.* can be attacker-controlled if the step runs malicious code
-// - jobs.*.outputs.* can be attacker-controlled from compromised jobs
-// - env.* can reference attacker-controlled environment variables
+// Every ${{ }} source can be attacker-influenced: parameters at queue time, variables
+// from PR context, step and job outputs from compromised jobs, env from the environment.
 func hasDynamicExpression(value string) bool {
 	matches := exprRegex.FindAllStringSubmatch(value, -1)
-	// Any ${{ }} expression is potentially dangerous for service connections
 	return len(matches) > 0
 }
 
-// trackConnectionUsage records which service connections a step references
 func trackConnectionUsage(step *graph.StepNode, connectionsInWorkflow map[string]bool) {
 	connectionParams := []string{
 		"azuresubscription",
@@ -239,7 +219,6 @@ func trackConnectionUsage(step *graph.StepNode, connectionsInWorkflow map[string
 		paramKeyLower := strings.ToLower(paramKey)
 		for _, connParam := range connectionParams {
 			if strings.Contains(paramKeyLower, connParam) {
-				// Found a connection reference
 				connectionsInWorkflow[paramValue] = true
 				break
 			}

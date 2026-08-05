@@ -1,11 +1,8 @@
 //go:build ignore
 // +build ignore
 
-// Manual test to verify template project ID caching
-// Run: go run pkg/gitlab/manual_test_caching.go <gitlab-token>
-//
-// This test fetches 3 templates and should show only 1 GetProject call
-// due to caching, even though 3 templates are fetched.
+// Manual check that GetTemplate caches the templates project ID:
+// go run pkg/gitlab/manual_test_caching.go <gitlab-token> [base-url]
 
 package main
 
@@ -62,7 +59,6 @@ func main() {
 	fmt.Println("\nNote: The first template fetch should be slower (fetches project ID),")
 	fmt.Println("      subsequent fetches should be faster (uses cached project ID).")
 
-	// Show rate limiter stats
 	rl := client.RateLimiter()
 	fmt.Printf("\nRate Limiter Stats:\n")
 	fmt.Printf("  Limit: %d\n", rl.Limit())

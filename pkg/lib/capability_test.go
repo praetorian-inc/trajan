@@ -25,7 +25,6 @@ func TestSDKCapability_Match_PlatformOverride(t *testing.T) {
 }
 
 func TestSDKCapability_Invoke_Success(t *testing.T) {
-	// Save and restore original ScanFunc
 	orig := InvokeScanFunc
 	defer func() { InvokeScanFunc = orig }()
 
@@ -71,13 +70,11 @@ func TestSDKCapability_Invoke_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, emitted, 2, "expected 1 asset + 1 risk")
 
-	// First emitted: asset (workflow)
 	asset, ok := emitted[0].(capmodel.Asset)
 	require.True(t, ok)
 	assert.Equal(t, "https://github.com/org/repo", asset.DNS)
 	assert.Contains(t, asset.Name, ".github/workflows/ci.yml")
 
-	// Second emitted: risk (finding)
 	risk, ok := emitted[1].(capmodel.Risk)
 	require.True(t, ok)
 	assert.Equal(t, "cicd-actions_injection", risk.Name)

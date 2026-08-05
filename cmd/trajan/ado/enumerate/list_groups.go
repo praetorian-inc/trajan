@@ -53,7 +53,6 @@ func runListGroupsAzDO() error {
 	}
 
 	if listGroupsDescriptor != "" {
-		// List members of a specific group
 		members, err := client.ListGroupMembers(ctx, listGroupsDescriptor)
 		if err != nil {
 			return err
@@ -91,7 +90,6 @@ func runListGroupsAzDO() error {
 		}
 	}
 
-	// List all groups (optionally scoped to project)
 	var scopeDesc string
 	if enumProject != "" {
 		proj, err := client.GetProject(ctx, enumProject)

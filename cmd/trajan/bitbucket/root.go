@@ -11,7 +11,6 @@ var BitbucketCmd = &cobra.Command{
 }
 
 func init() {
-	// Persistent flags available to all bitbucket subcommands
 	BitbucketCmd.PersistentFlags().String("email", "", "email address for API token auth (or set BITBUCKET_EMAIL/BB_EMAIL)")
 	BitbucketCmd.PersistentFlags().String("workspace", "", "Bitbucket workspace slug (or set BITBUCKET_WORKSPACE)")
 

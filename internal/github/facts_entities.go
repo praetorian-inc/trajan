@@ -1,8 +1,7 @@
 package github
 
-// Fact records for the org / repo / environment / ruleset / app subjects. Slice
-// and map fields are emitted non-nil because rules test them with `!= []`, so an
-// omitted empty would change rule evaluation.
+// Slice and map fields are emitted non-nil because rules test them with `!= []`, so
+// an omitted empty would change rule evaluation.
 
 type OrgSecretSummary struct {
 	Name       string `json:"name"`
@@ -78,10 +77,9 @@ type OrgFact struct {
 
 	RunnerGroups              []RunnerGroupSummary `json:"runner_groups"`
 	AnyRunnerGroupPublicRepos bool                 `json:"any_runner_group_public_repos"`
-	// A group whose visibility is "all" AND which has registered runners: every
-	// repository in the org can land a job on that fleet. Precomputed because
-	// the two conditions must hold of the SAME group, which a projection across
-	// runner_groups cannot express.
+	// A group with visibility "all" and registered runners: every repository in the
+	// org can land a job on that fleet. Precomputed because both conditions must hold
+	// of the SAME group, which a projection across runner_groups cannot express.
 	AnyRunnerGroupAllReposWithRunners bool `json:"any_runner_group_all_repos_with_runners"`
 	OrgRunnersCount                   int  `json:"org_runners_count"`
 
@@ -104,8 +102,7 @@ type OrgFact struct {
 	Provenance []SourceProvenance `json:"_provenance"`
 }
 
-// RepoLegacyBPSummary is part of the repo fact schema even though no repo rule
-// currently reads it.
+// Part of the repo fact schema even though no repo rule currently reads it.
 type RepoLegacyBPSummary struct {
 	RequiredReviews      any  `json:"required_reviews"`
 	EnforceAdmins        any  `json:"enforce_admins"`
@@ -189,8 +186,8 @@ type RulesetBypass struct {
 	BypassPullRequestOnly []RulesetBypassActor `json:"bypass_pull_request_only"`
 }
 
-// RulesetFact emits every key unconditionally (the effective-ruleset join reads
-// them whether set or not); Repo is the sole repo-scope-only key, hence omitempty.
+// Every key is emitted unconditionally because the effective-ruleset join reads
+// them whether set or not; Repo is the sole repo-scope-only key, hence omitempty.
 type RulesetFact struct {
 	ID    string `json:"_id"`
 	Scope any    `json:"scope"`
@@ -219,8 +216,8 @@ type RulesetFact struct {
 	Provenance []SourceProvenance `json:"_provenance"`
 }
 
-// RulesetSentinel stands in for a scope with no rulesets or an unavailable
-// endpoint; the effective-ruleset join skips it because ruleset_id is absent.
+// Stands in for a scope with no rulesets or an unavailable endpoint; the
+// effective-ruleset join skips it because ruleset_id is absent.
 type RulesetSentinel struct {
 	ID          string `json:"_id"`
 	Scope       any    `json:"scope"`

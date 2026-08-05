@@ -66,13 +66,8 @@ func TestIterJSON(t *testing.T) {
 	phaseDir := "10-normalize"
 	root := filepath.Join(run, phaseDir)
 
-	// Layout:
-	//   jobs/a.json          -> included
-	//   jobs/b.json          -> included
-	//   jobs/nested/c.json   -> included (recursive)
-	//   jobs/_skip.json      -> skipped (leading underscore)
-	//   _summary.json        -> skipped (leading underscore, at phase root)
-	//   jobs/note.txt        -> skipped (not .json)
+	// Recursive, and skipped when the basename starts with "_" — at any depth,
+	// including the phase root — or the extension isn't .json.
 	mustWrite(t, filepath.Join(root, "jobs", "b.json"), `{"id":"b"}`)
 	mustWrite(t, filepath.Join(root, "jobs", "a.json"), `{"id":"a"}`)
 	mustWrite(t, filepath.Join(root, "jobs", "nested", "c.json"), `{"id":"c"}`)

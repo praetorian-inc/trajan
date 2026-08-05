@@ -282,10 +282,9 @@ func (a *attacher) project(f *finding.Finding, t Target, ref findingRef, _ ancho
 	a.done(hits, 0)
 }
 
-// An anchor edge is exact where the chain item names one; otherwise every
-// emitted edge of the target type incident on an anchor node is a hit, which is
-// what fans a job-subject READS finding over its secrets while ignoring its
-// cache and artifact reads.
+// An anchor edge is exact where the chain item names one; otherwise every emitted edge
+// of the target type incident on an anchor node is a hit, which fans a job-subject
+// READS finding over its secrets while ignoring its cache and artifact reads.
 func (a *attacher) attachEdge(f *finding.Finding, t Target, ref findingRef, anc anchorSet) {
 	hits := 0
 	for _, id := range anc.edges {
@@ -329,11 +328,9 @@ func (a *attacher) attachAttack(f *finding.Finding, t Target, ref findingRef, an
 	}
 	actor := a.n.upsert(ExternalActor, map[string]string{"kind": "external"},
 		map[string]any{"synthetic": true}, "")
-	// The trigger classes go on the edge, not into ExternalActor's identity: 7
-	// victim jobs have an empty low_trust list and a per-class actor node would
-	// leave them sourceless. Both lists are emitted because ranking them here
-	// discards one. No _source: findings[] already names the rule, fingerprint
-	// and subject of every 20-scan file behind this edge.
+	// Trigger classes ride the edge, not ExternalActor's identity: a per-class actor
+	// would leave a victim with an empty low_trust list sourceless. Both lists are kept
+	// because ranking them here discards one; findings[] stands in for _source.
 	tcs := obj(victim.rec["trigger_class_summary"])
 	a.s.add(t.Type, resolved(ExternalActor, actor.ID), resolved(Job, victim.id), map[string]any{
 		"trigger_classes_low_trust": list(tcs["low_trust"]),

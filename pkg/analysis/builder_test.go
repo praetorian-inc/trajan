@@ -1,4 +1,3 @@
-// pkg/analysis/builder_test.go
 package analysis
 
 import (
@@ -18,13 +17,11 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// TestBuildGraphFromNormalized_AzureWorkflowNameFallsBackToPath verifies that when
-// the NormalizedWorkflow.Name is empty (as is the case for Azure pipelines which have
-// no mandatory name field), the WorkflowNode.Name falls back to the file path.
+// Azure pipelines have no mandatory name field, so Name arrives empty.
 func TestBuildGraphFromNormalized_AzureWorkflowNameFallsBackToPath(t *testing.T) {
 	wf := &parser.NormalizedWorkflow{
 		Platform: "azure",
-		Name:     "", // Azure pipelines have no mandatory name field
+		Name:     "",
 		Triggers: []string{"ci"},
 		Jobs:     make(map[string]*parser.NormalizedJob),
 	}
@@ -54,11 +51,9 @@ jobs:
 	g, err := BuildGraph("owner/repo", "pr.yml", []byte(yaml))
 	require.NoError(t, err)
 
-	// Should tag workflow with pull_request_target
 	prtNodes := g.GetNodesByTag(graph.TagPullRequestTarget)
 	assert.Len(t, prtNodes, 1)
 
-	// Should tag step with unsafe checkout
 	unsafeNodes := g.GetNodesByTag(graph.TagUnsafeCheckout)
 	assert.Len(t, unsafeNodes, 1)
 }
@@ -78,11 +73,9 @@ jobs:
 	g, err := BuildGraph("owner/repo", "injection.yml", []byte(yaml))
 	require.NoError(t, err)
 
-	// Should tag workflow with issue_comment
 	icNodes := g.GetNodesByTag(graph.TagIssueComment)
 	assert.Len(t, icNodes, 1)
 
-	// Should tag step with injectable
 	injectableNodes := g.GetNodesByTag(graph.TagInjectable)
 	assert.Len(t, injectableNodes, 1)
 }
@@ -101,7 +94,6 @@ jobs:
 	g, err := BuildGraph("owner/repo", "selfhosted.yml", []byte(yaml))
 	require.NoError(t, err)
 
-	// Should tag job with self-hosted runner
 	shNodes := g.GetNodesByTag(graph.TagSelfHostedRunner)
 	assert.Len(t, shNodes, 1)
 }
@@ -152,22 +144,18 @@ jobs:
 	g, err := BuildGraph("owner/repo", "pipeline.yml", []byte(yaml))
 	require.NoError(t, err)
 
-	// Verify graph structure: Workflow -> Job -> Steps
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 	require.Len(t, workflows, 1)
 	wfID := workflows[0].ID()
 
-	// Workflow should have children (jobs)
 	children := g.Children(wfID)
 	require.Len(t, children, 1)
 
-	// Job should have children (steps)
 	jobChildren := g.Children(children[0])
 	assert.Len(t, jobChildren, 2)
 }
 
 func TestBuildGraphFromNormalized_Basic(t *testing.T) {
-	// Create a NormalizedWorkflow for testing
 	nw := &parser.NormalizedWorkflow{
 		Platform: "github",
 		Name:     "Build",
@@ -194,10 +182,8 @@ func TestBuildGraphFromNormalized_Basic(t *testing.T) {
 	g, err := BuildGraphFromNormalized("owner/repo", "build.yml", nw)
 	require.NoError(t, err)
 
-	// Should have workflow, job, and steps
 	assert.Greater(t, g.NodeCount(), 3)
 
-	// Should have workflow node
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 	require.Len(t, workflows, 1)
 	wf := workflows[0].(*graph.WorkflowNode)
@@ -229,11 +215,9 @@ func TestBuildGraphFromNormalized_PullRequestTarget(t *testing.T) {
 	g, err := BuildGraphFromNormalized("owner/repo", "pr.yml", nw)
 	require.NoError(t, err)
 
-	// Should tag workflow with pull_request_target
 	prtNodes := g.GetNodesByTag(graph.TagPullRequestTarget)
 	assert.Len(t, prtNodes, 1)
 
-	// Should tag step with unsafe checkout
 	unsafeNodes := g.GetNodesByTag(graph.TagUnsafeCheckout)
 	assert.Len(t, unsafeNodes, 1)
 }
@@ -260,17 +244,14 @@ func TestBuildGraphFromNormalized_InjectionDetection(t *testing.T) {
 	g, err := BuildGraphFromNormalized("owner/repo", "injection.yml", nw)
 	require.NoError(t, err)
 
-	// Should tag workflow with issue_comment
 	icNodes := g.GetNodesByTag(graph.TagIssueComment)
 	assert.Len(t, icNodes, 1)
 
-	// Should tag step with injectable
 	injectableNodes := g.GetNodesByTag(graph.TagInjectable)
 	assert.Len(t, injectableNodes, 1)
 }
 
 func TestBuildGraphFromNormalized_GitLabIncludes(t *testing.T) {
-	// Create a NormalizedWorkflow with GitLab includes
 	gitlabCI := &parser.GitLabCI{
 		Includes: []parser.GitLabInclude{
 			{
@@ -316,29 +297,23 @@ func TestBuildGraphFromNormalized_GitLabIncludes(t *testing.T) {
 	g, err := BuildGraphFromNormalized("owner/repo", ".gitlab-ci.yml", nw)
 	require.NoError(t, err)
 
-	// Get workflow node
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 	require.Len(t, workflows, 1)
 	wf := workflows[0].(*graph.WorkflowNode)
 
-	// Verify includes are populated
 	require.Len(t, wf.Includes, 4, "Should have 4 includes")
 
-	// Verify local include
 	assert.Equal(t, "local", wf.Includes[0].Type)
 	assert.Equal(t, ".gitlab/templates/build.yml", wf.Includes[0].Path)
 
-	// Verify remote include
 	assert.Equal(t, "remote", wf.Includes[1].Type)
 	assert.Equal(t, "https://example.com/templates/test.yml", wf.Includes[1].Remote)
 
-	// Verify project include
 	assert.Equal(t, "project", wf.Includes[2].Type)
 	assert.Equal(t, "group/shared-ci", wf.Includes[2].Project)
 	assert.Equal(t, "templates/deploy.yml", wf.Includes[2].Path)
 	assert.Equal(t, "main", wf.Includes[2].Ref)
 
-	// Verify template include
 	assert.Equal(t, "template", wf.Includes[3].Type)
 	assert.Equal(t, "Security/SAST.gitlab-ci.yml", wf.Includes[3].Template)
 }
@@ -355,11 +330,10 @@ test:
   script:
     - echo hello`)
 
-	// Create a real gitlab.Client (empty is fine for this test)
 	mockClient := gitlab.NewClient("https://gitlab.com", "test-token")
 
 	metadata := map[string]interface{}{
-		"gitlab_client":     mockClient, // Use real *gitlab.Client
+		"gitlab_client":     mockClient,
 		"gitlab_project_id": 123,
 		"gitlab_ref":        "main",
 	}
@@ -368,11 +342,9 @@ test:
 	require.NoError(t, err)
 	require.NotNil(t, gr)
 
-	// Verify graph has workflow node
 	nodes := gr.Nodes()
 	require.Greater(t, len(nodes), 0, "expected nodes in graph")
 
-	// Verify metadata is set on graph
 	clientMeta, ok := gr.GetMetadata("gitlab_client")
 	assert.True(t, ok, "expected gitlab_client in metadata")
 	assert.Equal(t, mockClient, clientMeta)
@@ -385,8 +357,6 @@ test:
 	assert.True(t, ok, "expected gitlab_ref in metadata")
 	assert.Equal(t, "main", refMeta)
 
-	// TODO: In a future task, we'll verify the resolver actually resolved includes
-	// For now, just verify the graph builds without errors
 }
 
 func TestBuildGraphWithoutGitLabResolver(t *testing.T) {
@@ -398,25 +368,19 @@ jobs:
     steps:
       - run: echo hello`)
 
-	// No metadata or non-GitLab platform
 	gr, err := BuildGraph("owner/repo", ".github/workflows/test.yml", content)
 	require.NoError(t, err)
 	require.NotNil(t, gr)
 
-	// Should still build graph successfully without resolver
 	nodes := gr.Nodes()
 	require.Greater(t, len(nodes), 0, "expected nodes in graph")
 
-	// Verify no GitLab metadata
 	_, ok := gr.GetMetadata("gitlab_client")
 	assert.False(t, ok, "should not have gitlab_client in metadata for GitHub workflow")
 }
 
-// TestResolveGitLabIncludesWithActualResolution tests that includes are actually resolved
 func TestResolveGitLabIncludesWithActualResolution(t *testing.T) {
-	// Setup mock GitLab server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Handle GetWorkflowFile request for local include
 		if r.URL.Path == "/api/v4/projects/123/repository/files/.gitlab/ci/build.yml" && r.URL.Query().Get("ref") == "main" {
 			mockContent := []byte(`build:
   stage: build
@@ -437,7 +401,6 @@ func TestResolveGitLabIncludesWithActualResolution(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create client pointing to mock server
 	client := gitlab.NewClient(server.URL, "test-token")
 
 	content := []byte(`include:
@@ -462,14 +425,9 @@ test:
 	})
 	require.NoError(t, err)
 
-	// After implementation, we expect:
-	// 1. Main workflow node
-	// 2. Included workflow node for .gitlab/ci/build.yml
-	// 3. An EdgeIncludes edge from main -> included
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 	assert.GreaterOrEqual(t, len(workflows), 2, "Should have at least 2 workflow nodes (main + included)")
 
-	// Find the main workflow (the one with the original path)
 	var mainWorkflow *graph.WorkflowNode
 	for _, node := range workflows {
 		wfNode := node.(*graph.WorkflowNode)
@@ -480,7 +438,6 @@ test:
 	}
 	require.NotNil(t, mainWorkflow, "Should find main workflow node")
 
-	// Check for EdgeIncludes edges
 	children := g.Children(mainWorkflow.ID())
 
 	hasIncludedWorkflow := false
@@ -488,7 +445,6 @@ test:
 		if node, ok := g.GetNode(childID); ok {
 			if node.Type() == graph.NodeTypeWorkflow {
 				hasIncludedWorkflow = true
-				// Verify it's the included workflow
 				includedWf := node.(*graph.WorkflowNode)
 				assert.True(t, strings.Contains(includedWf.Path, "build.yml") || strings.Contains(includedWf.Path, "local:123"),
 					"Included workflow should reference build.yml")
@@ -498,11 +454,9 @@ test:
 	}
 	assert.True(t, hasIncludedWorkflow, "Main workflow should have included workflow as child")
 
-	// Verify that jobs from included workflow are in the graph
 	jobs := g.GetNodesByType(graph.NodeTypeJob)
 	assert.GreaterOrEqual(t, len(jobs), 2, "Should have at least 2 jobs (test + build)")
 
-	// Find the build job from the included workflow
 	var buildJob *graph.JobNode
 	for _, node := range jobs {
 		jobNode := node.(*graph.JobNode)
@@ -514,13 +468,9 @@ test:
 	assert.NotNil(t, buildJob, "Should have build job from included workflow")
 }
 
-// TestResolveGitLabIncludesNested tests nested include resolution
 func TestResolveGitLabIncludesNested(t *testing.T) {
-	// Setup mock GitLab server with nested includes
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Handle first level include
 		if r.URL.Path == "/api/v4/projects/123/repository/files/.gitlab/ci/build.yml" && r.URL.Query().Get("ref") == "main" {
-			// This included file itself includes another file
 			mockContent := []byte(`include:
   - local: '.gitlab/ci/test.yml'
 
@@ -540,7 +490,6 @@ build:
 			return
 		}
 
-		// Handle second level (nested) include
 		if r.URL.Path == "/api/v4/projects/123/repository/files/.gitlab/ci/test.yml" && r.URL.Query().Get("ref") == "main" {
 			mockContent := []byte(`test:
   stage: test
@@ -562,7 +511,6 @@ build:
 	}))
 	defer server.Close()
 
-	// Create client pointing to mock server
 	client := gitlab.NewClient(server.URL, "test-token")
 
 	content := []byte(`include:
@@ -589,18 +537,12 @@ deploy:
 	})
 	require.NoError(t, err)
 
-	// We expect:
-	// 1. Main workflow node
-	// 2. First level included workflow (.gitlab/ci/build.yml)
-	// 3. Second level included workflow (.gitlab/ci/test.yml)
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 	assert.GreaterOrEqual(t, len(workflows), 3, "Should have at least 3 workflow nodes (main + 2 nested includes)")
 
-	// Verify all jobs are present
 	jobs := g.GetNodesByType(graph.NodeTypeJob)
 	assert.GreaterOrEqual(t, len(jobs), 3, "Should have at least 3 jobs (deploy + build + test)")
 
-	// Find specific jobs
 	jobNames := make(map[string]bool)
 	for _, node := range jobs {
 		jobNode := node.(*graph.JobNode)
@@ -612,11 +554,8 @@ deploy:
 	assert.True(t, jobNames["test"], "Should have test job from nested include")
 }
 
-// TestResolveGitLabIncludesMultipleTypes tests resolution of different include types
 func TestResolveGitLabIncludesMultipleTypes(t *testing.T) {
-	// Setup mock GitLab server with multiple include types
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Handle local include
 		if r.URL.Path == "/api/v4/projects/123/repository/files/.gitlab/ci/build.yml" && r.URL.Query().Get("ref") == "main" {
 			mockContent := []byte(`build:
   stage: build
@@ -634,7 +573,6 @@ func TestResolveGitLabIncludesMultipleTypes(t *testing.T) {
 			return
 		}
 
-		// Handle GetProject for project include
 		if r.URL.Path == "/api/v4/projects/other/shared-ci" {
 			response := gitlab.Project{
 				ID:                456,
@@ -645,7 +583,6 @@ func TestResolveGitLabIncludesMultipleTypes(t *testing.T) {
 			return
 		}
 
-		// Handle GetWorkflowFile for project include
 		if r.URL.Path == "/api/v4/projects/456/repository/files/templates/deploy.yml" && r.URL.Query().Get("ref") == "v1.0" {
 			mockContent := []byte(`deploy:
   stage: deploy
@@ -663,7 +600,6 @@ func TestResolveGitLabIncludesMultipleTypes(t *testing.T) {
 			return
 		}
 
-		// Handle GetProject for gitlab-org/gitlab (template repository)
 		if r.URL.Path == "/api/v4/projects/gitlab-org/gitlab" {
 			response := gitlab.Project{
 				ID:                999,
@@ -674,7 +610,6 @@ func TestResolveGitLabIncludesMultipleTypes(t *testing.T) {
 			return
 		}
 
-		// Handle GetWorkflowFile for template
 		if r.URL.Path == "/api/v4/projects/999/repository/files/lib/gitlab/ci/templates/Security/SAST.gitlab-ci.yml" && r.URL.Query().Get("ref") == "master" {
 			mockContent := []byte(`sast:
   stage: test
@@ -696,7 +631,6 @@ func TestResolveGitLabIncludesMultipleTypes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create client pointing to mock server
 	client := gitlab.NewClient(server.URL, "test-token")
 
 	content := []byte(`include:
@@ -727,19 +661,12 @@ test:
 	})
 	require.NoError(t, err)
 
-	// We expect:
-	// 1. Main workflow node
-	// 2. Local include workflow
-	// 3. Project include workflow
-	// 4. Template include workflow
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 	assert.GreaterOrEqual(t, len(workflows), 4, "Should have at least 4 workflow nodes (main + 3 includes)")
 
-	// Verify all jobs are present
 	jobs := g.GetNodesByType(graph.NodeTypeJob)
 	assert.GreaterOrEqual(t, len(jobs), 4, "Should have at least 4 jobs")
 
-	// Find specific jobs
 	jobNames := make(map[string]bool)
 	for _, node := range jobs {
 		jobNode := node.(*graph.JobNode)
@@ -752,12 +679,8 @@ test:
 	assert.True(t, jobNames["sast"], "Should have sast job from template include")
 }
 
-// TestIncludedWorkflowsStoredInGraphMetadata tests that included workflows are stored
-// as platforms.Workflow objects in graph metadata and accessible via GetIncludedWorkflows
 func TestIncludedWorkflowsStoredInGraphMetadata(t *testing.T) {
-	// Setup mock GitLab server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Handle GetWorkflowFile request for local include
 		if r.URL.Path == "/api/v4/projects/123/repository/files/.gitlab/ci/build.yml" && r.URL.Query().Get("ref") == "main" {
 			mockContent := []byte(`build:
   stage: build
@@ -778,7 +701,6 @@ func TestIncludedWorkflowsStoredInGraphMetadata(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create client pointing to mock server
 	client := gitlab.NewClient(server.URL, "test-token")
 
 	content := []byte(`include:
@@ -803,11 +725,9 @@ test:
 	})
 	require.NoError(t, err)
 
-	// Verify included workflows are stored in metadata using GetIncludedWorkflows
 	includedWorkflows := g.GetIncludedWorkflows("owner/repo")
 	require.GreaterOrEqual(t, len(includedWorkflows), 1, "Should have at least 1 included workflow")
 
-	// Find the build.yml workflow
 	var buildWorkflow *platforms.Workflow
 	for i, wf := range includedWorkflows {
 		if strings.Contains(wf.Path, "build.yml") {
@@ -817,12 +737,10 @@ test:
 	}
 	require.NotNil(t, buildWorkflow, "Should find build.yml in included workflows")
 
-	// Verify the workflow has the correct properties
 	assert.NotEmpty(t, buildWorkflow.Content, "Workflow should have content")
 	assert.Contains(t, string(buildWorkflow.Content), "make build", "Content should contain the build command")
 	assert.Equal(t, "owner/repo", buildWorkflow.RepoSlug, "RepoSlug should match")
 
-	// Verify Path is clean path, not cache key
 	assert.Equal(t, ".gitlab/ci/build.yml", buildWorkflow.Path, "Path should be clean file path, not cache key")
 	assert.NotContains(t, buildWorkflow.Path, "local:", "Path should not contain cache key prefix")
 	assert.NotContains(t, buildWorkflow.Path, ":main", "Path should not contain ref suffix")

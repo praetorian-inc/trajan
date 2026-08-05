@@ -21,7 +21,7 @@ func TestNewClient_AppendsAPIv4(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			client := NewClient(tt.input, "test-token")
-			// Access private field via String() method
+			// baseURL is unexported; String() is the only view of it.
 			assert.Contains(t, client.String(), tt.expected)
 		})
 	}

@@ -1,4 +1,3 @@
-// pkg/platforms/azuredevops/init.go
 package azuredevops
 
 import (

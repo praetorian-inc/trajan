@@ -18,13 +18,10 @@ func init() {
 	})
 }
 
-// Detection detects pipeline access control issues including excessive job permissions,
-// variable group scope risks, and missing environment approval gates.
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new pipeline access control detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection(
@@ -35,7 +32,6 @@ func New() *Detection {
 	}
 }
 
-// Detect analyzes the graph for pipeline access control vulnerabilities
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 	for _, node := range g.GetNodesByType(graph.NodeTypeWorkflow) {
@@ -50,7 +46,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// checkJobPermissions checks for jobs running with elevated build/release admin permissions.
 func checkJobPermissions(wf *graph.WorkflowNode, g *graph.Graph) []detections.Finding {
 	var findings []detections.Finding
 
@@ -98,7 +93,6 @@ func checkJobPermissions(wf *graph.WorkflowNode, g *graph.Graph) []detections.Fi
 	return findings
 }
 
-// checkVariableGroupScope checks for variable group references exposed in step environment variables.
 func checkVariableGroupScope(wf *graph.WorkflowNode, g *graph.Graph) []detections.Finding {
 	var findings []detections.Finding
 
@@ -144,7 +138,6 @@ func checkVariableGroupScope(wf *graph.WorkflowNode, g *graph.Graph) []detection
 	return findings
 }
 
-// checkEnvironmentGates checks for environment references in steps that lack approval gates.
 func checkEnvironmentGates(wf *graph.WorkflowNode, g *graph.Graph) []detections.Finding {
 	var findings []detections.Finding
 
@@ -155,7 +148,6 @@ func checkEnvironmentGates(wf *graph.WorkflowNode, g *graph.Graph) []detections.
 				return true
 			}
 
-			// Check step.With for environment references (case-insensitive)
 			for key := range step.With {
 				keyLower := strings.ToLower(key)
 				if strings.Contains(keyLower, "environment") {
@@ -185,7 +177,6 @@ func checkEnvironmentGates(wf *graph.WorkflowNode, g *graph.Graph) []detections.
 				}
 			}
 
-			// Check step.Run for environment: YAML patterns
 			if step.Run != "" && strings.Contains(strings.ToLower(step.Run), "environment:") {
 				envLine := common.ScriptLineForPattern(step, "environment:", false)
 				findings = append(findings, detections.Finding{

@@ -14,8 +14,8 @@ func TestListPlatforms(t *testing.T) {
 	platforms := ListPlatforms()
 	require.NotEmpty(t, platforms, "expected registered platforms from blank imports")
 
-	// GitHub was ported to the new (internal/) CLI-only stack and is no longer
-	// registered in the old-stack SDK registry — see GITHUB_PORT_PLAN.md §3.
+	// GitHub moved to the internal/ CLI-only stack and is no longer registered
+	// in the old-stack SDK registry.
 	expected := []string{"azuredevops", "gitlab", "jenkins", "jfrog"}
 	for _, name := range expected {
 		assert.Contains(t, platforms, name, "missing platform: %s", name)
@@ -23,13 +23,11 @@ func TestListPlatforms(t *testing.T) {
 	assert.NotContains(t, platforms, "github", "github was ported out of the old-stack SDK registry")
 }
 
-// GitHub is no longer discoverable through the old-stack SDK (§3).
 func TestGetDetectionsForPlatform_GitHub_Removed(t *testing.T) {
 	assert.Empty(t, GetDetectionsForPlatform("github"),
 		"github detections were ported out of the old-stack SDK")
 }
 
-// minimalGitHubWorkflow is a valid minimal GitHub Actions workflow YAML.
 const minimalGitHubWorkflow = `name: ci
 on: [push]
 jobs:
@@ -65,7 +63,6 @@ func TestScan_LocalPath_NoTokenRequired(t *testing.T) {
 	require.NoError(t, os.MkdirAll(workflowDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(workflowDir, "test.yml"), []byte(minimalGitHubWorkflow), 0o644))
 
-	// Token is explicitly empty — local mode must not require it.
 	result, err := Scan(context.Background(), ScanConfig{
 		Platform:  "github",
 		Token:     "",
@@ -75,11 +72,8 @@ func TestScan_LocalPath_NoTokenRequired(t *testing.T) {
 	require.NotNil(t, result)
 }
 
-// vulnGitLabCI contains a known-vulnerable GitLab CI pattern: it interpolates
-// $CI_MERGE_REQUEST_TITLE into a script in a merge-request pipeline, which
-// triggers the script-injection detection. GitHub findings coverage moved to
-// the new CLI-only stack (internal/github); GitLab is the representative
-// surviving old-stack platform for this end-to-end SDK smoke.
+// vulnGitLabCI interpolates $CI_MERGE_REQUEST_TITLE into a script in a
+// merge-request pipeline: a known script-injection positive.
 const vulnGitLabCI = `build:
   script:
     - echo "$CI_MERGE_REQUEST_TITLE"
