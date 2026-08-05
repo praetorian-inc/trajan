@@ -14,8 +14,3 @@ func (s *LocalStorage) Save(config *Config) error {
 	// For testing on native Go, do nothing
 	return nil
 }
-
-// Clear removes configuration (stub for non-WASM builds)
-func (s *LocalStorage) Clear() error {
-	return nil
-}

@@ -8,22 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
-	"github.com/praetorian-inc/trajan/pkg/detections"
 )
-
-func TestDetection_ImplementsInterface(t *testing.T) {
-	var _ detections.Detection = (*Detection)(nil)
-}
-
-func TestDetection_Name(t *testing.T) {
-	d := New()
-	assert.Equal(t, "token-exposure", d.Name())
-}
-
-func TestDetection_Platform(t *testing.T) {
-	d := New()
-	assert.Equal(t, "gitlab", d.Platform())
-}
 
 func TestDetect_JobTokenInMergeRequest(t *testing.T) {
 	g := graph.NewGraph()

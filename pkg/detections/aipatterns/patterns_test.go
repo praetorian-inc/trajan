@@ -156,21 +156,3 @@ func TestCheckMCPIndicators(t *testing.T) {
 		})
 	}
 }
-
-func TestGetTriggerString(t *testing.T) {
-	tests := []struct {
-		name     string
-		triggers []string
-		want     string
-	}{
-		{"single trigger", []string{"push"}, "push"},
-		{"multiple triggers", []string{"push", "pull_request"}, "push, pull_request"},
-		{"no triggers", []string{}, "unknown"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			wf := graph.NewWorkflowNode("wf1", "ci.yml", "ci.yml", "owner/repo", tt.triggers)
-			assert.Equal(t, tt.want, GetTriggerString(wf))
-		})
-	}
-}

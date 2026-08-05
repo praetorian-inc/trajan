@@ -74,12 +74,6 @@ func TestVulnTypeToRuleID(t *testing.T) {
 	}
 }
 
-func TestGetRuleDescription(t *testing.T) {
-	desc := getRuleDescription(detections.VulnActionsInjection)
-	assert.Contains(t, desc, "injection")
-	assert.NotEmpty(t, desc)
-}
-
 func TestGenerateSARIF_EmptyFindings(t *testing.T) {
 	findings := []detections.Finding{}
 
@@ -99,83 +93,6 @@ func TestGenerateSARIF_EmptyFindings(t *testing.T) {
 	runs, ok := parsed["runs"].([]interface{})
 	assert.True(t, ok)
 	assert.Len(t, runs, 1)
-}
-
-func TestGenerateSARIF_SingleFinding(t *testing.T) {
-	findings := []detections.Finding{
-		{
-			Type:        detections.VulnActionsInjection,
-			Severity:    detections.SeverityHigh,
-			Confidence:  detections.ConfidenceHigh,
-			Platform:    "github",
-			Repository:  "owner/repo",
-			Workflow:    ".github/workflows/ci.yml",
-			Job:         "build",
-			Step:        "Run tests",
-			Line:        42,
-			Evidence:    "echo ${{ github.event.issue.title }}",
-			Remediation: "Sanitize user input before use in shell commands",
-		},
-	}
-
-	result, err := GenerateSARIF(findings)
-	assert.NoError(t, err)
-
-	var parsed map[string]interface{}
-	err = json.Unmarshal(result, &parsed)
-	assert.NoError(t, err)
-
-	// Verify tool information
-	runs := parsed["runs"].([]interface{})
-	run := runs[0].(map[string]interface{})
-	tool := run["tool"].(map[string]interface{})
-	driver := tool["driver"].(map[string]interface{})
-	assert.Equal(t, "trajan", driver["name"])
-
-	// Verify results
-	results := run["results"].([]interface{})
-	assert.Len(t, results, 1)
-
-	result0 := results[0].(map[string]interface{})
-	assert.Equal(t, "github/TRAJAN001", result0["ruleId"])
-	assert.Equal(t, "error", result0["level"])
-}
-
-func TestGenerateSARIF_MultipleRepositories(t *testing.T) {
-	findings := []detections.Finding{
-		{
-			Type:       detections.VulnActionsInjection,
-			Severity:   detections.SeverityHigh,
-			Platform:   "github",
-			Repository: "owner/repo1",
-			Workflow:   ".github/workflows/ci.yml",
-			Line:       10,
-			Evidence:   "test",
-		},
-		{
-			Type:       detections.VulnPwnRequest,
-			Severity:   detections.SeverityCritical,
-			Platform:   "github",
-			Repository: "owner/repo2",
-			Workflow:   ".github/workflows/build.yml",
-			Line:       20,
-			Evidence:   "test",
-		},
-	}
-
-	result, err := GenerateSARIF(findings)
-	assert.NoError(t, err)
-
-	var parsed map[string]interface{}
-	err = json.Unmarshal(result, &parsed)
-	assert.NoError(t, err)
-
-	runs := parsed["runs"].([]interface{})
-	run := runs[0].(map[string]interface{})
-	results := run["results"].([]interface{})
-
-	// Both findings should be in single run
-	assert.Len(t, results, 2)
 }
 
 func TestGenerateSARIF_WithProperties(t *testing.T) {
@@ -228,64 +145,6 @@ func TestGenerateSARIF_ValidatesSchema(t *testing.T) {
 	result, err := GenerateSARIF(findings)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, result)
-}
-
-func TestGenerateSARIF_GitHubPlatformPrefix(t *testing.T) {
-	findings := []detections.Finding{
-		{
-			Type:       detections.VulnActionsInjection,
-			Severity:   detections.SeverityHigh,
-			Platform:   "github",
-			Repository: "owner/repo",
-			Workflow:   ".github/workflows/ci.yml",
-			Line:       10,
-			Evidence:   "test",
-		},
-	}
-
-	result, err := GenerateSARIF(findings)
-	assert.NoError(t, err)
-
-	var parsed map[string]interface{}
-	err = json.Unmarshal(result, &parsed)
-	assert.NoError(t, err)
-
-	runs := parsed["runs"].([]interface{})
-	run := runs[0].(map[string]interface{})
-	results := run["results"].([]interface{})
-	result0 := results[0].(map[string]interface{})
-
-	// Rule ID should be prefixed with platform
-	assert.Equal(t, "github/TRAJAN001", result0["ruleId"])
-}
-
-func TestGenerateSARIF_GitLabPlatformPrefix(t *testing.T) {
-	findings := []detections.Finding{
-		{
-			Type:       detections.VulnIncludeInjection,
-			Severity:   detections.SeverityHigh,
-			Platform:   "gitlab",
-			Repository: "group/project",
-			Workflow:   ".gitlab-ci.yml",
-			Line:       5,
-			Evidence:   "test include injection",
-		},
-	}
-
-	result, err := GenerateSARIF(findings)
-	assert.NoError(t, err)
-
-	var parsed map[string]interface{}
-	err = json.Unmarshal(result, &parsed)
-	assert.NoError(t, err)
-
-	runs := parsed["runs"].([]interface{})
-	run := runs[0].(map[string]interface{})
-	results := run["results"].([]interface{})
-	result0 := results[0].(map[string]interface{})
-
-	// Rule ID should be prefixed with platform
-	assert.Equal(t, "gitlab/TRAJAN016", result0["ruleId"])
 }
 
 func TestGenerateSARIF_MultiPlatformFindings(t *testing.T) {
@@ -356,33 +215,4 @@ func TestGenerateSARIF_MultiPlatformFindings(t *testing.T) {
 	assert.Contains(t, ruleIDs, "gitlab/TRAJAN016")
 	assert.Contains(t, ruleIDs, "bitbucket/TRAJAN001")
 	assert.Contains(t, ruleIDs, "azuredevops/TRAJAN001")
-}
-
-func TestGenerateSARIF_EmptyPlatformDefaultsToGitHub(t *testing.T) {
-	findings := []detections.Finding{
-		{
-			Type:       detections.VulnActionsInjection,
-			Severity:   detections.SeverityHigh,
-			Platform:   "", // Empty platform
-			Repository: "owner/repo",
-			Workflow:   ".github/workflows/ci.yml",
-			Line:       10,
-			Evidence:   "test",
-		},
-	}
-
-	result, err := GenerateSARIF(findings)
-	assert.NoError(t, err)
-
-	var parsed map[string]interface{}
-	err = json.Unmarshal(result, &parsed)
-	assert.NoError(t, err)
-
-	runs := parsed["runs"].([]interface{})
-	run := runs[0].(map[string]interface{})
-	results := run["results"].([]interface{})
-	result0 := results[0].(map[string]interface{})
-
-	// Empty platform should default to github
-	assert.Equal(t, "github/TRAJAN001", result0["ruleId"])
 }

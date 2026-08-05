@@ -118,44 +118,6 @@ func TestClient_GetServerInfo(t *testing.T) {
 	}
 }
 
-func TestClient_GetWhoAmI(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"name":"admin","anonymous":false,"authorities":["authenticated","admin"]}`))
-	}))
-	defer srv.Close()
-
-	c := NewClient(srv.URL, "tok", WithUsername("admin"))
-	who, err := c.GetWhoAmI(context.Background())
-	if err != nil {
-		t.Fatalf("GetWhoAmI: %v", err)
-	}
-	if who.Name != "admin" {
-		t.Errorf("name = %q, want %q", who.Name, "admin")
-	}
-}
-
-func TestClient_PostScript(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/crumbIssuer/api/json":
-			w.Write([]byte(`{"crumb":"c","crumbRequestField":"Jenkins-Crumb"}`))
-		case "/scriptText":
-			r.ParseForm()
-			w.Write([]byte("Result: " + r.FormValue("script")))
-		}
-	}))
-	defer srv.Close()
-
-	c := NewClient(srv.URL, "tok", WithUsername("admin"))
-	out, err := c.PostScript(context.Background(), "println 'hello'")
-	if err != nil {
-		t.Fatalf("PostScript: %v", err)
-	}
-	if out != "Result: println 'hello'" {
-		t.Errorf("output = %q", out)
-	}
-}
-
 func TestFlattenJobs_Empty(t *testing.T) {
 	result := flattenJobs(nil, "")
 	if result != nil {
@@ -373,55 +335,4 @@ func TestClient_CSRFDisabled(t *testing.T) {
 			t.Error("CSRFDisabled() should be false after successful crumb fetch")
 		}
 	})
-}
-
-func TestClient_ListJobsRecursive(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/json") {
-			w.Write([]byte(`{
-				"jobs": [
-					{"name": "top-level-job", "url": "http://jenkins/job/top-level-job", "color": "blue"},
-					{
-						"name": "folder1",
-						"url": "http://jenkins/job/folder1",
-						"_class": "com.cloudbees.hudson.plugins.folder.Folder",
-						"jobs": [
-							{"name": "nested-job", "url": "http://jenkins/job/folder1/job/nested-job", "color": "blue"}
-						]
-					}
-				]
-			}`))
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer srv.Close()
-
-	c := NewClient(srv.URL, "tok", WithUsername("admin"))
-	jobs, err := c.ListJobsRecursive(context.Background())
-	if err != nil {
-		t.Fatalf("ListJobsRecursive: %v", err)
-	}
-
-	if len(jobs) != 2 {
-		t.Fatalf("expected 2 jobs, got %d", len(jobs))
-	}
-
-	// Find the nested job and verify its properties.
-	var nested *Job
-	for i := range jobs {
-		if jobs[i].Name == "nested-job" {
-			nested = &jobs[i]
-			break
-		}
-	}
-	if nested == nil {
-		t.Fatal("nested-job not found in flattened results")
-	}
-	if !nested.InFolder {
-		t.Error("nested job should have InFolder=true")
-	}
-	if nested.FullName != "folder1/nested-job" {
-		t.Errorf("nested job FullName = %q, want %q", nested.FullName, "folder1/nested-job")
-	}
 }

@@ -10,17 +10,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-func TestGraph_AddNode(t *testing.T) {
-	g := NewGraph()
-
-	workflow := NewWorkflowNode("wf1", "Build", ".github/workflows/build.yml", "owner/repo", []string{"push"})
-	g.AddNode(workflow)
-
-	node, ok := g.GetNode("wf1")
-	require.True(t, ok)
-	assert.Equal(t, "Build", node.(*WorkflowNode).Name)
-}
-
 func TestGraph_AddEdge(t *testing.T) {
 	g := NewGraph()
 
@@ -34,6 +23,10 @@ func TestGraph_AddEdge(t *testing.T) {
 	children := g.Children("wf1")
 	require.Len(t, children, 1)
 	assert.Equal(t, "job1", children[0])
+
+	// AddEdge also sets the reverse link; gitlab's GetJobParentWorkflow /
+	// GetStepParentWorkflow walk up the graph through Parent() during detections.
+	assert.Equal(t, "wf1", job.Parent())
 }
 
 func TestGraph_GetNodesByTag(t *testing.T) {
@@ -76,54 +69,6 @@ func TestGraph_GetNodesByType(t *testing.T) {
 
 	actions := g.GetNodesByType(NodeTypeAction)
 	assert.Len(t, actions, 0)
-}
-
-func TestGraph_Nodes(t *testing.T) {
-	g := NewGraph()
-
-	assert.Len(t, g.Nodes(), 0)
-
-	wf := NewWorkflowNode("wf1", "Build", "build.yml", "owner/repo", []string{"push"})
-	job := NewJobNode("job1", "build", "ubuntu-latest")
-
-	g.AddNode(wf)
-	g.AddNode(job)
-
-	nodes := g.Nodes()
-	assert.Len(t, nodes, 2)
-}
-
-func TestGraph_NodeCount(t *testing.T) {
-	g := NewGraph()
-
-	assert.Equal(t, 0, g.NodeCount())
-
-	g.AddNode(NewWorkflowNode("wf1", "Build", "build.yml", "owner/repo", []string{"push"}))
-	assert.Equal(t, 1, g.NodeCount())
-
-	g.AddNode(NewJobNode("job1", "build", "ubuntu-latest"))
-	assert.Equal(t, 2, g.NodeCount())
-}
-
-func TestGraph_UpdateNodeTag(t *testing.T) {
-	g := NewGraph()
-
-	wf := NewWorkflowNode("wf1", "Build", "build.yml", "owner/repo", []string{"push"})
-	g.AddNode(wf)
-
-	// Initially no injectable tag
-	assert.False(t, wf.HasTag(TagInjectable))
-
-	// Update tag
-	g.UpdateNodeTag("wf1", TagInjectable)
-
-	// Now should have tag
-	node, _ := g.GetNode("wf1")
-	assert.True(t, node.HasTag(TagInjectable))
-
-	// Tag should be in index
-	tagged := g.GetNodesByTag(TagInjectable)
-	assert.Len(t, tagged, 1)
 }
 
 func TestGraph_GetIncludedWorkflows(t *testing.T) {

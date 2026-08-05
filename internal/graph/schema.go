@@ -226,7 +226,7 @@ var identityKeys = map[NodeLabel][]string{
 	// INSTALLED_ON edge per repo.
 	DeployKey: {"fingerprint"},
 	CloudRole: {"identifier"},
-	// A closed modelling vocabulary no API will ever return; "external" is its
+	// A closed modeling vocabulary no API will ever return; "external" is its
 	// only value, minted by the attach pass when an attack edge needs a source.
 	ExternalActor: {"kind"},
 }

@@ -410,7 +410,7 @@ func TestCapabilityAppInstallationBypassMatchesOnAppID(t *testing.T) {
 			t.Errorf("broad-admin circumvents %v; %q must not come from an actor naming another app or a repository role", got, unwanted)
 		}
 	}
-	// administration: write is the app analogue of repo admin — the permission
+	// administration: write is the app analog of repo admin — the permission
 	// that removes the repo-scope ruleset rather than passing it.
 	if got := edgeStrings(t, admin, "circumvents"); !slices.Contains(got, "admin_can_remove_control") {
 		t.Errorf("broad-admin circumvents %v, want admin_can_remove_control", got)

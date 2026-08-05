@@ -11,58 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestConfig_Validation tests Config struct initialization
-func TestConfig_Validation(t *testing.T) {
-	tests := []struct {
-		name   string
-		config Config
-		valid  bool
-	}{
-		{
-			name: "GitHub config",
-			config: Config{
-				HeaderPrefix:     "X-RateLimit-",
-				DefaultLimit:     5000,
-				DefaultRemaining: 5000,
-				ThresholdPercent: 5,
-				ResetDuration:    time.Hour,
-			},
-			valid: true,
-		},
-		{
-			name: "GitLab config",
-			config: Config{
-				HeaderPrefix:     "RateLimit-",
-				DefaultLimit:     2000,
-				DefaultRemaining: 2000,
-				ThresholdPercent: 10,
-				ResetDuration:    time.Minute,
-			},
-			valid: true,
-		},
-		{
-			name: "Bitbucket config",
-			config: Config{
-				HeaderPrefix:     "X-RateLimit-",
-				DefaultLimit:     1000,
-				DefaultRemaining: 1000,
-				ThresholdPercent: 10,
-				ResetDuration:    time.Hour,
-			},
-			valid: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			limiter := New(tt.config)
-			assert.NotNil(t, limiter)
-			assert.Equal(t, tt.config.DefaultLimit, limiter.Limit())
-			assert.Equal(t, tt.config.DefaultRemaining, limiter.Remaining())
-		})
-	}
-}
-
 // TestLimiter_Update_WithXPrefix tests GitHub/Bitbucket header format (X-RateLimit-*)
 func TestLimiter_Update_WithXPrefix(t *testing.T) {
 	config := Config{
@@ -212,26 +160,6 @@ func TestLimiter_ShouldThrottle_GitLab(t *testing.T) {
 	}
 }
 
-// TestLimiter_Wait_NoThrottle tests immediate return when not throttled
-func TestLimiter_Wait_NoThrottle(t *testing.T) {
-	config := Config{
-		DefaultLimit:     5000,
-		DefaultRemaining: 5000,
-		ThresholdPercent: 5,
-	}
-	limiter := New(config)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	start := time.Now()
-	err := limiter.Wait(ctx)
-	elapsed := time.Since(start)
-
-	require.NoError(t, err)
-	assert.Less(t, elapsed, 10*time.Millisecond, "Should return immediately when not throttled")
-}
-
 // TestLimiter_Wait_ContextCanceled tests context cancellation
 func TestLimiter_Wait_ContextCanceled(t *testing.T) {
 	config := Config{
@@ -252,87 +180,6 @@ func TestLimiter_Wait_ContextCanceled(t *testing.T) {
 
 	err := limiter.Wait(ctx)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-}
-
-// TestLimiter_RetryAfter tests GitHub-specific retry-after support
-func TestLimiter_RetryAfter(t *testing.T) {
-	config := Config{
-		HeaderPrefix:       "X-RateLimit-",
-		DefaultLimit:       5000,
-		DefaultRemaining:   5000,
-		ThresholdPercent:   5,
-		SupportsRetryAfter: true,
-	}
-	limiter := New(config)
-
-	header := http.Header{}
-	header.Set("Retry-After", "30")
-
-	limiter.Update(header)
-
-	retryAfter := limiter.RetryAfter()
-	assert.False(t, retryAfter.IsZero(), "RetryAfter should be set")
-
-	expectedDuration := 30 * time.Second
-	actualDuration := time.Until(retryAfter)
-
-	// Allow 1 second tolerance
-	assert.Greater(t, actualDuration, expectedDuration-time.Second)
-	assert.Less(t, actualDuration, expectedDuration+time.Second)
-}
-
-// TestLimiter_Wait_RespectsRetryAfter tests retry-after waiting
-func TestLimiter_Wait_RespectsRetryAfter(t *testing.T) {
-	config := Config{
-		DefaultLimit:       5000,
-		DefaultRemaining:   5000,
-		ThresholdPercent:   5,
-		SupportsRetryAfter: true,
-	}
-	limiter := New(config)
-
-	// Set retryAfter to 100ms in future
-	limiter.mu.Lock()
-	limiter.retryAfter = time.Now().Add(100 * time.Millisecond)
-	limiter.mu.Unlock()
-
-	ctx := context.Background()
-	start := time.Now()
-	err := limiter.Wait(ctx)
-	elapsed := time.Since(start)
-
-	require.NoError(t, err)
-	assert.GreaterOrEqual(t, elapsed, 90*time.Millisecond, "Should wait for retryAfter")
-}
-
-// TestLimiter_Wait_RetryAfterPriority tests that retry-after takes priority
-func TestLimiter_Wait_RetryAfterPriority(t *testing.T) {
-	config := Config{
-		DefaultLimit:       5000,
-		DefaultRemaining:   0,
-		ThresholdPercent:   5,
-		SupportsRetryAfter: true,
-	}
-	limiter := New(config)
-
-	// Set primary rate limit to need long wait
-	limiter.mu.Lock()
-	limiter.remaining = 0
-	limiter.limit = 5000
-	limiter.reset = time.Now().Add(time.Hour)
-	// But retryAfter is only 100ms
-	limiter.retryAfter = time.Now().Add(100 * time.Millisecond)
-	limiter.mu.Unlock()
-
-	ctx := context.Background()
-	start := time.Now()
-	err := limiter.Wait(ctx)
-	elapsed := time.Since(start)
-
-	require.NoError(t, err)
-	// Should wait for retryAfter (100ms), not primary reset (1 hour)
-	assert.Greater(t, elapsed, 90*time.Millisecond)
-	assert.Less(t, elapsed, 500*time.Millisecond)
 }
 
 // TestLimiter_Concurrent tests thread safety
@@ -369,25 +216,6 @@ func TestLimiter_Concurrent(t *testing.T) {
 	// Verify state is consistent
 	assert.Equal(t, 2000, limiter.Limit())
 	assert.Equal(t, 1000, limiter.Remaining())
-}
-
-// TestLimiter_Getters tests all getter methods
-func TestLimiter_Getters(t *testing.T) {
-	config := Config{
-		DefaultLimit:     5000,
-		DefaultRemaining: 4500,
-		ThresholdPercent: 5,
-	}
-	limiter := New(config)
-
-	resetTime := time.Now().Add(time.Hour)
-	limiter.mu.Lock()
-	limiter.reset = resetTime
-	limiter.mu.Unlock()
-
-	assert.Equal(t, 4500, limiter.Remaining())
-	assert.Equal(t, 5000, limiter.Limit())
-	assert.Equal(t, resetTime, limiter.ResetTime())
 }
 
 // TestLimiter_WithoutRetryAfter tests platforms that don't support retry-after

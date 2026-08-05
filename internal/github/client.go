@@ -91,10 +91,10 @@ func (c *Client) do(ctx context.Context, method, rawURL string, params url.Value
 	return c.http.Do(req)
 }
 
-func readAllClose(resp *http.Response) []byte {
-	b, _ := io.ReadAll(resp.Body)
+func readAllClose(resp *http.Response) ([]byte, error) {
+	b, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	return b
+	return b, err
 }
 
 // Both limits answer 403 or 429. Retry-After is checked first because it is the
@@ -157,18 +157,22 @@ func (c *Client) Get(ctx context.Context, pathOrURL string, params url.Values, a
 		}
 		switch {
 		case resp.StatusCode == 200:
-			b := readAllClose(resp)
+			b, rerr := readAllClose(resp)
+			if rerr != nil {
+				return nil, nil, fmt.Errorf("read response body from %s: %w", u, rerr)
+			}
 			return json.RawMessage(b), resp.Header, nil
 		case resp.StatusCode == 404 && allow404:
 			hdr := resp.Header
 			resp.Body.Close()
 			return nil, hdr, nil
 		case resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504:
-			lastStatus, lastBody = resp.StatusCode, readAllClose(resp)
+			b, _ := readAllClose(resp)
+			lastStatus, lastBody = resp.StatusCode, b
 			sleepFn(ctx, 2)
 			continue
 		default:
-			b := readAllClose(resp)
+			b, _ := readAllClose(resp)
 			if c.sleepForRateLimit(ctx, resp, b, i) {
 				lastStatus, lastBody = resp.StatusCode, b
 				continue
@@ -191,14 +195,18 @@ func (c *Client) GetRaw(ctx context.Context, pathOrURL string, params url.Values
 		}
 		switch resp.StatusCode {
 		case 200:
-			b := readAllClose(resp)
+			b, rerr := readAllClose(resp)
+			if rerr != nil {
+				return nil, nil, fmt.Errorf("read response body from %s: %w", u, rerr)
+			}
 			return b, resp.Header, nil
 		case 502, 503, 504:
-			lastStatus, lastBody = resp.StatusCode, readAllClose(resp)
+			b, _ := readAllClose(resp)
+			lastStatus, lastBody = resp.StatusCode, b
 			sleepFn(ctx, 2)
 			continue
 		default:
-			b := readAllClose(resp)
+			b, _ := readAllClose(resp)
 			if c.sleepForRateLimit(ctx, resp, b, i) {
 				lastStatus, lastBody = resp.StatusCode, b
 				continue
@@ -231,7 +239,11 @@ func (c *Client) GetDownload(ctx context.Context, pathOrURL string) ([]byte, err
 	}
 	switch {
 	case resp.StatusCode == 200:
-		return readAllClose(resp), nil
+		b, rerr := readAllClose(resp)
+		if rerr != nil {
+			return nil, fmt.Errorf("read response body from %s: %w", u, rerr)
+		}
+		return b, nil
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
 		loc := resp.Header.Get("Location")
 		resp.Body.Close()
@@ -240,7 +252,8 @@ func (c *Client) GetDownload(ctx context.Context, pathOrURL string) ([]byte, err
 		}
 		return getSigned(ctx, loc)
 	default:
-		return nil, &GhError{Status: resp.StatusCode, URL: u, Body: string(readAllClose(resp))}
+		b, _ := readAllClose(resp)
+		return nil, &GhError{Status: resp.StatusCode, URL: u, Body: string(b)}
 	}
 }
 
@@ -257,9 +270,14 @@ func getSigned(ctx context.Context, rawURL string) ([]byte, error) {
 		return nil, fmt.Errorf("download from %s: %w", redactQuery(rawURL), err)
 	}
 	if resp.StatusCode != 200 {
-		return nil, &GhError{Status: resp.StatusCode, URL: redactQuery(rawURL), Body: string(readAllClose(resp))}
+		b, _ := readAllClose(resp)
+		return nil, &GhError{Status: resp.StatusCode, URL: redactQuery(rawURL), Body: string(b)}
 	}
-	return readAllClose(resp), nil
+	b, err := readAllClose(resp)
+	if err != nil {
+		return nil, fmt.Errorf("read response body from %s: %w", redactQuery(rawURL), err)
+	}
+	return b, nil
 }
 
 func redactQuery(rawURL string) string {

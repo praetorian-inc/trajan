@@ -164,43 +164,6 @@ var AllVulnerabilityTypes = []VulnerabilityType{
 	VulnOverexposedServiceConnections,
 }
 
-// PlatformVulnerabilityTypes maps each platform to its relevant vulnerability types.
-// Platforms not listed here fall back to AllVulnerabilityTypes.
-var PlatformVulnerabilityTypes = map[string][]VulnerabilityType{
-	"azuredevops": {
-		VulnScriptInjection,
-		VulnTriggerExploitation,
-		VulnServiceConnectionHijacking,
-		VulnDynamicTemplateInjection,
-		VulnExcessiveJobPermissions,
-		VulnOverexposedServiceConnections,
-		VulnSecretScopeRisk,
-		VulnEnvironmentBypass,
-		VulnSelfHostedAgent,
-		VulnAITokenExfiltration,
-		VulnAICodeInjection,
-		VulnAIWorkflowSabotage,
-		VulnAIMCPAbuse,
-		VulnAIPrivilegeEscalation,
-		VulnAISupplyChainPoisoning,
-		VulnUnredactedSecrets,
-		VulnTokenExposure,
-		VulnPullRequestSecretsExposure,
-	},
-}
-
-// VulnerabilityTypesForPlatform returns the relevant vulnerability types for a platform.
-// Returns AllVulnerabilityTypes if the platform is empty or not in PlatformVulnerabilityTypes.
-func VulnerabilityTypesForPlatform(platform string) []VulnerabilityType {
-	if platform == "" {
-		return AllVulnerabilityTypes
-	}
-	if types, ok := PlatformVulnerabilityTypes[platform]; ok {
-		return types
-	}
-	return AllVulnerabilityTypes
-}
-
 // Severity represents the severity level of a finding
 type Severity string
 
@@ -366,16 +329,6 @@ type ChainNode struct {
 	Name        string `json:"name"`           // e.g., "pull_request_target", "build"
 	Line        int    `json:"line,omitempty"` // Line number in workflow file
 	IfCondition string `json:"if,omitempty"`   // Conditional expression if present
-}
-
-// FindingHasType checks if any finding matches the given type.
-func FindingHasType(findings []Finding, vulnType VulnerabilityType) bool {
-	for _, f := range findings {
-		if f.Type == vulnType {
-			return true
-		}
-	}
-	return false
 }
 
 // String returns a human-readable representation of the finding

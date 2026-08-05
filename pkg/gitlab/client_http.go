@@ -14,6 +14,17 @@ import (
 	"time"
 )
 
+// retryAfterSeconds reads a 429 Retry-After delay, falling back to 60s when the
+// header is absent or not a plain integer.
+func retryAfterSeconds(h http.Header) int {
+	if v := h.Get("Retry-After"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			return parsed
+		}
+	}
+	return 60
+}
+
 // doRequestWithBody performs an HTTP request with JSON body, authentication and rate limiting
 func (c *Client) doRequestWithBody(ctx context.Context, method, path string, body interface{}) (*http.Response, error) {
 	const maxRetries = 3
@@ -69,13 +80,7 @@ func (c *Client) doRequestWithBody(ctx context.Context, method, path string, bod
 
 		// Handle 429 rate limit with retry (same logic as doRequest)
 		if resp.StatusCode == http.StatusTooManyRequests {
-			retryAfter := resp.Header.Get("Retry-After")
-			seconds := 60
-			if retryAfter != "" {
-				if parsed, err := strconv.Atoi(retryAfter); err == nil {
-					seconds = parsed
-				}
-			}
+			seconds := retryAfterSeconds(resp.Header)
 
 			resp.Body.Close()
 			c.semaphore.Release(1)
@@ -152,14 +157,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string) (*http.Resp
 
 		// Handle 429 rate limit with retry
 		if resp.StatusCode == http.StatusTooManyRequests {
-			// Parse Retry-After header (default to 60 seconds)
-			retryAfter := resp.Header.Get("Retry-After")
-			seconds := 60
-			if retryAfter != "" {
-				if parsed, err := strconv.Atoi(retryAfter); err == nil {
-					seconds = parsed
-				}
-			}
+			seconds := retryAfterSeconds(resp.Header)
 
 			// Close response body before retrying
 			resp.Body.Close()

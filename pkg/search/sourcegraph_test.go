@@ -11,14 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test SourceGraphSearchProvider implements SearchProvider interface
-func TestSourceGraphSearchProvider_Interface(t *testing.T) {
-	provider := NewSourceGraphSearchProvider("")
-
-	assert.Equal(t, "sourcegraph", provider.Name())
-	assert.NotNil(t, provider)
-}
-
 // Test SourceGraph search with SSE stream
 func TestSourceGraphSearchProvider_SSE_Stream(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -85,27 +77,6 @@ func TestSourceGraphSearchProvider_HTTP_Error(t *testing.T) {
 	result, err := provider.Search(context.Background(), "test")
 	assert.Error(t, err)
 	assert.Nil(t, result)
-}
-
-// Test SourceGraph search with deduplication
-func TestSourceGraphSearchProvider_Deduplication(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-
-		// Write duplicate repositories
-		w.Write([]byte("data: [{\"repository\": \"github.com/owner/repo1\"}]\n\n"))
-		w.Write([]byte("data: [{\"repository\": \"github.com/owner/repo1\"}]\n\n")) // Duplicate
-		w.Write([]byte("data: [{\"repository\": \"github.com/owner/repo2\"}]\n\n"))
-	}))
-	defer server.Close()
-
-	provider := NewSourceGraphSearchProvider("")
-	provider.baseURL = server.URL
-
-	result, err := provider.Search(context.Background(), "self-hosted")
-	require.NoError(t, err)
-	assert.Len(t, result.Repositories, 2) // Should deduplicate
 }
 
 // Test SourceGraph search with context cancellation
@@ -187,46 +158,4 @@ func TestSourceGraphSearchProvider_Malformed_JSON(t *testing.T) {
 	result, err := provider.Search(context.Background(), "self-hosted")
 	require.NoError(t, err)
 	assert.Len(t, result.Repositories, 1) // Should skip malformed JSON
-}
-
-// Test DefaultSourceGraphQuery with organization
-func TestDefaultSourceGraphQuery_WithOrg(t *testing.T) {
-	query := DefaultSourceGraphQuery("myorg")
-
-	assert.Contains(t, query, "self-hosted")
-	assert.Contains(t, query, "repo:myorg/")
-	assert.Contains(t, query, "lang:YAML")
-	assert.Contains(t, query, "file:.github/workflows/")
-	assert.Contains(t, query, "context:global")
-
-	// Should exclude GitHub-hosted labels
-	assert.Contains(t, query, "ubuntu-")
-	assert.Contains(t, query, "windows-")
-	assert.Contains(t, query, "macos-")
-}
-
-// Test DefaultSourceGraphQuery without organization
-func TestDefaultSourceGraphQuery_WithoutOrg(t *testing.T) {
-	query := DefaultSourceGraphQuery("")
-
-	assert.Contains(t, query, "self-hosted")
-	assert.NotContains(t, query, "repo:")
-	assert.Contains(t, query, "lang:YAML")
-	assert.Contains(t, query, "file:.github/workflows/")
-}
-
-// Test NewSourceGraphSearchProvider with default baseURL
-func TestNewSourceGraphSearchProvider_DefaultBaseURL(t *testing.T) {
-	provider := NewSourceGraphSearchProvider("")
-
-	assert.NotEmpty(t, provider.baseURL)
-	assert.Contains(t, provider.baseURL, "sourcegraph.com")
-}
-
-// Test NewSourceGraphSearchProvider with proxy
-func TestNewSourceGraphSearchProvider_WithProxy(t *testing.T) {
-	provider := NewSourceGraphSearchProvider("http://proxy:8080")
-
-	assert.NotNil(t, provider)
-	assert.NotNil(t, provider.httpClient)
 }

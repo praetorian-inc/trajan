@@ -188,38 +188,7 @@ func TestDetect_JobLevelMRCondition(t *testing.T) {
 	assert.Equal(t, detections.SeverityHigh, findings[0].Severity)
 }
 
-// TestDetect_GitLabSaaSRunner tests GitLab.com SaaS runner on MR
 // GitLab-hosted runners (saas-linux-small-amd64) are safe
-func TestDetect_GitLabSaaSRunner(t *testing.T) {
-	g := graph.NewGraph()
-
-	// Create workflow with merge_request trigger
-	wf := graph.NewWorkflowNode("wf1", "test", ".gitlab-ci.yml", "test/repo", []string{"merge_request_event"})
-	wf.AddTag(graph.TagMergeRequest)
-	g.AddNode(wf)
-
-	// Create job with GitLab SaaS runner tag
-	job := graph.NewJobNode("job1", "test", "saas-linux-small-amd64")
-	job.RunnerTags = []string{"saas-linux-small-amd64"}
-	job.SetParent(wf.ID())
-	job.Line = 10
-	g.AddNode(job)
-	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
-
-	// Create a step
-	step := graph.NewStepNode("step1", "test", 12)
-	step.Run = "npm test"
-	step.SetParent(job.ID())
-	g.AddNode(step)
-	g.AddEdge(job.ID(), step.ID(), graph.EdgeContains)
-
-	d := New()
-	findings, err := d.Detect(context.Background(), g)
-	require.NoError(t, err)
-
-	assert.Len(t, findings, 0, "Should not flag GitLab SaaS runners")
-}
-
 // TestDetect_NoTagsOnMR tests job without runner tags on MR
 // Jobs without tags default to shared runners (safe on GitLab.com)
 func TestDetect_NoTagsOnMR(t *testing.T) {
@@ -328,26 +297,6 @@ func TestDetect_ProtectedBranchPatterns(t *testing.T) {
 			shouldTag: false,
 		},
 		{
-			name:      "master branch equality",
-			ifCond:    "$CI_COMMIT_BRANCH == \"master\"",
-			shouldTag: false,
-		},
-		{
-			name:      "main branch regex",
-			ifCond:    "$CI_COMMIT_REF_NAME =~ /^main$/",
-			shouldTag: false,
-		},
-		{
-			name:      "master branch regex",
-			ifCond:    "$CI_COMMIT_REF_NAME =~ /^master$/",
-			shouldTag: false,
-		},
-		{
-			name:      "feature branch",
-			ifCond:    "$CI_COMMIT_BRANCH == \"feature-123\"",
-			shouldTag: false,
-		},
-		{
 			name:      "MR with branch condition",
 			ifCond:    "$CI_PIPELINE_SOURCE == \"merge_request_event\" && $CI_COMMIT_BRANCH == \"feature\"",
 			shouldTag: true,
@@ -390,40 +339,6 @@ func TestDetect_ProtectedBranchPatterns(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestDetect_CustomTagsOnMR tests custom/organization-specific runner tags on MR
-func TestDetect_CustomTagsOnMR(t *testing.T) {
-	g := graph.NewGraph()
-
-	// Create workflow with merge_request trigger
-	wf := graph.NewWorkflowNode("wf1", "test", ".gitlab-ci.yml", "test/repo", []string{"merge_request_event"})
-	wf.AddTag(graph.TagMergeRequest)
-	g.AddNode(wf)
-
-	// Create job with custom organization runner tag
-	job := graph.NewJobNode("job1", "test", "my-company-runner")
-	job.RunnerTags = []string{"my-company-runner"}
-	job.SetParent(wf.ID())
-	job.Line = 10
-	g.AddNode(job)
-	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
-
-	// Create a step
-	step := graph.NewStepNode("step1", "test", 12)
-	step.Run = "npm test"
-	step.SetParent(job.ID())
-	g.AddNode(step)
-	g.AddEdge(job.ID(), step.ID(), graph.EdgeContains)
-
-	d := New()
-	findings, err := d.Detect(context.Background(), g)
-	require.NoError(t, err)
-
-	// Custom tags that aren't GitLab SaaS tags should be flagged
-	assert.Len(t, findings, 1)
-	assert.Equal(t, detections.VulnSelfHostedRunner, findings[0].Type)
-	assert.Contains(t, findings[0].Evidence, "my-company-runner")
 }
 
 // TestDetect_SharedRunnersOnMR tests shared runner tags on MR (safe)

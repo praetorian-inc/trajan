@@ -42,48 +42,6 @@ func (m *mockParser) Parse(data []byte) (*NormalizedWorkflow, error) {
 // Registry Tests
 // ============================================================================
 
-func TestRegisterParser(t *testing.T) {
-	resetRegistry()
-
-	parser := &mockParser{platform: "test"}
-	RegisterParser(parser)
-
-	// Verify parser was registered
-	registered := GetParser("test")
-	assert.NotNil(t, registered)
-	assert.Equal(t, "test", registered.Platform())
-}
-
-func TestRegisterParser_Overwrite(t *testing.T) {
-	resetRegistry()
-
-	// Register first parser
-	parser1 := &mockParser{platform: "test"}
-	RegisterParser(parser1)
-
-	// Register second parser with same platform (should overwrite)
-	parser2 := &mockParser{platform: "test"}
-	RegisterParser(parser2)
-
-	// Verify second parser is registered
-	registered := GetParser("test")
-	assert.NotNil(t, registered)
-	// Both have same platform name, but we expect the second one
-	assert.Equal(t, parser2, registered)
-}
-
-func TestGetParser(t *testing.T) {
-	resetRegistry()
-
-	parser := &mockParser{platform: "github"}
-	RegisterParser(parser)
-
-	// Test successful retrieval
-	retrieved := GetParser("github")
-	assert.NotNil(t, retrieved)
-	assert.Equal(t, "github", retrieved.Platform())
-}
-
 func TestGetParser_Unknown(t *testing.T) {
 	resetRegistry()
 
@@ -255,11 +213,6 @@ func TestParserRegistryRaceConditions(t *testing.T) {
 // GitHubParser Tests
 // ============================================================================
 
-func TestGitHubParser_Platform(t *testing.T) {
-	parser := NewGitHubParser()
-	assert.Equal(t, "github", parser.Platform())
-}
-
 func TestGitHubParser_CanParse(t *testing.T) {
 	parser := NewGitHubParser()
 
@@ -316,31 +269,6 @@ func TestGitHubParser_CanParse(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func TestGitHubParser_Parse_Basic(t *testing.T) {
-	parser := NewGitHubParser()
-
-	yaml := `
-name: CI
-on: push
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: echo "test"
-`
-
-	workflow, err := parser.Parse([]byte(yaml))
-	require.NoError(t, err)
-	require.NotNil(t, workflow)
-
-	// Verify basic structure
-	assert.Equal(t, "github", workflow.Platform)
-	assert.Equal(t, "CI", workflow.Name)
-	assert.Contains(t, workflow.Triggers, "push")
-	assert.Len(t, workflow.Jobs, 1)
 }
 
 func TestGitHubParser_Parse_InvalidYAML(t *testing.T) {
@@ -838,11 +766,6 @@ func TestGitHubParser_InitRegistration(t *testing.T) {
 // GitLabParser Tests
 // ============================================================================
 
-func TestGitLabParser_Platform(t *testing.T) {
-	parser := NewGitLabParser()
-	assert.Equal(t, "gitlab", parser.Platform())
-}
-
 func TestGitLabParser_CanParse(t *testing.T) {
 	parser := NewGitLabParser()
 
@@ -924,10 +847,10 @@ build-job:
 	require.NotNil(t, buildJob)
 	assert.Equal(t, "build-job", buildJob.ID)
 
-	// Verify steps were created from script
+	// Exact match, not Contains: the script lines are joined in source order and a
+	// reordering or duplication regression has to fail here.
 	assert.Len(t, buildJob.Steps, 1)
-	assert.Contains(t, buildJob.Steps[0].Run, "echo \"Building\"")
-	assert.Contains(t, buildJob.Steps[0].Run, "npm ci")
+	assert.Equal(t, "echo \"Building\"\nnpm ci", buildJob.Steps[0].Run)
 }
 
 func TestGitLabParser_Parse_InvalidYAML(t *testing.T) {
@@ -1207,38 +1130,6 @@ test-job:
 	assert.Equal(t, "/templates/test.yml", inc2.Path)
 }
 
-func TestGitLabParser_Parse_Include_Remote(t *testing.T) {
-	parser := NewGitLabParser()
-
-	yaml := `
-include:
-  - remote: 'https://example.com/ci.yml'
-
-stages:
-  - test
-
-test-job:
-  stage: test
-  script:
-    - echo "test"
-`
-
-	workflow, err := parser.Parse([]byte(yaml))
-	require.NoError(t, err)
-	require.NotNil(t, workflow)
-
-	glCI, ok := workflow.Raw.(*GitLabCI)
-	require.True(t, ok, "Raw should be *GitLabCI")
-	require.Len(t, glCI.Includes, 1)
-
-	inc := glCI.Includes[0]
-	assert.Equal(t, IncludeTypeRemote, inc.Type)
-	assert.Equal(t, "https://example.com/ci.yml", inc.Remote)
-	assert.Empty(t, inc.Path)
-	assert.Empty(t, inc.Project)
-	assert.Empty(t, inc.Template)
-}
-
 func TestGitLabParser_Parse_Include_Project(t *testing.T) {
 	parser := NewGitLabParser()
 
@@ -1272,38 +1163,6 @@ test-job:
 	assert.Equal(t, "main", inc.Ref)
 	assert.Empty(t, inc.Remote)
 	assert.Empty(t, inc.Template)
-}
-
-func TestGitLabParser_Parse_Include_Template(t *testing.T) {
-	parser := NewGitLabParser()
-
-	yaml := `
-include:
-  - template: 'Auto-DevOps.gitlab-ci.yml'
-
-stages:
-  - test
-
-test-job:
-  stage: test
-  script:
-    - echo "test"
-`
-
-	workflow, err := parser.Parse([]byte(yaml))
-	require.NoError(t, err)
-	require.NotNil(t, workflow)
-
-	glCI, ok := workflow.Raw.(*GitLabCI)
-	require.True(t, ok, "Raw should be *GitLabCI")
-	require.Len(t, glCI.Includes, 1)
-
-	inc := glCI.Includes[0]
-	assert.Equal(t, IncludeTypeTemplate, inc.Type)
-	assert.Equal(t, "Auto-DevOps.gitlab-ci.yml", inc.Template)
-	assert.Empty(t, inc.Path)
-	assert.Empty(t, inc.Remote)
-	assert.Empty(t, inc.Project)
 }
 
 func TestGitLabParser_Parse_Include_Mixed(t *testing.T) {

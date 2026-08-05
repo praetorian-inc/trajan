@@ -46,12 +46,17 @@ func deriveBranchAccessEdges(prior engine.PriorPhase, cp engine.CurrentPhase, ti
 	for _, e := range hasPolicy {
 		policiesByBranch[mStr(e, "branch_id")] = append(policiesByBranch[mStr(e, "branch_id")], e)
 	}
-	repoGrants := loadRepoGrants(prior)
+	repoGrants, err := loadRepoGrants(prior)
+	if err != nil {
+		return fmt.Errorf("correlate: load has-role: %w", err)
+	}
+	repos, err := loadRecords(prior, "10-normalize/repos")
+	if err != nil {
+		return fmt.Errorf("correlate: load repos: %w", err)
+	}
 	repoIDByName := map[string]string{} // "project/repo" -> repo node _id
-	if repos, err := loadRecords(prior, "10-normalize/repos"); err == nil {
-		for _, r := range repos {
-			repoIDByName[mStr(r, "project")+"/"+mStr(r, "name")] = mStr(r, "_id")
-		}
+	for _, r := range repos {
+		repoIDByName[mStr(r, "project")+"/"+mStr(r, "name")] = mStr(r, "_id")
 	}
 
 	for _, b := range branches {
@@ -211,11 +216,11 @@ type repoGrantIndex struct {
 	byRepoAction map[string]map[string][]map[string]any
 }
 
-func loadRepoGrants(prior engine.PriorPhase) repoGrantIndex {
+func loadRepoGrants(prior engine.PriorPhase) (repoGrantIndex, error) {
 	idx := repoGrantIndex{byRepoAction: map[string]map[string][]map[string]any{}}
 	roles, err := loadRecords(prior, "10-normalize/edges/has-role")
 	if err != nil {
-		return idx
+		return idx, err
 	}
 	for _, role := range roles {
 		if mStr(role, "namespace") != gitNS || mStr(role, "resource_kind") != "Repository" {
@@ -235,7 +240,7 @@ func loadRepoGrants(prior engine.PriorPhase) repoGrantIndex {
 			}
 		}
 	}
-	return idx
+	return idx, nil
 }
 
 func (r repoGrantIndex) with(repoID, action string) []map[string]any {

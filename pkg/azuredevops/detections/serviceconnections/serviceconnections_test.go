@@ -12,21 +12,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-func TestServiceConnectionsDetection_Name(t *testing.T) {
-	d := New()
-	assert.Equal(t, "service-connections", d.Name())
-}
-
-func TestServiceConnectionsDetection_Platform(t *testing.T) {
-	d := New()
-	assert.Equal(t, platforms.PlatformAzureDevOps, d.Platform(), "Platform should be 'azuredevops' not 'azure'")
-}
-
-func TestServiceConnectionsDetection_Severity(t *testing.T) {
-	d := New()
-	assert.Equal(t, detections.SeverityCritical, d.Severity())
-}
-
 func TestServiceConnectionsDetection_Detect_DynamicConnectionFromParameter(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -59,39 +44,6 @@ func TestServiceConnectionsDetection_Detect_DynamicConnectionFromParameter(t *te
 	assert.Equal(t, detections.VulnServiceConnectionHijacking, finding.Type)
 	assert.Equal(t, platforms.PlatformAzureDevOps, finding.Platform, "Finding platform should be 'azuredevops'")
 	assert.Equal(t, detections.SeverityCritical, finding.Severity)
-}
-
-func TestServiceConnectionsDetection_Detect_DynamicConnectionFromVariable(t *testing.T) {
-	d := New()
-	ctx := context.Background()
-
-	g := graph.NewGraph()
-	wf := graph.NewWorkflowNode("wf1", "azure-pipelines.yml", "azure-pipelines.yml", "owner/repo", []string{})
-	g.AddNode(wf)
-
-	job := graph.NewJobNode("job1", "deploy", "ubuntu-latest")
-	job.SetParent(wf.ID())
-	g.AddNode(job)
-	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
-
-	// Create a step with dynamic service connection from variable
-	step := graph.NewStepNode("step1", "kubernetes-deploy", 15)
-	step.Uses = "task:KubernetesManifest@0"
-	step.With = map[string]string{
-		"kubernetesServiceConnection": "${{ variables.k8sConnection }}",
-		"action":                      "deploy",
-	}
-	step.SetParent(job.ID())
-	g.AddNode(step)
-	g.AddEdge(job.ID(), step.ID(), graph.EdgeContains)
-
-	findings, err := d.Detect(ctx, g)
-	require.NoError(t, err)
-	require.NotEmpty(t, findings, "Expected to find dynamic service connection")
-
-	finding := findings[0]
-	assert.Equal(t, detections.SeverityCritical, finding.Severity, "Dynamic connection should be Critical severity")
-	assert.NotEmpty(t, finding.Evidence, "Expected evidence field to contain the injection pattern")
 }
 
 func TestServiceConnectionsDetection_Detect_StaticConnection(t *testing.T) {

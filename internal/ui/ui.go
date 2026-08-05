@@ -327,12 +327,12 @@ const (
 	maxNote     = 40
 )
 
-func clip(s string, max int) string {
+func clip(s string, limit int) string {
 	r := []rune(s)
-	if len(r) <= max {
+	if len(r) <= limit {
 		return s
 	}
-	return string(r[:max-1]) + "…"
+	return string(r[:limit-1]) + "…"
 }
 
 type Count struct {

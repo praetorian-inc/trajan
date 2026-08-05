@@ -323,27 +323,6 @@ func (c *Client) postJSON(ctx context.Context, path string, body interface{}, re
 	return nil
 }
 
-// putJSON performs a PUT request with JSON body and decodes JSON response
-func (c *Client) putJSON(ctx context.Context, path string, body interface{}, result interface{}) error {
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return fmt.Errorf("marshaling request body: %w", err)
-	}
-
-	resp, err := c.doRequestWithBody(ctx, "PUT", path, jsonBody)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if result != nil {
-		if err := decodeJSONResponse(resp, result); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // patchJSON performs a PATCH request with JSON body and decodes JSON response
 func (c *Client) patchJSON(ctx context.Context, path string, body interface{}, result interface{}) error {
 	jsonBody, err := json.Marshal(body)

@@ -59,14 +59,3 @@ func (s *LocalStorage) Save(config *Config) error {
 
 	return nil
 }
-
-// Clear removes configuration from localStorage
-func (s *LocalStorage) Clear() error {
-	localStorage := js.Global().Get("localStorage")
-	if !localStorage.Truthy() {
-		return fmt.Errorf("localStorage not available")
-	}
-
-	localStorage.Call("removeItem", s.key)
-	return nil
-}

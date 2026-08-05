@@ -158,19 +158,6 @@ func (g *Graph) NodeCount() int {
 	return len(g.nodes)
 }
 
-// UpdateNodeTag adds a tag to a node and updates the index
-func (g *Graph) UpdateNodeTag(id string, tag Tag) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	if node, ok := g.nodes[id]; ok {
-		if !node.HasTag(tag) {
-			node.AddTag(tag)
-			g.tags[tag] = append(g.tags[tag], id)
-		}
-	}
-}
-
 // SetMetadata stores platform-level context in the graph
 func (g *Graph) SetMetadata(key string, value interface{}) {
 	g.mu.Lock()

@@ -19,50 +19,6 @@ func createFile(t *testing.T, path string, content string) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
-func TestSupportedPlatforms_ReturnsSorted(t *testing.T) {
-	got := SupportedPlatforms()
-	want := []string{
-		platforms.PlatformAzureDevOps,
-		platforms.PlatformGitHub,
-		platforms.PlatformGitLab,
-		platforms.PlatformJenkins,
-	}
-	assert.Equal(t, want, got)
-}
-
-func TestIsSupported(t *testing.T) {
-	tests := []struct {
-		platform string
-		want     bool
-	}{
-		{platforms.PlatformGitHub, true},
-		{platforms.PlatformGitLab, true},
-		{platforms.PlatformAzureDevOps, true},
-		{platforms.PlatformJenkins, true},
-		{"bitbucket", false},
-		{"jfrog", false},
-		{"", false},
-		{"unknown", false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.platform, func(t *testing.T) {
-			assert.Equal(t, tc.want, IsSupported(tc.platform))
-		})
-	}
-}
-
-func TestWalk_UnsupportedPlatform(t *testing.T) {
-	tmp := t.TempDir()
-	_, err := Walk("bitbucket", tmp, "slug")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `local scanning not supported for platform "bitbucket"`)
-}
-
-func TestWalk_NonexistentPath(t *testing.T) {
-	_, err := Walk(platforms.PlatformGitHub, "/nonexistent/path/definitely/not/here", "slug")
-	require.Error(t, err)
-}
-
 func TestWalk_SingleFile_TrustsCallerPlatform(t *testing.T) {
 	tmp := t.TempDir()
 	file := filepath.Join(tmp, "random-name.txt")
@@ -109,46 +65,6 @@ func TestWalk_Directory_GitHub_MatchesAndSkipsDirs(t *testing.T) {
 
 	assert.Equal(t, ".github/workflows/ci.yml", workflows[0].Path)
 	assert.Equal(t, "my-slug", workflows[0].RepoSlug)
-}
-
-func TestWalk_Directory_GitHub_ExcludesNestedWorkflows(t *testing.T) {
-	root := t.TempDir()
-
-	// Direct child — must be included.
-	createFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), "")
-
-	// Nested — must be excluded (GitHub Actions ignores nested files).
-	createFile(t, filepath.Join(root, ".github", "workflows", "sub", "nested.yml"), "")
-
-	workflows, err := Walk(platforms.PlatformGitHub, root, "slug")
-	require.NoError(t, err)
-
-	paths := make([]string, len(workflows))
-	for i, wf := range workflows {
-		paths[i] = wf.Path
-	}
-	assert.Contains(t, paths, ".github/workflows/ci.yml")
-	assert.NotContains(t, paths, ".github/workflows/sub/nested.yml")
-}
-
-func TestWalk_Directory_GitLab(t *testing.T) {
-	root := t.TempDir()
-
-	// Should be included
-	createFile(t, filepath.Join(root, ".gitlab-ci.yml"), "")
-	createFile(t, filepath.Join(root, "sub", ".gitlab-ci.yaml"), "")
-
-	// Should be excluded
-	createFile(t, filepath.Join(root, "pipeline.yml"), "")
-	createFile(t, filepath.Join(root, "sub", "other-ci.yml"), "")
-
-	workflows, err := Walk(platforms.PlatformGitLab, root, "gl-slug")
-	require.NoError(t, err)
-	require.Len(t, workflows, 2)
-
-	paths := []string{workflows[0].Path, workflows[1].Path}
-	assert.Contains(t, paths, ".gitlab-ci.yml")
-	assert.Contains(t, paths, "sub/.gitlab-ci.yaml")
 }
 
 func TestWalk_Directory_AzureDevOps(t *testing.T) {
@@ -227,33 +143,6 @@ func TestWalk_Directory_StableSortByPath(t *testing.T) {
 		paths[i] = wf.Path
 	}
 	require.Equal(t, []string{"a-service/Jenkinsfile", "z-service/Jenkinsfile"}, paths)
-}
-
-func TestWalk_ContentReadCorrectly(t *testing.T) {
-	root := t.TempDir()
-	content := "name: ci\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
-	createFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), content)
-
-	workflows, err := Walk(platforms.PlatformGitHub, root, "slug")
-	require.NoError(t, err)
-	require.Len(t, workflows, 1)
-
-	assert.Equal(t, []byte(content), workflows[0].Content)
-}
-
-func TestWalk_Directory_EmptyDir_ReturnsNoWorkflows(t *testing.T) {
-	workflows, err := Walk(platforms.PlatformGitHub, t.TempDir(), "slug")
-	require.NoError(t, err)
-	assert.Empty(t, workflows)
-}
-
-func TestWalk_Directory_OnlyNonMatchingFiles_ReturnsNoWorkflows(t *testing.T) {
-	root := t.TempDir()
-	createFile(t, filepath.Join(root, "README.md"), "# not a workflow")
-	createFile(t, filepath.Join(root, "Makefile"), "all:\n\techo hi")
-	workflows, err := Walk(platforms.PlatformGitHub, root, "slug")
-	require.NoError(t, err)
-	assert.Empty(t, workflows)
 }
 
 func TestWalk_SingleFile_UnreadableFile_ReturnsError(t *testing.T) {

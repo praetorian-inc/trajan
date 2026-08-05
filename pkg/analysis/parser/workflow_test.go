@@ -8,33 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseWorkflow_Basic(t *testing.T) {
-	yaml := `
-name: Build
-on: push
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: echo "Hello"
-`
-
-	wf, err := ParseWorkflow([]byte(yaml))
-	require.NoError(t, err)
-
-	assert.Equal(t, "Build", wf.Name)
-	assert.Contains(t, wf.GetTriggers(), "push")
-	assert.Len(t, wf.Jobs, 1)
-	assert.Contains(t, wf.Jobs, "build")
-
-	job := wf.Jobs["build"]
-	assert.Equal(t, "ubuntu-latest", job.GetRunsOn())
-	assert.Len(t, job.Steps, 2)
-	assert.Equal(t, "actions/checkout@v4", job.Steps[0].Uses)
-	assert.Equal(t, `echo "Hello"`, job.Steps[1].Run)
-}
-
 func TestParseWorkflow_PullRequestTarget(t *testing.T) {
 	yaml := `
 name: PR Target
@@ -77,35 +50,6 @@ jobs:
 	triggers := wf.GetTriggers()
 	assert.Contains(t, triggers, "push")
 	assert.Contains(t, triggers, "pull_request")
-}
-
-func TestJob_GetNeeds(t *testing.T) {
-	yaml := `
-name: Pipeline
-on: push
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo build
-  test:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - run: echo test
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [build, test]
-    steps:
-      - run: echo deploy
-`
-
-	wf, err := ParseWorkflow([]byte(yaml))
-	require.NoError(t, err)
-
-	assert.Empty(t, wf.Jobs["build"].GetNeeds())
-	assert.Equal(t, []string{"build"}, wf.Jobs["test"].GetNeeds())
-	assert.ElementsMatch(t, []string{"build", "test"}, wf.Jobs["deploy"].GetNeeds())
 }
 
 func TestJob_IsSelfHostedRunner(t *testing.T) {

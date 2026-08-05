@@ -585,15 +585,16 @@ func deriveCacheKeyspace(jobs []map[string]any) map[string]any {
 		for _, c := range mList(job, opKey) {
 			var key, scope string
 			var restore any
-			if cm, ok := c.(map[string]any); ok {
-				key, _ = (mGet(cm, "key_template")).(string)
+			switch cm := c.(type) {
+			case map[string]any:
+				key, _ = mGet(cm, "key_template").(string)
 				if key == "" {
 					key, _ = mGet(cm, "key").(string)
 				}
 				scope, _ = mGet(cm, "scope").(string)
 				restore = mGet(cm, "restore_keys")
-			} else if s, ok := c.(string); ok {
-				key = s
+			case string:
+				key = cm
 			}
 			prefix, ok := strings.CutPrefix(scope, "scope-prefix:")
 			if !ok {
@@ -1137,7 +1138,7 @@ func deriveCapabilityEdges(effective, principals, deployKeys, repos, apps []map[
 	// the installation-repositories list collect never fetches, so its scope is
 	// narrowed to the repositories where a job actually mints its token — sound
 	// without that call, and the only repositories where the grant is reachable
-	// from a workflow anyway. administration:write is the app analogue of repo
+	// from a workflow anyway. administration:write is the app analog of repo
 	// admin — it is the permission that removes the control itself.
 	for _, a := range apps {
 		perms := mMap(a, "permissions")

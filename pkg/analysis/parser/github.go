@@ -361,20 +361,13 @@ func (j GitHubJob) GetNeeds() []string {
 // Covers standard, ARM, larger (xlarge/large), and legacy labels.
 // https://docs.github.com/en/actions/using-github-hosted-runners
 var GitHubHostedRunners = map[string]bool{
-	// Linux x64
 	"ubuntu-latest": true, "ubuntu-24.04": true, "ubuntu-22.04": true, "ubuntu-20.04": true,
-	"ubuntu-slim": true,
-	// Linux ARM
+	"ubuntu-slim":      true,
 	"ubuntu-24.04-arm": true, "ubuntu-22.04-arm": true,
-	// Windows x64
 	"windows-latest": true, "windows-2025": true, "windows-2025-vs2026": true, "windows-2022": true, "windows-2019": true,
-	// Windows ARM
 	"windows-11-arm": true,
-	// macOS ARM (Apple Silicon)
-	"macos-latest": true, "macos-26": true, "macos-15": true, "macos-14": true, "macos-13": true, "macos-12": true,
-	// macOS Intel
+	"macos-latest":   true, "macos-26": true, "macos-15": true, "macos-14": true, "macos-13": true, "macos-12": true,
 	"macos-26-intel": true, "macos-15-intel": true,
-	// macOS larger runners
 	"macos-latest-large": true, "macos-26-large": true, "macos-15-large": true, "macos-14-large": true,
 	"macos-latest-xlarge": true, "macos-26-xlarge": true, "macos-15-xlarge": true, "macos-14-xlarge": true,
 }
@@ -410,7 +403,7 @@ func (j GitHubJob) IsSelfHostedRunner() bool {
 func extractMatrixVar(expr string) string {
 	start := strings.Index(expr, "{{")
 	end := strings.Index(expr, "}}")
-	if start < 0 || end < 0 {
+	if start < 0 || end < start+2 {
 		return ""
 	}
 	inner := strings.TrimSpace(expr[start+2 : end])

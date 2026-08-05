@@ -116,15 +116,3 @@ func TestIntegration_FetchCrumb(t *testing.T) {
 		t.Log("CSRF disabled (no crumb)")
 	}
 }
-
-func TestIntegration_AnonymousAccess(t *testing.T) {
-	url := os.Getenv("JENKINS_TEST_URL")
-	if url == "" {
-		t.Skip("JENKINS_TEST_URL not set")
-	}
-	// Create anonymous client (no username/token)
-	c := NewClient(url, "")
-	_, err := c.GetServerInfo(context.Background())
-	// Anonymous should either succeed or fail with 403 depending on config
-	t.Logf("Anonymous GetServerInfo result: err=%v", err)
-}

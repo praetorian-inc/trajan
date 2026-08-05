@@ -2,10 +2,8 @@
 package analysis
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,32 +36,6 @@ func TestBuildGraphFromNormalized_AzureWorkflowNameFallsBackToPath(t *testing.T)
 	require.Len(t, workflows, 1)
 	wfNode := workflows[0].(*graph.WorkflowNode)
 	assert.Equal(t, "my-pipeline.yml", wfNode.Name, "WorkflowNode.Name should fall back to path when workflow Name is empty")
-}
-
-func TestBuildGraph_Basic(t *testing.T) {
-	yaml := `
-name: Build
-on: [push, pull_request]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build
-        run: make build
-`
-
-	g, err := BuildGraph("owner/repo", "build.yml", []byte(yaml))
-	require.NoError(t, err)
-
-	// Should have workflow, job, and steps
-	assert.Greater(t, g.NodeCount(), 3)
-
-	// Should have workflow node
-	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
-	require.Len(t, workflows, 1)
-	wf := workflows[0].(*graph.WorkflowNode)
-	assert.Equal(t, "Build", wf.Name)
 }
 
 func TestBuildGraph_PullRequestTarget(t *testing.T) {
@@ -438,99 +410,6 @@ jobs:
 	// Verify no GitLab metadata
 	_, ok := gr.GetMetadata("gitlab_client")
 	assert.False(t, ok, "should not have gitlab_client in metadata for GitHub workflow")
-}
-
-// mockGitLabClient implements the GitLab client interface for testing include resolution
-type mockGitLabClient struct {
-	files map[string][]byte
-}
-
-func (m *mockGitLabClient) GetWorkflowFile(ctx context.Context, projectID int, path, ref string) ([]byte, error) {
-	key := fmt.Sprintf("%d:%s:%s", projectID, path, ref)
-	if content, ok := m.files[key]; ok {
-		return content, nil
-	}
-	return nil, fmt.Errorf("file not found: %s", key)
-}
-
-func (m *mockGitLabClient) GetProject(ctx context.Context, path string) (*gitlab.Project, error) {
-	// Mock project lookup - return dummy project with ID 456
-	return &gitlab.Project{ID: 456, PathWithNamespace: path}, nil
-}
-
-func (m *mockGitLabClient) GetTemplate(ctx context.Context, name string) ([]byte, error) {
-	key := fmt.Sprintf("template:%s", name)
-	if content, ok := m.files[key]; ok {
-		return content, nil
-	}
-	return nil, fmt.Errorf("template not found: %s", name)
-}
-
-// TestResolveGitLabIncludes tests the include resolution during graph building
-func TestResolveGitLabIncludes(t *testing.T) {
-	_ = &mockGitLabClient{
-		files: map[string][]byte{
-			// Local include file
-			"123:.gitlab/ci/build.yml:main": []byte(`build:
-  stage: build
-  script:
-    - make build`),
-		},
-	}
-
-	content := []byte(`include:
-  - local: '.gitlab/ci/build.yml'
-
-stages:
-  - test
-
-test:
-  stage: test
-  script:
-    - make test`)
-
-	// Create a real gitlab.Client wrapper around our mock
-	// We need to use the actual *gitlab.Client type
-	realClient := gitlab.NewClient("https://gitlab.com", "test-token")
-
-	// Wrap the mock to intercept calls
-	// For this test, we'll use a different approach: directly test normalizedGraphBuilder
-	gitlabParser := parser.NewGitLabParser()
-	normalized, err := gitlabParser.Parse(content)
-	require.NoError(t, err)
-
-	// Create resolver manually
-	_ = gitlab.NewIncludeResolver(realClient, 123, "main")
-
-	// For testing, we need to inject the mock client into the resolver
-	// Since the resolver is not exported, we'll test through the public API
-
-	// Actually, let's test the integration through BuildGraph with proper metadata
-	// But we can't inject a mock into NewIncludeResolver...
-	// Let's instead verify that the includes are populated correctly in the workflow node
-	// and test the actual resolution logic separately
-
-	g, err := BuildGraphFromNormalized("owner/repo", ".gitlab-ci.yml", normalized, map[string]interface{}{
-		"gitlab_client":     realClient,
-		"gitlab_project_id": 123,
-		"gitlab_ref":        "main",
-	})
-	require.NoError(t, err)
-
-	// Verify graph has main workflow node with includes populated
-	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
-	require.Len(t, workflows, 1)
-	wfNode := workflows[0].(*graph.WorkflowNode)
-
-	// Verify includes are populated from the parsed GitLabCI
-	require.Len(t, wfNode.Includes, 1, "Should have 1 include in workflow node")
-	assert.Equal(t, "local", wfNode.Includes[0].Type)
-	assert.Equal(t, ".gitlab/ci/build.yml", wfNode.Includes[0].Path)
-
-	// TODO: After implementing resolveGitLabIncludes, test that:
-	// 1. Included workflow nodes are created
-	// 2. Edges are created from parent to included workflow (EdgeIncludes)
-	// 3. Jobs from included workflows are part of the graph
 }
 
 // TestResolveGitLabIncludesWithActualResolution tests that includes are actually resolved

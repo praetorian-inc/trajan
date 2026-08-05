@@ -14,8 +14,15 @@ import (
 // and PIPELINE_POISONING (cat-01 injection half). The step-level sinks/sources
 // these key on are already collapsed onto each :Job by walkSteps.
 func deriveTaintEdges(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, jobs, pipelines []map[string]any) error {
-	pipeMeta := indexPipelines(pipelines, loadBuildValidated(prior))
-	grants := loadGrants(prior)
+	validated, err := loadBuildValidated(prior)
+	if err != nil {
+		return fmt.Errorf("correlate: load build-validates: %w", err)
+	}
+	pipeMeta := indexPipelines(pipelines, validated)
+	grants, err := loadGrants(prior)
+	if err != nil {
+		return fmt.Errorf("correlate: load has-role: %w", err)
+	}
 
 	readsByJob, err := deriveReads(prior, cp, timer, jobs)
 	if err != nil {
@@ -56,18 +63,18 @@ func pipeKey(project string, id int64) string { return fmt.Sprintf("%s/%d", proj
 
 // derivePolicyAttribution runs earlier in the same pass, so its BUILD_VALIDATES
 // edges are already on disk.
-func loadBuildValidated(prior engine.PriorPhase) map[string]bool {
+func loadBuildValidated(prior engine.PriorPhase) (map[string]bool, error) {
 	out := map[string]bool{}
 	edges, err := loadRecords(prior, "10-normalize/edges/build-validates")
 	if err != nil {
-		return out
+		return nil, err
 	}
 	for _, e := range edges {
 		if id := mInt64(e, "build_definition_id"); id != 0 {
 			out[pipeKey(mStr(e, "project"), id)] = true
 		}
 	}
-	return out
+	return out, nil
 }
 
 func indexPipelines(pipelines []map[string]any, validated map[string]bool) map[string]pipeInfo {
@@ -464,23 +471,27 @@ type grantIndex struct {
 // loadGrants indexes HAS_ROLE edges by (project, namespace-tagged action) -> the
 // principal grants (descriptor + expanded leaf members) — the source side of the
 // injection edges (who holds Queue builds / Contribute).
-func loadGrants(prior engine.PriorPhase) grantIndex {
+func loadGrants(prior engine.PriorPhase) (grantIndex, error) {
 	idx := grantIndex{byProjectAction: map[string]map[string][]map[string]any{}}
 	roles, err := loadRecords(prior, "10-normalize/edges/has-role")
 	if err != nil {
-		return idx
+		return idx, err
+	}
+	projs, err := loadRecords(prior, "10-normalize/projects")
+	if err != nil {
+		return idx, err
 	}
 	projByID := map[string]string{}
-	if projs, err := loadRecords(prior, "10-normalize/projects"); err == nil {
-		for _, p := range projs {
-			projByID[mStr(p, "_id")] = mStr(p, "project")
-		}
+	for _, p := range projs {
+		projByID[mStr(p, "_id")] = mStr(p, "project")
+	}
+	repos, err := loadRecords(prior, "10-normalize/repos")
+	if err != nil {
+		return idx, err
 	}
 	repoProj := map[string]string{}
-	if repos, err := loadRecords(prior, "10-normalize/repos"); err == nil {
-		for _, r := range repos {
-			repoProj[mStr(r, "_id")] = mStr(r, "project")
-		}
+	for _, r := range repos {
+		repoProj[mStr(r, "_id")] = mStr(r, "project")
 	}
 	nsTag := map[string]string{gitNS: gitNSKey, buildNS: buildNSKey, endpointNS: endpointNSKey}
 	for _, role := range roles {
@@ -508,7 +519,7 @@ func loadGrants(prior engine.PriorPhase) grantIndex {
 			idx.byProjectAction[project][tagged] = append(idx.byProjectAction[project][tagged], grant)
 		}
 	}
-	return idx
+	return idx, nil
 }
 
 func (g grantIndex) principalsWith(project, ns string, actions ...string) []any {

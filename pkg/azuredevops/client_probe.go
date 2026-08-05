@@ -74,20 +74,6 @@ func (c *Client) ListVariableGroups(ctx context.Context, projectNameOrID string)
 	return result.Value, nil
 }
 
-// GetVariableGroup gets a specific variable group by ID
-// Endpoint: /{project}/_apis/distributedtask/variablegroups/{groupId}
-func (c *Client) GetVariableGroup(ctx context.Context, projectNameOrID string, groupID int) (*VariableGroup, error) {
-	encodedProject := url.PathEscape(projectNameOrID)
-	path := fmt.Sprintf("/%s/_apis/distributedtask/variablegroups/%d?api-version=%s", encodedProject, groupID, APIVersion)
-
-	var result VariableGroup
-	if err := c.getJSON(ctx, path, &result); err != nil {
-		return nil, fmt.Errorf("getting variable group: %w", err)
-	}
-
-	return &result, nil
-}
-
 // ListServiceConnections lists all service connections in a project
 // Endpoint: /{project}/_apis/serviceendpoint/endpoints
 func (c *Client) ListServiceConnections(ctx context.Context, projectNameOrID string) ([]ServiceConnection, error) {

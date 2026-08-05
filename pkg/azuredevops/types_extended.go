@@ -645,54 +645,6 @@ type OrganizationList struct {
 	Count int            `json:"count"`
 }
 
-// Security Namespace ID Constants
-const (
-	BuildNamespaceID             = "33344d9c-fc72-4d6f-aba5-fa317101a7e9"
-	GitNamespaceID               = "2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87"
-	ProjectNamespaceID           = "52d39943-cb85-4d7f-8fa8-c6baac873819"
-	ReleaseManagementNamespaceID = "c788c23e-1b46-4162-8f5e-d7585343b5de"
-	DistributedTaskNamespaceID   = "101eae8c-1709-47f9-b228-0e476c35b3ba"
-)
-
-// BuildPermissionBits maps permission bits to names
-var BuildPermissionBits = map[int]string{
-	1:     "ViewBuilds",
-	2:     "EditBuildQuality",
-	4:     "RetainIndefinitely",
-	8:     "DeleteBuilds",
-	16:    "ManageBuildQualities",
-	32:    "DestroyBuilds",
-	64:    "UpdateBuildInformation",
-	128:   "QueueBuilds",
-	256:   "ManageBuildQueue",
-	512:   "StopBuilds",
-	1024:  "ViewBuildDefinition",
-	2048:  "EditBuildDefinition",
-	4096:  "DeleteBuildDefinition",
-	8192:  "OverrideBuildCheckInValidation",
-	16384: "AdministerBuildPermissions",
-}
-
-// GitPermissionBits maps permission bits to names
-var GitPermissionBits = map[int]string{
-	1:     "Administer",
-	2:     "GenericRead",
-	4:     "GenericContribute",
-	8:     "ForcePush",
-	16:    "CreateBranch",
-	32:    "CreateTag",
-	64:    "ManageNote",
-	128:   "PolicyExempt",
-	256:   "CreateRepository",
-	512:   "DeleteRepository",
-	1024:  "RenameRepository",
-	2048:  "EditPolicies",
-	4096:  "RemoveOthersLocks",
-	8192:  "ManagePermissions",
-	16384: "PullRequestContribute",
-	32768: "PullRequestBypassPolicy",
-}
-
 // PolicyType represents a policy type definition
 type PolicyType struct {
 	ID          string `json:"id"`

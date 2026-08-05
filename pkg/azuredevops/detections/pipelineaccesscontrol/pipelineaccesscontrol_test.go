@@ -12,21 +12,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-func TestPipelineAccessControlDetection_Name(t *testing.T) {
-	d := New()
-	assert.Equal(t, "pipeline-access-control", d.Name())
-}
-
-func TestPipelineAccessControlDetection_Platform(t *testing.T) {
-	d := New()
-	assert.Equal(t, platforms.PlatformAzureDevOps, d.Platform())
-}
-
-func TestPipelineAccessControlDetection_Severity(t *testing.T) {
-	d := New()
-	assert.Equal(t, detections.SeverityLow, d.Severity())
-}
-
 func TestPipelineAccessControlDetection_Detect_EnvironmentInWith(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -167,34 +152,6 @@ func TestPipelineAccessControlDetection_Detect_ExcessiveBuildAdminPermissions(t 
 		}
 	}
 	assert.True(t, found, "Expected VulnExcessiveJobPermissions finding for build:admin")
-}
-
-func TestPipelineAccessControlDetection_Detect_ExcessiveReleaseAdminPermissions(t *testing.T) {
-	d := New()
-	ctx := context.Background()
-
-	g := graph.NewGraph()
-	wf := graph.NewWorkflowNode("wf1", "pipeline.yml", "pipeline.yml", "owner/repo", nil)
-	g.AddNode(wf)
-
-	job := graph.NewJobNode("job1", "deploy", "ubuntu-latest")
-	job.Permissions = map[string]string{
-		"release": "admin",
-	}
-	job.SetParent(wf.ID())
-	g.AddNode(job)
-	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
-
-	findings, err := d.Detect(ctx, g)
-	require.NoError(t, err)
-
-	found := false
-	for _, f := range findings {
-		if f.Type == detections.VulnExcessiveJobPermissions {
-			found = true
-		}
-	}
-	assert.True(t, found, "Expected VulnExcessiveJobPermissions finding for release:admin")
 }
 
 func TestPipelineAccessControlDetection_Detect_SafeReadOnlyPermissions(t *testing.T) {

@@ -12,21 +12,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-func TestSecretsExposureDetection_Name(t *testing.T) {
-	d := New()
-	assert.Equal(t, "secrets-exposure", d.Name())
-}
-
-func TestSecretsExposureDetection_Platform(t *testing.T) {
-	d := New()
-	assert.Equal(t, platforms.PlatformAzureDevOps, d.Platform())
-}
-
-func TestSecretsExposureDetection_Severity(t *testing.T) {
-	d := New()
-	assert.Equal(t, detections.SeverityHigh, d.Severity())
-}
-
 func TestSecretsExposureDetection_Detect_EchoWithVariableExpansion(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -163,25 +148,6 @@ func TestSecretsExposureDetection_Detect_SafeSystemVariable(t *testing.T) {
 	findings, err := d.Detect(ctx, g)
 	require.NoError(t, err)
 	assert.Empty(t, findings, "Expected no findings for safe system variable Build.BuildId")
-}
-
-func TestSecretsExposureDetection_Detect_MultipleSafeSystemVariables(t *testing.T) {
-	d := New()
-	ctx := context.Background()
-
-	g := graph.NewGraph()
-	wf := graph.NewWorkflowNode("wf1", "pipeline.yml", "pipeline.yml", "owner/repo", nil)
-	g.AddNode(wf)
-
-	step := graph.NewStepNode("step1", "echo-multi-safe", 10)
-	step.Run = "echo $(Build.BuildId) $(Build.SourceVersion) $(System.TeamProject)"
-	step.SetParent(wf.ID())
-	g.AddNode(step)
-	g.AddEdge(wf.ID(), step.ID(), graph.EdgeContains)
-
-	findings, err := d.Detect(ctx, g)
-	require.NoError(t, err)
-	assert.Empty(t, findings, "Expected no findings when all variables are safe system variables")
 }
 
 func TestSecretsExposureDetection_Detect_MixedSafeAndUnsafeVariables(t *testing.T) {

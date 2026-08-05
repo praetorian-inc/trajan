@@ -52,7 +52,7 @@ func (g *gqlClient) query(ctx context.Context, query string, vars map[string]any
 			return err
 		}
 		if resp.StatusCode == http.StatusOK {
-			raw := readAllClose(resp)
+			raw, _ := readAllClose(resp)
 			var env gqlEnvelope
 			if uerr := json.Unmarshal(raw, &env); uerr != nil {
 				return &GhError{Status: 200, URL: graphqlEndpoint, Body: "graphql: " + uerr.Error()}
@@ -67,13 +67,13 @@ func (g *gqlClient) query(ctx context.Context, query string, vars map[string]any
 		}
 		switch resp.StatusCode {
 		case 502, 503, 504:
-			b := readAllClose(resp)
+			b, _ := readAllClose(resp)
 			sleepFn(ctx, 2)
 			if i == 5 {
 				return &GhError{Status: resp.StatusCode, URL: graphqlEndpoint, Body: string(b)}
 			}
 		default:
-			b := readAllClose(resp)
+			b, _ := readAllClose(resp)
 			if g.c.sleepForRateLimit(ctx, resp, b, i) {
 				continue
 			}

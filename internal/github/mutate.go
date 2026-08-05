@@ -48,9 +48,12 @@ func (c *Client) Mutate(ctx context.Context, method, pathOrURL string, body any)
 			return nil, 0, err
 		}
 		status := resp.StatusCode
-		b := readAllClose(resp)
+		b, rerr := readAllClose(resp)
 		switch {
 		case status >= 200 && status < 300:
+			if rerr != nil {
+				return nil, status, fmt.Errorf("read response body from %s: %w", u, rerr)
+			}
 			return json.RawMessage(b), status, nil
 		case status >= 500:
 			return nil, status, fmt.Errorf("%w: %w", ErrAmbiguous, &GhError{Status: status, URL: u, Body: string(b)})

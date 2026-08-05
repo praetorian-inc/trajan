@@ -21,12 +21,30 @@ linters:
       exclude-functions:
         - (io.Closer).Close
         - (*os.File).Close
+        # neo4j's Close takes a ctx, so it does not satisfy io.Closer. Writes are
+        # auto-commit statements, leaving nothing to roll back at teardown.
+        - (github.com/neo4j/neo4j-go-driver/v5/neo4j.DriverWithContext).Close
+        - (github.com/neo4j/neo4j-go-driver/v5/neo4j.SessionWithContext).Close
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
         - (*text/tabwriter.Writer).Flush
     misspell:
       locale: US
+    staticcheck:
+      # Listing `checks` REPLACES golangci-lint's defaults rather than extending
+      # them, so the six ST1xxx it excludes by default must be repeated here.
+      # QF1001 rewrites merge-gate predicates via De Morgan; the negated form
+      # states the domain rule directly and is the auditable one.
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -QF1001
     gocritic:
       enabled-tags:
         - diagnostic
@@ -57,6 +75,9 @@ linters:
         # (consistent with hugeParam above being disabled).
         - rangeValCopy
         - deferInLoop
+        # Fires on `return s, s.err()` where s is a pointer and err() only reads;
+        # no evaluation order can change the result.
+        - evalOrder
   exclusions:
     rules:
       - path: _test\.go

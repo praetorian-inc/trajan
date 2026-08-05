@@ -31,14 +31,6 @@ func freestyleXML(agentLabel string, commands []string) []byte {
 </project>`)
 }
 
-// TestJenkinsParser_Platform verifies Platform() returns "jenkins"
-func TestJenkinsParser_Platform(t *testing.T) {
-	p := NewJenkinsParser()
-	if got := p.Platform(); got != "jenkins" {
-		t.Errorf("Platform() = %q, want %q", got, "jenkins")
-	}
-}
-
 // TestJenkinsParser_CanParse verifies CanParse for known and unknown paths
 func TestJenkinsParser_CanParse(t *testing.T) {
 	p := NewJenkinsParser()

@@ -13,9 +13,8 @@ import (
 
 // IndexedDBStorage stub for non-WASM builds
 type IndexedDBStorage struct {
-	dbName      string
-	dbVersion   int
-	initialized bool
+	dbName    string
+	dbVersion int
 }
 
 // NewIndexedDBStorage creates a new IndexedDB storage adapter

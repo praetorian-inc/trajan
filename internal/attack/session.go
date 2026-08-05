@@ -63,6 +63,10 @@ type Session struct {
 	// held here because the public half is injected into rendered payloads and
 	// the private half must never touch disk.
 	privateKey *rsa.PrivateKey
+
+	// publicKeyPEM is derived once at mint time: PayloadEnv cannot report a
+	// failure, and an empty value there composes a job that skips sealing.
+	publicKeyPEM string
 }
 
 type identityClient struct {
@@ -155,7 +159,12 @@ func NewSession(ctx context.Context, p *Plan, planDir string, ledger *Ledger, ex
 		if err != nil {
 			return nil, fmt.Errorf("mint run keypair: %w", err)
 		}
+		pub, err := publicKeyPEM(key)
+		if err != nil {
+			return nil, fmt.Errorf("encode run public key: %w", err)
+		}
 		s.privateKey = key
+		s.publicKeyPEM = pub
 	}
 
 	return s, nil
@@ -465,13 +474,7 @@ func (s *Session) OrgAllowed(owner string) error {
 // rendered fragment. The public half of the run keypair lands here with the
 // encryption engine.
 func (s *Session) PayloadEnv() payload.Env {
-	pub := ""
-	if s.privateKey != nil {
-		if p, err := publicKeyPEM(s.privateKey); err == nil {
-			pub = p
-		}
-	}
-	return payload.Env{PubKey: pub, Collector: s.Plan.collector()}
+	return payload.Env{PubKey: s.publicKeyPEM, Collector: s.Plan.collector()}
 }
 
 // Mutation is one state change: the request, the repository it lands in, and the

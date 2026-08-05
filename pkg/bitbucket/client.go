@@ -78,11 +78,6 @@ func WithAuthMode(mode AuthMode) ClientOption {
 	return func(c *Client) { c.authMode = mode }
 }
 
-// WithBaseURL overrides the default Bitbucket API base URL.
-func WithBaseURL(baseURL string) ClientOption {
-	return func(c *Client) { c.baseURL = baseURL }
-}
-
 // WithTimeout sets the HTTP client timeout.
 func WithTimeout(timeout time.Duration) ClientOption {
 	return func(c *Client) { c.httpClient.Timeout = timeout }

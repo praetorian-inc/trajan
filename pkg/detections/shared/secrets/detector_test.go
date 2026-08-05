@@ -3,6 +3,8 @@ package secrets
 
 import (
 	"testing"
+
+	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
 func TestSecretPatterns(t *testing.T) {
@@ -63,14 +65,17 @@ func TestSecretPatterns(t *testing.T) {
 func TestSecretPatterns_ConfidenceLevels(t *testing.T) {
 	detector := New()
 
-	// AWS access keys should be high confidence
 	matches := detector.DetectSecretPattern("AKIAIOSFODNN7EXAMPLE")
-	if len(matches) == 0 {
-		t.Fatal("Expected to find AWS key")
+	if len(matches) != 1 {
+		t.Fatalf("DetectSecretPattern() = %d matches, want 1", len(matches))
+	}
+	if matches[0].Pattern != "AWS Access Key" {
+		t.Fatalf("Pattern = %q, want %q", matches[0].Pattern, "AWS Access Key")
 	}
 
-	// Check that confidence is set
-	if matches[0].Confidence == "" {
-		t.Error("Confidence should be set for detected secrets")
+	// credentials.detectStructural discards everything below High, so a silent
+	// demotion of this pattern drops real findings instead of failing loudly.
+	if matches[0].Confidence != detections.ConfidenceHigh {
+		t.Errorf("Confidence = %q, want %q", matches[0].Confidence, detections.ConfidenceHigh)
 	}
 }

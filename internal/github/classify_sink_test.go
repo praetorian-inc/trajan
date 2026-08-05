@@ -28,20 +28,6 @@ func TestClassifyStepEmptyStepNoSink(t *testing.T) {
 	}
 }
 
-// docker_build_with_login is never set true anywhere; verify even docker sinks leave it false.
-func TestClassifyStepDockerBuildWithLoginAlwaysFalse(t *testing.T) {
-	for _, s := range []Step{
-		runStep("docker build -t x ."),
-		usesStep("docker/build-push-action@v5"),
-		usesStep("actions/checkout@v4"),
-		{},
-	} {
-		if classifyStep(s).DockerBuildWithLogin {
-			t.Errorf("docker_build_with_login should always be false, step=%+v", s)
-		}
-	}
-}
-
 func TestClassifyStepRunRegexSinks(t *testing.T) {
 	cases := []struct {
 		run   string

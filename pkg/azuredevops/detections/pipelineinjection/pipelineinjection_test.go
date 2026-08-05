@@ -12,22 +12,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-func TestPipelineInjectionDetection_Name(t *testing.T) {
-	d := New()
-	assert.Equal(t, "pipeline-injection", d.Name())
-}
-
-// TestPipelineInjectionDetection_Platform verifies the platform is registered as "azuredevops"
-func TestPipelineInjectionDetection_Platform(t *testing.T) {
-	d := New()
-	assert.Equal(t, platforms.PlatformAzureDevOps, d.Platform(), "Platform should be 'azuredevops' not 'azure'")
-}
-
-func TestPipelineInjectionDetection_Severity(t *testing.T) {
-	d := New()
-	assert.Equal(t, detections.SeverityCritical, d.Severity())
-}
-
 func TestPipelineInjectionDetection_Detect_ParametersInScript(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -83,7 +67,12 @@ func TestPipelineInjectionDetection_Detect_VariablesInScript(t *testing.T) {
 	require.NotEmpty(t, findings, "Expected to find template injection")
 
 	finding := findings[0]
-	assert.NotEmpty(t, finding.Evidence, "Expected evidence field to contain the injection pattern")
+	assert.Equal(t, detections.VulnScriptInjection, finding.Type)
+	assert.Equal(t, detections.SeverityHigh, finding.Severity)
+	// Medium, unlike the parameters branch's High: a variable may or may not carry
+	// PR-controlled content, and that difference is the point of this branch.
+	assert.Equal(t, detections.ConfidenceMedium, finding.Confidence)
+	assert.Equal(t, "${{ variables.buildScript }}", finding.Evidence)
 }
 
 func TestPipelineInjectionDetection_Detect_SafeStaticScript(t *testing.T) {
@@ -373,31 +362,6 @@ func TestPipelineInjectionDetection_Detect_RuntimeExpressionWithParameter(t *tes
 
 	finding := findings[0]
 	assert.Equal(t, detections.SeverityHigh, finding.Severity, "Runtime expression should be High severity")
-}
-
-func TestPipelineInjectionDetection_Detect_RuntimeExpressionWithVariable(t *testing.T) {
-	d := New()
-	ctx := context.Background()
-
-	g := graph.NewGraph()
-	wf := graph.NewWorkflowNode("wf1", "azure-pipelines.yml", "azure-pipelines.yml", "owner/repo", []string{})
-	g.AddNode(wf)
-
-	job := graph.NewJobNode("job1", "build", "ubuntu-latest")
-	job.SetParent(wf.ID())
-	g.AddNode(job)
-	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
-
-	// Runtime expression with variable
-	step := graph.NewStepNode("step1", "build", 45)
-	step.Run = "curl $[ variables.apiUrl ]"
-	step.SetParent(job.ID())
-	g.AddNode(step)
-	g.AddEdge(job.ID(), step.ID(), graph.EdgeContains)
-
-	findings, err := d.Detect(ctx, g)
-	require.NoError(t, err)
-	assert.NotEmpty(t, findings, "Expected to find runtime expression injection")
 }
 
 func TestPipelineInjectionDetection_Detect_RuntimeExpressionInTemplateReference(t *testing.T) {

@@ -45,7 +45,10 @@ func Run(ctx context.Context, runDir string, opts Options) error {
 	}
 	findings = filterAndOrder(findings, opts)
 
-	state, _ := engine.LoadState(runDir) // best-effort header data; a missing _meta.json is not fatal
+	state, err := engine.LoadState(runDir) // best-effort header data; a missing _meta.json is not fatal
+	if err != nil {
+		state = &engine.State{}
+	}
 	meta := reportMeta{
 		RunID:        filepath.Base(runDir),
 		Platform:     state.Platform,

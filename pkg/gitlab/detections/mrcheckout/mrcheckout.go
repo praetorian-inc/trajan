@@ -151,6 +151,11 @@ func (d *Detection) createFinding(g *graph.Graph, checkoutStep *graph.StepNode, 
 		// Fallback to empty workflow info if parent not found
 		wf = &graph.WorkflowNode{}
 	}
+	// Detect carries job across DFS callbacks, so it is still nil for a step
+	// reached before any job node.
+	if job == nil {
+		job = &graph.JobNode{}
+	}
 	// Extract checkout ref
 	checkoutRef := extractCheckoutRef(checkoutStep.Run)
 

@@ -85,8 +85,7 @@ func (e *GitLabError) Error() string {
 	return fmt.Sprintf("HTTP %d from %s: %s", e.Status, e.URL, b)
 }
 
-func IsPermissionError(err error) bool { return softStatus(err) == http.StatusForbidden }
-func IsNotFoundError(err error) bool   { return softStatus(err) == http.StatusNotFound }
+func IsNotFoundError(err error) bool { return softStatus(err) == http.StatusNotFound }
 
 var sleepFn = sleep
 

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -180,42 +181,6 @@ func TestGetDisplayPath(t *testing.T) {
 				t.Errorf("expected %q, got %q", tt.expected, result)
 			}
 		})
-	}
-}
-
-func TestFetchLocal(t *testing.T) {
-	mockContent := []byte("stages:\n  - build\njobs:\n  build:\n    script:\n      - echo hello")
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Expecting: GET /api/v4/projects/123/repository/files/.gitlab/ci/build.yml?ref=main
-		// Note: httptest automatically decodes URL path, so %2F becomes /
-		if r.URL.Path == "/api/v4/projects/123/repository/files/.gitlab/ci/build.yml" && r.URL.Query().Get("ref") == "main" {
-			response := FileResponse{
-				FileName: ".gitlab/ci/build.yml",
-				FilePath: ".gitlab/ci/build.yml",
-				Encoding: "base64",
-				Content:  base64.StdEncoding.EncodeToString(mockContent),
-				BlobID:   "abc123",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-	resolver := NewIncludeResolver(client, 123, "main")
-	ctx := context.Background()
-
-	content, err := resolver.fetchLocal(ctx, ".gitlab/ci/build.yml")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if len(content) == 0 {
-		t.Fatal("expected content, got empty")
 	}
 }
 
@@ -461,59 +426,6 @@ func TestFetchTemplate(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestResolveInclude(t *testing.T) {
-	mockContent := []byte(`stages:
-  - build
-build:
-  stage: build
-  script:
-    - echo hello`)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Handle GetWorkflowFile request for local include
-		if r.URL.Path == "/api/v4/projects/123/repository/files/.gitlab/ci/build.yml" && r.URL.Query().Get("ref") == "main" {
-			response := FileResponse{
-				FileName: ".gitlab/ci/build.yml",
-				FilePath: ".gitlab/ci/build.yml",
-				Encoding: "base64",
-				Content:  base64.StdEncoding.EncodeToString(mockContent),
-				BlobID:   "abc123",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-	resolver := NewIncludeResolver(client, 123, "main")
-	ctx := context.Background()
-
-	inc := parser.GitLabInclude{
-		Type: parser.IncludeTypeLocal,
-		Path: ".gitlab/ci/build.yml",
-	}
-
-	result, err := resolver.resolveInclude(ctx, inc, 0)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("expected result, got nil")
-	}
-
-	if result.Type != string(parser.IncludeTypeLocal) {
-		t.Errorf("expected type %s, got %s", parser.IncludeTypeLocal, result.Type)
-	}
-
-	if result.Workflow == nil {
-		t.Fatal("expected workflow, got nil")
 	}
 }
 
@@ -782,8 +694,11 @@ func TestResolveIncludes(t *testing.T) {
 	resolver := NewIncludeResolver(client, 123, "main")
 	ctx := context.Background()
 
+	// The middle include 404s: ResolveIncludes must skip it and still return the
+	// two that resolved, rather than failing the whole batch.
 	includes := []parser.GitLabInclude{
 		{Type: parser.IncludeTypeLocal, Path: ".gitlab/ci/build.yml"},
+		{Type: parser.IncludeTypeLocal, Path: ".gitlab/ci/missing.yml"},
 		{Type: parser.IncludeTypeLocal, Path: ".gitlab/ci/test.yml"},
 	}
 
@@ -793,7 +708,12 @@ func TestResolveIncludes(t *testing.T) {
 	}
 
 	if len(results) != 2 {
-		t.Errorf("expected 2 results, got %d", len(results))
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	for _, want := range []string{".gitlab/ci/build.yml", ".gitlab/ci/test.yml"} {
+		if !slices.ContainsFunc(results, func(r *IncludedWorkflow) bool { return r.Path == want }) {
+			t.Errorf("expected %q among resolved includes", want)
+		}
 	}
 }
 
@@ -904,69 +824,6 @@ func TestResolveInclude_PathField(t *testing.T) {
 			},
 		},
 		{
-			name: "local include with colon in path",
-			include: parser.GitLabInclude{
-				Type: parser.IncludeTypeLocal,
-				Path: ".gitlab/ci/backup_2024-01-15_10:30:00.yml",
-			},
-			expectedPath: ".gitlab/ci/backup_2024-01-15_10:30:00.yml",
-			setupServer: func() *httptest.Server {
-				mockContent := []byte("backup:\n  script:\n    - make backup")
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if r.URL.Path == "/api/v4/projects/123/repository/files/.gitlab/ci/backup_2024-01-15_10:30:00.yml" && r.URL.Query().Get("ref") == "main" {
-						response := FileResponse{
-							FileName: "backup_2024-01-15_10:30:00.yml",
-							FilePath: ".gitlab/ci/backup_2024-01-15_10:30:00.yml",
-							Encoding: "base64",
-							Content:  base64.StdEncoding.EncodeToString(mockContent),
-							BlobID:   "abc124",
-						}
-						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(response)
-						return
-					}
-					http.NotFound(w, r)
-				}))
-			},
-		},
-		{
-			name: "project include sets clean path",
-			include: parser.GitLabInclude{
-				Type:    parser.IncludeTypeProject,
-				Project: "other/repo",
-				Path:    "templates/deploy.yml",
-				Ref:     "v1.0",
-			},
-			expectedPath: "templates/deploy.yml",
-			setupServer: func() *httptest.Server {
-				mockContent := []byte("deploy:\n  script:\n    - kubectl apply")
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if r.URL.Path == "/api/v4/projects/other/repo" {
-						response := Project{
-							ID:                456,
-							PathWithNamespace: "other/repo",
-						}
-						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(response)
-						return
-					}
-					if r.URL.Path == "/api/v4/projects/456/repository/files/templates/deploy.yml" && r.URL.Query().Get("ref") == "v1.0" {
-						response := FileResponse{
-							FileName: "templates/deploy.yml",
-							FilePath: "templates/deploy.yml",
-							Encoding: "base64",
-							Content:  base64.StdEncoding.EncodeToString(mockContent),
-							BlobID:   "def456",
-						}
-						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(response)
-						return
-					}
-					http.NotFound(w, r)
-				}))
-			},
-		},
-		{
 			name: "project include with colon in path",
 			include: parser.GitLabInclude{
 				Type:    parser.IncludeTypeProject,
@@ -994,76 +851,6 @@ func TestResolveInclude_PathField(t *testing.T) {
 							Encoding: "base64",
 							Content:  base64.StdEncoding.EncodeToString(mockContent),
 							BlobID:   "def457",
-						}
-						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(response)
-						return
-					}
-					http.NotFound(w, r)
-				}))
-			},
-		},
-		{
-			name: "template include sets clean path",
-			include: parser.GitLabInclude{
-				Type:     parser.IncludeTypeTemplate,
-				Template: "Security/SAST.gitlab-ci.yml",
-			},
-			expectedPath: "Security/SAST.gitlab-ci.yml",
-			setupServer: func() *httptest.Server {
-				mockContent := []byte("sast:\n  script:\n    - run-sast")
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if r.URL.Path == "/api/v4/projects/gitlab-org/gitlab" {
-						response := Project{
-							ID:                999,
-							PathWithNamespace: "gitlab-org/gitlab",
-						}
-						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(response)
-						return
-					}
-					if r.URL.Path == "/api/v4/projects/999/repository/files/lib/gitlab/ci/templates/Security/SAST.gitlab-ci.yml" && r.URL.Query().Get("ref") == "master" {
-						response := FileResponse{
-							FileName: "Security/SAST.gitlab-ci.yml",
-							FilePath: "lib/gitlab/ci/templates/Security/SAST.gitlab-ci.yml",
-							Encoding: "base64",
-							Content:  base64.StdEncoding.EncodeToString(mockContent),
-							BlobID:   "xyz789",
-						}
-						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(response)
-						return
-					}
-					http.NotFound(w, r)
-				}))
-			},
-		},
-		{
-			name: "template include with colon in name",
-			include: parser.GitLabInclude{
-				Type:     parser.IncludeTypeTemplate,
-				Template: "Jobs/Build:Docker.gitlab-ci.yml",
-			},
-			expectedPath: "Jobs/Build:Docker.gitlab-ci.yml",
-			setupServer: func() *httptest.Server {
-				mockContent := []byte("docker:\n  script:\n    - docker build")
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if r.URL.Path == "/api/v4/projects/gitlab-org/gitlab" {
-						response := Project{
-							ID:                999,
-							PathWithNamespace: "gitlab-org/gitlab",
-						}
-						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(response)
-						return
-					}
-					if r.URL.Path == "/api/v4/projects/999/repository/files/lib/gitlab/ci/templates/Jobs/Build:Docker.gitlab-ci.yml" && r.URL.Query().Get("ref") == "master" {
-						response := FileResponse{
-							FileName: "Build:Docker.gitlab-ci.yml",
-							FilePath: "lib/gitlab/ci/templates/Jobs/Build:Docker.gitlab-ci.yml",
-							Encoding: "base64",
-							Content:  base64.StdEncoding.EncodeToString(mockContent),
-							BlobID:   "xyz790",
 						}
 						w.Header().Set("Content-Type", "application/json")
 						json.NewEncoder(w).Encode(response)

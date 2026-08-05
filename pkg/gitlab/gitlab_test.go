@@ -12,14 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/praetorian-inc/trajan/internal/registry"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
-
-func TestGitLabPlatform_Name(t *testing.T) {
-	p := NewPlatform()
-	assert.Equal(t, "gitlab", p.Name())
-}
 
 func TestGitLabPlatform_Init(t *testing.T) {
 	p := NewPlatform()
@@ -31,6 +25,17 @@ func TestGitLabPlatform_Init(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, p.Client())
+
+	// The scheme check is the only input validation Init does; a BaseURL reaching
+	// the client as file:// or javascript: would be read/executed as given.
+	for _, bad := range []string{"javascript:alert(1)", "file:///etc/passwd", "gitlab.com"} {
+		err := NewPlatform().Init(context.Background(), platforms.Config{
+			GitLab:  &platforms.GitLabAuth{Token: "test-token"},
+			BaseURL: bad,
+		})
+		require.Error(t, err, "BaseURL %q must be rejected", bad)
+		assert.Contains(t, err.Error(), "invalid URL scheme")
+	}
 }
 
 func TestGitLabPlatform_ScanProject(t *testing.T) {
@@ -176,13 +181,6 @@ func TestGitLabPlatform_InvalidProjectFormat(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid repo format")
-}
-
-func TestGitLabPlatform_Registration(t *testing.T) {
-	// Import triggers init() which registers the platform
-	p, err := registry.GetPlatform("gitlab")
-	require.NoError(t, err)
-	assert.Equal(t, "gitlab", p.Name())
 }
 
 func TestScanAttachesResolverMetadata(t *testing.T) {

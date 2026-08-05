@@ -93,24 +93,6 @@ func TestAnalyzeBranchFilters_MixedProtectedAndWildcard(t *testing.T) {
 	}
 }
 
-// === containsWildcard tests ===
-
-func TestContainsWildcard(t *testing.T) {
-	cases := map[string]bool{
-		"refs/heads/main":    false,
-		"refs/heads/*":       true,
-		"feature/?":          true,
-		"*":                  true,
-		"+refs/heads/main":   false,
-		"+refs/heads/feat/*": true,
-	}
-	for pattern, expected := range cases {
-		if containsWildcard(pattern) != expected {
-			t.Errorf("containsWildcard(%q) = %v, want %v", pattern, !expected, expected)
-		}
-	}
-}
-
 // === containsUserBranchPattern tests ===
 
 func TestContainsUserBranchPattern(t *testing.T) {
@@ -128,80 +110,5 @@ func TestContainsUserBranchPattern(t *testing.T) {
 		if containsUserBranchPattern(pattern) != expected {
 			t.Errorf("containsUserBranchPattern(%q) = %v, want %v", pattern, !expected, expected)
 		}
-	}
-}
-
-// === isProtectedWildcard tests ===
-
-func TestIsProtectedWildcard(t *testing.T) {
-	cases := map[string]bool{
-		"+refs/heads/release/*":  true,
-		"+refs/heads/releases/*": true,
-		"+release/*":             true,
-		"+releases/*":            true,
-		"+refs/heads/feature/*":  false,
-		"+refs/heads/*":          false,
-		"*":                      false,
-	}
-	for pattern, expected := range cases {
-		if isProtectedWildcard(pattern) != expected {
-			t.Errorf("isProtectedWildcard(%q) = %v, want %v", pattern, !expected, expected)
-		}
-	}
-}
-
-// === formatBranchFilters tests ===
-
-func TestFormatBranchFilters_Empty(t *testing.T) {
-	if formatBranchFilters([]string{}, 3) != "*" {
-		t.Error("empty should return *")
-	}
-}
-
-func TestFormatBranchFilters_WithinLimit(t *testing.T) {
-	result := formatBranchFilters([]string{"a", "b"}, 3)
-	if result != "a, b" {
-		t.Errorf("got %q", result)
-	}
-}
-
-func TestFormatBranchFilters_ExceedsLimit(t *testing.T) {
-	result := formatBranchFilters([]string{"a", "b", "c", "d", "e"}, 3)
-	// Should show first 3 + "+2 more"
-	if result == "" {
-		t.Error("should not be empty")
-	}
-}
-
-// === utility tests ===
-
-func TestFormatBool(t *testing.T) {
-	if formatBool(true) != "Yes" {
-		t.Error("true should be Yes")
-	}
-	if formatBool(false) != "No" {
-		t.Error("false should be No")
-	}
-}
-
-func TestTruncateString(t *testing.T) {
-	if truncateString("short", 10) != "short" {
-		t.Error("short string shouldn't be truncated")
-	}
-	if truncateString("this is very long", 10) != "this is..." {
-		t.Error("long string should be truncated")
-	}
-}
-
-func TestPolicyTypeNameMap(t *testing.T) {
-	m := policyTypeNameMap()
-	if m["0609b952-1397-4640-95ec-e00a01b2c241"] != "Build" {
-		t.Error("Build policy type missing")
-	}
-	if m["fa4e907d-c16b-4a4c-9dfa-4906e5d171dd"] != "Min Reviewers" {
-		t.Error("Min Reviewers missing")
-	}
-	if len(m) != 4 {
-		t.Errorf("expected 4 policy types, got %d", len(m))
 	}
 }

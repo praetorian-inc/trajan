@@ -110,38 +110,6 @@ func TestClient_ListGroupProjects(t *testing.T) {
 	assert.Equal(t, "private", projects[1].Visibility)
 }
 
-// TestClient_ListUserProjects tests listing user projects
-func TestClient_ListUserProjects(t *testing.T) {
-	mockProjects := []Project{
-		{
-			ID:                1,
-			Name:              "User Project",
-			Path:              "user-project",
-			PathWithNamespace: "username/user-project",
-			DefaultBranch:     "main",
-		},
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v4/users/username/projects", r.URL.Path)
-		assert.Equal(t, "GET", r.Method)
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockProjects)
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-	ctx := context.Background()
-
-	projects, err := client.ListUserProjects(ctx, "username")
-	require.NoError(t, err)
-	require.Len(t, projects, 1)
-
-	assert.Equal(t, "User Project", projects[0].Name)
-	assert.Equal(t, "user-project", projects[0].Path)
-}
-
 // TestClient_GetWorkflowFile tests fetching .gitlab-ci.yml
 func TestClient_GetWorkflowFile(t *testing.T) {
 	mockContent := `stages:
@@ -246,6 +214,32 @@ func TestClient_429RateLimitRetry(t *testing.T) {
 	assert.Equal(t, 1, project.ID)
 }
 
+// A wrong fallback here means a 429 either hammers GitLab immediately or stalls a
+// scan far longer than the server asked for, and both retry loops depend on it.
+func TestRetryAfterSeconds(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  int
+	}{
+		{"valid", "2", 2},
+		{"absent", "", 60},
+		{"unparseable", "invalid", 60},
+		{"http-date form is not supported", "Wed, 21 Oct 2026 07:28:00 GMT", 60},
+		{"zero means retry immediately", "0", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := http.Header{}
+			if tt.value != "" {
+				h.Set("Retry-After", tt.value)
+			}
+			assert.Equal(t, tt.want, retryAfterSeconds(h))
+		})
+	}
+}
+
 // TestClient_429RetryAfterHeader tests parsing of Retry-After header
 func TestClient_429RetryAfterHeader(t *testing.T) {
 	tests := []struct {
@@ -258,16 +252,8 @@ func TestClient_429RetryAfterHeader(t *testing.T) {
 			retryAfter: "2",
 			expectWait: true,
 		},
-		{
-			name:       "Missing Retry-After header",
-			retryAfter: "",
-			expectWait: true, // Should default to 60 seconds
-		},
-		{
-			name:       "Invalid Retry-After header",
-			retryAfter: "invalid",
-			expectWait: true, // Should default to 60 seconds
-		},
+		// Only the valid case runs end-to-end: the fallback is a real 60s sleep with
+		// no clock to inject. TestRetryAfterSeconds covers the parse itself instead.
 	}
 
 	for _, tt := range tests {
@@ -359,204 +345,6 @@ func TestGetProjectMember(t *testing.T) {
 	assert.Equal(t, "Developer", member.RoleName)
 }
 
-// TestDeleteJobLogs tests erasing job trace
-func TestDeleteJobLogs(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "POST", r.Method)
-		assert.Equal(t, "/api/v4/projects/123/jobs/456/erase", r.URL.Path)
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":        456,
-			"erased_at": "2026-02-24T12:00:00Z",
-		})
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-
-	err := client.DeleteJobLogs(context.Background(), 123, 456)
-	assert.NoError(t, err)
-}
-
-// TestDeleteBranch tests deleting a repository branch
-func TestDeleteBranch(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "DELETE", r.Method)
-		assert.Equal(t, "/api/v4/projects/123/repository/branches/test-branch", r.URL.Path)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-
-	err := client.DeleteBranch(context.Background(), 123, "test-branch")
-	assert.NoError(t, err)
-}
-
-// TestDeletePipeline tests deleting a pipeline
-func TestDeletePipeline(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "DELETE", r.Method)
-		assert.Equal(t, "/api/v4/projects/123/pipelines/456", r.URL.Path)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-
-	err := client.DeletePipeline(context.Background(), 123, 456)
-	assert.NoError(t, err)
-}
-
-// TestCreateBranch tests creating a new branch
-func TestCreateBranch(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "POST", r.Method)
-		assert.Equal(t, "/api/v4/projects/123/repository/branches", r.URL.Path)
-		assert.Equal(t, "test-branch", r.URL.Query().Get("branch"))
-		assert.Equal(t, "abc123", r.URL.Query().Get("ref"))
-
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(Branch{
-			Name: "test-branch",
-		})
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-
-	err := client.CreateBranch(context.Background(), 123, "test-branch", "abc123")
-	assert.NoError(t, err)
-}
-
-// TestGetBranch tests fetching branch information
-func TestGetBranch(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "GET", r.Method)
-		assert.Equal(t, "/api/v4/projects/123/repository/branches/main", r.URL.Path)
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(Branch{
-			Name: "main",
-			Commit: struct {
-				ID string `json:"id"`
-			}{
-				ID: "abc123def456",
-			},
-		})
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-
-	branch, err := client.GetBranch(context.Background(), 123, "main")
-	assert.NoError(t, err)
-	assert.Equal(t, "main", branch.Name)
-	assert.Equal(t, "abc123def456", branch.Commit.ID)
-}
-
-// TestCreateCommit tests creating a commit with file actions
-func TestCreateCommit(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "POST", r.Method)
-		assert.Equal(t, "/api/v4/projects/123/repository/commits", r.URL.Path)
-
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(Commit{
-			ID:      "def789",
-			ShortID: "def789ab",
-		})
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-
-	actions := []CommitAction{
-		{
-			Action:   "create",
-			FilePath: ".gitlab-ci.yml",
-			Content:  "test: content",
-		},
-	}
-
-	commit, err := client.CreateCommit(context.Background(), 123, "test-branch", actions, "Test commit")
-	assert.NoError(t, err)
-	assert.Equal(t, "def789", commit.ID)
-}
-
-// TestListPipelines tests listing pipelines with branch filter
-func TestListPipelines(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "GET", r.Method)
-		assert.Equal(t, "/api/v4/projects/123/pipelines", r.URL.Path)
-		assert.Equal(t, "test-branch", r.URL.Query().Get("ref"))
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode([]Pipeline{
-			{
-				ID:     456,
-				Ref:    "test-branch",
-				Status: "success",
-			},
-		})
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-
-	pipelines, err := client.ListPipelines(context.Background(), 123, "test-branch")
-	assert.NoError(t, err)
-	assert.Len(t, pipelines, 1)
-	assert.Equal(t, 456, pipelines[0].ID)
-	assert.Equal(t, "test-branch", pipelines[0].Ref)
-}
-
-// TestListPipelineJobs tests fetching jobs for a pipeline
-func TestListPipelineJobs(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "GET", r.Method)
-		assert.Equal(t, "/api/v4/projects/123/pipelines/456/jobs", r.URL.Path)
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode([]Job{
-			{
-				ID:     789,
-				Name:   "build_job",
-				Status: "success",
-			},
-		})
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-
-	jobs, err := client.ListPipelineJobs(context.Background(), 123, 456)
-	assert.NoError(t, err)
-	assert.Len(t, jobs, 1)
-	assert.Equal(t, 789, jobs[0].ID)
-	assert.Equal(t, "build_job", jobs[0].Name)
-}
-
-// TestGetJobTrace tests downloading job logs
-func TestGetJobTrace(t *testing.T) {
-	mockLogs := "Job log output\nWith multiple lines\n$encrypted$data$"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "GET", r.Method)
-		assert.Equal(t, "/api/v4/projects/123/jobs/789/trace", r.URL.Path)
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(mockLogs))
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-
-	logs, err := client.GetJobTrace(context.Background(), 123, 789)
-	assert.NoError(t, err)
-	assert.Equal(t, mockLogs, logs)
-}
-
 func TestClient_GetJobTrace_410Gone(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusGone)
@@ -572,29 +360,6 @@ func TestClient_GetJobTrace_410Gone(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "410")
 	assert.Empty(t, trace)
-}
-
-func TestClient_ListRecentPipelines(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v4/projects/123/pipelines" {
-			pipelines := []Pipeline{
-				{ID: 1, Status: "success", Ref: "main"},
-				{ID: 2, Status: "failed", Ref: "develop"},
-			}
-			json.NewEncoder(w).Encode(pipelines)
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "test-token")
-	pipelines, err := client.ListRecentPipelines(context.Background(), 123, 5)
-
-	require.NoError(t, err)
-	assert.Len(t, pipelines, 2)
-	assert.Equal(t, 1, pipelines[0].ID)
-	assert.Equal(t, "success", pipelines[0].Status)
 }
 
 // TestClient_GetTemplate_Caching tests that GetTemplate caches the project ID

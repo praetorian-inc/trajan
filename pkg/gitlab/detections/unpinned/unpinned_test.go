@@ -11,25 +11,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
-func TestDetection_ImplementsInterface(t *testing.T) {
-	var _ detections.Detection = (*Detection)(nil)
-}
-
-func TestDetection_Name(t *testing.T) {
-	d := New()
-	assert.Equal(t, "unpinned-include", d.Name())
-}
-
-func TestDetection_Platform(t *testing.T) {
-	d := New()
-	assert.Equal(t, "gitlab", d.Platform())
-}
-
-func TestDetection_Severity(t *testing.T) {
-	d := New()
-	assert.Equal(t, detections.SeverityLow, d.Severity())
-}
-
 func TestDetect_UnpinnedProjectInclude(t *testing.T) {
 	g := graph.NewGraph()
 

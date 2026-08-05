@@ -65,7 +65,7 @@ type anchorNode struct {
 }
 
 // Anchors are ordered downstream-first: where a chain item offers two
-// same-labelled candidates the consumer / reader / callee side is the victim, so
+// same-labeled candidates the consumer / reader / callee side is the victim, so
 // the first match wins. graph.Target has no third argument to say so.
 type anchorSet struct {
 	nodes []anchorNode

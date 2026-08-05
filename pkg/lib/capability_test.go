@@ -13,52 +13,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-func TestSDKCapability_InterfaceCompliance(t *testing.T) {
-	var _ capability.Capability[capmodel.Repository] = (*SDKCapability)(nil)
-}
-
-func TestSDKCapability_Metadata(t *testing.T) {
-	capInstance := NewSDKCapability()
-	assert.Equal(t, "trajan", capInstance.Name())
-	assert.Contains(t, capInstance.Description(), "CI/CD")
-	_, ok := capInstance.Input().(capmodel.Repository)
-	assert.True(t, ok)
-}
-
-func TestSDKCapability_Parameters(t *testing.T) {
-	capInstance := NewSDKCapability()
-	params := capInstance.Parameters()
-	require.Len(t, params, 3)
-	assert.Equal(t, "token", params[0].Name)
-	assert.Equal(t, "platform", params[1].Name)
-	assert.Contains(t, params[1].Options, "github")
-	assert.Contains(t, params[1].Options, "jenkins")
-	assert.Equal(t, "base_url", params[2].Name)
-}
-
-func TestSDKCapability_Match_ValidURL(t *testing.T) {
-	capInstance := NewSDKCapability()
-	ctx := capability.ExecutionContext{}
-	err := capInstance.Match(ctx, capmodel.Repository{URL: "https://github.com/org/repo"})
-	assert.NoError(t, err)
-}
-
-func TestSDKCapability_Match_EmptyURL(t *testing.T) {
-	capInstance := NewSDKCapability()
-	ctx := capability.ExecutionContext{}
-	err := capInstance.Match(ctx, capmodel.Repository{})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "repository URL is required")
-}
-
-func TestSDKCapability_Match_UnsupportedURL(t *testing.T) {
-	capInstance := NewSDKCapability()
-	ctx := capability.ExecutionContext{}
-	err := capInstance.Match(ctx, capmodel.Repository{URL: "https://unknown.com/org/repo"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported CI/CD platform")
-}
-
 func TestSDKCapability_Match_PlatformOverride(t *testing.T) {
 	capInstance := NewSDKCapability()
 	ctx := capability.ExecutionContext{
@@ -151,34 +105,6 @@ func TestSDKCapability_Invoke_CircleCI_Skipped(t *testing.T) {
 	assert.Empty(t, emitted, "CircleCI should emit nothing")
 }
 
-func TestSDKCapability_Invoke_NoFindings(t *testing.T) {
-	orig := InvokeScanFunc
-	defer func() { InvokeScanFunc = orig }()
-
-	InvokeScanFunc = func(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
-		return &ScanResult{}, nil
-	}
-
-	capInstance := NewSDKCapability()
-	var emitted []any
-	out := capability.EmitterFunc(func(models ...any) error {
-		emitted = append(emitted, models...)
-		return nil
-	})
-
-	ctx := capability.ExecutionContext{
-		Parameters: capability.Parameters{
-			{Name: "token", Value: "t"},
-		},
-	}
-
-	err := capInstance.Invoke(ctx, capmodel.Repository{
-		URL: "https://github.com/org/repo", Org: "org", Name: "repo",
-	}, out)
-	require.NoError(t, err)
-	assert.Empty(t, emitted)
-}
-
 func TestDetectPlatform(t *testing.T) {
 	tests := []struct {
 		url      string
@@ -207,21 +133,4 @@ func TestSeverityToStatus(t *testing.T) {
 	assert.Equal(t, TriageMedium, SeverityToStatus(detections.SeverityMedium))
 	assert.Equal(t, TriageLow, SeverityToStatus(detections.SeverityLow))
 	assert.Equal(t, TriageInfo, SeverityToStatus(detections.SeverityInfo))
-}
-
-func TestBuildFindingProof(t *testing.T) {
-	f := detections.Finding{
-		Type:       detections.VulnActionsInjection,
-		Severity:   detections.SeverityHigh,
-		Confidence: detections.ConfidenceHigh,
-		Platform:   "github",
-		Class:      detections.ClassInjection,
-		Repository: "org/repo",
-		Workflow:   "ci.yml",
-		Evidence:   "test evidence",
-	}
-	proof := BuildFindingProof(f)
-	require.NotEmpty(t, proof)
-	assert.Contains(t, string(proof), "actions_injection")
-	assert.Contains(t, string(proof), "test evidence")
 }

@@ -22,13 +22,6 @@ func findingsByType(findings []detections.Finding, t detections.VulnerabilityTyp
 	return result
 }
 
-func TestAIRisk_Properties(t *testing.T) {
-	d := New()
-	assert.Equal(t, "ai-risk", d.Name())
-	assert.Equal(t, platforms.PlatformAzureDevOps, d.Platform())
-	assert.Equal(t, detections.SeverityMedium, d.Severity())
-}
-
 // ---------------------------------------------------------------------------
 // Token Exfiltration
 // ---------------------------------------------------------------------------

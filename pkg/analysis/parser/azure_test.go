@@ -8,13 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAzureParser_Platform(t *testing.T) {
-	parser := NewAzureParser()
-	if got := parser.Platform(); got != "azure" {
-		t.Errorf("Platform() = %v, want azure", got)
-	}
-}
-
 func TestAzureParser_CanParse(t *testing.T) {
 	parser := NewAzureParser()
 
@@ -66,70 +59,6 @@ func TestAzureParser_CanParse(t *testing.T) {
 				t.Errorf("CanParse(%q) = %v, want %v", tt.path, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestAzureParser_Parse_BasicStructure(t *testing.T) {
-	parser := NewAzureParser()
-
-	yaml := []byte(`
-trigger:
-  - main
-  - develop
-
-pool:
-  vmImage: 'ubuntu-latest'
-
-variables:
-  buildConfiguration: 'Release'
-
-stages:
-  - stage: Build
-    jobs:
-      - job: BuildJob
-        steps:
-          - script: echo "Building..."
-            displayName: 'Build application'
-`)
-
-	wf, err := parser.Parse(yaml)
-	if err != nil {
-		t.Fatalf("Parse() error = %v", err)
-	}
-
-	if wf.Platform != "azure" {
-		t.Errorf("Platform = %v, want azure", wf.Platform)
-	}
-
-	if len(wf.Jobs) == 0 {
-		t.Error("Expected jobs to be parsed, got none")
-	}
-}
-
-func TestAzureParser_Parse_FlatJobsStructure(t *testing.T) {
-	parser := NewAzureParser()
-
-	yaml := []byte(`
-trigger:
-  - main
-
-pool:
-  vmImage: 'ubuntu-latest'
-
-jobs:
-  - job: Test
-    steps:
-      - script: npm test
-        displayName: 'Run tests'
-`)
-
-	wf, err := parser.Parse(yaml)
-	if err != nil {
-		t.Fatalf("Parse() error = %v", err)
-	}
-
-	if len(wf.Jobs) == 0 {
-		t.Error("Expected jobs to be parsed from flat structure, got none")
 	}
 }
 
@@ -262,9 +191,29 @@ jobs:
 		t.Fatalf("Parse() error = %v", err)
 	}
 
-	// Verify raw structure contains template info for detection
-	if wf.Raw == nil {
-		t.Error("Expected Raw to contain parsed structure")
+	pipeline, ok := wf.Raw.(*AzurePipelines)
+	if !ok {
+		t.Fatalf("Raw = %T, want *AzurePipelines", wf.Raw)
+	}
+
+	// Both template references are the cross-repo template-injection surface; a
+	// parser that silently dropped either would hide the reachable code.
+	extends, ok := pipeline.Extends.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Extends = %T, want map[string]interface{}", pipeline.Extends)
+	}
+	if extends["template"] != "templates/pipeline.yml" {
+		t.Errorf("extends.template = %v, want %q", extends["template"], "templates/pipeline.yml")
+	}
+
+	if len(pipeline.Jobs) != 1 {
+		t.Fatalf("len(Jobs) = %d, want 1", len(pipeline.Jobs))
+	}
+	if pipeline.Jobs[0].Template != "templates/build.yml" {
+		t.Errorf("job Template = %q, want %q", pipeline.Jobs[0].Template, "templates/build.yml")
+	}
+	if got := pipeline.Jobs[0].TemplateParameters["buildConfig"]; got != "${{ parameters.config }}" {
+		t.Errorf("job TemplateParameters[buildConfig] = %v, want %q", got, "${{ parameters.config }}")
 	}
 }
 
@@ -291,9 +240,21 @@ jobs:
 		t.Fatalf("Parse() error = %v", err)
 	}
 
-	// Check pipeline-level variables
-	if len(wf.Env) == 0 {
-		t.Error("Expected pipeline-level variables to be parsed")
+	// parseVariables handles the list-of-{name,value} form here and the plain map
+	// form at job level, so both shapes need their values checked, not just counted.
+	if wf.Env["version"] != "1.0.0" {
+		t.Errorf("Env[version] = %q, want %q", wf.Env["version"], "1.0.0")
+	}
+	if wf.Env["region"] != "us-east-1" {
+		t.Errorf("Env[region] = %q, want %q", wf.Env["region"], "us-east-1")
+	}
+
+	job := wf.Jobs["Deploy"]
+	if job == nil {
+		t.Fatal("Expected job 'Deploy' to exist")
+	}
+	if job.Env["environment"] != "production" {
+		t.Errorf("job Env[environment] = %q, want %q", job.Env["environment"], "production")
 	}
 }
 
@@ -319,8 +280,20 @@ jobs:
 		t.Fatalf("Parse() error = %v", err)
 	}
 
-	if wf.Raw == nil {
-		t.Error("Expected Raw to contain parameter definitions")
+	pipeline, ok := wf.Raw.(*AzurePipelines)
+	if !ok {
+		t.Fatalf("Raw = %T, want *AzurePipelines", wf.Raw)
+	}
+	if len(pipeline.Parameters) != 2 {
+		t.Fatalf("len(Parameters) = %d, want 2", len(pipeline.Parameters))
+	}
+	if got := pipeline.Parameters[0]; got.Name != "environment" || got.Type != "string" || got.Default != "dev" {
+		t.Errorf("Parameters[0] = %+v, want {environment string dev}", got)
+	}
+	// A parameter with no default must come back empty rather than carrying the
+	// previous entry's value.
+	if got := pipeline.Parameters[1]; got.Name != "deployRegion" || got.Type != "string" || got.Default != "" {
+		t.Errorf("Parameters[1] = %+v, want {deployRegion string }", got)
 	}
 }
 

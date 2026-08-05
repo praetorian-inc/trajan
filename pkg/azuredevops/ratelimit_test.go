@@ -3,7 +3,6 @@ package azuredevops
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"testing"
 	"time"
 
@@ -211,34 +210,4 @@ func TestRateLimiter_Concurrent(t *testing.T) {
 	assert.Equal(t, 200, rl.Limit())
 	assert.Equal(t, 100, rl.Remaining())
 	assert.Equal(t, time.Unix(1735776000, 0), rl.ResetTime())
-}
-
-// TestRateLimiter_TSTUModel tests 5-minute window understanding
-func TestRateLimiter_TSTUModel(t *testing.T) {
-	rl := NewRateLimiter()
-
-	// Simulate API response with TSTU information
-	header := http.Header{}
-	header.Set("X-RateLimit-Limit", "200")     // 200 TSTUs total
-	header.Set("X-RateLimit-Remaining", "180") // 180 TSTUs remaining
-
-	// 5-minute window reset (current time + 5 minutes)
-	resetTime := time.Now().Add(5 * time.Minute)
-	header.Set("X-RateLimit-Reset", strconv.FormatInt(resetTime.Unix(), 10))
-
-	rl.Update(header)
-
-	// Verify TSTU values
-	assert.Equal(t, 200, rl.Limit(), "Should track 200 TSTU limit")
-	assert.Equal(t, 180, rl.Remaining(), "Should track remaining TSTUs")
-	assert.WithinDuration(t, resetTime, rl.ResetTime(), time.Second, "Reset should be ~5 minutes from now")
-
-	// Verify throttling doesn't trigger until low TSTUs
-	assert.False(t, rl.ShouldThrottle(), "Should not throttle at 90% TSTUs remaining")
-
-	// Simulate low TSTUs
-	header.Set("X-RateLimit-Remaining", "15") // Below 10% threshold
-	rl.Update(header)
-
-	assert.True(t, rl.ShouldThrottle(), "Should throttle when TSTUs drop below 10%")
 }

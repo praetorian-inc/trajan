@@ -183,14 +183,3 @@ func formatBool(b bool) string {
 	}
 	return "No"
 }
-
-// truncateString truncates a string with "..." suffix if it exceeds maxLen
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	if maxLen <= 3 {
-		return s[:maxLen]
-	}
-	return s[:maxLen-3] + "..."
-}
