@@ -1,0 +1,124 @@
+id: t-04/cache-handoff
+summary: Demonstrate that a cache entry written under one key is restored by a later job reading a shared key prefix.
+flavor: workflow_steps
+
+params:
+  - { name: marker, type: string, required: true, doc: "the run-unique high-entropy token the harvest correlates on" }
+  - { name: role, type: string, required: true, doc: "writer | reader — the two halves sit in different trust contexts, so the chain places them as separate steps" }
+  - { name: key, type: string, doc: "required for writer: the exact key to write; must carry a chain-scoped prefix unless the operator has confirmed a deliberate overlap with the target's real keys" }
+  - { name: restore_keys, type: "[]string", doc: "required for reader: the prefix list whose fallback behaviour is being demonstrated" }
+  - { name: payload_bytes, type: int, default: 256, doc: "size of the marker payload; clamped to 4096 in the body because the repository's cache budget is LRU-evicted and a large entry evicts the customer's real caches" }
+  - { name: cache_path, type: string, default: .trajan-cache, doc: "workspace-relative directory that is cached; never a real dependency directory" }
+
+# Writer emits: trajan-cache-key / trajan-cache-path / trajan-cache-ref /
+# trajan-payload-bytes. Reader emits: trajan-restore-keys / trajan-cache-hit /
+# trajan-cache-matched-key / trajan-cache-restored, and on a restore
+# trajan-writer-marker / trajan-writer-run naming which writer's entry arrived.
+# Absence is emitted, not skipped.
+#
+# The reader's exact key is the chain marker, which no writer uses, so only the
+# restore-keys prefix list can produce a hit — that is what makes the fallback the
+# thing being measured. A cache written from a PR is scoped to the merge ref and is
+# not restorable from the base branch, so the writer records the ref it was scoped
+# to and the report must state which ref relationship the demonstration relied on.
+#
+# trajan-cache-hit carries the restore step's own output and has three states, not
+# two: true is an exact match on the primary key, false is a partial match through
+# the restore-keys prefix list — the state this template exists to measure — and
+# none is nothing restored at all. The action never sets the output on a miss, so it
+# arrives as the empty string; folding that onto false would report the fallback and
+# the miss as the same observation. Read false against trajan-cache-matched-key,
+# which names the key that matched and is empty only where the cache service itself
+# was unavailable.
+#
+# The default-branch scope is writable only by push, workflow_dispatch,
+# repository_dispatch, delete, registry_package, page_build and schedule. Any other
+# event resolving to the default branch restores but cannot write — which covers
+# pull_request_target, issue_comment and workflow_run, so a writer placed in one of
+# those cannot seed the scope a default-branch victim run reads.
+#
+# Every entry the writer creates must be deleted by id during cleanup; the job
+# itself cannot do that.
+#
+# The cache actions are pinned to the current major on the floating tag. Node 20 is
+# removed from the runner in September 2026, so an earlier major is the choice that
+# stops working on the customer's system; the cost of the current one is Node 24 and
+# an Actions Runner of at least 2.327.1, which a stale self-hosted runner may be
+# below. path, key and restore-keys are unchanged across the bump, so nothing the
+# reader parses moves with it.
+body: |
+  <<- if eq .Params.role "writer" ->>
+  - name: trajan cache writer stage
+    shell: bash
+    run: |
+      marker=<< .Params.marker >>
+      key=<< .Params.key >>
+      path=<< .Params.cache_path >>
+      echo "trajan-marker=$marker"
+      [ -n "$key" ] || { echo trajan-error=cache-key-required; exit 1; }
+      case $path in
+        ''|/*) echo trajan-error=cache-path-must-be-workspace-relative; exit 1 ;;
+      esac
+      bytes=<< .Params.payload_bytes >>
+      if [ "$bytes" -gt 4096 ]; then
+        bytes=4096
+        echo trajan-payload-bytes-clamped=true
+      fi
+      mkdir -p "$path"
+      {
+        printf 'trajan-marker=%s\ntrajan-run=%s\ntrajan-ref=%s\n' "$marker" "$GITHUB_RUN_ID" "$GITHUB_REF"
+        head -c "$bytes" /dev/zero | tr '\0' x
+        printf '\n'
+      } > "$path/trajan-cache-marker"
+      echo "trajan-cache-key=$key trajan-cache-path=$path trajan-cache-ref=${GITHUB_REF} trajan-payload-bytes=$bytes"
+      echo "trajan-marker-end=$marker"
+  - name: trajan cache save
+    uses: actions/cache/save@v6
+    with:
+      path: << .Params.cache_path >>
+      key: << .Params.key >>
+  <<- else if eq .Params.role "reader" >>
+  - name: trajan cache restore
+    id: trajan-cache-restore
+    uses: actions/cache/restore@v6
+    with:
+      path: << .Params.cache_path >>
+      key: << .Params.marker >>
+      restore-keys: |
+        <<- range .Params.restore_keys >>
+        << . >>
+        <<- end >>
+  - name: trajan cache reader observe
+    shell: bash
+    env:
+      TRJ_MATCHED: ${{ steps.trajan-cache-restore.outputs.cache-matched-key }}
+      TRJ_HIT: ${{ steps.trajan-cache-restore.outputs.cache-hit }}
+    run: |
+      marker=<< .Params.marker >>
+      path=<< .Params.cache_path >>
+      keys=(<< .Params.restore_keys >>)
+      echo "trajan-marker=$marker"
+      [ "${#keys[@]}" -gt 0 ] || { echo trajan-error=restore-keys-required; exit 1; }
+      echo "trajan-restore-keys=${keys[*]}"
+      case ${TRJ_HIT-} in
+        true|false) hit=${TRJ_HIT} ;;
+        *) hit=none ;;
+      esac
+      echo "trajan-cache-hit=$hit trajan-cache-matched-key=${TRJ_MATCHED:-}"
+      entry=$path/trajan-cache-marker
+      if [ -f "$entry" ]; then
+        writer=$(awk -F= '$1=="trajan-marker"{print $2; exit}' "$entry" | tr -dc 'A-Za-z0-9._-' | cut -c1-64)
+        run=$(awk -F= '$1=="trajan-run"{print $2; exit}' "$entry" | tr -dc '0-9' | cut -c1-24)
+        echo "trajan-cache-restored=true trajan-writer-marker=$writer trajan-writer-run=$run"
+      else
+        echo trajan-cache-restored=false
+      fi
+      echo "trajan-marker-end=$marker"
+  <<- else >>
+  - name: trajan cache role error
+    shell: bash
+    run: |
+      echo trajan-marker=<< .Params.marker >>
+      echo trajan-error=unknown-role trajan-role=<< .Params.role >>
+      exit 1
+  <<- end >>

@@ -1,7 +1,6 @@
 package detect
 
 import (
-	"reflect"
 	"testing"
 )
 
@@ -170,83 +169,6 @@ func TestEvaluatePredicateInOperator(t *testing.T) {
 	}
 	if mustEval(t, pred(`kind in {sha, digest}`), subj) {
 		t.Error("kind in {sha, digest} should be false")
-	}
-}
-
-func TestSplitPredicateOperatorPrecedenceAndQuoting(t *testing.T) {
-	cases := []struct {
-		predicate string
-		field     string
-		op        string
-		rhs       string
-	}{
-		{`a >= 2`, "a", "ge", "2"},
-		{`a <= 2`, "a", "le", "2"},
-		{`a > 2`, "a", "gt", "2"},
-		{`a < 2`, "a", "lt", "2"},
-		{`a == 2`, "a", "eq", "2"},
-		{`a != 2`, "a", "ne", "2"},
-		// An == inside the quoted rhs must not be taken as the split operator.
-		{`name == "x == y"`, "name", "eq", `"x == y"`},
-		{`triggers ∋ {a, b}`, "triggers", "contains", "{a, b}"},
-		{`labels ⊆ {a}`, "labels", "subset", "{a}"},
-		{`x matches "re"`, "x", "matches", `"re"`},
-	}
-	for _, c := range cases {
-		field, op, rhs, ok := splitPredicate(c.predicate)
-		if !ok {
-			t.Errorf("%q: split failed", c.predicate)
-			continue
-		}
-		if field != c.field || op != c.op || rhs != c.rhs {
-			t.Errorf("split(%q) = (%q,%q,%q), want (%q,%q,%q)",
-				c.predicate, field, op, rhs, c.field, c.op, c.rhs)
-		}
-	}
-}
-
-func TestSplitPredicateUnparseable(t *testing.T) {
-	if _, _, _, ok := splitPredicate("just_a_bare_field"); ok {
-		t.Error("a predicate with no operator must not split")
-	}
-	if _, err := evaluatePredicate("nope", map[string]any{}); err == nil {
-		t.Error("evaluatePredicate on an operatorless predicate should error")
-	}
-}
-
-func TestParseValue(t *testing.T) {
-	cases := []struct {
-		text string
-		want any
-	}{
-		{"null", nil},
-		{"None", nil},
-		{"true", true},
-		{"false", false},
-		{"[]", []any{}},
-		{"{}", map[string]any{}},
-		{`"quoted"`, "quoted"},
-		{`'quoted'`, "quoted"},
-		{"42", 42},
-		{"bare", "bare"},
-	}
-	for _, c := range cases {
-		if got := parseValue(c.text); !reflect.DeepEqual(got, c.want) {
-			t.Errorf("parseValue(%q) = %#v, want %#v", c.text, got, c.want)
-		}
-	}
-	// Set literal: items are trimmed, quote-stripped, and trailing empties dropped.
-	set, ok := parseValue(`{a, 'b' , c,}`).(map[string]struct{})
-	if !ok {
-		t.Fatalf("set literal did not parse to a set: %#v", parseValue(`{a, 'b' , c,}`))
-	}
-	for _, want := range []string{"a", "b", "c"} {
-		if _, present := set[want]; !present {
-			t.Errorf("set missing %q: %#v", want, set)
-		}
-	}
-	if len(set) != 3 {
-		t.Errorf("set should have 3 members, got %d: %#v", len(set), set)
 	}
 }
 

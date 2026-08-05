@@ -94,10 +94,25 @@ func Run(ctx context.Context, runDir string, opts Options) error {
 }
 
 func load(runDir string) ([]finding.Finding, error) {
-	files, err := engine.PriorPhase{RunDir: runDir}.IterJSON(filepath.Join("20-scan", "findings"))
+	prior := engine.PriorPhase{RunDir: runDir}
+	files, err := prior.IterJSON(filepath.Join("20-scan", "findings"))
 	if err != nil {
 		return nil, fmt.Errorf("load findings: %w", err)
 	}
+	// Verification findings live one directory deeper, under <plan>/findings, alongside
+	// step records and loot that are not findings. The phase directory comes from the
+	// constant: spelled out here, renumbering the phase would leave this reading zero
+	// findings and reporting no error.
+	attackFiles, err := prior.IterJSON(engine.AttackRoot())
+	if err != nil {
+		return nil, fmt.Errorf("load attack findings: %w", err)
+	}
+	for _, pf := range attackFiles {
+		if filepath.Base(filepath.Dir(pf.Rel)) == "findings" {
+			files = append(files, pf)
+		}
+	}
+
 	out := make([]finding.Finding, 0, len(files))
 	for _, pf := range files {
 		var f finding.Finding

@@ -1,4 +1,4 @@
-package detect
+package dsl
 
 import (
 	"reflect"
@@ -24,8 +24,8 @@ func TestGetPathDictDescentAndMisses(t *testing.T) {
 		{"missing.deeper.deeper", nil},                 // nil mid-walk short-circuits
 	}
 	for _, c := range cases {
-		if got := getPath(subj, c.path); !reflect.DeepEqual(got, c.want) {
-			t.Errorf("getPath(%q) = %#v, want %#v", c.path, got, c.want)
+		if got := GetPath(subj, c.path); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("GetPath(%q) = %#v, want %#v", c.path, got, c.want)
 		}
 	}
 }
@@ -34,14 +34,14 @@ func TestGetPathNumericListIndex(t *testing.T) {
 	subj := map[string]any{
 		"triggers": []any{"pull_request_target", "push"},
 	}
-	if got := getPath(subj, "triggers.0"); got != "pull_request_target" {
+	if got := GetPath(subj, "triggers.0"); got != "pull_request_target" {
 		t.Errorf("triggers.0 = %#v, want %q", got, "pull_request_target")
 	}
-	if got := getPath(subj, "triggers.1"); got != "push" {
+	if got := GetPath(subj, "triggers.1"); got != "push" {
 		t.Errorf("triggers.1 = %#v, want %q", got, "push")
 	}
 	// Out-of-range index returns nil, not a panic.
-	if got := getPath(subj, "triggers.5"); got != nil {
+	if got := GetPath(subj, "triggers.5"); got != nil {
 		t.Errorf("triggers.5 = %#v, want nil", got)
 	}
 }
@@ -55,7 +55,7 @@ func TestGetPathListProjectionStepsUses(t *testing.T) {
 			map[string]any{"run": "make build"}, // no `uses` key -> nil for this element
 		},
 	}
-	got := getPath(subj, "steps.uses")
+	got := GetPath(subj, "steps.uses")
 	want := []any{"actions/checkout@v4", "actions/setup-node@v4", nil}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("steps.uses = %#v, want %#v", got, want)
@@ -71,7 +71,7 @@ func TestGetPathProjectionNestedAndNonMapElement(t *testing.T) {
 			"not-a-map",
 		},
 	}
-	got := getPath(subj, "reviewers_required.login")
+	got := GetPath(subj, "reviewers_required.login")
 	want := []any{"alice", "dependabot[bot]", nil}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("reviewers_required.login = %#v, want %#v", got, want)
@@ -87,7 +87,7 @@ func TestGetPathProjectionMultiSegment(t *testing.T) {
 			map[string]any{},
 		},
 	}
-	got := getPath(subj, "links.meta.score")
+	got := GetPath(subj, "links.meta.score")
 	want := []any{float64(3), float64(7), nil, nil}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("links.meta.score = %#v, want %#v", got, want)
@@ -99,7 +99,7 @@ func TestGetPathTopLevelListProjection(t *testing.T) {
 		map[string]any{"x": 1},
 		map[string]any{"x": 2},
 	}
-	got := getPath(subj, "x")
+	got := GetPath(subj, "x")
 	want := []any{1, 2}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("top-level x projection = %#v, want %#v", got, want)
@@ -107,11 +107,11 @@ func TestGetPathTopLevelListProjection(t *testing.T) {
 }
 
 func TestGetPathNilSubjectAndEmptySegment(t *testing.T) {
-	if got := getPath(nil, "a.b"); got != nil {
-		t.Errorf("getPath(nil, ...) = %#v, want nil", got)
+	if got := GetPath(nil, "a.b"); got != nil {
+		t.Errorf("GetPath(nil, ...) = %#v, want nil", got)
 	}
 	// An empty path splits to a single "" segment, a missing key on the dict -> nil.
-	if got := getPath(map[string]any{"a": 1}, ""); got != nil {
-		t.Errorf("getPath(dict, \"\") = %#v, want nil (empty key miss)", got)
+	if got := GetPath(map[string]any{"a": 1}, ""); got != nil {
+		t.Errorf("GetPath(dict, \"\") = %#v, want nil (empty key miss)", got)
 	}
 }

@@ -1,0 +1,62 @@
+apiVersion: trajan.attack/v1
+title: Stale-approval TOCTOU
+
+scope: [ghektestorg/fr-11-07-stale-approval]
+identity: store:range-attacker
+
+inputs:
+  benign_patch: { type: string, required: true, doc: "the benign change the operator wrote" }
+  payload:      { type: string, required: true }
+
+steps:
+  - id: target
+    uses: repo.resolve
+    owner: ghektestorg
+    repo: fr-11-07-stale-approval
+
+  - id: writable
+    uses: repo.writable
+    repo: target
+
+  - id: branch
+    uses: ref.create
+    on: writable
+    name: chore/dep-bump
+
+  - id: benign
+    uses: commit.code
+    on: branch
+    message: "chore: bump lockfile"
+    patch: benign_patch
+
+  - id: pr
+    uses: pr.open
+    head: branch
+    base: target
+    title: "chore: bump lockfile"
+
+  - id: approval
+    uses: pr.review.await
+    on: pr
+
+  - id: swap
+    uses: commit.code
+    on: branch
+    message: "chore: bump lockfile"
+    files: { .github/ci/run.sh: payload }
+    suppress: false
+    expect: benign
+
+  - id: survived
+    uses: pr.review.state
+    on: pr
+
+  - id: merge
+    uses: pr.merge
+    when: survived.review_decision == 'APPROVED'
+    pr: pr
+    method: squash
+
+cleanup:
+  - { uses: pr.close, id: cleanup-pr, pr: pr, when: "merge.sha == ''" }
+  - { uses: ref.delete, id: cleanup-branch, ref: branch }

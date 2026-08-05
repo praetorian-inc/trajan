@@ -88,8 +88,8 @@ func (g *gitTransport) githubURL(owner, repo string) string {
 	return fmt.Sprintf("https://github.com/%s/%s.git", owner, repo)
 }
 
-// ensureClone shallow-clones every branch once (D2.5), caching the dir or the
-// clone error so a failed repo is not retried.
+// ensureClone shallow-clones every branch once, caching the dir or the clone
+// error so a failed repo is not retried.
 func (g *gitTransport) ensureClone(ctx context.Context, owner, repo string) (string, error) {
 	key := owner + "/" + repo
 	g.mu.Lock()

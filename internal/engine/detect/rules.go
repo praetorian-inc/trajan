@@ -13,14 +13,14 @@ import (
 	yaml "go.yaml.in/yaml/v4"
 
 	detectionrules "github.com/praetorian-inc/trajan/internal/detection-rules"
+	"github.com/praetorian-inc/trajan/internal/dsl"
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/finding"
 )
 
 // RuleSourceBase is the "<repo>/blob/<ref>" prefix that turns an embedded rule
 // path into a browsable URL. Overridable at build time (-ldflags) to pin a
-// release ref; set to "" to omit rule.url entirely. Adjust the repo/ref here
-// once the rules' permanent home is settled.
+// release ref; set to "" to omit rule.url entirely.
 var RuleSourceBase = "https://github.com/praetorian-inc/trajan/blob/main"
 
 type Block struct {
@@ -299,13 +299,13 @@ func BuildFinding(p Provider, rule *Rule, subject map[string]any, kind, org, run
 }
 
 func buildRuleDSL(rule *Rule) any {
-	dsl := RuleDSL{Subject: rule.Subject}
+	out := RuleDSL{Subject: rule.Subject}
 	if rule.ChainOf != nil {
-		dsl.ChainOf = rule.ChainOf
+		out.ChainOf = rule.ChainOf
 	} else {
-		dsl.Where = rule.Where
+		out.Where = rule.Where
 	}
-	return dsl
+	return out
 }
 
 func ruleURL(ruleFile string) string {
@@ -326,7 +326,7 @@ func buildProvenance(rule *Rule, subject map[string]any) map[string]any {
 			if strings.HasPrefix(ref, "_provenance") {
 				continue // the collected-input pointer is added explicitly below
 			}
-			if v := getPath(subject, ref); v != nil {
+			if v := dsl.GetPath(subject, ref); v != nil {
 				prov[ref] = v
 			}
 		}

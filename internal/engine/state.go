@@ -90,12 +90,17 @@ func (s *State) RecordPhase(rec PhaseRecord) {
 // Soft failures are announced, not just recorded: a rule that never fires
 // because its input was unreadable makes the finding count look complete.
 func PhaseDone(rec PhaseRecord, attrs ...any) {
-	name := phaseLabel(rec.Phase)
-	slog.Info(name+" complete", attrs...)
+	slog.Info(phaseLabel(rec.Phase)+" complete", attrs...)
+	PhaseIssues(rec)
+}
+
+// PhaseIssues is the announcement on its own, for a phase that renders its own
+// completion line and still owes the operator its soft failures.
+func PhaseIssues(rec PhaseRecord) {
 	if len(rec.Errors) == 0 {
 		return
 	}
-	slog.Warn(name+" degraded", "skipped", len(rec.Errors))
+	slog.Warn(phaseLabel(rec.Phase)+" degraded", "skipped", len(rec.Errors))
 	for _, e := range rec.Errors {
 		ui.Item(e)
 	}

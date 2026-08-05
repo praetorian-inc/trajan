@@ -1,0 +1,124 @@
+id: t-06/runner-characteristics
+summary: Measure whether filesystem state written by one run on a self-hosted runner survives into a later one, plus the reachability probes that only a job on the host can answer.
+flavor: workflow_steps
+
+params:
+  - { name: marker, type: string, required: true, doc: "the run-unique high-entropy token the harvest correlates on; also the HMAC key for the host digest, so the two roles of one chain must be given the same value" }
+  - { name: role, type: string, required: true, doc: "plant | check — plant writes a durable marker, check looks for markers left by prior runs and removes them" }
+  - { name: plant_location, type: string, default: workspace, doc: "workspace | runner_home | tmp — which persistence surface is being tested; must match on both roles" }
+  - { name: probe_docker_socket, type: bool, default: false, doc: "record whether the docker socket path exists and is writable; no container operation is issued" }
+  - { name: probe_privilege, type: bool, default: false, doc: "record whether an escalation path appears configured; sudo is never invoked and nothing is escalated" }
+  - { name: probe_imds, type: bool, default: false, doc: "record whether a cloud instance metadata endpoint responds; the response body is discarded unread" }
+  - { name: record_host_identity, type: bool, default: true, doc: "emit the runner's own name and environment plus a salted digest of a stable host attribute" }
+
+# plant emits trajan-plant-location / trajan-plant-path. check emits one
+# trajan-prior-run / trajan-prior-age-seconds / trajan-prior-same-run /
+# trajan-prior-removed line per marker found, then trajan-prior-count and
+# trajan-prior-state-reused. A marker from a DIFFERENT run is a demonstration that
+# one run's filesystem writes were still there for the next, which no endpoint
+# reports and which is a stronger fact than how a runner registered; a marker this
+# run planted is removed and reported but never counted, or a plant and a check
+# placed in one run would prove themselves. A count of zero is a real negative and
+# is emitted.
+#
+# trajan-prior-state-reused is deliberately not named for ephemerality: runner.list
+# reads the registration's own ephemeral field, and a finding that only needs "a
+# non-ephemeral self-hosted runner is reachable" should take it from there and leave
+# no residue on the host. These roles answer the different question of what actually
+# persisted, which a runner registered either way can get wrong.
+#
+# Each probe is an observation with a hard boundary enforced here rather than by
+# operator discipline: the docker probe stats the socket and opens nothing, the
+# privilege probe reads configuration and never invokes sudo, and the metadata
+# probe discards the response body to /dev/null so no credential document is ever
+# read — reachability is the whole of what the finding needs.
+#
+# plant deliberately writes a file that outlives the run on the customer's host, so
+# a chain that plants must also check, and any marker check could not remove is
+# outstanding state on their host that belongs in the report.
+body: |
+  - name: trajan runner characteristics
+    shell: bash
+    run: |
+      marker=<< .Params.marker >>
+      location=<< .Params.plant_location >>
+      role=<< .Params.role >>
+      echo "trajan-marker=$marker"
+      case $location in
+        workspace)   dir=${GITHUB_WORKSPACE:-.}/.trajan-persist ;;
+        runner_home) dir=${HOME:-/tmp}/.trajan-persist ;;
+        tmp)         dir=/tmp/.trajan-persist ;;
+        *)           echo "trajan-error=unknown-plant-location trajan-plant-location=$location"; exit 1 ;;
+      esac
+      case $role in
+        plant)
+          mkdir -p "$dir"
+          file=$dir/trajan-$marker-$GITHUB_RUN_ID
+          printf 'trajan-marker=%s\ntrajan-run=%s\ntrajan-planted-at=%s\n' \
+            "$marker" "$GITHUB_RUN_ID" "$(date -u +%s)" > "$file"
+          echo "trajan-plant-location=$location trajan-plant-path=$file"
+          ;;
+        check)
+          now=$(date -u +%s)
+          count=0
+          for file in "$dir"/trajan-*; do
+            [ -f "$file" ] || continue
+            prior=$(awk -F= '$1=="trajan-run"{print $2; exit}' "$file" | tr -dc '0-9' | cut -c1-24)
+            planted=$(awk -F= '$1=="trajan-planted-at"{print $2; exit}' "$file" | tr -dc '0-9' | cut -c1-24)
+            age=unknown
+            if [ -n "$planted" ]; then
+              age=$((now - planted))
+            fi
+            if [ "$prior" = "${GITHUB_RUN_ID}" ]; then
+              same=true
+            else
+              same=false
+              count=$((count + 1))
+            fi
+            if rm -f "$file" 2>/dev/null; then
+              removed=true
+            else
+              removed=false
+            fi
+            echo "trajan-prior-run=$prior trajan-prior-age-seconds=$age trajan-prior-same-run=$same trajan-prior-removed=$removed"
+          done
+          echo "trajan-plant-location=$location trajan-prior-count=$count trajan-prior-state-reused=$([ "$count" -gt 0 ] && echo true || echo false)"
+          ;;
+        *)
+          echo "trajan-error=unknown-role trajan-role=$role"
+          exit 1
+          ;;
+      esac
+      <<- if .Params.record_host_identity >>
+      attribute=$(cat /etc/machine-id 2>/dev/null || hostname 2>/dev/null || echo unknown)
+      if command -v openssl >/dev/null 2>&1; then
+        digest=$(printf %s "$attribute" | openssl dgst -sha256 -hmac "$marker" -r | cut -c1-16)
+      else
+        digest=unavailable
+      fi
+      echo "trajan-runner-name=${RUNNER_NAME:-} trajan-runner-environment=${RUNNER_ENVIRONMENT:-} trajan-runner-os=${RUNNER_OS:-} trajan-runner-arch=${RUNNER_ARCH:-} trajan-host-digest=$digest"
+      <<- end >>
+      <<- if .Params.probe_docker_socket >>
+      socket=/var/run/docker.sock
+      echo "trajan-docker-socket-present=$([ -S "$socket" ] && echo true || echo false) trajan-docker-socket-writable=$([ -w "$socket" ] && echo true || echo false)"
+      <<- end >>
+      <<- if .Params.probe_privilege >>
+      echo "trajan-uid=$(id -u) trajan-groups=$(id -nG | tr ' ' ',' | cut -c1-128)"
+      sudoers=$([ -r /etc/sudoers ] && echo true || echo false)
+      nopasswd=unreadable
+      if [ "$sudoers" = true ]; then
+        nopasswd=$(grep -qs NOPASSWD /etc/sudoers && echo true || echo false)
+      fi
+      echo "trajan-sudoers-readable=$sudoers trajan-sudo-nopasswd-configured=$nopasswd"
+      <<- end >>
+      <<- if .Params.probe_imds >>
+      if command -v curl >/dev/null 2>&1; then
+        imds=0
+        status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 http://169.254.169.254/latest/meta-data/) || imds=$?
+        [ "$imds" -eq 0 ] || status=unreachable
+        echo "trajan-imds-status=$status trajan-imds-curl-exit=$imds"
+      else
+        echo trajan-imds-status=curl-unavailable
+      fi
+      <<- end >>
+      echo "trajan-marker-end=$marker"

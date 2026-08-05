@@ -1,0 +1,25 @@
+id: t-99/operator-freeform-shell
+summary: An operator-supplied shell payload, wrapped in the corpus marker envelope so the result is still a finding rather than a log someone has to read by hand.
+flavor: shell
+
+params:
+  - { name: marker, type: string, required: true, doc: "required exactly as for a preset: the assembled finding has no other way to locate the result" }
+  - { name: body, type: file, required: true, doc: "the operator's script, supplied as a file and interpolated verbatim — this is the one value in the corpus that must NOT be quoted at render time" }
+
+# The shell half of the escape hatch. It exists because the flavor is fixed by the
+# primitive that attaches a fragment, so an escape hatch on only one side of the
+# split would leave commit.code — the pwn-request path, where the payload is a file
+# in the checked-out tree — with no way out of the preset corpus.
+#
+# The body is not inspected, rewritten or sanitised. The envelope is: the marker
+# before it, and an EXIT trap so trajan-marker-end is emitted however the operator's
+# content ends, which is what separates "never ran", "ran and failed" and "ran to
+# completion" in the harvest. No shell options are imposed — error handling is the
+# operator's content's own business.
+body: |
+  #!/usr/bin/env bash
+  TRJ_MARKER=<< .Params.marker >>
+  echo "trajan-marker=$TRJ_MARKER"
+  trap 'echo "trajan-marker-end=$TRJ_MARKER"' EXIT
+
+  << .Params.body >>

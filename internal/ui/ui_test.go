@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func render(t *testing.T, tier Tier, color bool, fn func(*Printer)) string {
@@ -113,5 +114,108 @@ func TestControlCharactersAreStripped(t *testing.T) {
 	got = render(t, Human, false, func(p *Printer) { p.Error("bad \x1b[31mproject", "fix \x1b[0mit") })
 	if strings.Count(got, "\x1b") != 0 {
 		t.Errorf("escape survived in Error: %q", got)
+	}
+}
+
+// A step table is read by column, and a run log is commonly redirected to a file
+// and diffed. Both properties break silently, so both are pinned here.
+func TestStepRowHoldsAnEmptyColumnAndPadsNoFurtherThanItsLastWord(t *testing.T) {
+	got := render(t, Human, false, func(p *Printer) {
+		p.Step(StepLine{Seq: 9, Total: 15, Action: "await workflow run", Status: "unresolved", Note: "not evaluated"})
+		p.Step(StepLine{Seq: 1, Total: 15, Action: "resolve repository", Resource: "acme/widgets", Status: "ok", Note: "topic"})
+	})
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	for _, l := range lines {
+		if strings.HasSuffix(l, " ") {
+			t.Errorf("trailing whitespace would land in a redirected log: %q", l)
+		}
+	}
+	// The first row has no target. Its status must still begin where the second
+	// row's detail begins, or the absent value collapses the column.
+	if a, b := strings.Index(lines[0], "unresolved"), strings.Index(lines[1], "topic"); a != b {
+		t.Errorf("columns diverge: status at %d, detail at %d", a, b)
+	}
+}
+
+// A clause cut mid-rune lands in a log as a replacement character, and the note a
+// row carries is a client error the remote side wrote.
+func TestAClippedNoteStaysValidUTF8(t *testing.T) {
+	got := render(t, Human, false, func(p *Printer) {
+		p.Step(StepLine{Seq: 1, Total: 9, Action: "commit code", Resource: "acme/widgets", Status: "failed", Note: strings.Repeat("é", maxNote+10)})
+	})
+	if !utf8.ValidString(got) {
+		t.Fatalf("clip produced invalid UTF-8: %q", got)
+	}
+	if strings.Count(got, "é") != maxNote-1 {
+		t.Errorf("want %d runes kept, got %q", maxNote-1, got)
+	}
+}
+
+// The status color is decoration. A log read without it still has to distinguish a
+// step that ran from one that did not, which is the whole reason the word stays.
+func TestStepNamesItsStatusWithoutColorAndStaysSilentOnSuccess(t *testing.T) {
+	failed := render(t, Human, false, func(p *Printer) {
+		p.Step(StepLine{Seq: 6, Total: 15, Action: "open pull request", Resource: "acme/widgets", Status: "failed", Note: "422 no commits"})
+	})
+	if !strings.Contains(failed, "failed") {
+		t.Errorf("a failed step must say so with color off: %q", failed)
+	}
+	ok := render(t, Human, false, func(p *Printer) {
+		p.Step(StepLine{Seq: 5, Total: 15, Action: "commit code", Resource: "acme/widgets", Status: "ok", Note: "a.txt"})
+	})
+	if strings.Contains(ok, "ok") {
+		t.Errorf("a successful step should not spend a column saying so: %q", ok)
+	}
+}
+
+func TestColorLeavesTheStepTableIntact(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		fn   func(*Printer)
+	}{
+		{"step", func(p *Printer) {
+			p.Step(StepLine{Seq: 1, Total: 9, Action: "create branch", Resource: "acme/widgets", Status: "ok", Note: "topic"})
+		}},
+		{"failed step", func(p *Printer) {
+			p.Step(StepLine{Seq: 2, Total: 9, Action: "open pull request", Resource: "acme/widgets", Status: "failed", Note: "422"})
+		}},
+		{"outcome", func(p *Printer) {
+			p.Outcome("attack complete", []Count{{"ok", 3}, {"failed", 1}}, "2s")
+		}},
+		{"head", func(p *Printer) { p.Head("Title", [2]string{"plan", "p1"}) }},
+		{"section", func(p *Printer) { p.Section("Attack Steps") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plain, colored := render(t, Human, false, tc.fn), render(t, Human, true, tc.fn)
+			if colored == plain {
+				t.Fatal("color requested but no escape emitted")
+			}
+			if stripANSI(colored) != plain {
+				t.Errorf("color changed the text: %q vs %q", stripANSI(colored), plain)
+			}
+		})
+	}
+}
+
+func TestOutcomeDropsZeroCounts(t *testing.T) {
+	got := render(t, Human, false, func(p *Printer) {
+		p.Outcome("attack complete", []Count{{"ok", 15}, {"failed", 0}, {"mutations", 14}}, "")
+	})
+	if got != "\nattack complete: 15 ok, 14 mutations\n" {
+		t.Errorf("got %q", got)
+	}
+}
+
+// --debug is the machine-parseable tier, and the step line it emitted before the
+// table existed is the one a script may already read.
+func TestStepUnderDebugKeepsItsParseableLine(t *testing.T) {
+	got := render(t, Debug, false, func(p *Printer) {
+		p.Step(StepLine{Seq: 4, Total: 15, ID: "branch_a", Uses: "ref.create", Action: "create branch",
+			Target: "acme/widgets", Resource: "acme/widgets/tree/topic", Status: "ok"})
+	})
+	for _, want := range []string{`msg="step ok"`, "step=branch_a", "uses=ref.create", "target=acme/widgets", "resource=acme/widgets/tree/topic"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in %q", want, got)
+		}
 	}
 }

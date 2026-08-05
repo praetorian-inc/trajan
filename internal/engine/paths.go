@@ -13,6 +13,11 @@ const (
 	dirNormalize = "10-normalize"
 	dirScan      = "20-scan"
 	dirGraph     = "30-graph"
+	// Verification runs after the phases that decide what is worth verifying, and the
+	// ordinal says so. 30 was taken by the graph phase on main while this branch was
+	// open; nothing reads an attack directory by a hardcoded name, so the number moved
+	// rather than the phase.
+	dirAttack = "40-attack"
 )
 
 func CollectOrg(org string) string { return path.Join(dirCollect, "org", org+".json") }
@@ -328,8 +333,6 @@ func NormalizeADOProjectAgentPool(project string, poolID int64) string {
 	return adoNorm("project-agent-pools", fmt.Sprintf("%s__%d.json", adoKey(project), poolID))
 }
 
-// ---- GitLab collect paths ----
-//
 // glKey sanitizes a GitLab group/project full path (slash-separated) for use as a
 // single path segment: anything outside [A-Za-z0-9.-] becomes '-'. '_' is folded
 // too, since multi-component keys are joined with "__" (adoKey's rationale).
@@ -466,8 +469,6 @@ func CollectGLUserMemberships(id int64) string {
 	return glCollect("user-memberships", fmt.Sprintf("%d.json", id))
 }
 
-// ---- GitLab normalize paths ----
-//
 // Node records key by glKey(subjectKey); jobs by project + workflow stem + job
 // name; chains one file per join. NormalizeGLChain is the GitLab analog of the
 // GitHub unexported chainPath.
@@ -540,6 +541,36 @@ func NormalizeDeployKey(repo string, keyID int64) string {
 func Finding(ruleID, subjectHash string) string {
 	return path.Join(dirScan, "findings", ruleID+"__"+subjectHash+".json")
 }
+
+// AttackRoot is the phase directory every plan's own directory sits under.
+func AttackRoot() string { return dirAttack }
+
+// AttackDir is one plan's directory. A plan id carries the template's path
+// ("github/pwn-request"), so safePath folds the slash and one plan stays one
+// directory.
+func AttackDir(planID string) string { return path.Join(dirAttack, safePath(planID)) }
+
+func AttackPlan(planID string) string { return path.Join(AttackDir(planID), "_plan.json") }
+
+func AttackLedger(planID string) string { return path.Join(AttackDir(planID), "_ledger.jsonl") }
+
+func AttackDryRun(planID string) string { return path.Join(AttackDir(planID), "dry-run.json") }
+
+func AttackSteps(planID string) string { return path.Join(AttackDir(planID), "steps") }
+
+func AttackStep(planID string, seq int, stepID string) string {
+	return path.Join(AttackSteps(planID), fmt.Sprintf("%03d-%s.json", seq, stepID))
+}
+
+func AttackLoot(planID, name string) string {
+	return path.Join(AttackDir(planID), "loot", name)
+}
+
+func AttackFinding(planID, fingerprint string) string {
+	return path.Join(AttackDir(planID), "findings", fingerprint+".json")
+}
+
+func AttackCleanup(planID string) string { return path.Join(AttackDir(planID), "cleanup.json") }
 
 func ScanSummary() string { return path.Join(dirScan, "_summary.json") }
 

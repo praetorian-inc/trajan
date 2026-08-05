@@ -131,9 +131,9 @@ var triggerToAttackerFields = map[string][]string{
 	},
 }
 
-// Deterministic order (triggers input order, fields declaration order) because
-// the Python original iterated a set, which made downstream break-on-first
-// matching order-dependent.
+// The order is deterministic — triggers in input order, fields in declaration
+// order — because the consumers break on the first match, so an unstable order
+// changes which field they report.
 func attackerFieldsForTriggers(triggers []string) []string {
 	seen := map[string]bool{}
 	out := []string{}

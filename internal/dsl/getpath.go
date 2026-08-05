@@ -1,10 +1,11 @@
-package detect
+package dsl
 
 import "strings"
 
+// GetPath resolves a dotted path against a decoded JSON/YAML subject.
 // A non-numeric segment against a list projects the remaining path across every
 // element (steps.uses → the list of each element's uses) and returns immediately.
-func getPath(subject any, path string) any {
+func GetPath(subject any, path string) any {
 	cur := subject
 	parts := strings.Split(path, ".")
 	for i := 0; i < len(parts); i++ {

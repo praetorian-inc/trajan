@@ -42,8 +42,8 @@ func workflowFilePath(subject map[string]any) string {
 	return ""
 }
 
-// ScanOptions and Scan are re-exported so cmd/trajan/github keeps calling
-// github.Scan / github.ScanOptions unchanged.
+// Scan and ScanOptions are aliases: the scan is generic over platforms and lives
+// in detect, while callers reach it through the platform package they collected with.
 type ScanOptions = detect.ScanOptions
 
 func Scan(ctx context.Context, runDir string, opts ScanOptions) error {
