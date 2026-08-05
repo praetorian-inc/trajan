@@ -145,6 +145,12 @@ trajan github scan --repo owner/repo -o json > results.json
 
 For detailed usage and detection explanations, see the [Wiki](https://github.com/praetorian-inc/trajan/wiki).
 
+## GitHub Action
+
+Trajan can scan a repository from a GitHub Actions workflow and upload HTML,
+Markdown, and JSONL reports. See the [GitHub Action guide](.github/GITHUB_ACTION.md)
+for permissions, branch testing, expanded token coverage, and CI gating.
+
 ## Platform coverage
 
 | Platform | Detections | Enumerate |
@@ -227,4 +233,3 @@ Built on research from [Gato](https://github.com/praetorian-inc/gato), [Glato](h
 ## License
 
 Apache 2.0. See [LICENSE](LICENSE).
-
