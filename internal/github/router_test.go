@@ -278,7 +278,7 @@ func TestClassifyGetSurfaces(t *testing.T) {
 		"/repos/o/p/branches/main/protection":          surfaceRESTFloor,
 		"/repos/o/p/commits/v1":                        surfaceRefResolve,
 		// rulesets / environments / teams / outside collaborators / branch
-		// protection are not graphql-mappable -> rest floor (D2.3 fidelity gate).
+		// protection have no GraphQL equivalent, so they fall to the REST floor.
 		"/orgs/o/rulesets":              surfaceRESTFloor,
 		"/repos/o/p/rulesets":           surfaceRESTFloor,
 		"/repos/o/p/environments/prod":  surfaceRESTFloor,

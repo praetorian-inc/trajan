@@ -1,0 +1,113 @@
+id: t-05/artifact-handoff
+summary: Demonstrate that an artifact written by one job is consumed by a downstream job or a downstream workflow_run, and that its bytes arrive as trusted data.
+flavor: workflow_steps
+
+params:
+  - { name: marker, type: string, required: true, doc: "the run-unique high-entropy token the harvest correlates on" }
+  - { name: role, type: string, required: true, doc: "producer | consumer" }
+  - { name: artifact_name, type: string, required: true, doc: "the artifact name; must match on both sides" }
+  - { name: consumer_mode, type: string, default: same_run, doc: "same_run | workflow_run — whether the reader is a needs-ordered job in this run or a separate workflow_run downstream" }
+  - { name: record_extraction_root, type: bool, default: true, doc: "consumer only: report the absolute directory the artifact contents landed in" }
+
+# A same-run consumer reads the artifact through the runner's own artifact service,
+# which no permissions: scope governs. Reaching into the upstream run needs run-id
+# and github-token, and that path is the REST API: actions: read is what it costs,
+# and a permissions: block that omits it fails the download rather than the
+# measurement.
+permissions:
+  - { scope: actions, level: read, when: { role: consumer, consumer_mode: workflow_run } }
+
+# Producer emits trajan-artifact-name / trajan-artifact-run. Consumer emits
+# trajan-artifact-received, and on receipt trajan-producer-marker /
+# trajan-producer-run, plus trajan-extraction-root when recorded. In workflow_run
+# mode it also emits trajan-upstream-run / trajan-upstream-event /
+# trajan-upstream-head-repo, which is the fact a low-trust upstream turns on.
+#
+# Artifact bytes are NOT masked, which is why this template exists and also its
+# hazard: whatever is written is stored in the customer's repository in the clear
+# for the retention period. The payload is the marker and the run coordinates and
+# nothing else, retention is pinned to one day, and no parameter can put other
+# material into it. The archive is well formed and contains no traversal entry —
+# the consumer records where extraction landed and the report reasons about it.
+#
+# Two things the fragment cannot express: same_run ordering needs a job-level
+# needs:, and workflow_run mode needs the consuming workflow to be triggered by the
+# producer's completion. Both belong to the job envelope the authoring step writes.
+# Every artifact the producer creates must be deleted by id during cleanup.
+#
+# The artifact actions are pinned to the current major on the floating tag, for the
+# reason t-04 records: an earlier major is the one that stops working once Node 20
+# leaves the runner, at the cost of requiring an Actions Runner of at least 2.327.1.
+# name, path, retention-days, run-id and github-token are unchanged across the bump,
+# and the upload still archives by default, so the consumer's extraction path holds.
+body: |
+  <<- if eq .Params.role "producer" ->>
+  - name: trajan artifact producer stage
+    shell: bash
+    run: |
+      marker=<< .Params.marker >>
+      name=<< .Params.artifact_name >>
+      echo "trajan-marker=$marker"
+      mkdir -p .trajan-artifact
+      printf 'trajan-marker=%s\ntrajan-run=%s\ntrajan-repo=%s\ntrajan-event=%s\n' \
+        "$marker" "$GITHUB_RUN_ID" "$GITHUB_REPOSITORY" "$GITHUB_EVENT_NAME" \
+        > .trajan-artifact/trajan-artifact-marker
+      echo "trajan-artifact-name=$name trajan-artifact-run=${GITHUB_RUN_ID}"
+      echo "trajan-marker-end=$marker"
+  - name: trajan artifact upload
+    uses: actions/upload-artifact@v7
+    with:
+      name: << .Params.artifact_name >>
+      path: .trajan-artifact/trajan-artifact-marker
+      retention-days: 1
+  <<- else if eq .Params.role "consumer" >>
+  - name: trajan artifact download
+    uses: actions/download-artifact@v8
+    with:
+      name: << .Params.artifact_name >>
+      path: .trajan-artifact-in
+      <<- if eq .Params.consumer_mode "workflow_run" >>
+      run-id: ${{ github.event.workflow_run.id }}
+      github-token: ${{ github.token }}
+      <<- end >>
+  - name: trajan artifact consumer observe
+    shell: bash
+    env:
+      <<- if eq .Params.consumer_mode "workflow_run" >>
+      TRJ_UPSTREAM_RUN: ${{ github.event.workflow_run.id }}
+      TRJ_UPSTREAM_EVENT: ${{ github.event.workflow_run.event }}
+      TRJ_UPSTREAM_HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+      <<- end >>
+      TRJ_MODE: << .Params.consumer_mode >>
+    run: |
+      marker=<< .Params.marker >>
+      name=<< .Params.artifact_name >>
+      echo "trajan-marker=$marker"
+      echo "trajan-artifact-name=$name trajan-consumer-mode=${TRJ_MODE}"
+      <<- if eq .Params.consumer_mode "workflow_run" >>
+      echo "trajan-upstream-run=$(printf %s "${TRJ_UPSTREAM_RUN:-}" | tr -dc '0-9' | cut -c1-24)" \
+           "trajan-upstream-event=$(printf %s "${TRJ_UPSTREAM_EVENT:-}" | tr -dc 'a-z_' | cut -c1-32)" \
+           "trajan-upstream-head-repo=$(printf %s "${TRJ_UPSTREAM_HEAD_REPO:-}" | tr -dc 'A-Za-z0-9._/-' | cut -c1-128)"
+      <<- end >>
+      entry=.trajan-artifact-in/trajan-artifact-marker
+      if [ -f "$entry" ]; then
+        producer=$(awk -F= '$1=="trajan-marker"{print $2; exit}' "$entry" | tr -dc 'A-Za-z0-9._-' | cut -c1-64)
+        run=$(awk -F= '$1=="trajan-run"{print $2; exit}' "$entry" | tr -dc '0-9' | cut -c1-24)
+        echo "trajan-artifact-received=true trajan-producer-marker=$producer trajan-producer-run=$run"
+      else
+        echo trajan-artifact-received=false
+      fi
+      <<- if .Params.record_extraction_root >>
+      if [ -d .trajan-artifact-in ]; then
+        echo "trajan-extraction-root=$(cd .trajan-artifact-in && pwd)"
+      fi
+      <<- end >>
+      echo "trajan-marker-end=$marker"
+  <<- else >>
+  - name: trajan artifact role error
+    shell: bash
+    run: |
+      echo trajan-marker=<< .Params.marker >>
+      echo trajan-error=unknown-role trajan-role=<< .Params.role >>
+      exit 1
+  <<- end >>

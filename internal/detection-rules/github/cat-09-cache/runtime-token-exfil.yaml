@@ -2,6 +2,7 @@ id: cat-09/runtime-token-exfil
 scenario_id: cat-09/03
 title: "Cache poisoned by low-trust job is restored in a high-trust job"
 subject: chain
+graph: node(Cache)
 severity: critical
 confidence: medium
 description: >

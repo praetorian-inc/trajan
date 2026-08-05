@@ -2,6 +2,7 @@ id: cat-10/ai-agents-allowlist-wildcard
 scenario_id: cat-10/06
 title: "Agent allowed-users list contains wildcard or non-write actors"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

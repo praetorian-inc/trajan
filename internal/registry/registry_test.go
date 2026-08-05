@@ -17,7 +17,6 @@ import (
 func Reset() {
 	ResetPlatforms()
 	ResetDetections()
-	ResetAttacks()
 }
 
 // Mock platform for testing

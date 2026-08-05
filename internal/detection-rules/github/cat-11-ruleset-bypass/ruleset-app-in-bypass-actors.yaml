@@ -2,6 +2,7 @@ id: cat-11/ruleset-app-in-bypass-actors
 scenario_id: cat-11/08
 title: "GitHub App / automation principal in ruleset bypass actors"
 subject: ruleset
+graph: edge(CAN_BYPASS, App, Ruleset)
 severity: high
 confidence: medium
 description: >

@@ -39,7 +39,9 @@ func Normalize(ctx context.Context, runDir string) error {
 
 	jobs, normErr := normalizeJobs(prior, cp, org, timer)
 	if normErr == nil {
-		normErr = normalizeEntities(runDir)
+		normErr = normalizeEntities(runDir, func(err error) {
+			timer.Errors = append(timer.Errors, err.Error())
+		})
 	}
 	if normErr == nil {
 		normErr = correlate(prior, cp, jobs)
@@ -71,6 +73,7 @@ func normalizeJobs(prior engine.PriorPhase, cp engine.CurrentPhase, org string, 
 
 	orgDefault := loadOrgDefaultPerms(prior, org)
 	refResolutions := loadRefResolutions(prior)
+	secretScopes := loadSecretScopeIndex(prior, org)
 
 	var allJobs []Job
 	for _, rd := range repoDirs {
@@ -102,6 +105,7 @@ func normalizeJobs(prior engine.PriorPhase, cp engine.CurrentPhase, org string, 
 				repoDefault:    repoDefault,
 				orgDefault:     orgDefault,
 				refResolutions: refResolutions,
+				secretScopes:   secretScopes,
 			})
 			if err != nil {
 				timer.Errors = append(timer.Errors, fmt.Sprintf("%s: %v", relpath, err))
@@ -166,6 +170,7 @@ type normalizeCtx struct {
 	repoDefault    string
 	orgDefault     string
 	refResolutions map[string]string
+	secretScopes   secretScopeIndex
 }
 
 func normalizeWorkflowText(text string, nc normalizeCtx) ([]Job, error) {
@@ -179,10 +184,8 @@ func normalizeWorkflowText(text string, nc normalizeCtx) ([]Job, error) {
 
 	filename := filepath.Base(nc.relpath)
 
-	workflowName := ".github/workflows/" + filename
-	if name, ok := root.FieldValue("name", nil).(string); ok && strings.TrimSpace(name) != "" {
-		workflowName = name
-	}
+	declaredName, _ := root.FieldValue("name", nil).(string)
+	workflowName := strings.TrimSpace(declaredName)
 
 	onNode := root.Field("on")
 	if onNode == nil {
@@ -225,6 +228,7 @@ func normalizeWorkflowText(text string, nc normalizeCtx) ([]Job, error) {
 			orgDefault:        nc.orgDefault,
 			relpath:           nc.relpath,
 			refResolutions:    nc.refResolutions,
+			secretScopes:      nc.secretScopes,
 		})
 		if ok {
 			out = append(out, rec)
@@ -264,6 +268,7 @@ type jobInputs struct {
 	orgDefault        string
 	relpath           string
 	refResolutions    map[string]string
+	secretScopes      secretScopeIndex
 }
 
 func normalizeJob(in jobInputs) (Job, bool) {
@@ -292,6 +297,12 @@ func normalizeJob(in jobInputs) (Job, bool) {
 	runsOn, selfHosted, runnerLabels, runnerGroup := resolveRunsOn(jobPlain["runs-on"])
 
 	env, envDynamic := resolveEnvironment(jobPlain["environment"])
+	// A dynamically chosen environment names no inventory we can read, so the
+	// environment leg of secret precedence is skipped rather than guessed.
+	envName := ""
+	if env != nil && !envDynamic {
+		envName = env.Name
+	}
 
 	ifSummary := classifyGate(stringPtrFromAny(jobPlain["if"]))
 
@@ -299,6 +310,7 @@ func normalizeJob(in jobInputs) (Job, bool) {
 	sinksSeen := []string{}
 	executesCheckedOut := false
 	checkoutOfPR := false
+	cloudRoles := []CloudRoleRef{}
 	cacheWrites := []CacheRef{}
 	cacheReads := []CacheRef{}
 	artifactWrites := []ArtifactRef{}
@@ -373,12 +385,13 @@ func normalizeJob(in jobInputs) (Job, bool) {
 			cw, cr := extractCacheOps(step)
 			cacheWrites = append(cacheWrites, cw...)
 			cacheReads = append(cacheReads, cr...)
+			cloudRoles = append(cloudRoles, extractCloudRoles(step)...)
 			aw, ar := extractArtifactOps(step)
 			artifactWrites = append(artifactWrites, aw...)
 			artifactReads = append(artifactReads, ar...)
 
 			for _, sec := range findSecretsReferenced(stepText(step)) {
-				secretsRef = append(secretsRef, SecretRef{Name: sec, Scope: "unknown", StepIndex: idx})
+				secretsRef = append(secretsRef, in.secretScopes.ref(sec, in.repo, envName, idx))
 			}
 
 			for _, ref := range findAttackerReferences(stepExecText(step), in.triggers) {
@@ -425,7 +438,7 @@ func normalizeJob(in jobInputs) (Job, bool) {
 	for _, sec := range findSecretsReferenced(jobEnvText) {
 		if !seenSecrets[sec] {
 			seenSecrets[sec] = true
-			secretsRef = append(secretsRef, SecretRef{Name: sec, Scope: "unknown", StepIndex: -1})
+			secretsRef = append(secretsRef, in.secretScopes.ref(sec, in.repo, envName, -1))
 		}
 	}
 
@@ -477,7 +490,7 @@ func normalizeJob(in jobInputs) (Job, bool) {
 	}
 
 	return Job{
-		ID:         in.repo + "__" + engineWFStem(in.workflowFilename) + "__" + in.jobID,
+		ID:         engine.JobKey(in.repo, in.branch, in.isDefaultBranch, in.workflowFilename, in.jobID),
 		Provenance: &JobProvenance{WorkflowFile: in.relpath, YAMLLineRange: lineRangeOrZero(in.jobNode.Range()), Repo: in.repo},
 		Repo:       in.repo,
 
@@ -496,6 +509,7 @@ func normalizeJob(in jobInputs) (Job, bool) {
 		AttackerContextFieldsReferencedExec:    attackerExec,
 		AttackerContextFieldsReferencedBinding: attackerBinding,
 
+		Needs:                  jobNeeds(jobPlain["needs"]),
 		NeedsOutputRefsExec:    needsExec,
 		NeedsOutputRefsBinding: needsBinding,
 		NeedsOutputRefs:        needsUnion,
@@ -530,6 +544,7 @@ func normalizeJob(in jobInputs) (Job, bool) {
 		OIDCAudience:    nil,
 		OIDCSubTemplate: oidcSub,
 
+		CloudRoles:     cloudRoles,
 		CacheWrites:    cacheWrites,
 		CacheReads:     cacheReads,
 		ArtifactWrites: artifactWrites,
@@ -666,6 +681,21 @@ func resolveEnvironment(value any) (*EnvironmentRef, bool) {
 		return ref, dynamic
 	default:
 		return nil, false
+	}
+}
+
+func jobNeeds(value any) []string {
+	switch v := value.(type) {
+	case string:
+		return []string{v}
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, x := range v {
+			out = append(out, anyToStr(x))
+		}
+		return out
+	default:
+		return []string{}
 	}
 }
 
@@ -861,8 +891,14 @@ func extractCacheOps(step map[string]any) ([]CacheRef, []CacheRef) {
 }
 
 func cacheEntry(k string) CacheRef {
-	prefix := strings.Trim(strings.SplitN(k, "${{", 2)[0], "-_/")
-	return CacheRef{KeyTemplate: k, Scope: "scope-prefix:" + prefix}
+	return CacheRef{KeyTemplate: k, Scope: "scope-prefix:" + cacheKeyPrefix(k)}
+}
+
+// The literal head of the key template, which is what restore-keys prefix
+// matching compares against — everything from the first expression on is
+// unknowable statically.
+func cacheKeyPrefix(k string) string {
+	return strings.Trim(strings.SplitN(k, "${{", 2)[0], "-_/")
 }
 
 func restoreKeyLines(value any) []string {
@@ -884,6 +920,38 @@ func restoreKeyLines(value any) []string {
 	default:
 		return nil
 	}
+}
+
+// The identifier is whatever the action names as the assumable identity, kept
+// verbatim the way ArtifactRef.Name is: a reusable callee names its role
+// "${{ inputs.role-arn }}" and only the call site knows the literal, so
+// discarding the expression here severs the callee from the role it assumes.
+// Resolution against the caller's inputs happens in internal/graph, which has
+// the call graph; an expression that stays unresolved never becomes a node.
+var cloudLogins = []struct{ prefix, provider, key string }{
+	{"aws-actions/configure-aws-credentials", "aws", "role-to-assume"},
+	{"azure/login", "azure", "client-id"},
+	{"google-github-actions/auth", "gcp", "workload_identity_provider"},
+}
+
+func extractCloudRoles(step map[string]any) []CloudRoleRef {
+	uses, _ := step["uses"].(string)
+	if uses == "" {
+		return nil
+	}
+	with, _ := step["with"].(map[string]any)
+	var out []CloudRoleRef
+	for _, cl := range cloudLogins {
+		if !strings.HasPrefix(strings.ToLower(uses), cl.prefix) {
+			continue
+		}
+		id, _ := with[cl.key].(string)
+		if id == "" {
+			continue
+		}
+		out = append(out, CloudRoleRef{Provider: cl.provider, Identifier: id})
+	}
+	return out
 }
 
 func extractArtifactOps(step map[string]any) ([]ArtifactRef, []ArtifactRef) {
@@ -1158,6 +1226,142 @@ func loadRefResolutions(prior engine.PriorPhase) map[string]string {
 	return out
 }
 
+// secretScopeIndex answers "which inventory defines this name" from the
+// 00-collect/secrets bundles. Only the actions bucket is consulted: a workflow's
+// secrets.<NAME> reads Actions secrets. The zero value resolves nothing.
+type secretScopeIndex struct {
+	scoped       map[string]map[string]bool // "<repo>" or "<repo>__<env>" -> names
+	org          map[string]orgSecret
+	orgKey       string
+	privateRepos map[string]bool
+}
+
+type orgSecret struct {
+	visibility string
+	selected   map[string]bool
+}
+
+func loadSecretScopeIndex(prior engine.PriorPhase, org string) secretScopeIndex {
+	ix := secretScopeIndex{
+		scoped:       map[string]map[string]bool{},
+		org:          map[string]orgSecret{},
+		orgKey:       org,
+		privateRepos: map[string]bool{},
+	}
+
+	files, err := prior.IterJSON("00-collect/secrets")
+	if err != nil {
+		return ix
+	}
+	for _, f := range files {
+		var env struct {
+			Data struct {
+				Scope          string `json:"scope"`
+				Repo           string `json:"repo"`
+				Environment    string `json:"environment"`
+				ActionsSecrets []struct {
+					Name                 string `json:"name"`
+					Visibility           string `json:"visibility"`
+					SelectedRepositories []struct {
+						Name string `json:"name"`
+					} `json:"selected_repositories"`
+				} `json:"actions_secrets"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(f.Data, &env); err != nil {
+			continue
+		}
+		d := env.Data
+
+		if d.Scope == "org" {
+			for _, s := range d.ActionsSecrets {
+				selected := map[string]bool{}
+				for _, r := range s.SelectedRepositories {
+					selected[r.Name] = true
+				}
+				ix.org[s.Name] = orgSecret{visibility: s.Visibility, selected: selected}
+			}
+			continue
+		}
+		if d.Repo == "" {
+			continue
+		}
+		key := d.Repo
+		if d.Scope == "environment" {
+			key += "__" + d.Environment
+		}
+		if ix.scoped[key] == nil {
+			ix.scoped[key] = map[string]bool{}
+		}
+		for _, s := range d.ActionsSecrets {
+			ix.scoped[key][s.Name] = true
+		}
+	}
+
+	repos, err := prior.IterJSON("00-collect/repos")
+	if err != nil {
+		return ix
+	}
+	for _, f := range repos {
+		var env struct {
+			Data struct {
+				Repo struct {
+					Name    string `json:"name"`
+					Private bool   `json:"private"`
+				} `json:"repo"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(f.Data, &env); err != nil {
+			continue
+		}
+		if env.Data.Repo.Name != "" {
+			ix.privateRepos[env.Data.Repo.Name] = env.Data.Repo.Private
+		}
+	}
+	return ix
+}
+
+func (ix secretScopeIndex) ref(name, repo, envName string, stepIndex int) SecretRef {
+	out := SecretRef{Name: name, StepIndex: stepIndex}
+	if scope, key, ok := ix.resolve(name, repo, envName); ok {
+		out.Scope, out.ScopeKey = &scope, &key
+	}
+	return out
+}
+
+// resolve applies GitHub's precedence, most specific first. A name no inventory
+// defines is left unresolved: it may be a typo, or a secret the token could not
+// read, and either way it keys no :Secret node.
+func (ix secretScopeIndex) resolve(name, repo, envName string) (scope, key string, ok bool) {
+	if envName != "" {
+		if envKey := repo + "__" + envName; ix.scoped[envKey][name] {
+			return "environment", envKey, true
+		}
+	}
+	if ix.scoped[repo][name] {
+		return "repo", repo, true
+	}
+	if s, found := ix.org[name]; found && ix.orgReaches(s, repo) {
+		return "org", ix.orgKey, true
+	}
+	return "", "", false
+}
+
+// "all" reaches every repo in the org, "private" only private and internal ones
+// (both carry private=true), "selected" only the enumerated repos.
+func (ix secretScopeIndex) orgReaches(s orgSecret, repo string) bool {
+	switch s.visibility {
+	case "all":
+		return true
+	case "private":
+		return ix.privateRepos[repo]
+	case "selected":
+		return s.selected[repo]
+	default:
+		return false
+	}
+}
+
 func newSourceProvenance(file string, lr *LineRange) *SourceProvenance {
 	return &SourceProvenance{File: file, LineRange: lr}
 }
@@ -1279,11 +1483,4 @@ func jsonDump(v any) string {
 		return "{}"
 	}
 	return string(b)
-}
-
-// engineWFStem mirrors engine.wfStem, which is unexported and so cannot be reused.
-func engineWFStem(wf string) string {
-	wf = strings.TrimSuffix(wf, ".yml")
-	wf = strings.TrimSuffix(wf, ".yaml")
-	return wf
 }

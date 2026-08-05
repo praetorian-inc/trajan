@@ -2,6 +2,7 @@ id: cat-12/env-bypass-custom-rule-webhook
 scenario_id: cat-12/08
 title: "Environment uses custom deployment protection rule (third-party App)"
 subject: environment
+graph: node(Environment)
 severity: medium
 confidence: low
 description: >

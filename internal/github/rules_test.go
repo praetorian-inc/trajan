@@ -4,10 +4,48 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
+
+// LoadRules skips an unusable rule instead of failing, so nothing at run time
+// notices a rule that stopped loading. This is where a bad id or an unparseable
+// where/chain_of has to be caught.
+func TestEveryEmbeddedRuleLoads(t *testing.T) {
+	var skipped []string
+	rules, err := detect.LoadRules("github", func(e error) { skipped = append(skipped, e.Error()) })
+	if err != nil {
+		t.Fatalf("LoadRules: %v", err)
+	}
+	if len(skipped) > 0 {
+		t.Errorf("unusable embedded rule(s):\n%s", strings.Join(skipped, "\n"))
+	}
+	if len(rules) == 0 {
+		t.Fatal("no rules loaded")
+	}
+}
+
+// detect carries rule.Graph unparsed, so a typo'd target now survives loading
+// and only surfaces when the graph phase builds its rule -> target index —
+// where a rule that fails to parse silently attaches nothing.
+func TestEveryEmbeddedRuleHasAParsableGraphTarget(t *testing.T) {
+	rules, err := detect.LoadRules("github", nil)
+	if err != nil {
+		t.Fatalf("LoadRules: %v", err)
+	}
+	var bad []string
+	for _, r := range rules {
+		if _, err := graph.ParseTarget(r.Graph); err != nil {
+			bad = append(bad, r.ID+": "+err.Error())
+		}
+	}
+	if len(bad) > 0 {
+		t.Errorf("rule(s) with an unusable graph target:\n%s", strings.Join(bad, "\n"))
+	}
+}
 
 func TestBlockMarshalJSON(t *testing.T) {
 	scalar, err := json.Marshal(detect.Block{Predicate: "a == b"})
@@ -70,6 +108,22 @@ func TestBuildFindingSubjectOwnerWins(t *testing.T) {
 	f2 := detect.BuildFinding(provider, rule, subj, "org", "", "")
 	if f2.Org != "acme" {
 		t.Errorf("with no run scope, org should come from the subject owner; got %q", f2.Org)
+	}
+}
+
+// fr-02-01-workflow-dispatch-against-arbitrary-branch declares `name: deploy` in
+// .github/workflows/deploy.yml. The report renders finding.file next to
+// code.line_range as one locator, so file must be the path, never the name.
+func TestBuildFindingFileIsTheWorkflowPath(t *testing.T) {
+	rule := &detect.Rule{ID: "cat-x/y", Subject: "job"}
+	subj := map[string]any{"_id": "j1", "workflow_name": "deploy", "workflow_filename": "deploy.yml"}
+	if f := detect.BuildFinding(provider, rule, subj, "job", "ghektestorg", ""); f.File != ".github/workflows/deploy.yml" {
+		t.Errorf("file should be the workflow path, got %q", f.File)
+	}
+
+	repoSubj := map[string]any{"_id": "ghektestorg/fr-02-01", "repo": "fr-02-01"}
+	if f := detect.BuildFinding(provider, rule, repoSubj, "repo", "ghektestorg", ""); f.File != "" {
+		t.Errorf("a subject with no workflow has no file locator, got %q", f.File)
 	}
 }
 

@@ -2,6 +2,7 @@ id: cat-01/action-ref-templated-from-pr
 scenario_id: cat-01/03
 title: "Action ref templated from attacker-controlled PR context"
 subject: job
+graph: attack(PWN_REQUEST)
 severity: critical
 confidence: high
 description: >

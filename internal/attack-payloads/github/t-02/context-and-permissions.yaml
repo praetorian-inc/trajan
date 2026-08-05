@@ -1,0 +1,70 @@
+id: t-02/context-and-permissions
+summary: Record what this job actually got — the event and ref it ran under, the runner it landed on, and which API capabilities its GITHUB_TOKEN really has.
+flavor: workflow_steps
+
+params:
+  - { name: marker, type: string, required: true, doc: "the run-unique high-entropy token the harvest correlates on" }
+  - { name: probe_token_scopes, type: bool, default: true, doc: "resolve the token's real capabilities with read-only API calls instead of inferring them from the workflow file" }
+  - { name: probe_writes, type: bool, default: false, doc: "REFUSED by this fragment — a write issued from inside the job cannot be ledgered write-ahead; see the note above the body" }
+
+# Emits: trajan-event / trajan-ref / trajan-base-ref / trajan-actor / trajan-repo /
+# trajan-run / trajan-attempt / trajan-job / trajan-runner-name / trajan-runner-os /
+# trajan-runner-arch / trajan-runner-environment / trajan-oidc-request-env, then one
+# trajan-capability=<name> trajan-status=<code> trajan-class=<class> line per probe.
+# Response bodies are never emitted, only the status class.
+#
+# Two facts the catalog asks for that a job cannot observe about itself, recorded as
+# such rather than guessed: the runner's resolved label set (no environment variable
+# carries it — it comes from GET /actions/runs/{id}/jobs), and whether the repo/org
+# default or an explicit permissions block decided the token (a control-plane
+# comparison against the observed capability set, not something the job can see).
+#
+# probe_writes renders a refusal on purpose. A write probe must be issued by a
+# primitive, which appends its inverse to the ledger BEFORE the call; a write issued
+# from inside the emitted job leaves no undo record and no accounting, so an approval
+# or a dispatch could survive a killed run with nothing to replay. The refusal is
+# rendered, so it is visible in the dry run before anything is committed.
+body: |
+  - name: trajan context and permissions
+    shell: bash
+    env:
+      TRJ_TOKEN: ${{ github.token }}
+    run: |
+      marker=<< .Params.marker >>
+      echo "trajan-marker=$marker"
+      <<- if .Params.probe_writes >>
+      echo trajan-error=probe-writes-not-issuable-from-a-payload
+      exit 1
+      <<- end >>
+      echo "trajan-event=${GITHUB_EVENT_NAME} trajan-ref=${GITHUB_REF} trajan-base-ref=${GITHUB_BASE_REF:-} trajan-actor=${GITHUB_ACTOR}"
+      echo "trajan-repo=${GITHUB_REPOSITORY} trajan-run=${GITHUB_RUN_ID} trajan-attempt=${GITHUB_RUN_ATTEMPT} trajan-job=${GITHUB_JOB}"
+      echo "trajan-runner-name=${RUNNER_NAME:-} trajan-runner-os=${RUNNER_OS:-} trajan-runner-arch=${RUNNER_ARCH:-} trajan-runner-environment=${RUNNER_ENVIRONMENT:-}"
+      echo "trajan-runner-labels=unavailable-in-job trajan-oidc-request-env=$([ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] && echo true || echo false)"
+      <<- if .Params.probe_token_scopes >>
+      command -v curl >/dev/null 2>&1 || { echo trajan-error=curl-unavailable; exit 1; }
+      probe() {
+        cap=$1
+        rc=0
+        code=$(printf 'header = "authorization: bearer %s"\n' "$TRJ_TOKEN" |
+          curl -sS -K - -o /dev/null -w '%{http_code}' --max-time 20 \
+            -H 'accept: application/vnd.github+json' "${GITHUB_API_URL}$2") || rc=$?
+        if [ "$rc" -ne 0 ]; then
+          echo "trajan-capability=$cap trajan-status=curl-$rc trajan-class=unreachable"
+          return
+        fi
+        case $code in
+          2??) class=allowed ;;
+          401) class=unauthorized ;;
+          403) class=forbidden ;;
+          404) class=not-found ;;
+          *)   class=other ;;
+        esac
+        echo "trajan-capability=$cap trajan-status=$code trajan-class=$class"
+      }
+      probe contents-read "/repos/${GITHUB_REPOSITORY}"
+      probe actions-read "/repos/${GITHUB_REPOSITORY}/actions/workflows"
+      probe secrets-read "/repos/${GITHUB_REPOSITORY}/actions/secrets"
+      probe administration-read "/repos/${GITHUB_REPOSITORY}/actions/runners"
+      probe org-members-read "/orgs/${GITHUB_REPOSITORY_OWNER}/members"
+      <<- end >>
+      echo "trajan-marker-end=$marker"

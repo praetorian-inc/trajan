@@ -30,11 +30,20 @@ var provider = detect.Provider{
 	Display: subjectDisplay,
 	Code:    buildCode,
 	Repo:    func(s map[string]any) string { return detect.StringField(s, "repo") },
-	File:    func(s map[string]any) string { return detect.StringField(s, "workflow_name") },
+	File:    workflowFilePath,
 }
 
-// ScanOptions and Scan are re-exported so cmd/trajan/github keeps calling
-// github.Scan / github.ScanOptions unchanged.
+// workflowFilePath is the repo-relative locator that finding.code's line range
+// indexes into. workflow_name is the author-declared `name:` and is not a path.
+func workflowFilePath(subject map[string]any) string {
+	if f := detect.StringField(subject, "workflow_filename"); f != "" {
+		return ".github/workflows/" + f
+	}
+	return ""
+}
+
+// Scan and ScanOptions are aliases: the scan is generic over platforms and lives
+// in detect, while callers reach it through the platform package they collected with.
 type ScanOptions = detect.ScanOptions
 
 func Scan(ctx context.Context, runDir string, opts ScanOptions) error {

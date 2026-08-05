@@ -2,6 +2,7 @@ id: cat-10/ai-agents-mcp-privileged-tools
 scenario_id: cat-10/04
 title: "MCP server with privileged third-party tools on agent allowlist"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

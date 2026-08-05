@@ -2,7 +2,6 @@ package lib
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/praetorian-inc/capability-sdk/pkg/capability"
@@ -10,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/praetorian-inc/trajan/pkg/attacks"
 	"github.com/praetorian-inc/trajan/pkg/detections"
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
@@ -30,19 +28,12 @@ func TestSDKCapability_Metadata(t *testing.T) {
 func TestSDKCapability_Parameters(t *testing.T) {
 	capInstance := NewSDKCapability()
 	params := capInstance.Parameters()
-	require.Len(t, params, 13)
+	require.Len(t, params, 3)
 	assert.Equal(t, "token", params[0].Name)
 	assert.Equal(t, "platform", params[1].Name)
 	assert.Contains(t, params[1].Options, "github")
 	assert.Contains(t, params[1].Options, "jenkins")
 	assert.Equal(t, "base_url", params[2].Name)
-	assert.Equal(t, "active_mode", params[3].Name)
-	assert.Equal(t, "bool", params[3].Type)
-	assert.Equal(t, "attack_plugins", params[4].Name)
-	assert.Equal(t, "[]string", params[4].Type)
-	assert.NotEmpty(t, params[4].Options)
-	assert.Equal(t, "dry_run", params[5].Name)
-	assert.Equal(t, "attack_timeout", params[6].Name)
 }
 
 func TestSDKCapability_Match_ValidURL(t *testing.T) {
@@ -233,156 +224,4 @@ func TestBuildFindingProof(t *testing.T) {
 	require.NotEmpty(t, proof)
 	assert.Contains(t, string(proof), "actions_injection")
 	assert.Contains(t, string(proof), "test evidence")
-}
-
-func TestSDKCapability_Invoke_AllAttackPluginsFail_ReturnsError(t *testing.T) {
-	origScan := InvokeScanFunc
-	origAttack := InvokeAttackFunc
-	defer func() {
-		InvokeScanFunc = origScan
-		InvokeAttackFunc = origAttack
-	}()
-
-	InvokeScanFunc = func(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
-		return &ScanResult{}, nil
-	}
-	InvokeAttackFunc = func(ctx context.Context, cfg AttackConfig) (*AttackResult, error) {
-		return &AttackResult{
-			Errors: []error{
-				fmt.Errorf("401 unauthorized: invalid token"),
-			},
-			Results: []attacks.AttackResult{
-				{Plugin: "plugin1", Success: false, Message: "auth failed"},
-			},
-		}, nil
-	}
-
-	capInstance := NewSDKCapability()
-	var emitted []any
-	out := capability.EmitterFunc(func(models ...any) error {
-		emitted = append(emitted, models...)
-		return nil
-	})
-
-	ctx := capability.ExecutionContext{
-		Parameters: capability.Parameters{
-			{Name: "token", Value: "bad-token"},
-			{Name: "active_mode", Value: "true"},
-			{Name: "attack_plugins", Value: "plugin1"},
-		},
-	}
-	input := capmodel.Repository{
-		URL:  "https://github.com/org/repo",
-		Org:  "org",
-		Name: "repo",
-	}
-
-	err := capInstance.Invoke(ctx, input, out)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "all attack plugins failed")
-	assert.Contains(t, err.Error(), "401 unauthorized")
-	assert.Empty(t, emitted, "no risks should be emitted when all plugins fail")
-}
-
-func TestSDKCapability_Invoke_ExtraOptsForwarded(t *testing.T) {
-	origScan := InvokeScanFunc
-	origAttack := InvokeAttackFunc
-	defer func() {
-		InvokeScanFunc = origScan
-		InvokeAttackFunc = origAttack
-	}()
-
-	InvokeScanFunc = func(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
-		return &ScanResult{}, nil
-	}
-
-	var capturedConfig AttackConfig
-	InvokeAttackFunc = func(ctx context.Context, cfg AttackConfig) (*AttackResult, error) {
-		capturedConfig = cfg
-		return &AttackResult{
-			Results: []attacks.AttackResult{
-				{Plugin: "plugin1", Success: true, Message: "success"},
-			},
-		}, nil
-	}
-
-	capInstance := NewSDKCapability()
-	out := capability.EmitterFunc(func(models ...any) error { return nil })
-
-	ctx := capability.ExecutionContext{
-		Parameters: capability.Parameters{
-			{Name: "token", Value: "test-token"},
-			{Name: "active_mode", Value: "true"},
-			{Name: "attack_plugins", Value: "plugin1"},
-			{Name: "c2_repo", Value: "owner/my-c2-repo"},
-			{Name: "target_os", Value: "linux"},
-			{Name: "delivery", Value: "pr"},
-			{Name: "persistence_method", Value: "workflow"},
-		},
-	}
-	input := capmodel.Repository{
-		URL:  "https://github.com/org/repo",
-		Org:  "org",
-		Name: "repo",
-	}
-
-	err := capInstance.Invoke(ctx, input, out)
-	require.NoError(t, err)
-
-	assert.Equal(t, "owner/my-c2-repo", capturedConfig.ExtraOpts["c2_repo"])
-	assert.Equal(t, "linux", capturedConfig.ExtraOpts["target_os"])
-	assert.Equal(t, "pr", capturedConfig.ExtraOpts["delivery"])
-	assert.Equal(t, "workflow", capturedConfig.ExtraOpts["method"], "persistence_method should be remapped to 'method'")
-	assert.NotContains(t, capturedConfig.ExtraOpts, "persistence_method", "original key should be removed after remapping")
-}
-
-func TestSDKCapability_Invoke_PartialAttackSuccess_ReturnsNil(t *testing.T) {
-	origScan := InvokeScanFunc
-	origAttack := InvokeAttackFunc
-	defer func() {
-		InvokeScanFunc = origScan
-		InvokeAttackFunc = origAttack
-	}()
-
-	InvokeScanFunc = func(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
-		return &ScanResult{}, nil
-	}
-	InvokeAttackFunc = func(ctx context.Context, cfg AttackConfig) (*AttackResult, error) {
-		return &AttackResult{
-			Errors: []error{
-				fmt.Errorf("plugin2: connection refused"),
-			},
-			Results: []attacks.AttackResult{
-				{Plugin: "plugin1", Success: true, Message: "compromised"},
-				{Plugin: "plugin2", Success: false, Message: "failed"},
-			},
-		}, nil
-	}
-
-	capInstance := NewSDKCapability()
-	var emitted []any
-	out := capability.EmitterFunc(func(models ...any) error {
-		emitted = append(emitted, models...)
-		return nil
-	})
-
-	ctx := capability.ExecutionContext{
-		Parameters: capability.Parameters{
-			{Name: "token", Value: "test-token"},
-			{Name: "active_mode", Value: "true"},
-			{Name: "attack_plugins", Value: "plugin1,plugin2"},
-		},
-	}
-	input := capmodel.Repository{
-		URL:  "https://github.com/org/repo",
-		Org:  "org",
-		Name: "repo",
-	}
-
-	err := capInstance.Invoke(ctx, input, out)
-	require.NoError(t, err, "partial success should not return error")
-	require.Len(t, emitted, 1, "only the successful plugin risk should be emitted")
-	risk, ok := emitted[0].(capmodel.Risk)
-	require.True(t, ok)
-	assert.Equal(t, "cicd-attack-plugin1", risk.Name)
 }

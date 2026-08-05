@@ -1,0 +1,29 @@
+id: t-08/expression-injection
+summary: Attacker-controlled event data that makes a naively interpolating job emit the chain marker, and nothing else.
+flavor: shell
+
+params:
+  - { name: marker, type: string, required: true, doc: "the run-unique high-entropy token the harvest correlates on" }
+
+# Not a job: the data a target's already-vulnerable workflow interpolates. The
+# assertion is that trajan-marker=<marker> trajan-injection=true appears in the
+# TARGET job's log — the one job in a chain the operator did not author, running on
+# the target's runner under the target's token.
+#
+# The whole safety property is that the class is fixed, not parameterised: the text
+# is one command substitution that runs echo and terminates. No breakout, no
+# trailing comment, so the rest of the interpolating command still runs and the
+# target's job is not derailed; no file access, no network, no environment
+# enumeration, no reach for a secret. There is deliberately no parameter that could
+# widen it — an injection proof that can be parameterised into arbitrary command
+# execution is a shell, not a proof.
+#
+# It fires where the field is interpolated unquoted or inside double quotes, which
+# is the shape the detection rules key on. A single-quoted interpolation suppresses
+# command substitution, so the marker does not appear and the correct reading is
+# "not demonstrated by this carrier", not "not injectable".
+#
+# The carrier is whichever primitive places this text, and the trailing newline is
+# stripped because a pull-request title cannot contain one.
+body: |-
+  $(echo trajan-marker=<< .Params.marker >> trajan-injection=true trajan-marker-end=<< .Params.marker >>)

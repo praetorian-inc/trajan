@@ -1,0 +1,55 @@
+id: t-07/checked-out-code-execution
+summary: Prove that a job executed code that came from the checked-out tree rather than from the workflow file.
+flavor: shell
+
+params:
+  - { name: marker, type: string, required: true, doc: "the run-unique high-entropy token the harvest correlates on" }
+  - { name: vector, type: string, required: true, doc: "build_script | package_manager_lifecycle | local_action | makefile_target — the execution path being demonstrated" }
+  - { name: path, type: string, required: true, doc: "where in the checked-out tree the file is placed; must be chain-scoped" }
+  - { name: emit_context, type: bool, default: true, doc: "also emit the run coordinates and the two token-reachability observations the executing code could make about itself, neither of which reads a credential value" }
+
+# The body is a workspace file, not a job: the weakness is that a file under the
+# attacker's control in the checked-out ref is executed by a job holding the base
+# repository's token and secrets. It emits the marker and the context and does
+# nothing else — no network, no writes outside its own directory, no reading of
+# secret material. The proof is that the marker appeared alongside the recorded
+# context, not that anything was taken.
+#
+# Token reachability is two separate facts, and neither reads a value.
+# trajan-token-env is only true where the workflow mapped the token into env:
+# itself — GITHUB_TOKEN is not a default environment variable, so a probe of the
+# environment alone reports absence in almost every real target job and understates
+# the finding. trajan-token-persisted is the reachability that actually follows from
+# a checkout: actions/checkout defaults to persist-credentials: true, which leaves a
+# usable credential against the extraheader config key — stored inline in
+# .git/config through v5 and in a RUNNER_TEMP file included from it in v6+. Asking
+# git for the key NAME establishes that the credential is there; --name-only and the
+# discarded stdout are both deliberate, so no form of this probe can print the
+# header value. unknown is emitted rather than false where there is no git or no
+# work tree, because absence was not measured there.
+#
+# String and list values interpolate PRE-QUOTED for this flavor, so write
+# << .Params.x >> bare and never inside quotes of your own. ${{ }} in this body
+# is GitHub's own syntax and passes through verbatim.
+body: |
+  #!/usr/bin/env bash
+  set -eu
+
+  echo trajan-marker=<< .Params.marker >>
+  echo trajan-vector=<< .Params.vector >>
+  echo trajan-source=<< .Params.path >>
+  <<- if .Params.emit_context >>
+  echo "trajan-event=${GITHUB_EVENT_NAME:-} trajan-ref=${GITHUB_REF:-} trajan-sha=${GITHUB_SHA:-}"
+  echo "trajan-repo=${GITHUB_REPOSITORY:-} trajan-run=${GITHUB_RUN_ID:-} trajan-attempt=${GITHUB_RUN_ATTEMPT:-}"
+  echo "trajan-token-env=$([ -n "${GITHUB_TOKEN:-}" ] && echo true || echo false)"
+  if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if git config --name-only --get-regexp '^http\..*\.extraheader$' >/dev/null 2>&1; then
+      echo trajan-token-persisted=true
+    else
+      echo trajan-token-persisted=false
+    fi
+  else
+    echo trajan-token-persisted=unknown
+  fi
+  <<- end >>
+  echo trajan-marker-end=<< .Params.marker >>

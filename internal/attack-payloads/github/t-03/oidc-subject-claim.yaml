@@ -1,0 +1,90 @@
+id: t-03/oidc-subject-claim
+summary: Demonstrate that an OIDC id-token can be minted from this context and record what its claim set contains, so it can be compared against a cloud trust policy.
+flavor: workflow_steps
+
+params:
+  - { name: marker, type: string, required: true, doc: "the run-unique high-entropy token the harvest correlates on" }
+  - { name: audience, type: string, doc: "the aud value to request; empty requests the provider default, which is recorded as such" }
+  - { name: provider_profile, type: string, doc: "aws | gcp | azure | generic — recorded so the finding can be phrased in that provider's trust-policy vocabulary" }
+  - { name: expected_sub_pattern, type: string, doc: "a glob the observed sub is matched against, so the finding can say the subject would match a stated trust condition; write it in the subject format the target repository actually issues — repositories created, renamed or transferred after 2026-07-15 carry owner and repository ids as repo:OWNER@OWNER-ID/REPO@REPO-ID:..., and a glob written for the older repo:OWNER/REPO:... shape matches neither" }
+  - name: claims_to_record
+    type: "[]string"
+    default: [sub, aud, repository, ref, event_name, job_workflow_ref, environment, runner_environment]
+    doc: "which claims of the decoded claim set to emit; a claim the token does not carry is emitted as <absent>"
+  - { name: emit_context, type: bool, default: true, doc: "also emit the run coordinates the claim set has to be read against" }
+
+permissions:
+  - { scope: id-token, level: write }
+
+# Emits: trajan-oidc-request-env=<bool>, trajan-audience=<requested|provider-default>,
+# then one trajan-claim-<name>=<value> line per recorded claim, and
+# trajan-expected-sub-match=<bool> when a pattern was supplied. The raw token is
+# never emitted, never written to a file and never leaves the job — only the
+# decoded claim set, which is metadata a trust policy is matched against.
+#
+# The subject is recorded verbatim as trajan-claim-sub whatever shape it arrives in,
+# so the evidence does not depend on which subject format the repository issues; only
+# expected_sub_pattern does, and it is the operator's statement of the trust condition
+# being tested rather than anything this fragment defaults.
+#
+# id-token: write is opt-in only and is never inherited from a repo/org default or
+# from write-all, so the job this renders into must carry it explicitly. When the
+# token-request environment is absent the step reports that as a negative
+# observation and exits 0: on a fork pull_request that is a fact about the target,
+# not a failure of the fragment.
+body: |
+  - name: trajan oidc subject claim
+    shell: bash
+    env:
+      TRJ_AUDIENCE: << .Params.audience >>
+      TRJ_EXPECT: << .Params.expected_sub_pattern >>
+    run: |
+      marker=<< .Params.marker >>
+      profile=<< .Params.provider_profile >>
+      echo "trajan-marker=$marker"
+      echo "trajan-provider-profile=$profile"
+      <<- if .Params.emit_context >>
+      echo "trajan-event=${GITHUB_EVENT_NAME} trajan-ref=${GITHUB_REF} trajan-repo=${GITHUB_REPOSITORY} trajan-run=${GITHUB_RUN_ID}"
+      <<- end >>
+      if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+        echo trajan-oidc-request-env=false
+        echo "trajan-marker-end=$marker"
+        exit 0
+      fi
+      echo trajan-oidc-request-env=true
+      command -v curl >/dev/null 2>&1 || { echo trajan-error=curl-unavailable; exit 1; }
+      command -v jq >/dev/null 2>&1 || { echo trajan-error=jq-unavailable; exit 1; }
+      url=$ACTIONS_ID_TOKEN_REQUEST_URL
+      if [ -n "$TRJ_AUDIENCE" ]; then
+        url="$url&audience=$(jq -rn --arg a "$TRJ_AUDIENCE" '$a|@uri')"
+        echo trajan-audience=requested
+      else
+        echo trajan-audience=provider-default
+      fi
+      rc=0
+      token=$(printf 'header = "authorization: bearer %s"\n' "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" |
+        curl -sS -K - --max-time 20 "$url" | jq -r '.value // empty') || rc=$?
+      if [ "$rc" -ne 0 ] || [ -z "$token" ]; then
+        echo "trajan-error=id-token-not-minted trajan-curl-exit=$rc"
+        exit 1
+      fi
+      segment=$(printf %s "$token" | cut -d. -f2 | tr '_-' '/+')
+      unset token
+      case $(( ${#segment} % 4 )) in
+        2) segment="$segment==" ;;
+        3) segment="$segment=" ;;
+      esac
+      claims=$(printf %s "$segment" | base64 -d 2>/dev/null) || { echo trajan-error=id-token-undecodable; exit 1; }
+      for claim in << .Params.claims_to_record >>; do
+        value=$(printf %s "$claims" | jq -r --arg c "$claim" 'if has($c) then (.[$c]|tostring) else "<absent>" end' | tr -d '\n' | cut -c1-256)
+        echo "trajan-claim-$claim=$value"
+      done
+      if [ -n "$TRJ_EXPECT" ]; then
+        sub=$(printf %s "$claims" | jq -r '.sub // ""')
+        if [[ $sub == $TRJ_EXPECT ]]; then
+          echo trajan-expected-sub-match=true
+        else
+          echo trajan-expected-sub-match=false
+        fi
+      fi
+      echo "trajan-marker-end=$marker"

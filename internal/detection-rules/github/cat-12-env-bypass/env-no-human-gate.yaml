@@ -2,6 +2,7 @@ id: cat-12/env-bypass-no-human-gate
 scenario_id: cat-12/01
 title: "Environment has no human gating"
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: high
 description: >

@@ -13,14 +13,14 @@ import (
 	yaml "go.yaml.in/yaml/v4"
 
 	detectionrules "github.com/praetorian-inc/trajan/internal/detection-rules"
+	"github.com/praetorian-inc/trajan/internal/dsl"
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/finding"
 )
 
 // RuleSourceBase is the "<repo>/blob/<ref>" prefix that turns an embedded rule
 // path into a browsable URL. Overridable at build time (-ldflags) to pin a
-// release ref; set to "" to omit rule.url entirely. Adjust the repo/ref here
-// once the rules' permanent home is settled.
+// release ref; set to "" to omit rule.url entirely.
 var RuleSourceBase = "https://github.com/praetorian-inc/trajan/blob/main"
 
 type Block struct {
@@ -97,6 +97,10 @@ type Rule struct {
 	Evidence        []string `yaml:"evidence"`
 	RemediationHint string   `yaml:"remediation_hint"`
 
+	// Carried as the raw string so this package stays provider-generic: the
+	// platform that understands the target vocabulary parses it.
+	Graph string `yaml:"graph"`
+
 	RuleFile string `yaml:"-"`
 }
 
@@ -111,8 +115,16 @@ func (r *Rule) SubjectKind() string {
 }
 
 // LoadRules walks a platform's rule subtree (detection-rules/<subtree>) and
-// returns its parsed rules, sorted by path for deterministic ordering.
-func LoadRules(subtree string) ([]Rule, error) {
+// returns its parsed rules, sorted by path for deterministic ordering. A rule
+// that cannot be used — bad YAML, no id, no where/chain_of — is skipped and
+// reported to onError rather than failing the load, so one broken file cannot
+// zero out detection. Only IO is fatal.
+func LoadRules(subtree string, onError func(error)) ([]Rule, error) {
+	skip := func(err error) {
+		if onError != nil {
+			onError(err)
+		}
+	}
 	var files []string
 	err := fs.WalkDir(detectionrules.FS, subtree, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -136,9 +148,11 @@ func LoadRules(subtree string) ([]Rule, error) {
 		}
 		var r Rule
 		if err := yaml.Unmarshal(b, &r); err != nil {
-			return nil, fmt.Errorf("bad rule yaml %s: %w", p, err)
+			skip(fmt.Errorf("bad rule yaml %s: %w", p, err))
+			continue
 		}
 		if r.ID == "" || (r.Where == nil && r.ChainOf == nil) {
+			skip(fmt.Errorf("unusable rule %s: needs an id and a where or chain_of", p))
 			continue
 		}
 		r.RuleFile = p
@@ -285,13 +299,13 @@ func BuildFinding(p Provider, rule *Rule, subject map[string]any, kind, org, run
 }
 
 func buildRuleDSL(rule *Rule) any {
-	dsl := RuleDSL{Subject: rule.Subject}
+	out := RuleDSL{Subject: rule.Subject}
 	if rule.ChainOf != nil {
-		dsl.ChainOf = rule.ChainOf
+		out.ChainOf = rule.ChainOf
 	} else {
-		dsl.Where = rule.Where
+		out.Where = rule.Where
 	}
-	return dsl
+	return out
 }
 
 func ruleURL(ruleFile string) string {
@@ -312,7 +326,7 @@ func buildProvenance(rule *Rule, subject map[string]any) map[string]any {
 			if strings.HasPrefix(ref, "_provenance") {
 				continue // the collected-input pointer is added explicitly below
 			}
-			if v := getPath(subject, ref); v != nil {
+			if v := dsl.GetPath(subject, ref); v != nil {
 				prov[ref] = v
 			}
 		}

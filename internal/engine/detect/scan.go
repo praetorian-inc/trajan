@@ -34,7 +34,7 @@ func Scan(ctx context.Context, runDir string, p Provider, opts ScanOptions) erro
 	}
 
 	timer := engine.StartPhaseTimer(engine.PhaseScan, "scan")
-	bySeverity, scanErr := runScan(ctx, runDir, state.Org, p, opts, timer)
+	bySeverity, scanErr := runScan(ctx, runDir, state, p, opts, timer)
 
 	rec := timer.Stop(scanErr)
 	state.RecordPhase(rec)
@@ -55,15 +55,13 @@ func OrgOnlyRules(rules []Rule) []Rule {
 	return slices.DeleteFunc(rules, func(r Rule) bool { return r.SubjectKind() != "org" })
 }
 
-func runScan(ctx context.Context, runDir, org string, p Provider, opts ScanOptions, timer *engine.PhaseTimer) (map[string]int, error) {
+func runScan(ctx context.Context, runDir string, state *engine.State, p Provider, opts ScanOptions, timer *engine.PhaseTimer) (map[string]int, error) {
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
+	org := state.Org
+	onError := func(e error) { timer.Errors = append(timer.Errors, e.Error()) }
 
-	if err := os.RemoveAll(filepath.Join(runDir, "20-scan")); err != nil {
-		return nil, fmt.Errorf("clear 20-scan: %w", err)
-	}
-
-	rules, err := LoadRules(p.RuleSubtree)
+	rules, err := LoadRules(p.RuleSubtree, onError)
 	if err != nil {
 		return nil, fmt.Errorf("load rules: %w", err)
 	}
@@ -88,7 +86,13 @@ func runScan(ctx context.Context, runDir, org string, p Provider, opts ScanOptio
 		subjectsByKind[kind] = subs
 	}
 
-	onError := func(e error) { timer.Errors = append(timer.Errors, e.Error()) }
+	// Clearing output only once every fatal input check has passed keeps a scan
+	// that aborts from destroying the previous run's findings and graph.
+	for _, d := range append([]string{"20-scan"}, state.StaleDirs(engine.PhaseScan)...) {
+		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
+			return nil, fmt.Errorf("clear %s: %w", d, err)
+		}
+	}
 
 	ruleFires := make(map[string]int, len(rules))
 	bySeverity := map[string]int{}

@@ -2,6 +2,7 @@ id: cat-11/ruleset-no-protection-on-default
 scenario_id: cat-11/02
 title: "Default branch has no active ruleset and no legacy protection"
 subject: chain
+graph: node(Branch)
 severity: high
 confidence: high
 description: >

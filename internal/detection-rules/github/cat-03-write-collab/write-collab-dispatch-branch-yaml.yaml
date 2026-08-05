@@ -2,6 +2,7 @@ id: cat-03/write-collab-dispatch-branch-yaml
 scenario_id: cat-03/06
 title: "workflow_dispatch on arbitrary branch (incl. branches with edited YAML)"
 subject: job
+graph: edge(READS, Job, Secret)
 severity: medium
 confidence: medium
 description: >

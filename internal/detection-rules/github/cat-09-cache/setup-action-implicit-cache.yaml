@@ -2,6 +2,7 @@ id: cat-09/setup-action-implicit-cache
 scenario_id: cat-09/05
 title: "Setup-* action's implicit cache used after PR-controlled checkout"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

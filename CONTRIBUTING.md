@@ -9,7 +9,6 @@ This doc covers the dev setup, project structure, and how to add plugins or new 
 - [Project layout](#project-layout)
 - [Architecture overview](#architecture-overview)
 - [Adding a detection plugin](#adding-a-detection-plugin)
-- [Adding an attack plugin](#adding-an-attack-plugin)
 - [Adding a platform](#adding-a-platform)
 - [Testing](#testing)
 - [Code style](#code-style)
@@ -80,7 +79,7 @@ Trajan can also run in the browser via WebAssembly:
 ```
 cmd/
   trajan/               CLI entry point and subcommands
-    github/             GitHub subcommands (scan, attack, enumerate, search)
+    github/             GitHub subcommands (scan, enumerate, search)
     ado/                Azure DevOps subcommands
     gitlab/             GitLab subcommands
     jenkins/            Jenkins subcommands
@@ -88,7 +87,7 @@ cmd/
   trajan-wasm/          WASM entry point for browser builds
 
 internal/
-  registry/             Global detection and attack plugin registries
+  registry/             Global detection and platform registries
   cmdutil/              Shared CLI flag helpers
 
 pkg/
@@ -101,16 +100,14 @@ pkg/
     expression/         GitHub Actions expression evaluator with taint propagation
   detections/           Detection interface, base helpers, shared logic
     shared/             Cross-platform helpers (taint sources, AI patterns)
-  attacks/              Attack plugin interface and chain executor
-    shared/             Cross-platform attack utilities (payloads, AI probes)
   scanner/              Scan orchestration
   output/               Terminal output or JSON
   config/               Configuration and local storage
 
-  github/               GitHub: platform, client, detections, attacks
-  gitlab/               GitLab: platform, client, detections, attacks
-  azuredevops/          Azure DevOps: platform, client, detections, attacks
-  jenkins/              Jenkins: platform, client, detections, attacks
+  github/               GitHub: platform, client, detections
+  gitlab/               GitLab: platform, client, detections
+  azuredevops/          Azure DevOps: platform, client, detections
+  jenkins/              Jenkins: platform, client, detections
   jfrog/                JFrog: platform, client, token probing
 
 browser/                WASM UI (HTML, JS, CSS, build scripts)
@@ -214,32 +211,6 @@ func (p *Plugin) Detect(ctx context.Context, g *graph.Graph) ([]detections.Findi
 
 4. Add `myplugin_test.go` with table-driven tests that build a graph from YAML fixtures and assert on expected findings.
 
-## Adding an attack plugin
-
-Attack plugins live under `pkg/<platform>/attacks/<name>/` or `pkg/attacks/<platform>/<name>/`. They implement `attacks.AttackPlugin`:
-
-```go
-type AttackPlugin interface {
-    Name() string
-    Description() string
-    Category() AttackCategory
-    CanAttack(findings []detections.Finding) bool
-    Execute(ctx context.Context, opts AttackOptions) (*AttackResult, error)
-    Cleanup(ctx context.Context, session *Session) error
-}
-```
-
-Requirements:
-
-- `CanAttack` must return `true` only for findings your plugin can exploit.
-- `Execute` must honor `opts.DryRun` (preview the attack without side effects).
-- `Cleanup` must reverse all artifacts (branches, PRs, repos) created during execution.
-- Track all created artifacts in `AttackResult.CleanupActions` so session cleanup works.
-
-Register with `registry.RegisterAttackPlugin(platform, name, factory)` in `init()`, and add a blank import in `pkg/attacks/all/all.go`.
-
-Attack categories: `CategorySecrets`, `CategoryCICD`, `CategoryRunners`, `CategoryPersistence`, `CategoryC2`, `CategoryRecon`.
-
 ## Adding a platform
 
 To add support for a new CI/CD platform:
@@ -341,7 +312,7 @@ refactor: namespace attack plugin registry keys as platform/name
 1. One logical change per PR. If you're fixing a bug and adding a feature, split them.
 2. `make test` and `make lint` must pass.
 3. Describe what changed and why. Link to related issues.
-4. Add tests for new functionality. Detection and attack plugins need test coverage.
+4. Add tests for new functionality. Detection plugins need test coverage.
 5. Keep diffs reviewable. Avoid unrelated formatting changes or large generated blocks.
 
 ### PR checklist

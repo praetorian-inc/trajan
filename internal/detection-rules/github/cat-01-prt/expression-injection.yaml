@@ -2,6 +2,7 @@ id: cat-01/expression-injection
 scenario_id: cat-01/08
 title: "Attacker-controllable expression flows into a run/script sink"
 subject: job
+graph: attack(EXPRESSION_INJECTION)
 severity: high
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-05/workflow-run-context-injection
 scenario_id: cat-05/03
 title: "workflow_run downstream interpolates attacker-controllable context"
 subject: chain
+graph: attack(EXPRESSION_INJECTION)
 severity: high
 confidence: high
 description: >

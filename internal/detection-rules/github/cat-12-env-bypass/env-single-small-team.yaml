@@ -2,6 +2,7 @@ id: cat-12/env-bypass-single-small-team
 scenario_id: cat-12/12
 title: "Environment reviewer is a small / single-person team"
 subject: environment
+graph: node(Environment)
 severity: medium
 confidence: low
 description: >

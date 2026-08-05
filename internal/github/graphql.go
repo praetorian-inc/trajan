@@ -18,7 +18,6 @@ type gqlError struct {
 	Message string `json:"message"`
 }
 
-// gqlEnvelope is the standard GraphQL response shape: data + optional errors.
 type gqlEnvelope struct {
 	Data   json.RawMessage `json:"data"`
 	Errors []gqlError      `json:"errors"`
@@ -74,11 +73,10 @@ func (g *gqlClient) query(ctx context.Context, query string, vars map[string]any
 				return &GhError{Status: resp.StatusCode, URL: graphqlEndpoint, Body: string(b)}
 			}
 		default:
-			if g.c.sleepForRateLimit(ctx, resp) {
-				readAllClose(resp)
+			b := readAllClose(resp)
+			if g.c.sleepForRateLimit(ctx, resp, b, i) {
 				continue
 			}
-			b := readAllClose(resp)
 			return &GhError{Status: resp.StatusCode, URL: graphqlEndpoint, Body: string(b)}
 		}
 	}

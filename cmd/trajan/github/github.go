@@ -1,16 +1,18 @@
 package github
 
 import (
+	"fmt"
+	"log/slog"
+
 	"github.com/spf13/cobra"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/engine/detect"
 	"github.com/praetorian-inc/trajan/internal/github"
 	"github.com/praetorian-inc/trajan/internal/graph"
 	"github.com/praetorian-inc/trajan/internal/report"
 )
 
-// GitHubCmd is the root of the GitHub platform command tree. It is wired into
-// trajan's root command by cmd/trajan/root.go.
 var GitHubCmd = newGitHubCmd()
 
 func newGitHubCmd() *cobra.Command {
@@ -31,6 +33,7 @@ func newGitHubCmd() *cobra.Command {
 
 	var path string
 	var neo4jURL, neo4jUser, neo4jPass string
+	var neo4jReset bool
 	var writeBack, noGraph, detailed bool
 	var orgDetectionsOnly bool
 	var reportFormat, reportMinSev, reportMinConf, reportOut string
@@ -93,6 +96,35 @@ func newGitHubCmd() *cobra.Command {
 			})
 		},
 	}
+	graphCmd := &cobra.Command{
+		Use:   "graph",
+		Short: "Build importable graph nodes/edges from normalized facts and findings",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			runDir, err := engine.ResolveRunDir(cfg, "gh", path)
+			if err != nil {
+				return err
+			}
+			// detect carries rule.Graph as an unparsed string so it stays
+			// provider-generic; the target vocabulary is this platform's, so the
+			// rule -> target index is built here rather than inside graph.Build.
+			onError := func(e error) { slog.Warn("rule skipped", "err", e) }
+			rules, err := detect.LoadRules("github", onError)
+			if err != nil {
+				return err
+			}
+			targets := make(map[string]graph.Target, len(rules))
+			for _, r := range rules {
+				t, err := graph.ParseTarget(r.Graph)
+				if err != nil {
+					onError(fmt.Errorf("%s: %w", r.ID, err))
+					continue
+				}
+				targets[r.ID] = t
+			}
+			return graph.Build(cmd.Context(), cfg, runDir, targets)
+		},
+	}
 	push := &cobra.Command{
 		Use:   "push",
 		Short: "Push facts + findings into the graph",
@@ -102,7 +134,7 @@ func newGitHubCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return graph.Push(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser, neo4jPass)
+			return graph.Push(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser, neo4jPass, neo4jReset)
 		},
 	}
 	analyze := &cobra.Command{
@@ -117,14 +149,7 @@ func newGitHubCmd() *cobra.Command {
 			return graph.Analyze(cmd.Context(), cfg, runDir, writeBack, noGraph, detailed)
 		},
 	}
-	attack := &cobra.Command{
-		Use:   "attack",
-		Short: "Active exploitation (reserved)",
-		Args:  cobra.NoArgs,
-		RunE: func(*cobra.Command, []string) error {
-			return engine.ErrNotImplemented
-		},
-	}
+	attack := newAttackCmd(cfg)
 	run := &cobra.Command{
 		Use:   "run <locator>",
 		Short: "Wrapper: collect, normalize, scan in one process",
@@ -143,7 +168,9 @@ func newGitHubCmd() *cobra.Command {
 
 	scan.Flags().BoolVar(&orgDetectionsOnly, "org-detections-only", false, "evaluate only org-subject (org-level) rules")
 
-	for _, c := range []*cobra.Command{normalize, scan, reportCmd, push, analyze, attack} {
+	// attack is deliberately absent: its subcommands each bind their own --path, so a
+	// flag on the parent would read a variable none of them consult.
+	for _, c := range []*cobra.Command{normalize, scan, reportCmd, graphCmd, push, analyze} {
 		c.Flags().StringVarP(&path, "path", "p", "", "run directory (default: latest)")
 	}
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
@@ -151,14 +178,15 @@ func newGitHubCmd() *cobra.Command {
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
 	// No "o" shorthand: the root command already owns -o for --output, and cobra
 	// panics when a subcommand's local flag redefines an inherited shorthand.
-	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: the run dir)")
+	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: stdout for json/jsonl, run dir for md/html)")
 	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j Bolt URL")
 	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")
 	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "", "Neo4j password")
+	push.Flags().BoolVar(&neo4jReset, "reset", false, "delete every node in the database before pushing")
 	analyze.Flags().BoolVarP(&writeBack, "write-back", "w", false, "persist analysis results")
 	analyze.Flags().BoolVarP(&noGraph, "no-graph", "G", false, "analyze in-memory (no Neo4j)")
 	analyze.Flags().BoolVarP(&detailed, "detailed", "d", false, "expand output")
 
-	gh.AddCommand(whoami, collect, normalize, scan, reportCmd, push, analyze, attack, run)
+	gh.AddCommand(whoami, collect, normalize, scan, reportCmd, graphCmd, push, analyze, attack, run)
 	return gh
 }

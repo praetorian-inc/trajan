@@ -2,6 +2,7 @@ id: cat-06/oidc-reusable-unpinned
 scenario_id: cat-06/06
 title: "OIDC mint inside an un-pinned reusable workflow"
 subject: chain
+graph: edge(CALLS, Job, Workflow)
 severity: high
 confidence: medium
 description: >

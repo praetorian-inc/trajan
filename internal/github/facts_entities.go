@@ -5,9 +5,12 @@ package github
 // omitted empty would change rule evaluation.
 
 type OrgSecretSummary struct {
-	Name              string `json:"name"`
-	Visibility        string `json:"visibility"`
-	SelectedRepoCount int    `json:"selected_repo_count"`
+	Name       string `json:"name"`
+	Visibility string `json:"visibility"`
+	// Named, not just counted: a "selected" secret's blast radius IS this list,
+	// and an empty one means the secret is reachable by nothing.
+	SelectedRepositories []string `json:"selected_repositories"`
+	SelectedRepoCount    int      `json:"selected_repo_count"`
 }
 
 type AppPermSummary struct {
@@ -75,7 +78,12 @@ type OrgFact struct {
 
 	RunnerGroups              []RunnerGroupSummary `json:"runner_groups"`
 	AnyRunnerGroupPublicRepos bool                 `json:"any_runner_group_public_repos"`
-	OrgRunnersCount           int                  `json:"org_runners_count"`
+	// A group whose visibility is "all" AND which has registered runners: every
+	// repository in the org can land a job on that fleet. Precomputed because
+	// the two conditions must hold of the SAME group, which a projection across
+	// runner_groups cannot express.
+	AnyRunnerGroupAllReposWithRunners bool `json:"any_runner_group_all_repos_with_runners"`
+	OrgRunnersCount                   int  `json:"org_runners_count"`
 
 	HookURLs         []any `json:"hook_urls"`
 	HooksCount       int   `json:"hooks_count"`
@@ -104,11 +112,17 @@ type RepoLegacyBPSummary struct {
 	RequiredStatusChecks bool `json:"required_status_checks"`
 	RestrictionsPresent  bool `json:"restrictions_present"`
 	LockBranch           any  `json:"lock_branch"`
+
+	RequiredPullRequestReviews bool `json:"required_pull_request_reviews"`
+	DismissStaleReviews        any  `json:"dismiss_stale_reviews"`
+	RequireCodeOwnerReviews    any  `json:"require_code_owner_reviews"`
+	RequireLastPushApproval    any  `json:"require_last_push_approval"`
 }
 
 type RepoFact struct {
 	ID            string `json:"_id"`
 	Repo          string `json:"repo"`
+	RepoID        any    `json:"repo_id"`
 	Owner         any    `json:"owner"`
 	Visibility    any    `json:"visibility"`
 	Archived      any    `json:"archived"`
@@ -124,6 +138,10 @@ type RepoFact struct {
 
 	DefaultBranchProtectionPresent bool                 `json:"default_branch_protection_present"`
 	DefaultBranchProtectionSummary *RepoLegacyBPSummary `json:"default_branch_protection_summary"`
+
+	// null when the run predates CODEOWNERS collection, which is not the same
+	// fact as a repository that has no CODEOWNERS file.
+	Codeowners *CodeownersFact `json:"codeowners"`
 
 	Provenance []SourceProvenance `json:"_provenance"`
 }

@@ -2,6 +2,7 @@ id: cat-08/apps-pats-fine-grained-pat-overshoot
 scenario_id: cat-08/04
 title: "Fine-grained PAT/Token secrets present at org scope (visibility=all)"
 subject: org
+graph: node(Secret)
 severity: medium
 confidence: low
 description: >

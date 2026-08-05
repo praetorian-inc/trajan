@@ -2,6 +2,7 @@ id: cat-04/allowed-actions-permissive
 scenario_id: cat-04/01
 title: "Org Actions allow-list permits all actions"
 subject: org
+graph: node(Organization)
 severity: high
 confidence: high
 description: >

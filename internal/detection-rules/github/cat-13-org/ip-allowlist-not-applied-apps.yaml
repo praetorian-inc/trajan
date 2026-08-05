@@ -2,6 +2,7 @@ id: cat-04/ip-allowlist-not-applied-apps
 scenario_id: cat-04/09
 title: "GitHub App installed with admin perms — IP allowlist won't gate its traffic"
 subject: org
+graph: node(Organization)
 severity: high
 confidence: medium
 description: >

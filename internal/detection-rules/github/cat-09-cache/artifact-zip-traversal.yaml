@@ -2,6 +2,7 @@ id: cat-09/artifact-zip-traversal
 scenario_id: cat-09/08
 title: "Artifact (PR-produced) is downloaded and extracted without validation"
 subject: job
+graph: edge(READS, Job, Artifact)
 severity: high
 confidence: low
 description: >

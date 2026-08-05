@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Scope}} — Trajan findings</title>
+<style>{{.CSS}}</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <div>
+    <p class="eyebrow">Trajan{{with .Platform}} · {{.}}{{end}}</p>
+    <h1>{{.Scope}}</h1>
+    <p class="meta">
+      {{- if .Total -}}
+        {{.Total}} finding{{plural .Total}} across {{.RuleCount}} rule{{plural .RuleCount}}
+      {{- else -}}
+        No findings at the selected thresholds
+      {{- end -}}
+    </p>
+  </div>
+  <button type="button" class="iconbtn" id="theme" aria-label="Switch between light and dark" title="Switch between light and dark">
+    <svg class="i-sun" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.4A8.6 8.6 0 0 1 9.6 3.5a8.6 8.6 0 1 0 10.9 10.9Z"/></svg>
+  </button>
+</header>
+
+{{if .Total}}
+<div class="tiles">
+  <div class="tile"><span class="n">{{.Total}}</span><span class="k">Total</span></div>
+  {{range .Severities}}
+  <button type="button" class="tile s-{{.Key}}" data-filter="sev" data-value="{{.Key}}" aria-pressed="true">
+    <span class="n">{{.N}}</span><span class="k">{{.Label}}</span>
+  </button>
+  {{end}}
+</div>
+
+<div class="layout">
+<aside class="sidebar">
+  <section class="side-sec">
+    <p class="side-h">Jump to</p>
+    {{range .Severities}}
+    <button type="button" class="side-row s-{{.Key}}" data-jump="{{.Key}}">
+      <span class="dot"></span><span class="side-label">{{.Label}}</span><span class="side-n">{{.N}}</span>
+    </button>
+    {{end}}
+  </section>
+
+  <section class="side-sec">
+    <p class="side-h">Confidence</p>
+    {{range .Confidences}}
+    <button type="button" class="side-row" data-filter="conf" data-value="{{.Key}}" aria-pressed="true">
+      <span class="side-label">{{.Label}}</span><span class="side-n">{{.N}}</span>
+    </button>
+    {{end}}
+  </section>
+
+  {{if .RuleGroups}}
+  <section class="side-sec">
+    <p class="side-h">Rules <button type="button" class="side-clear" id="clearRules" hidden>clear</button></p>
+    <input id="ruleQ" class="side-input" type="search" placeholder="Filter rules…" autocomplete="off" spellcheck="false">
+    <div id="ruleList">
+      {{range .RuleGroups}}
+      <div class="rule-group">
+        {{if .Cat}}<p class="rule-cat">{{.Cat}}<span class="side-n">{{.N}}</span></p>{{end}}
+        {{range .Rules}}
+        <button type="button" class="side-row rule-row" data-filter="rule" data-value="{{.ID}}" aria-pressed="false" title="{{.ID}}">
+          <span class="side-label">{{.Leaf}}</span><span class="side-n">{{.N}}</span>
+        </button>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+</aside>
+
+<div class="main">
+<div class="toolbar">
+  <div class="search">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.7" cy="10.7" r="6.7"/><path d="M15.6 15.6 20 20"/></svg>
+    <input id="q" type="search" placeholder="Search finding titles…" autocomplete="off" spellcheck="false">
+  </div>
+  <button type="button" class="linkbtn" id="expandAll">Expand all</button>
+  <button type="button" class="linkbtn" id="reset">Reset</button>
+  <p class="tally"><b id="shown">{{.Total}}</b> of {{.Total}}</p>
+</div>
+
+<main>
+{{range .Findings}}{{$f := .}}
+<article class="finding s-{{.Severity}}" data-sev="{{.Severity}}" data-conf="{{.Confidence}}" data-rule="{{ruleID .}}">
+  <div class="f-head">
+    <span class="sev">{{titleCase .Severity}}</span>
+    <span class="fid">{{.FindingID}}</span>
+    <span class="conf">{{titleCase .Confidence}} confidence</span>
+  </div>
+
+  <h2>{{.Title}}</h2>
+
+  {{with location $f}}
+  <p class="subject"><code class="loc">{{.Path}}</code>{{with .Label}}<span class="loc-label">{{.}}</span>{{end}}</p>
+  {{end}}
+
+  {{if .Evidence}}
+  <p class="lbl-sec">Evidence</p>
+  <ul class="evidence">{{range .Evidence}}<li>{{.}}</li>{{end}}</ul>
+  {{end}}
+
+  {{with .Code}}
+  <p class="lbl-sec">Code <span class="path">{{codeCaption $f}}</span></p>
+  <pre>{{.Snippet}}</pre>
+  {{end}}
+
+  {{with .Remediation}}{{with trim .Hint}}
+  <p class="remedy"><strong>Remediation.</strong> {{.}}</p>
+  {{end}}{{end}}
+
+  {{with .AINotes}}{{with trim .Text}}
+  <p class="remedy"><strong>AI notes.</strong> {{.}}</p>
+  {{end}}{{end}}
+
+  {{if hasDetails $f}}
+  <details class="more">
+    <summary>Details</summary>
+    {{with trim .Description}}<p class="desc">{{.}}</p>{{end}}
+    {{with .Subject.Display}}<p class="meta-line"><span class="tag">Subject</span> <code>{{.}}</code></p>{{end}}
+    {{with .Rule}}
+    <p class="meta-line"><span class="tag">Rule</span> {{if .URL}}<a href="{{.URL}}">{{.ID}}</a>{{else}}<code>{{.ID}}</code>{{end}}</p>
+    {{end}}
+    {{if .Provenance}}
+    <table class="prov">
+      {{range provRows $f}}<tr><td class="k">{{.K}}</td><td class="v">{{.V}}</td></tr>{{end}}
+    </table>
+    {{end}}
+  </details>
+  {{end}}
+</article>
+{{end}}
+</main>
+
+<p class="panel" id="empty" hidden>No findings match the current filters.</p>
+</div>
+</div>
+{{else}}
+<p class="panel">Nothing to report — no finding met the severity and confidence thresholds for this run.</p>
+{{end}}
+
+<footer>
+  <span>Run <code>{{.RunID}}</code></span>
+  <span>Generated {{.GeneratedAt}}</span>
+</footer>
+
+</div>
+
+<button type="button" class="totop" id="toTop" aria-label="Back to top" title="Back to top" hidden>
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>
+</button>
+
+<script>{{.JS}}</script>
+</body>
+</html>

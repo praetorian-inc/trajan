@@ -2,6 +2,7 @@ id: cat-10/ai-agents-config-not-pinned
 scenario_id: cat-10/03
 title: "Agent invoked from workflow_run without restoring config from base ref"
 subject: job
+graph: attack(AGENT_INJECTION)
 severity: high
 confidence: medium
 description: >

@@ -12,6 +12,12 @@ const (
 	dirCollect   = "00-collect"
 	dirNormalize = "10-normalize"
 	dirScan      = "20-scan"
+	dirGraph     = "30-graph"
+	// Verification runs after the phases that decide what is worth verifying, and the
+	// ordinal says so. 30 was taken by the graph phase on main while this branch was
+	// open; nothing reads an attack directory by a hardcoded name, so the number moved
+	// rather than the phase.
+	dirAttack = "40-attack"
 )
 
 func CollectOrg(org string) string { return path.Join(dirCollect, "org", org+".json") }
@@ -69,6 +75,10 @@ func CollectMembers(org string) string {
 	return path.Join(dirCollect, "members", org+".json")
 }
 
+func CollectBranches(repo string) string {
+	return path.Join(dirCollect, "branches", repo+".json")
+}
+
 func CollectWorkflowYAML(repo, filename string) string {
 	return path.Join(dirCollect, "workflows", repo, filename)
 }
@@ -77,20 +87,20 @@ func CollectWorkflowMeta(repo, filename string) string {
 	return path.Join(dirCollect, "workflows", repo, filename+".meta.json")
 }
 
-// branchSlug strips a leading "refs/heads/" then maps "/" -> "__". Non-injective,
+// BranchSlug strips a leading "refs/heads/" then maps "/" -> "__". Non-injective,
 // matching safeRef: "release/1.0" -> "release__1.0".
-func branchSlug(ref string) string {
+func BranchSlug(ref string) string {
 	ref = strings.TrimPrefix(ref, "refs/heads/")
 	return strings.ReplaceAll(ref, "/", "__")
 }
 
 // repoBranchDir keeps the bare "<repo>" segment for the default branch so legacy
-// paths stay byte-stable; non-default branches get "<repo>@<branchSlug>".
+// paths stay byte-stable; non-default branches get "<repo>@<BranchSlug>".
 func repoBranchDir(repo, ref string, isDefault bool) string {
 	if isDefault {
 		return repo
 	}
-	return repo + "@" + branchSlug(ref)
+	return repo + "@" + BranchSlug(ref)
 }
 
 func CollectWorkflowYAMLBranch(repo, ref string, isDefault bool, filename string) string {
@@ -323,8 +333,6 @@ func NormalizeADOProjectAgentPool(project string, poolID int64) string {
 	return adoNorm("project-agent-pools", fmt.Sprintf("%s__%d.json", adoKey(project), poolID))
 }
 
-// ---- GitLab collect paths ----
-//
 // glKey sanitizes a GitLab group/project full path (slash-separated) for use as a
 // single path segment: anything outside [A-Za-z0-9.-] becomes '-'. '_' is folded
 // too, since multi-component keys are joined with "__" (adoKey's rationale).
@@ -461,8 +469,6 @@ func CollectGLUserMemberships(id int64) string {
 	return glCollect("user-memberships", fmt.Sprintf("%d.json", id))
 }
 
-// ---- GitLab normalize paths ----
-//
 // Node records key by glKey(subjectKey); jobs by project + workflow stem + job
 // name; chains one file per join. NormalizeGLChain is the GitLab analog of the
 // GitHub unexported chainPath.
@@ -498,15 +504,81 @@ func NormalizeJob(repo, workflow, jobID string) string {
 }
 
 func NormalizeJobBranch(repo, ref string, isDefault bool, workflow, jobID string) string {
-	return path.Join(dirNormalize, "jobs",
-		fmt.Sprintf("%s__%s__%s.json", repoBranchDir(repo, ref, isDefault), wfStem(workflow), jobID))
+	return path.Join(dirNormalize, "jobs", JobKey(repo, ref, isDefault, workflow, jobID)+".json")
+}
+
+// JobKey is a job's identity and its NormalizeJobBranch filename stem, derived
+// once so the two can never disagree.
+func JobKey(repo, ref string, isDefault bool, workflow, jobID string) string {
+	return fmt.Sprintf("%s__%s__%s", repoBranchDir(repo, ref, isDefault), wfStem(workflow), jobID)
+}
+
+// kind is "user" or "team"; kind prefixes the key so a user and a team sharing a
+// name land in different files.
+func NormalizePrincipal(kind, key string) string {
+	return path.Join(dirNormalize, "principals", kind+"__"+key+".json")
+}
+
+// scopeKey is the org name or a repo name.
+func NormalizeRunner(scopeKey string, runnerID int64) string {
+	return path.Join(dirNormalize, "runners", fmt.Sprintf("%s__%d.json", scopeKey, runnerID))
+}
+
+func NormalizeRunnerGroup(groupID int64) string {
+	return path.Join(dirNormalize, "runner-groups", fmt.Sprintf("%d.json", groupID))
+}
+
+// scopeKey is "<repo>" or "<repo>__<env>"; bucket is "actions", "codespaces", or
+// "dependabot", which distinguishes same-named secrets in different buckets.
+func NormalizeSecret(scopeKey, bucket, name string) string {
+	return path.Join(dirNormalize, "secrets", scopeKey+"__"+bucket+"__"+name+".json")
+}
+
+func NormalizeDeployKey(repo string, keyID int64) string {
+	return path.Join(dirNormalize, "deploy-keys", fmt.Sprintf("%s__%d.json", repo, keyID))
 }
 
 func Finding(ruleID, subjectHash string) string {
 	return path.Join(dirScan, "findings", ruleID+"__"+subjectHash+".json")
 }
 
+// AttackRoot is the phase directory every plan's own directory sits under.
+func AttackRoot() string { return dirAttack }
+
+// AttackDir is one plan's directory. A plan id carries the template's path
+// ("github/pwn-request"), so safePath folds the slash and one plan stays one
+// directory.
+func AttackDir(planID string) string { return path.Join(dirAttack, safePath(planID)) }
+
+func AttackPlan(planID string) string { return path.Join(AttackDir(planID), "_plan.json") }
+
+func AttackLedger(planID string) string { return path.Join(AttackDir(planID), "_ledger.jsonl") }
+
+func AttackDryRun(planID string) string { return path.Join(AttackDir(planID), "dry-run.json") }
+
+func AttackSteps(planID string) string { return path.Join(AttackDir(planID), "steps") }
+
+func AttackStep(planID string, seq int, stepID string) string {
+	return path.Join(AttackSteps(planID), fmt.Sprintf("%03d-%s.json", seq, stepID))
+}
+
+func AttackLoot(planID, name string) string {
+	return path.Join(AttackDir(planID), "loot", name)
+}
+
+func AttackFinding(planID, fingerprint string) string {
+	return path.Join(AttackDir(planID), "findings", fingerprint+".json")
+}
+
+func AttackCleanup(planID string) string { return path.Join(AttackDir(planID), "cleanup.json") }
+
 func ScanSummary() string { return path.Join(dirScan, "_summary.json") }
+
+func GraphNodes() string { return path.Join(dirGraph, "nodes.json") }
+
+func GraphEdges() string { return path.Join(dirGraph, "edges.json") }
+
+func GraphSummary() string { return path.Join(dirGraph, "_summary.json") }
 
 func RunMeta() string { return "_meta.json" }
 

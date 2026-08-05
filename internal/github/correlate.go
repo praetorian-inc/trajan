@@ -1,6 +1,7 @@
 package github
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -36,22 +37,38 @@ func correlate(prior engine.PriorPhase, cp engine.CurrentPhase, _ []Job) error {
 	if err != nil {
 		return fmt.Errorf("correlate: load apps: %w", err)
 	}
+	principals, err := loadRecords(prior, "10-normalize/principals")
+	if err != nil {
+		return fmt.Errorf("correlate: load principals: %w", err)
+	}
+	deployKeys, err := loadRecords(prior, "10-normalize/deploy-keys")
+	if err != nil {
+		return fmt.Errorf("correlate: load normalized deploy-keys: %w", err)
+	}
 	deployKeyFiles, err := prior.IterJSON("00-collect/deploy-keys")
 	if err != nil {
 		return fmt.Errorf("correlate: load deploy-keys: %w", err)
 	}
+	branchesByRepo, err := loadBranchInventory(prior)
+	if err != nil {
+		return fmt.Errorf("correlate: load branches: %w", err)
+	}
 
-	coverage, coverageEntries := deriveBranchCoverage(repos, rulesets)
+	coverage, coverageEntries := deriveBranchCoverage(repos, rulesets, branchesByRepo)
+	effective, effectiveEntries := deriveEffectiveRuleset(coverageEntries, rulesets, repos)
+	mintable, mintRepos := deriveAppMintable(jobs, apps)
 
 	writers := []func() error{
 		func() error { return cp.Write(chainPath("reusable-callgraph"), deriveReusableCallgraph(jobs)) },
 		func() error { return cp.Write(chainPath("trigger-channels"), deriveTriggerChannels(jobs)) },
 		func() error { return cp.Write(chainPath("cache-keyspace"), deriveCacheKeyspace(jobs)) },
 		func() error { return cp.Write(chainPath("branch-coverage"), coverage) },
+		func() error { return cp.Write(chainPath("effective-ruleset"), effective) },
 		func() error {
-			return cp.Write(chainPath("effective-ruleset"), deriveEffectiveRuleset(coverageEntries, rulesets))
+			return cp.Write(chainPath("capability-edges"),
+				deriveCapabilityEdges(effectiveEntries, principals, deployKeys, repos, apps, mintRepos))
 		},
-		func() error { return cp.Write(chainPath("app-mintable"), deriveAppMintable(jobs, apps)) },
+		func() error { return cp.Write(chainPath("app-mintable"), mintable) },
 		func() error { return cp.Write(chainPath("env-deployments"), deriveEnvDeployments(jobs, envs)) },
 		func() error { return cp.Write(chainPath("deploy-key-reuse"), deriveDeployKeyReuse(deployKeyFiles)) },
 		func() error { return cp.Write(chainPath("job-output-flow"), deriveJobOutputFlow(jobs)) },
@@ -175,16 +192,17 @@ func deriveReusableCallgraph(jobs []map[string]any) map[string]any {
 					"triggers":          mGet(job, "triggers"),
 				},
 				"callee": map[string]any{
-					"uses":        usesVal,
-					"owner":       mGet(callee, "owner"),
-					"repo":        mGet(callee, "repo"),
-					"path":        mGet(callee, "path"),
-					"ref":         ref,
-					"ref_kind":    kind,
-					"ref_mutable": mutable,
-					"is_local":    isLocal,
-					"inputs":      inputs,
-					"secrets":     secrets,
+					"uses":            usesVal,
+					"owner":           mGet(callee, "owner"),
+					"repo":            mGet(callee, "repo"),
+					"path":            mGet(callee, "path"),
+					"ref":             ref,
+					"ref_kind":        kind,
+					"ref_mutable":     mutable,
+					"is_local":        isLocal,
+					"inputs":          inputs,
+					"secrets":         secrets,
+					"secrets_inherit": mBool(callee, "secrets_inherit"),
 				},
 			})
 		}
@@ -369,15 +387,17 @@ func deriveTriggerChannels(jobs []map[string]any) map[string]any {
 	}
 
 	artifactHandoffs := []map[string]any{}
+	calleeInputs := calleeInputsByWorkflow(jobs)
 	writersByRepoName := map[[2]string][]map[string]any{}
 	for _, j := range jobs {
 		for _, name := range artifactNames(j, "artifact_writes") {
-			key := [2]string{mStr(j, "repo"), name}
+			key := [2]string{mStr(j, "repo"), resolveInputRef(name, calleeInputs[calleeWorkflow(j)])}
 			writersByRepoName[key] = append(writersByRepoName[key], j)
 		}
 	}
 	for _, j := range jobs {
-		for _, name := range artifactNames(j, "artifact_reads") {
+		for _, raw := range artifactNames(j, "artifact_reads") {
+			name := resolveInputRef(raw, calleeInputs[calleeWorkflow(j)])
 			for _, writer := range writersByRepoName[[2]string{mStr(j, "repo"), name}] {
 				if mStr(writer, "_id") == mStr(j, "_id") {
 					continue
@@ -465,6 +485,60 @@ func orEmptyMap(v any) any {
 	return map[string]any{}
 }
 
+// A reusable callee names its artifacts "${{ inputs.X }}" and only the call site
+// knows X, so without resolving it the handoff from the caller's writer to the
+// callee's reader is invisible.
+// Two call sites disagreeing on an input leaves that input unresolvable: picking
+// either value would name an artifact the other caller never produces.
+func calleeInputsByWorkflow(jobs []map[string]any) map[[2]string]map[string]any {
+	out := map[[2]string]map[string]any{}
+	disputed := map[[2]string]map[string]bool{}
+	for _, j := range jobs {
+		for _, c := range mList(j, "calls_reusable_workflows") {
+			call, _ := c.(map[string]any)
+			repo := cmp.Or(mStr(call, "repo"), mStr(j, "repo"))
+			k := [2]string{repo, path.Base(mStr(call, "path"))}
+			if out[k] == nil {
+				out[k] = map[string]any{}
+				disputed[k] = map[string]bool{}
+			}
+			for name, v := range mMap(call, "inputs") {
+				if prev, seen := out[k][name]; seen && fmt.Sprint(prev) != fmt.Sprint(v) {
+					disputed[k][name] = true
+				}
+				out[k][name] = v
+			}
+		}
+	}
+	for k, names := range disputed {
+		for name := range names {
+			delete(out[k], name)
+		}
+	}
+	return out
+}
+
+func calleeWorkflow(job map[string]any) [2]string {
+	return [2]string{mStr(job, "repo"), mStr(job, "workflow_filename")}
+}
+
+func resolveInputRef(name string, inputs map[string]any) string {
+	ref, ok := strings.CutPrefix(name, "${{")
+	if !ok {
+		return name
+	}
+	if ref, ok = strings.CutSuffix(ref, "}}"); !ok {
+		return name
+	}
+	if ref, ok = strings.CutPrefix(strings.TrimSpace(ref), "inputs."); !ok {
+		return name
+	}
+	if v, _ := inputs[ref].(string); v != "" && !strings.Contains(v, "${{") {
+		return v
+	}
+	return name
+}
+
 func artifactNames(job map[string]any, key string) []string {
 	var out []string
 	for _, a := range mList(job, key) {
@@ -499,24 +573,9 @@ func containsRepoDispatchEmit(job map[string]any) bool {
 	return false
 }
 
-var cacheExprRe = regexp.MustCompile(`(?s)\$\{\{.*?\}\}`)
-var cacheChunkRe = regexp.MustCompile(`[-_/]+`)
-
-func literalPrefix(key string) string {
-	cleaned := cacheExprRe.ReplaceAllString(key, "")
-	var out []string
-	for _, c := range cacheChunkRe.Split(cleaned, -1) {
-		c = strings.TrimSpace(c)
-		if c == "" {
-			continue
-		}
-		out = append(out, c)
-		if len(out) >= 2 {
-			break
-		}
-	}
-	return strings.Join(out, "/")
-}
+// GitHub scopes caches per repository, so two repos writing "npm-..." share no
+// cache and the (repo, prefix) pair is the entity, not the prefix.
+type cacheScope struct{ repo, prefix string }
 
 func deriveCacheKeyspace(jobs []map[string]any) map[string]any {
 	writesByPrefix := map[string][]map[string]any{}
@@ -526,20 +585,19 @@ func deriveCacheKeyspace(jobs []map[string]any) map[string]any {
 		for _, c := range mList(job, opKey) {
 			var key, scope string
 			var restore any
-			switch cv := c.(type) {
-			case map[string]any:
-				key, _ = (mGet(cv, "key_template")).(string)
+			if cm, ok := c.(map[string]any); ok {
+				key, _ = (mGet(cm, "key_template")).(string)
 				if key == "" {
-					key, _ = mGet(cv, "key").(string)
+					key, _ = mGet(cm, "key").(string)
 				}
-				scope, _ = mGet(cv, "scope").(string)
-				restore = mGet(cv, "restore_keys")
-			case string:
-				key = cv
+				scope, _ = mGet(cm, "scope").(string)
+				restore = mGet(cm, "restore_keys")
+			} else if s, ok := c.(string); ok {
+				key = s
 			}
-			prefix := literalPrefix(key)
-			if prefix == "" && strings.HasPrefix(scope, "scope-prefix:") {
-				prefix = strings.SplitN(scope, ":", 2)[1]
+			prefix, ok := strings.CutPrefix(scope, "scope-prefix:")
+			if !ok {
+				prefix = cacheKeyPrefix(key)
 			}
 			if prefix == "" {
 				continue
@@ -557,19 +615,22 @@ func deriveCacheKeyspace(jobs []map[string]any) map[string]any {
 		collect(job, "cache_reads", readsByPrefix)
 	}
 
-	prefixes := map[string]bool{}
-	for p := range writesByPrefix {
-		prefixes[p] = true
+	writesByScope, readsByScope := groupByCacheScope(writesByPrefix), groupByCacheScope(readsByPrefix)
+	scopes := map[cacheScope]bool{}
+	for s := range writesByScope {
+		scopes[s] = true
 	}
-	for p := range readsByPrefix {
-		prefixes[p] = true
+	for s := range readsByScope {
+		scopes[s] = true
 	}
-	sortedPrefixes := slices.Sorted(maps.Keys(prefixes))
+	sortedScopes := slices.SortedFunc(maps.Keys(scopes), func(a, b cacheScope) int {
+		return cmp.Or(cmp.Compare(a.repo, b.repo), cmp.Compare(a.prefix, b.prefix))
+	})
 
 	prefixOverlaps := []map[string]any{}
-	for _, prefix := range sortedPrefixes {
-		ws := writesByPrefix[prefix]
-		rs := readsByPrefix[prefix]
+	for _, sc := range sortedScopes {
+		ws := writesByScope[sc]
+		rs := readsByScope[sc]
 		allJobs := map[string]map[string]any{}
 		order := []string{}
 		add := func(entries []map[string]any) {
@@ -600,8 +661,9 @@ func deriveCacheKeyspace(jobs []map[string]any) map[string]any {
 			}
 		}
 		prefixOverlaps = append(prefixOverlaps, map[string]any{
-			"_id":                   "cache_overlap__" + prefix,
-			"key_prefix":            prefix,
+			"_id":                   "cache_overlap__" + sc.repo + "__" + sc.prefix,
+			"repo":                  sc.repo,
+			"key_prefix":            sc.prefix,
 			"writer_count":          len(ws),
 			"reader_count":          len(rs),
 			"writers":               nonNilSlice(ws),
@@ -640,6 +702,18 @@ func nilIfEmptyScope(scope string, src any) any {
 	return scope
 }
 
+func groupByCacheScope(byPrefix map[string][]map[string]any) map[cacheScope][]map[string]any {
+	out := map[cacheScope][]map[string]any{}
+	for prefix, entries := range byPrefix {
+		for _, e := range entries {
+			job, _ := e["job"].(map[string]any)
+			sc := cacheScope{mStr(job, "repo"), prefix}
+			out[sc] = append(out[sc], e)
+		}
+	}
+	return out
+}
+
 func cacheJobSummary(job map[string]any) map[string]any {
 	return map[string]any{
 		"_id":                       mGet(job, "_id"),
@@ -655,10 +729,10 @@ func cacheJobSummary(job map[string]any) map[string]any {
 	}
 }
 
-func deriveBranchCoverage(repos, rulesets []map[string]any) (map[string]any, []map[string]any) {
+func deriveBranchCoverage(repos, rulesets []map[string]any, branchesByRepo map[string][]string) (map[string]any, []map[string]any) {
 	var orgRulesets []map[string]any
 	for _, rs := range rulesets {
-		if mStr(rs, "scope") == "org" && !mBool(rs, "_empty") && !mBool(rs, "_unavailable") {
+		if mStr(rs, "scope") == "org" && !mBool(rs, "_empty") && !mBool(rs, "_unavailable") && targetsBranch(rs) {
 			orgRulesets = append(orgRulesets, rs)
 		}
 	}
@@ -669,9 +743,11 @@ func deriveBranchCoverage(repos, rulesets []map[string]any) (map[string]any, []m
 		if repoName == "" {
 			repoName = mStr(repo, "_id")
 		}
-		branch := mStr(repo, "default_branch")
-		if branch == "" {
-			branch = "main"
+		repoIDf, _ := numericValue(mGet(repo, "repo_id"))
+		repoID := int64(repoIDf)
+		def := mStr(repo, "default_branch")
+		if def == "" {
+			def = "main"
 		}
 
 		var repoRulesets []map[string]any
@@ -684,72 +760,111 @@ func deriveBranchCoverage(repos, rulesets []map[string]any) (map[string]any, []m
 				unavailable = true
 				continue
 			}
-			if mBool(rs, "_empty") {
+			if mBool(rs, "_empty") || !targetsBranch(rs) {
 				continue
 			}
 			repoRulesets = append(repoRulesets, rs)
 		}
 
-		applicable := []map[string]any{}
-		for _, rs := range append(append([]map[string]any{}, orgRulesets...), repoRulesets...) {
-			conds := mMap(rs, "conditions")
-			refConds := mMap(conds, "ref_name")
-			refIncludes := asStrings(mGet(refConds, "include"))
-			refExcludes := asStrings(mGet(refConds, "exclude"))
-			if !refPatternMatches(branch, refIncludes) {
-				continue
-			}
-			if len(refExcludes) > 0 && refPatternMatches(branch, refExcludes) {
-				continue
-			}
-			if mStr(rs, "scope") == "org" {
-				repoConds := mMap(conds, "repository_name")
-				rInc := asStrings(mGet(repoConds, "include"))
-				rExc := asStrings(mGet(repoConds, "exclude"))
-				if len(rInc) > 0 && !slices.Contains(rInc, "~ALL") && !refPatternMatches(repoName, rInc) {
-					continue
-				}
-				if len(rExc) > 0 && refPatternMatches(repoName, rExc) {
-					continue
-				}
-			}
-			applicable = append(applicable, map[string]any{
-				"ruleset_id":                      mGet(rs, "ruleset_id"),
-				"scope":                           mGet(rs, "scope"),
-				"name":                            mGet(rs, "name"),
-				"enforcement":                     mGet(rs, "enforcement"),
-				"requires_pull_request":           mGet(rs, "requires_pull_request"),
-				"required_approving_review_count": mGet(rs, "required_approving_review_count"),
-				"any_bypass_present":              mGet(mMap(rs, "bypass"), "any_bypass_present"),
-			})
+		branches := branchesByRepo[repoName]
+		if len(branches) == 0 {
+			branches = []string{def}
 		}
 
-		legacyBP := mMap(repo, "default_branch_protection_summary")
-		coverage = append(coverage, map[string]any{
-			"_id":                 repoName + "__" + branch,
-			"repo":                repoName,
-			"branch":              branch,
-			"ref_unavailable":     unavailable,
-			"applicable_rulesets": applicable,
-			"applicable_count":    len(applicable),
-			"has_active_ruleset":  anyApplicable(applicable, func(a map[string]any) bool { return mStr(a, "enforcement") == "active" }),
-			"has_pr_required_ruleset": anyApplicable(applicable, func(a map[string]any) bool {
-				return mBool(a, "requires_pull_request") && mStr(a, "enforcement") == "active"
-			}),
-			"legacy_protection_present": mGet(repo, "default_branch_protection_present"),
-			"legacy_required_reviews":   mGet(legacyBP, "required_reviews"),
-			"legacy_enforce_admins":     mGet(legacyBP, "enforce_admins"),
-			"any_bypass_present_in_active": anyApplicable(applicable, func(a map[string]any) bool {
-				return mBool(a, "any_bypass_present") && mStr(a, "enforcement") == "active"
-			}),
-			"_provenance": []any{map[string]any{"file": path.Join("10-normalize", "repos", repoName+".json")}},
-		})
+		for _, branch := range branches {
+			applicable := []map[string]any{}
+			unevaluable := []any{}
+			for _, rs := range append(append([]map[string]any{}, orgRulesets...), repoRulesets...) {
+				conds := mMap(rs, "conditions")
+				refConds := mMap(conds, "ref_name")
+				refIncludes := asStrings(mGet(refConds, "include"))
+				refExcludes := asStrings(mGet(refConds, "exclude"))
+				if !refMatchAny(branch, def, refIncludes) {
+					continue
+				}
+				if len(refExcludes) > 0 && refMatchAny(branch, def, refExcludes) {
+					continue
+				}
+				if mStr(rs, "scope") == "org" {
+					decoded := decodeConditions(conds)
+					if !orgRepoGate(decoded, repoName, repoID, nil) {
+						// Repo properties are not collected, so a property-scoped
+						// org ruleset fails the gate for want of data rather than
+						// because it does not apply.
+						if decoded.RepositoryProperty != nil {
+							unevaluable = append(unevaluable, mGet(rs, "ruleset_id"))
+						}
+						continue
+					}
+				}
+				applicable = append(applicable, map[string]any{
+					"ruleset_id":                      mGet(rs, "ruleset_id"),
+					"scope":                           mGet(rs, "scope"),
+					"name":                            mGet(rs, "name"),
+					"enforcement":                     mGet(rs, "enforcement"),
+					"requires_pull_request":           mGet(rs, "requires_pull_request"),
+					"required_approving_review_count": mGet(rs, "required_approving_review_count"),
+					"any_bypass_present":              mGet(mMap(rs, "bypass"), "any_bypass_present"),
+				})
+			}
+
+			// Legacy protection is fetched for the default branch only, so on any
+			// other branch its absence is unknown rather than false.
+			isDefault := branch == def
+			legacyPresent := mGet(repo, "default_branch_protection_present")
+			legacyBP := mMap(repo, "default_branch_protection_summary")
+			if !isDefault {
+				legacyPresent, legacyBP = nil, nil
+			}
+
+			coverage = append(coverage, map[string]any{
+				"_id":                 repoName + "__" + engine.BranchSlug(branch),
+				"repo":                repoName,
+				"branch":              branch,
+				"is_default_branch":   isDefault,
+				"ref_unavailable":     unavailable,
+				"applicable_rulesets": applicable,
+				"applicable_count":    len(applicable),
+				"has_active_ruleset":  anyApplicable(applicable, func(a map[string]any) bool { return mStr(a, "enforcement") == "active" }),
+				"has_pr_required_ruleset": anyApplicable(applicable, func(a map[string]any) bool {
+					return mBool(a, "requires_pull_request") && mStr(a, "enforcement") == "active"
+				}),
+				"org_rulesets_unevaluable":         unevaluable,
+				"legacy_protection_present":        legacyPresent,
+				"legacy_protection_unknown":        !isDefault,
+				"legacy_protection_summary":        legacyBP,
+				"legacy_required_reviews":          mGet(legacyBP, "required_reviews"),
+				"legacy_enforce_admins":            mGet(legacyBP, "enforce_admins"),
+				"can_approve_pull_request_reviews": mGet(repo, "can_approve_pull_request_reviews"),
+				"any_bypass_present_in_active": anyApplicable(applicable, func(a map[string]any) bool {
+					return mBool(a, "any_bypass_present") && mStr(a, "enforcement") == "active"
+				}),
+				"_provenance": []any{map[string]any{"file": path.Join("10-normalize", "repos", repoName+".json")}},
+			})
+		}
 	}
 
 	return map[string]any{
 		"chain":                "branch-coverage",
 		"repo_branch_coverage": coverage,
 	}, coverage
+}
+
+// A ruleset that omits target is a branch ruleset — "branch" is the API default.
+func targetsBranch(rs map[string]any) bool {
+	t := mGet(rs, "target")
+	return t == nil || t == "branch"
+}
+
+func setList(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for k, ok := range set {
+		if ok {
+			out = append(out, k)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 func anyApplicable(items []map[string]any, pred func(map[string]any) bool) bool {
@@ -761,36 +876,71 @@ func anyApplicable(items []map[string]any, pred func(map[string]any) bool) bool 
 	return false
 }
 
-func refPatternMatches(branch string, patterns []string) bool {
-	for _, p := range patterns {
-		if p == "~ALL" || p == "~DEFAULT_BRANCH" || p == branch {
-			return true
-		}
-		if fnmatchCase(branch, p) {
-			return true
-		}
-		if strings.HasPrefix(p, "refs/heads/") && fnmatchCase("refs/heads/"+branch, p) {
-			return true
-		}
+// correlate sees conditions as a decoded map while orgRepoGate takes the typed
+// shape collect parses; round-tripping keeps one implementation of the gate
+// rather than a second, subtly different copy.
+func decodeConditions(conds map[string]any) rulesetConditions {
+	var out rulesetConditions
+	if b, err := json.Marshal(conds); err == nil {
+		_ = json.Unmarshal(b, &out)
 	}
-	return false
+	return out
 }
 
-func deriveEffectiveRuleset(entries, rulesets []map[string]any) map[string]any {
+// A run collected before 00-collect/branches existed yields an empty map, and
+// deriveBranchCoverage falls back to the repo's default branch.
+func loadBranchInventory(prior engine.PriorPhase) (map[string][]string, error) {
+	recs, err := loadRecords(prior, "00-collect/branches")
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(recs))
+	for _, rec := range recs {
+		data := mMap(rec, "data")
+		if repo := mStr(data, "repo"); repo != "" {
+			out[repo] = asStrings(mGet(data, "branches"))
+		}
+	}
+	return out, nil
+}
+
+// CODEOWNERS is read off the repository's default branch, so the coverage it
+// reports is only claimed for the branch that file governs; is_default_branch
+// rides along so a rule can say so.
+func deriveEffectiveRuleset(entries, rulesets, repos []map[string]any) (map[string]any, []map[string]any) {
 	fullByID := map[string]map[string]any{}
 	for _, rs := range rulesets {
 		if rid := idKey(mGet(rs, "ruleset_id")); rid != "" {
 			fullByID[rid] = rs
 		}
 	}
+	codeowners := map[string]map[string]any{}
+	for _, r := range repos {
+		codeowners[mStr(r, "repo")] = r
+	}
 
 	effective := []map[string]any{}
 	for _, entry := range entries {
 		var active []map[string]any
+		rulesetsByID := map[string]any{}
 		applicable, _ := entry["applicable_rulesets"].([]map[string]any)
 		for _, am := range applicable {
 			rid := idKey(mGet(am, "ruleset_id"))
-			if full, ok := fullByID[rid]; ok && mStr(full, "enforcement") == "active" {
+			full, ok := fullByID[rid]
+			if !ok {
+				continue
+			}
+			bypass := mMap(full, "bypass")
+			rulesetsByID[rid] = map[string]any{
+				"id":                    mGet(full, "ruleset_id"),
+				"scope":                 mGet(full, "scope"),
+				"enforcement":           mGet(full, "enforcement"),
+				"rule_types":            listOrEmpty(full, "rule_types"),
+				"requires_pull_request": mGet(full, "requires_pull_request"),
+				"bypass_always":         listOrEmpty(bypass, "bypass_always"),
+				"bypass_pull_request":   listOrEmpty(bypass, "bypass_pull_request_only"),
+			}
+			if mStr(full, "enforcement") == "active" {
 				active = append(active, full)
 			}
 		}
@@ -798,10 +948,14 @@ func deriveEffectiveRuleset(entries, rulesets []map[string]any) map[string]any {
 		ruleTypesActive := map[string]bool{}
 		bypassPerRule := map[string][]any{}
 		requirePRWithBypass := false
+		codeOwnerReview, dismissStale, lastPushApproval := false, false, false
 		var effectiveApproving any
 		var activeIDs []any
 		for _, rs := range active {
 			activeIDs = append(activeIDs, mGet(rs, "ruleset_id"))
+			codeOwnerReview = codeOwnerReview || mGet(rs, "require_code_owner_review") == true
+			dismissStale = dismissStale || mGet(rs, "dismiss_stale_reviews_on_push") == true
+			lastPushApproval = lastPushApproval || mGet(rs, "require_last_push_approval") == true
 			ruleTypes := asStrings(mGet(rs, "rule_types"))
 			for _, rt := range ruleTypes {
 				ruleTypesActive[rt] = true
@@ -823,25 +977,63 @@ func deriveEffectiveRuleset(entries, rulesets []map[string]any) map[string]any {
 			}
 		}
 
+		legacyBP := mMap(entry, "legacy_protection_summary")
+		legacyRequiresPR := mGet(legacyBP, "required_pull_request_reviews")
+		requiresPR := ruleTypesActive["pull_request"] || legacyRequiresPR == true
+		controlUnknown := mBool(entry, "ref_unavailable") || mBool(entry, "legacy_protection_unknown")
+
+		approvals := effectiveApproving
+		if legacy, ok := numericValue(mGet(legacyBP, "required_reviews")); ok {
+			if cur, have := numericValue(approvals); !have || legacy > cur {
+				approvals = mGet(legacyBP, "required_reviews")
+			}
+		}
+		approvalCount, _ := numericValue(approvals)
+
+		gaps := setList(map[string]bool{
+			"no_control":                 len(active) == 0 && !controlUnknown && mGet(entry, "legacy_protection_present") != true,
+			"no_approvals_required":      requiresPR && approvalCount == 0,
+			"single_approval_required":   requiresPR && approvalCount == 1,
+			"no_status_checks":           !ruleTypesActive["required_status_checks"] && mGet(legacyBP, "required_status_checks") != true,
+			"code_owner_review_absent":   !codeOwnerReview && mGet(legacyBP, "require_code_owner_reviews") != true,
+			"stale_approvals_survive":    !dismissStale && mGet(legacyBP, "dismiss_stale_reviews") != true,
+			"last_push_unapproved":       !lastPushApproval && mGet(legacyBP, "require_last_push_approval") != true,
+			"actions_can_approve":        mGet(entry, "can_approve_pull_request_reviews") == true,
+			"control_visibility_unknown": controlUnknown,
+		})
+
 		effective = append(effective, map[string]any{
 			"_id":                                       mGet(entry, "_id"),
 			"repo":                                      mGet(entry, "repo"),
 			"branch":                                    mGet(entry, "branch"),
+			"is_default_branch":                         mGet(entry, "is_default_branch"),
+			"codeowners":                                mGet(codeowners[mStr(entry, "repo")], "codeowners"),
 			"active_ruleset_ids":                        nonNilSlice(activeIDs),
 			"active_ruleset_count":                      len(active),
-			"rule_types_active":                         slices.Sorted(maps.Keys(ruleTypesActive)),
+			"rule_types_active":                         nonNilSlice(slices.Sorted(maps.Keys(ruleTypesActive))),
 			"requires_pull_request_active":              ruleTypesActive["pull_request"],
 			"requires_required_status_checks":           ruleTypesActive["required_status_checks"],
 			"requires_non_fast_forward":                 ruleTypesActive["non_fast_forward"],
 			"requires_branch_creation_only_admins":      ruleTypesActive["creation"],
 			"restricts_deletions":                       ruleTypesActive["deletion"],
+			"restricts_updates":                         ruleTypesActive["update"],
 			"signed_commits_required":                   ruleTypesActive["required_signatures"],
+			"rulesets_by_id":                            rulesetsByID,
 			"bypass_present_per_rule":                   nonNilAnyMapList(bypassPerRule),
 			"any_bypass_present_in_active":              mGet(entry, "any_bypass_present_in_active"),
 			"require_pr_with_bypass":                    requirePRWithBypass,
-			"min_required_approving_review_count":       effectiveApproving,
-			"effective_required_approving_review_count": effectiveApproving,
+			"effective_required_approving_review_count": approvals,
+			"require_code_owner_review_active":          codeOwnerReview,
+			"require_last_push_approval_active":         lastPushApproval,
+			"dismiss_stale_reviews_on_push_active":      dismissStale,
 			"legacy_protection_present":                 mGet(entry, "legacy_protection_present"),
+			"legacy_required_reviews":                   mGet(entry, "legacy_required_reviews"),
+			"legacy_requires_pull_request":              legacyRequiresPR,
+			"legacy_enforce_admins":                     mGet(entry, "legacy_enforce_admins"),
+			"legacy_lock_branch":                        mGet(legacyBP, "lock_branch"),
+			"control_unknown":                           controlUnknown,
+			"org_rulesets_unevaluable":                  listOrEmpty(entry, "org_rulesets_unevaluable"),
+			"gaps":                                      gaps,
 			"_provenance":                               mGet(entry, "_provenance"),
 		})
 	}
@@ -849,31 +1041,385 @@ func deriveEffectiveRuleset(entries, rulesets []map[string]any) map[string]any {
 	return map[string]any{
 		"chain":                "effective-ruleset",
 		"effective_per_branch": effective,
+	}, effective
+}
+
+type writePrincipal struct {
+	Kind    string
+	ID      string
+	Name    string
+	Via     string
+	Perm    any
+	IsAdmin bool
+	UserID  string
+	AppID   string
+	TeamIDs []string
+	Prov    []any
+}
+
+// deriveCapabilityEdges joins every write-capable principal against the branches
+// effective-ruleset resolved a control state for, one record per (principal,
+// branch). The branch-level gaps live on the effective record; the edge carries
+// only what depends on the principal — which controls it circumvents and which
+// routes onto the branch that leaves open.
+func deriveCapabilityEdges(effective, principals, deployKeys, repos, apps []map[string]any, mintRepos map[string][]string) map[string]any {
+	defaultBranch := map[string]string{}
+	archived := map[string]bool{}
+	// Whether a run's GITHUB_TOKEN can cast an approving review at all. Neither
+	// half sits on a branch record, so no query over the graph can recover it.
+	tokenCanApprove := map[string]bool{}
+	for _, r := range repos {
+		defaultBranch[mStr(r, "repo")] = mStr(r, "default_branch")
+		archived[mStr(r, "repo")] = mBool(r, "archived")
+		tokenCanApprove[mStr(r, "repo")] = mBool(r, "actions_enabled") &&
+			mBool(r, "can_approve_pull_request_reviews")
+	}
+
+	teamsOf := map[string][]string{}
+	for _, p := range principals {
+		tid := idKey(mGet(p, "team_id"))
+		if mStr(p, "kind") != "team" || tid == "" {
+			continue
+		}
+		for _, m := range mList(p, "members") {
+			mm, _ := m.(map[string]any)
+			if login := mStr(mm, "login"); login != "" {
+				teamsOf[login] = append(teamsOf[login], tid)
+			}
+		}
+	}
+
+	byRepo := map[string][]writePrincipal{}
+	for _, p := range principals {
+		kind := mStr(p, "kind")
+		name := cmp.Or(mStr(p, "login"), mStr(p, "slug"))
+		for _, g := range mList(p, "repo_grants") {
+			gm, _ := g.(map[string]any)
+			repo := mStr(gm, "repo")
+			if repo == "" || !mBool(gm, "can_push") {
+				continue
+			}
+			wp := writePrincipal{
+				Kind:    kind,
+				ID:      mStr(p, "_id"),
+				Name:    name,
+				Via:     "team_grant",
+				Perm:    mGet(gm, "permission"),
+				IsAdmin: mBool(gm, "is_admin"),
+				TeamIDs: []string{idKey(mGet(p, "team_id"))},
+				Prov:    listOrEmpty(p, "_provenance"),
+			}
+			if kind == "user" {
+				wp.Via = "direct_collaborator"
+				if mBool(gm, "via_outside_collaboration") {
+					wp.Via = "outside_collaborator"
+				}
+				wp.UserID = idKey(mGet(p, "user_id"))
+				wp.TeamIDs = teamsOf[name]
+			}
+			byRepo[repo] = append(byRepo[repo], wp)
+		}
+	}
+	for _, k := range deployKeys {
+		repo := mStr(k, "repo")
+		if repo == "" || !mBool(k, "can_push") {
+			continue
+		}
+		byRepo[repo] = append(byRepo[repo], writePrincipal{
+			Kind: "deploy_key",
+			ID:   mStr(k, "_id"),
+			Name: cmp.Or(mStr(k, "title"), mStr(k, "fingerprint")),
+			Via:  "deploy_key",
+			Prov: listOrEmpty(k, "_provenance"),
+		})
+	}
+	// repository_selection "all" IS the repo set. A "selected" installation needs
+	// the installation-repositories list collect never fetches, so its scope is
+	// narrowed to the repositories where a job actually mints its token — sound
+	// without that call, and the only repositories where the grant is reachable
+	// from a workflow anyway. administration:write is the app analogue of repo
+	// admin — it is the permission that removes the control itself.
+	for _, a := range apps {
+		perms := mMap(a, "permissions")
+		if mStr(perms, "contents") != "write" {
+			continue
+		}
+		slug := mStr(a, "app_slug")
+		scope, via := mintRepos[slug], "app_token_mint"
+		if mStr(a, "repository_selection") == "all" {
+			scope, via = nil, "app_installation"
+			for _, r := range repos {
+				if repo := mStr(r, "repo"); repo != "" {
+					scope = append(scope, repo)
+				}
+			}
+		}
+		wp := writePrincipal{
+			Kind:    "app",
+			ID:      mStr(a, "_id"),
+			Name:    slug,
+			Via:     via,
+			IsAdmin: mStr(perms, "administration") == "write",
+			AppID:   idKey(mGet(a, "app_id")),
+			Prov:    listOrEmpty(a, "_provenance"),
+		}
+		for _, repo := range scope {
+			byRepo[repo] = append(byRepo[repo], wp)
+		}
+	}
+
+	edges := []map[string]any{}
+	for _, eff := range effective {
+		repo, branch := mStr(eff, "repo"), mStr(eff, "branch")
+		active := activeRulesetDetail(eff)
+		legacyLock := mGet(eff, "legacy_lock_branch") == true
+		legacyRequiresPR := mGet(eff, "legacy_requires_pull_request") == true
+		legacyExemptsAdmins := mGet(eff, "legacy_enforce_admins") == false
+		// An org-scope ruleset survives repo admin; legacy protection and a
+		// repo-scope ruleset do not.
+		removable := mGet(eff, "legacy_protection_present") == true ||
+			slices.ContainsFunc(active, func(rs map[string]any) bool { return mStr(rs, "scope") == "repo" })
+		approvals, _ := numericValue(mGet(eff, "effective_required_approving_review_count"))
+
+		for _, wp := range byRepo[repo] {
+			matched := []any{}
+			unproven := false
+			directBlockers, directBypassed, anyModeBypassed := 0, 0, 0
+			appliedDirect, appliedPR := map[string]bool{}, map[string]bool{}
+			for _, rs := range active {
+				types := asStrings(mGet(rs, "rule_types"))
+				always, unresolvedAlways := capabilityBypassMatch(listOrEmpty(rs, "bypass_always"), wp)
+				prOnly, unresolvedPR := capabilityBypassMatch(listOrEmpty(rs, "bypass_pull_request"), wp)
+				matched = append(append(matched, always...), prOnly...)
+
+				if slices.Contains(types, "pull_request") || slices.Contains(types, "update") {
+					directBlockers++
+					unproven = unproven || unresolvedAlways || unresolvedPR
+					if len(always) > 0 {
+						directBypassed++
+					}
+					if len(always) > 0 || len(prOnly) > 0 {
+						anyModeBypassed++
+					}
+				}
+				if len(always) > 0 {
+					continue
+				}
+				for _, t := range types {
+					appliedDirect[t] = true
+					if len(prOnly) == 0 {
+						appliedPR[t] = true
+					}
+				}
+			}
+
+			bypassAll := directBlockers > 0 && directBypassed == directBlockers
+			bypassPR := directBlockers > 0 && anyModeBypassed == directBlockers && !bypassAll
+
+			legacyBlocksDirect := legacyLock || (legacyRequiresPR && !(wp.IsAdmin && legacyExemptsAdmins))
+
+			// An update rule alone locks the ref outright; paired with a pull_request
+			// rule it only forces the merge through the PR.
+			open := map[string]bool{
+				"direct_push":  !archived[repo] && !legacyBlocksDirect && !appliedDirect["pull_request"] && !appliedDirect["update"],
+				"pull_request": !archived[repo] && wp.Kind != "deploy_key" && !legacyLock && !(appliedPR["update"] && !appliedPR["pull_request"]),
+			}
+			// The PR route is only a control if an approval is actually demanded of
+			// this principal, and the token's approval only counts when the gate
+			// still binds them — a bypass holder was never gated in the first place.
+			// Exactly one, not one-or-more: a repository has a single Actions
+			// identity and GitHub refuses a self-review, so two required approvals
+			// still cost the attacker a human.
+			prGate := appliedPR["pull_request"] || (legacyRequiresPR && !(wp.IsAdmin && legacyExemptsAdmins))
+			selfApproves := open["pull_request"] && prGate && approvals == 1 && tokenCanApprove[repo]
+
+			routesOpen, routesBlocked := []string{}, []string{}
+			for _, r := range []string{"direct_push", "pull_request"} {
+				if open[r] {
+					routesOpen = append(routesOpen, r)
+				} else {
+					routesBlocked = append(routesBlocked, r)
+				}
+			}
+
+			edges = append(edges, map[string]any{
+				"_id": fmt.Sprintf("cap__%s__%s__%s", repo, branch, wp.ID),
+
+				"principal_kind": wp.Kind,
+				"principal_id":   wp.ID,
+				"principal_name": wp.Name,
+				"write_via":      wp.Via,
+				"permission":     wp.Perm,
+				"is_admin":       wp.IsAdmin,
+
+				"repo":              repo,
+				"branch":            branch,
+				"is_default_branch": branch == defaultBranch[repo],
+
+				"circumvents": setList(map[string]bool{
+					"bypass_always":                   bypassAll,
+					"bypass_pull_request":             bypassPR,
+					"bypass_unproven":                 unproven,
+					"admin_can_remove_control":        wp.IsAdmin && removable,
+					"admin_can_unarchive":             wp.IsAdmin && archived[repo],
+					"approval_count_self_satisfiable": selfApproves,
+				}),
+				"routes_open":           routesOpen,
+				"routes_blocked":        routesBlocked,
+				"bypass_actors_matched": matched,
+
+				// Carried for the rule that reads this chain, not for the graph edge:
+				// emitCanLandCode copies an explicit field list and takes neither.
+				"code_owner_review_active":       mGet(eff, "require_code_owner_review_active"),
+				"codeowners_covers_ci_execution": mBool(mMap(eff, "codeowners"), "covers_ci_execution"),
+
+				"_provenance": append(slices.Clone(wp.Prov), listOrEmpty(eff, "_provenance")...),
+			})
+		}
+	}
+
+	return map[string]any{
+		"chain":      "capability-edges",
+		"edges":      edges,
+		"edge_count": len(edges),
 	}
 }
 
-var minterActions = [][2]string{
-	{"actions/create-github-app-token", "app-id"},
-	{"tibdex/github-app-token", "app_id"},
-	{"getsentry/action-github-app-token", "app_id"},
-	{"peter-evans/create-github-app-token", "app_id"},
+func activeRulesetDetail(eff map[string]any) []map[string]any {
+	byID := mMap(eff, "rulesets_by_id")
+	out := make([]map[string]any, 0, len(byID))
+	for _, id := range listOrEmpty(eff, "active_ruleset_ids") {
+		if rs := mMap(byID, idKey(id)); rs != nil {
+			out = append(out, rs)
+		}
+	}
+	return out
 }
 
-func deriveAppMintable(jobs, apps []map[string]any) map[string]any {
-	appsByID := map[string]map[string]any{}
+// A RepositoryRole actor names a role the principal's own grant already states,
+// so it resolves for a user or a team; OrganizationAdmin does not, because
+// nothing collected maps it back to a login, and a human facing one is reported
+// unresolved rather than guessed — the gate is unproven, not proven absent.
+// Neither role reaches a non-human principal: a deploy key and an app
+// installation hold no repository role, and an app is named by app_id through the
+// Integration actor instead.
+func capabilityBypassMatch(actors []any, wp writePrincipal) ([]any, bool) {
+	matched := []any{}
+	unresolved := false
+	human := wp.Kind == "user" || wp.Kind == "team"
+	for _, a := range actors {
+		am, _ := a.(map[string]any)
+		aid := idKey(mGet(am, "actor_id"))
+		switch mStr(am, "actor_type") {
+		case "Team":
+			if aid != "" && slices.Contains(wp.TeamIDs, aid) {
+				matched = append(matched, am)
+			}
+		case "User":
+			if aid != "" && aid == wp.UserID {
+				matched = append(matched, am)
+			}
+		case "RepositoryRole":
+			actorRank, principalRank := baseRoleRank(aid), principalRoleRank(wp)
+			switch {
+			case !human:
+			case actorRank == 0 || principalRank == 0:
+				unresolved = true
+			case principalRank >= actorRank:
+				matched = append(matched, am)
+			}
+		case "DeployKey":
+			if wp.Kind == "deploy_key" {
+				matched = append(matched, am)
+			}
+		case "Integration":
+			if aid != "" && aid == wp.AppID {
+				matched = append(matched, am)
+			}
+		default:
+			unresolved = unresolved || human
+		}
+	}
+	return matched, unresolved
+}
+
+var baseRoleRanks = map[string]int{
+	"read": 1, "pull": 1,
+	"triage": 2,
+	"write":  3, "push": 3,
+	"maintain": 4,
+	"admin":    5,
+}
+
+// Base repository role ids 1..5 ascend read, triage, write, maintain, admin, and
+// a role bypass covers every role at or above it — an admin bypasses a
+// triage-scoped actor. The ordering is GitHub's; nothing collected maps an id to
+// a role name, so it cannot be confirmed against a run. An id outside 1..5 is a
+// custom role and stays unresolved rather than ranked.
+func baseRoleRank(actorID string) int {
+	switch actorID {
+	case "1", "2", "3", "4", "5":
+		return int(actorID[0] - '0')
+	}
+	return 0
+}
+
+func principalRoleRank(wp writePrincipal) int {
+	if wp.IsAdmin {
+		return 5
+	}
+	perm, _ := wp.Perm.(string)
+	return baseRoleRanks[strings.ToLower(perm)]
+}
+
+// A generic minter takes the App identity as an app-id input. An action that
+// authenticates as its own published App has no such input — its slug is fixed
+// by the action itself, and the token it hands the job carries that App's
+// installation permissions whatever the workflow declared.
+var minterActions = []struct{ prefix, appIDKey, appSlug string }{
+	{prefix: "actions/create-github-app-token", appIDKey: "app-id"},
+	{prefix: "tibdex/github-app-token", appIDKey: "app_id"},
+	{prefix: "getsentry/action-github-app-token", appIDKey: "app_id"},
+	{prefix: "peter-evans/create-github-app-token", appIDKey: "app_id"},
+	{prefix: "anthropics/claude-code-action", appSlug: "claude"},
+}
+
+// The second return maps an app slug to the repositories a job mints its token
+// in; it is the only repository scope a "selected" installation has, since the
+// installation's repository list is never collected.
+func deriveAppMintable(jobs, apps []map[string]any) (map[string]any, map[string][]string) {
+	appsByID, appsBySlug := map[string]map[string]any{}, map[string]map[string]any{}
 	for _, rec := range apps {
 		if aid := coerceAppID(mGet(rec, "app_id")); aid != "" {
 			appsByID[aid] = rec
 		}
+		if slug := mStr(rec, "app_slug"); slug != "" {
+			appsBySlug[slug] = rec
+		}
 	}
 
+	mintRepos := map[string][]string{}
 	mints := []map[string]any{}
 	for _, job := range jobs {
 		for _, h := range jobAppMinterHits(job) {
 			appIDValue := coerceAppID(h["app_id_value"])
 			var resolved map[string]any
-			if appIDValue != "" {
+			switch slug, _ := h["app_slug"].(string); {
+			case slug != "":
+				// The out-of-band token only exists where that App is installed;
+				// without the installation the action falls back to whatever
+				// token the workflow handed it, which is not a mint.
+				if resolved = appsBySlug[slug]; resolved == nil {
+					continue
+				}
+			case appIDValue != "":
 				resolved = appsByID[appIDValue]
+			}
+			if resolved != nil {
+				slug := mStr(resolved, "app_slug")
+				if repo := mStr(job, "repo"); repo != "" && !slices.Contains(mintRepos[slug], repo) {
+					mintRepos[slug] = append(mintRepos[slug], repo)
+				}
 			}
 			var appField any
 			if resolved != nil {
@@ -910,7 +1456,7 @@ func deriveAppMintable(jobs, apps []map[string]any) map[string]any {
 		"chain":        "app-mintable",
 		"mints":        mints,
 		"minter_count": len(mints),
-	}
+	}, mintRepos
 }
 
 func jobAppMinterHits(job map[string]any) []map[string]any {
@@ -922,12 +1468,12 @@ func jobAppMinterHits(job map[string]any) []map[string]any {
 			continue
 		}
 		for _, ma := range minterActions {
-			prefix, appIDKey := ma[0], ma[1]
-			if uses == prefix || strings.HasPrefix(uses, prefix+"@") {
+			if uses == ma.prefix || strings.HasPrefix(uses, ma.prefix+"@") {
 				hits = append(hits, map[string]any{
-					"action":       prefix,
+					"action":       ma.prefix,
 					"ref":          uses,
-					"app_id_value": mGet(mMap(step, "with"), appIDKey),
+					"app_id_value": mGet(mMap(step, "with"), ma.appIDKey),
+					"app_slug":     ma.appSlug,
 					"step_name":    mGet(step, "name"),
 				})
 			}
@@ -1225,58 +1771,4 @@ func nonNilAnyMapList(m map[string][]any) map[string]any {
 		out[k] = nonNilSlice(v)
 	}
 	return out
-}
-
-// fnmatchCase replicates Python fnmatch.fnmatchcase: whole-string anchored,
-// case-sensitive shell wildcards.
-func fnmatchCase(name, pattern string) bool {
-	re, err := regexp.Compile("^" + fnmatchToRegex(pattern) + "$")
-	if err != nil {
-		return false
-	}
-	return re.MatchString(name)
-}
-
-func fnmatchToRegex(pattern string) string {
-	var b strings.Builder
-	for i := 0; i < len(pattern); {
-		c := pattern[i]
-		switch c {
-		case '*':
-			b.WriteString(".*")
-			i++
-		case '?':
-			b.WriteString(".")
-			i++
-		case '[':
-			j := i + 1
-			if j < len(pattern) && (pattern[j] == '!' || pattern[j] == '^') {
-				j++
-			}
-			if j < len(pattern) && pattern[j] == ']' {
-				j++
-			}
-			for j < len(pattern) && pattern[j] != ']' {
-				j++
-			}
-			if j >= len(pattern) {
-				b.WriteString(`\[`)
-				i++
-				continue
-			}
-			set := pattern[i+1 : j]
-			b.WriteByte('[')
-			if strings.HasPrefix(set, "!") {
-				b.WriteByte('^')
-				set = set[1:]
-			}
-			b.WriteString(strings.ReplaceAll(set, `\`, `\\`))
-			b.WriteByte(']')
-			i = j + 1
-		default:
-			b.WriteString(regexp.QuoteMeta(string(c)))
-			i++
-		}
-	}
-	return b.String()
 }
