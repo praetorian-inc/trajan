@@ -48,8 +48,10 @@ func Run(ctx context.Context, runDir string, opts Options) error {
 	state, _ := engine.LoadState(runDir) // best-effort header data; a missing _meta.json is not fatal
 	meta := reportMeta{
 		RunID:        filepath.Base(runDir),
+		Platform:     state.Platform,
+		Scope:        state.Scope,
 		Org:          state.Org,
-		GeneratedAt:  engine.IsoformatUTC(time.Now()),
+		Generated:    time.Now(),
 		Total:        len(findings),
 		BySeverity:   countBy(findings, func(f finding.Finding) string { return f.Severity }),
 		ByConfidence: countBy(findings, func(f finding.Finding) string { return f.Confidence }),
@@ -71,9 +73,17 @@ func Run(ctx context.Context, runDir string, opts Options) error {
 	case "md":
 		return emit(runDir, opts, "findings.md", renderMarkdown(meta, findings))
 	case "html":
-		return emit(runDir, opts, "findings.html", renderHTML(meta, findings))
+		b, err := renderHTML(meta, findings)
+		if err != nil {
+			return err
+		}
+		return emit(runDir, opts, "findings.html", b)
 	case "all":
 		jsonl, err := renderJSONL(findings)
+		if err != nil {
+			return err
+		}
+		htm, err := renderHTML(meta, findings)
 		if err != nil {
 			return err
 		}
@@ -81,7 +91,7 @@ func Run(ctx context.Context, runDir string, opts Options) error {
 			name string
 			data []byte
 		}{
-			{"findings.html", renderHTML(meta, findings)},
+			{"findings.html", htm},
 			{"findings.jsonl", jsonl},
 			{"findings.md", renderMarkdown(meta, findings)},
 		} {
