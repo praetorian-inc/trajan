@@ -1,0 +1,115 @@
+name: Trajan CI/CD Security Scan
+description: Scan GitHub Actions configuration with Trajan and publish HTML, Markdown, and JSONL reports.
+author: Praetorian
+
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  token:
+    description: GitHub token used by Trajan. Defaults to the current job's github.token.
+    required: false
+    default: ""
+  scope:
+    description: Repository (owner/name) or organization to scan. Defaults to github.repository.
+    required: false
+    default: ""
+  artifact-name:
+    description: Name of the uploaded report artifact.
+    required: false
+    default: trajan-report
+  retention-days:
+    description: Number of days GitHub retains the report artifact.
+    required: false
+    default: "14"
+  fail-on-severity:
+    description: Fail after report upload when this severity or higher is found (none, info, low, medium, high, critical).
+    required: false
+    default: none
+  force-rest:
+    description: Avoid putting the token in a git child-process argument. This reduces Trajan's all-branches collection.
+    required: false
+    default: "true"
+
+outputs:
+  report-dir:
+    description: Directory containing the generated reports.
+    value: ${{ steps.scan.outputs.report-dir }}
+  html-path:
+    description: Path to the self-contained HTML report.
+    value: ${{ steps.scan.outputs.html-path }}
+  markdown-path:
+    description: Path to the Markdown report.
+    value: ${{ steps.scan.outputs.markdown-path }}
+  jsonl-path:
+    description: Path to the JSONL findings.
+    value: ${{ steps.scan.outputs.jsonl-path }}
+  artifact-url:
+    description: URL of the uploaded report artifact.
+    value: ${{ steps.upload.outputs.artifact-url }}
+  finding-count:
+    description: Total number of reported findings.
+    value: ${{ steps.scan.outputs.finding-count }}
+  degraded:
+    description: Whether Trajan recorded one or more soft collection failures.
+    value: ${{ steps.scan.outputs.degraded }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache: false
+
+    - name: Build Trajan
+      shell: bash
+      run: "$GITHUB_ACTION_PATH/scripts/github-action/install.sh"
+
+    - name: Run Trajan
+      id: scan
+      continue-on-error: true
+      shell: bash
+      env:
+        TRAJAN_TOKEN: ${{ inputs.token || github.token }}
+        TRAJAN_SCOPE: ${{ inputs.scope || github.repository }}
+        FAIL_ON_SEVERITY: ${{ inputs.fail-on-severity }}
+        FORCE_REST: ${{ inputs.force-rest }}
+      run: "$GITHUB_ACTION_PATH/scripts/github-action/run.sh"
+
+    - name: Upload Trajan reports
+      id: upload
+      if: always() && steps.scan.outputs.report-ready == 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.scan.outputs.report-dir }}
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
+
+    - name: Write Trajan job summary
+      if: always()
+      shell: bash
+      env:
+        SCAN_EXIT_CODE: ${{ steps.scan.outputs.scan-exit-code }}
+        FINDING_COUNT: ${{ steps.scan.outputs.finding-count }}
+        CRITICAL_COUNT: ${{ steps.scan.outputs.critical-count }}
+        HIGH_COUNT: ${{ steps.scan.outputs.high-count }}
+        MEDIUM_COUNT: ${{ steps.scan.outputs.medium-count }}
+        LOW_COUNT: ${{ steps.scan.outputs.low-count }}
+        INFO_COUNT: ${{ steps.scan.outputs.info-count }}
+        DEGRADED: ${{ steps.scan.outputs.degraded }}
+        SOFT_ERROR_COUNT: ${{ steps.scan.outputs.soft-error-count }}
+        ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+      run: "$GITHUB_ACTION_PATH/scripts/github-action/summary.sh"
+
+    - name: Apply Trajan failure policy
+      if: always()
+      shell: bash
+      env:
+        SCAN_EXIT_CODE: ${{ steps.scan.outputs.scan-exit-code }}
+        THRESHOLD_HIT: ${{ steps.scan.outputs.threshold-hit }}
+        FAIL_ON_SEVERITY: ${{ inputs.fail-on-severity }}
+      run: "$GITHUB_ACTION_PATH/scripts/github-action/gate.sh"
