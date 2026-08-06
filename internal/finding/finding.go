@@ -1,6 +1,5 @@
-// Package finding defines the canonical, provider-independent finding record.
-// Every producer (scan now; analyze/agent later) emits this shape, and the
-// report renderer consumes only this — it never imports a platform package.
+// Package finding defines the canonical, provider-independent finding record every
+// producer emits. The report renderer consumes only this, never a platform package.
 package finding
 
 import (
@@ -9,8 +8,8 @@ import (
 	"fmt"
 )
 
-// Finding is one self-contained result. A consumer holding a single record —
-// no rule files, no run dir — can render and transport it.
+// Self-contained: a consumer holding a single record — no rule files, no run dir —
+// can render and transport it.
 type Finding struct {
 	FindingID   string `json:"finding_id,omitempty"` // run-local F-NNN; assigned by report at output
 	Fingerprint string `json:"fingerprint"`          // stable content hash; computed by the producer
@@ -72,12 +71,10 @@ type AINotes struct {
 	Rationale         string `json:"rationale,omitempty"`
 }
 
-// Fingerprint is sha256 over the record minus the non-deterministic fields
-// (fingerprint, finding_id, matched_at, ai_notes), hex, first 16 chars. The
-// marshal→generic→marshal round-trip canonicalizes the JSON: map keys sort
-// recursively and number/whitespace formatting is normalized, so two
-// structurally identical findings hash equal regardless of field order or
-// source value types.
+// sha256 over the record minus the non-deterministic fields (fingerprint,
+// finding_id, matched_at, ai_notes), hex, first 16 chars. The marshal→generic→marshal
+// round-trip sorts map keys recursively and normalizes number formatting, so
+// structurally identical findings hash equal whatever their field order or types.
 func Fingerprint(f Finding) string {
 	f.Fingerprint = ""
 	f.FindingID = ""
@@ -103,7 +100,7 @@ func Fingerprint(f Finding) string {
 var severityRank = map[string]int{"critical": 5, "high": 4, "medium": 3, "low": 2, "info": 1}
 var confidenceRank = map[string]int{"high": 3, "medium": 2, "low": 1}
 
-// SeverityRank / ConfidenceRank return 0 for an unknown level so it sorts below
-// every known one and is filtered out by any non-zero threshold.
+// An unknown level ranks 0, so it sorts below every known one and any non-zero
+// threshold filters it out.
 func SeverityRank(s string) int   { return severityRank[s] }
 func ConfidenceRank(c string) int { return confidenceRank[c] }

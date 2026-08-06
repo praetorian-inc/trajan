@@ -9,7 +9,6 @@ import (
 )
 
 func TestInjectableContexts(t *testing.T) {
-	// Verify expected injectable contexts are present
 	expected := []string{
 		"CI_MERGE_REQUEST_TITLE",
 		"CI_MERGE_REQUEST_DESCRIPTION",
@@ -52,7 +51,6 @@ func TestZeroClickTriggers(t *testing.T) {
 }
 
 func TestDangerousTokenVariables(t *testing.T) {
-	// Verify expected dangerous token variables are present
 	expected := []string{
 		"CI_JOB_TOKEN",
 		"CI_REGISTRY_PASSWORD",
@@ -113,7 +111,6 @@ func TestGetStepParentWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.StepNode) {
 				g := graph.NewGraph()
 
-				// Create workflow -> job -> step hierarchy
 				wf := graph.NewWorkflowNode("wf-1", "main-workflow", ".gitlab-ci.yml", "owner/repo", []string{"merge_request"})
 				job := graph.NewJobNode("job-1", "build", "docker")
 				step := graph.NewStepNode("step-1", "run tests", 10)
@@ -122,7 +119,6 @@ func TestGetStepParentWorkflow(t *testing.T) {
 				g.AddNode(job)
 				g.AddNode(step)
 
-				// Establish containment edges: workflow -> job -> step
 				g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 				g.AddEdge(job.ID(), step.ID(), graph.EdgeContains)
 
@@ -136,10 +132,8 @@ func TestGetStepParentWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.StepNode) {
 				g := graph.NewGraph()
 
-				// Create parent workflow
 				parentWf := graph.NewWorkflowNode("wf-parent", "parent", ".gitlab-ci.yml", "owner/repo", []string{"push"})
 
-				// Create included workflow -> job -> step hierarchy
 				includedWf := graph.NewWorkflowNode("wf-included", "included-workflow", "included.yml", "owner/repo", []string{"merge_request"})
 				job := graph.NewJobNode("job-included", "deploy", "docker")
 				step := graph.NewStepNode("step-included", "deploy app", 20)
@@ -149,11 +143,9 @@ func TestGetStepParentWorkflow(t *testing.T) {
 				g.AddNode(job)
 				g.AddNode(step)
 
-				// Establish hierarchy
 				g.AddEdge(includedWf.ID(), job.ID(), graph.EdgeContains)
 				g.AddEdge(job.ID(), step.ID(), graph.EdgeContains)
 
-				// Establish include relationship
 				g.AddEdge(parentWf.ID(), includedWf.ID(), graph.EdgeIncludes)
 
 				return g, step
@@ -175,7 +167,6 @@ func TestGetStepParentWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.StepNode) {
 				g := graph.NewGraph()
 
-				// Create orphaned step (no parent)
 				step := graph.NewStepNode("step-orphan", "orphaned step", 15)
 				g.AddNode(step)
 
@@ -189,14 +180,12 @@ func TestGetStepParentWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.StepNode) {
 				g := graph.NewGraph()
 
-				// Create job and step, but no workflow
 				job := graph.NewJobNode("job-orphan", "orphaned job", "docker")
 				step := graph.NewStepNode("step-1", "test", 10)
 
 				g.AddNode(job)
 				g.AddNode(step)
 
-				// Connect step to job
 				g.AddEdge(job.ID(), step.ID(), graph.EdgeContains)
 
 				return g, step
@@ -209,7 +198,6 @@ func TestGetStepParentWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.StepNode) {
 				g := graph.NewGraph()
 
-				// Create step -> job -> action (invalid parent)
 				action := graph.NewActionNode("action-1", "actions", "checkout", "v4")
 				job := graph.NewJobNode("job-1", "build", "docker")
 				step := graph.NewStepNode("step-1", "test", 10)
@@ -218,7 +206,7 @@ func TestGetStepParentWorkflow(t *testing.T) {
 				g.AddNode(job)
 				g.AddNode(step)
 
-				// Create invalid hierarchy: action -> job -> step
+				// Invalid hierarchy: the step's grandparent is an action, not a workflow.
 				g.AddEdge(action.ID(), job.ID(), graph.EdgeContains)
 				g.AddEdge(job.ID(), step.ID(), graph.EdgeContains)
 
@@ -232,7 +220,6 @@ func TestGetStepParentWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.StepNode) {
 				g := graph.NewGraph()
 
-				// Create complex hierarchy
 				wf := graph.NewWorkflowNode("wf-complex", "complex", ".gitlab-ci.yml", "owner/repo", []string{"push"})
 				job1 := graph.NewJobNode("job-1", "stage1", "docker")
 				job2 := graph.NewJobNode("job-2", "stage2", "docker")
@@ -245,15 +232,13 @@ func TestGetStepParentWorkflow(t *testing.T) {
 				g.AddNode(step1)
 				g.AddNode(step2)
 
-				// workflow contains both jobs
 				g.AddEdge(wf.ID(), job1.ID(), graph.EdgeContains)
 				g.AddEdge(wf.ID(), job2.ID(), graph.EdgeContains)
 
-				// jobs contain steps
 				g.AddEdge(job1.ID(), step1.ID(), graph.EdgeContains)
 				g.AddEdge(job2.ID(), step2.ID(), graph.EdgeContains)
 
-				// Both steps should resolve to the same workflow
+				// Both steps resolve to the same workflow.
 				return g, step2
 			},
 			expectedWorkflow: "wf-complex",
@@ -287,14 +272,12 @@ func TestIsRootWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.WorkflowNode) {
 				g := graph.NewGraph()
 
-				// Create main .gitlab-ci.yml workflow with no incoming includes
 				wf := graph.NewWorkflowNode("wf-root", "main-workflow", ".gitlab-ci.yml", "owner/repo", []string{"push"})
 				job := graph.NewJobNode("job-1", "build", "docker")
 
 				g.AddNode(wf)
 				g.AddNode(job)
 
-				// Workflow contains job (outgoing edge, not incoming)
 				g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
 				return g, wf
@@ -306,16 +289,14 @@ func TestIsRootWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.WorkflowNode) {
 				g := graph.NewGraph()
 
-				// Create parent workflow
 				parentWf := graph.NewWorkflowNode("wf-parent", "parent", ".gitlab-ci.yml", "owner/repo", []string{"push"})
 
-				// Create included workflow (build.yml)
 				includedWf := graph.NewWorkflowNode("wf-included", "build-workflow", "build.yml", "owner/repo", []string{"push"})
 
 				g.AddNode(parentWf)
 				g.AddNode(includedWf)
 
-				// Parent includes child - this creates an incoming EdgeIncludes edge to includedWf
+				// The edge direction matters: includedWf gains an incoming EdgeIncludes.
 				g.AddEdge(parentWf.ID(), includedWf.ID(), graph.EdgeIncludes)
 
 				return g, includedWf
@@ -335,7 +316,6 @@ func TestIsRootWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.WorkflowNode) {
 				g := graph.NewGraph()
 
-				// Create isolated workflow with no edges at all
 				wf := graph.NewWorkflowNode("wf-isolated", "isolated", ".gitlab-ci.yml", "owner/repo", []string{"push"})
 				g.AddNode(wf)
 
@@ -348,7 +328,6 @@ func TestIsRootWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.WorkflowNode) {
 				g := graph.NewGraph()
 
-				// Create workflow with only outgoing edges (contains, triggers)
 				wf := graph.NewWorkflowNode("wf-outgoing", "main", ".gitlab-ci.yml", "owner/repo", []string{"push"})
 				job := graph.NewJobNode("job-1", "build", "docker")
 				triggeredWf := graph.NewWorkflowNode("wf-triggered", "triggered", "deploy.yml", "owner/repo", []string{"push"})
@@ -357,7 +336,6 @@ func TestIsRootWorkflow(t *testing.T) {
 				g.AddNode(job)
 				g.AddNode(triggeredWf)
 
-				// Outgoing edges (not incoming)
 				g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 				g.AddEdge(wf.ID(), triggeredWf.ID(), graph.EdgeTriggers)
 
@@ -370,7 +348,6 @@ func TestIsRootWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.WorkflowNode) {
 				g := graph.NewGraph()
 
-				// Create workflows with incoming trigger edge (not include)
 				triggerWf := graph.NewWorkflowNode("wf-trigger", "trigger", "trigger.yml", "owner/repo", []string{"push"})
 				targetWf := graph.NewWorkflowNode("wf-target", "target", "target.yml", "owner/repo", []string{"workflow_run"})
 
@@ -389,18 +366,15 @@ func TestIsRootWorkflow(t *testing.T) {
 			setupGraph: func() (*graph.Graph, *graph.WorkflowNode) {
 				g := graph.NewGraph()
 
-				// Create multiple parent workflows
 				parent1 := graph.NewWorkflowNode("wf-parent1", "parent1", ".gitlab-ci.yml", "owner/repo", []string{"push"})
 				parent2 := graph.NewWorkflowNode("wf-parent2", "parent2", "other.yml", "owner/repo", []string{"push"})
 
-				// Create shared included workflow
 				sharedWf := graph.NewWorkflowNode("wf-shared", "shared", "shared.yml", "owner/repo", []string{"push"})
 
 				g.AddNode(parent1)
 				g.AddNode(parent2)
 				g.AddNode(sharedWf)
 
-				// Multiple parents include the same workflow
 				g.AddEdge(parent1.ID(), sharedWf.ID(), graph.EdgeIncludes)
 				g.AddEdge(parent2.ID(), sharedWf.ID(), graph.EdgeIncludes)
 

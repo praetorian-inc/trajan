@@ -14,9 +14,8 @@ const (
 	ScopeRepo
 )
 
-// Scope narrows a run. Org is always required; Project/Repo optionally restrict
-// the fan-out. Org and project surfaces are collected regardless of narrowing,
-// mirroring the GitHub collector (a repo-scoped run still collects the org).
+// Org and project surfaces are collected regardless of narrowing, so a repo-scoped
+// run still collects the org.
 type Scope struct {
 	Kind    ScopeKind
 	Org     string
@@ -25,7 +24,6 @@ type Scope struct {
 	Slug    string
 }
 
-// An empty locator yields the zero Scope so the caller can fall back to ORG_NAME.
 func ParseScope(arg string) (Scope, error) {
 	s := strings.TrimSpace(arg)
 	s = strings.TrimPrefix(strings.TrimPrefix(s, "https://"), "http://")
@@ -36,8 +34,8 @@ func ParseScope(arg string) (Scope, error) {
 		case strings.Contains(host, "dev.azure.com"):
 			parts = parts[1:] // dev.azure.com/<org>/<project>... — org is the first path segment
 		case strings.HasSuffix(host, ".visualstudio.com"):
-			// legacy vanity host: the org IS the subdomain (<org>.visualstudio.com/<project>),
-			// so replace the host with the org rather than dropping it (which loses the org).
+			// On the legacy vanity host the org IS the subdomain, so the host is replaced
+			// by the org rather than dropped.
 			parts[0] = strings.TrimSuffix(host, ".visualstudio.com")
 		}
 	}

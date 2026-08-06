@@ -9,11 +9,19 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
+func clearGHEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{"TRAJAN_GH_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"} {
+		t.Setenv(k, "")
+	}
+}
+
 func TestResolveTokenGhTokenBeatsGitHubToken(t *testing.T) {
+	clearGHEnv(t)
 	t.Setenv("GH_TOKEN", "  gh-token  ")
 	t.Setenv("GITHUB_TOKEN", "github-token")
 
-	tok, err := ResolveToken(context.Background())
+	tok, err := ResolveToken(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -23,10 +31,10 @@ func TestResolveTokenGhTokenBeatsGitHubToken(t *testing.T) {
 }
 
 func TestResolveTokenGitHubTokenFallback(t *testing.T) {
-	t.Setenv("GH_TOKEN", "")
+	clearGHEnv(t)
 	t.Setenv("GITHUB_TOKEN", "github-token")
 
-	tok, err := ResolveToken(context.Background())
+	tok, err := ResolveToken(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,13 +43,35 @@ func TestResolveTokenGitHubTokenFallback(t *testing.T) {
 	}
 }
 
+func TestResolveTokenEnvBeatsExplicit(t *testing.T) {
+	clearGHEnv(t)
+	t.Setenv("GH_TOKEN", "env")
+	tok, err := ResolveToken(context.Background(), "flag")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tok != "env" {
+		t.Fatalf("env must beat --token, got %q", tok)
+	}
+}
+
+func TestResolveTokenExplicitBeforeGhCLI(t *testing.T) {
+	clearGHEnv(t)
+	t.Setenv("PATH", t.TempDir())
+	tok, err := ResolveToken(context.Background(), "  flag-tok  ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tok != "flag-tok" {
+		t.Fatalf("expected explicit token, got %q", tok)
+	}
+}
+
 func TestResolveTokenMissingBothNoGhReturnsErrNoToken(t *testing.T) {
-	t.Setenv("GITHUB_TOKEN", "")
-	t.Setenv("GH_TOKEN", "")
-	// empty PATH so the `gh auth token` fallback can't find gh
+	clearGHEnv(t)
 	t.Setenv("PATH", t.TempDir())
 
-	_, err := ResolveToken(context.Background())
+	_, err := ResolveToken(context.Background(), "")
 	if !errors.Is(err, engine.ErrNoToken) {
 		t.Fatalf("expected ErrNoToken, got %v", err)
 	}

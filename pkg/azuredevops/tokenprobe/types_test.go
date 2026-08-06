@@ -6,12 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCapability_String(t *testing.T) {
-	assert.Equal(t, "identity:read", string(CapabilityIdentityRead))
-	assert.Equal(t, "projects:read", string(CapabilityProjectsRead))
-	assert.Equal(t, "repositories:read", string(CapabilityRepositoriesRead))
-}
-
 func TestProbeResult_HasCapability(t *testing.T) {
 	result := &ProbeResult{
 		Capabilities: []Capability{CapabilityProjectsRead, CapabilityRepositoriesRead},

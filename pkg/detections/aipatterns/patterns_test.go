@@ -96,13 +96,11 @@ func TestHasAIEnvVars(t *testing.T) {
 }
 
 func TestIsAIStep_WithEnvVars(t *testing.T) {
-	// Step with no AI action/run but AI env var should still be detected
 	step := graph.NewStepNode("s1", "step", 1)
 	step.Uses = "actions/checkout@v4"
 	step.Env = map[string]string{"OPENAI_API_KEY": "sk-..."}
 	assert.True(t, IsAIStep(step))
 
-	// Step with no AI signals at all
 	step2 := graph.NewStepNode("s2", "step", 2)
 	step2.Uses = "actions/checkout@v4"
 	step2.Env = map[string]string{"GITHUB_TOKEN": "ghp_..."}
@@ -153,24 +151,6 @@ func TestCheckMCPIndicators(t *testing.T) {
 			step.Env = tt.env
 			step.With = tt.with
 			assert.Equal(t, tt.want, CheckMCPIndicators(step))
-		})
-	}
-}
-
-func TestGetTriggerString(t *testing.T) {
-	tests := []struct {
-		name     string
-		triggers []string
-		want     string
-	}{
-		{"single trigger", []string{"push"}, "push"},
-		{"multiple triggers", []string{"push", "pull_request"}, "push, pull_request"},
-		{"no triggers", []string{}, "unknown"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			wf := graph.NewWorkflowNode("wf1", "ci.yml", "ci.yml", "owner/repo", tt.triggers)
-			assert.Equal(t, tt.want, GetTriggerString(wf))
 		})
 	}
 }

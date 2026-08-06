@@ -17,6 +17,7 @@ import (
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/finding"
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 const (
@@ -24,7 +25,6 @@ const (
 	graphDir = "30-graph"
 )
 
-// Build reads 10-normalize and 20-scan and writes 30-graph/{nodes,edges,_summary}.json.
 // targets maps a rule id to its graph target; the caller supplies it because
 // internal/github imports internal/graph and the dependency cannot be reversed.
 func Build(ctx context.Context, cfg *engine.Config, runDir string, targets map[string]Target) error {
@@ -35,12 +35,26 @@ func Build(ctx context.Context, cfg *engine.Config, runDir string, targets map[s
 	if err := state.CheckPhase(engine.PhaseGraph); err != nil {
 		return err
 	}
+	ui.PhaseHeader("Graph")
 	timer := engine.StartPhaseTimer(engine.PhaseGraph, "graph")
-	buildErr := runBuild(ctx, cfg, runDir, targets, timer)
+	stats, buildErr := runBuild(ctx, cfg, runDir, targets, timer)
 
-	state.RecordPhase(timer.Stop(buildErr))
-	return errors.Join(buildErr, state.Save(runDir))
+	rec := timer.Stop(buildErr)
+	state.RecordPhase(rec)
+	saveErr := state.Save(runDir)
+	if buildErr == nil {
+		ui.Outcome("Graph complete", []ui.Count{
+			{Label: "nodes", N: stats.nodes},
+			{Label: "edges", N: stats.edges},
+		}, engine.Elapsed(rec.DurationS))
+		if stats.attached > 0 || stats.unattached > 0 {
+			ui.Note(fmt.Sprintf("%d findings attached, %d unattached", stats.attached, stats.unattached))
+		}
+	}
+	return errors.Join(buildErr, saveErr)
 }
+
+type buildStats struct{ nodes, edges, attached, unattached int }
 
 type nodesFile struct {
 	Nodes []node `json:"nodes"`
@@ -50,7 +64,7 @@ type edgesFile struct {
 	Edges []edge `json:"edges"`
 }
 
-func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets map[string]Target, timer *engine.PhaseTimer) error {
+func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets map[string]Target, timer *engine.PhaseTimer) (buildStats, error) {
 	// RunPartial calls onError from its workers.
 	var errMu sync.Mutex
 	onError := func(e error) {
@@ -61,11 +75,11 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets ma
 
 	c, err := loadCorpus(ctx, cfg, runDir, onError)
 	if err != nil {
-		return err
+		return buildStats{}, err
 	}
 	findings, findingsSeen, err := loadFindings(ctx, cfg, runDir, onError)
 	if err != nil {
-		return err
+		return buildStats{}, err
 	}
 	in := inputsSummary{
 		NormalizeSeen:    c.seen,
@@ -80,23 +94,23 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets ma
 	}
 
 	if err := os.RemoveAll(filepath.Join(runDir, graphDir)); err != nil {
-		return fmt.Errorf("clear %s: %w", graphDir, err)
+		return buildStats{}, fmt.Errorf("clear %s: %w", graphDir, err)
 	}
 
 	nodes, err := buildNodes(ctx, c)
 	if err != nil {
-		return err
+		return buildStats{}, err
 	}
 	edges, err := buildEdges(ctx, c, nodes)
 	if err != nil {
-		return err
+		return buildStats{}, err
 	}
 	observed := backfillObserved(nodes, edges)
 	dropped := dropDangling(nodes, edges)
 
 	att := newAttacher(c, nodes, edges, targets)
 	if err := att.run(ctx, findings); err != nil {
-		return err
+		return buildStats{}, err
 	}
 
 	all := nodes.all()
@@ -119,13 +133,16 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets ma
 		{engine.GraphSummary(), sum},
 	} {
 		if err := cp.Write(w.rel, w.v); err != nil {
-			return fmt.Errorf("write %s: %w", w.rel, err)
+			return buildStats{}, fmt.Errorf("write %s: %w", w.rel, err)
 		}
 	}
 	timer.OutputFiles = 3
-	slog.Info("graph built", "nodes", len(all), "edges", len(edgeList),
-		"findings_attached", att.res.attached, "findings_unattached", len(att.res.unattached))
-	return nil
+	return buildStats{
+		nodes:      len(all),
+		edges:      len(edgeList),
+		attached:   att.res.attached,
+		unattached: len(att.res.unattached),
+	}, nil
 }
 
 // An absent 20-scan is a missing input, not an empty one: IterJSON would report
@@ -158,11 +175,9 @@ func loadFindings(ctx context.Context, cfg *engine.Config, runDir string, onErro
 	return out, len(files), nil
 }
 
-// An edge endpoint whose full identity tuple is known but which has no backing
-// record is a real entity outside the collection, not a placeholder: the two
-// reusable-workflow callees in uncollected repos and the environments named only
-// by a deployment. Emitting it keeps the relation truthful; inventing an
-// identity value would not, which is why upsert still refuses those.
+// An endpoint with a complete identity tuple and no backing record is a real entity
+// outside the collection — a callee in an uncollected repo, an environment named only
+// by a deployment — so emitting it is truthful where inventing an identity is not.
 func backfillObserved(n *nodeSet, s *edgeSet) int {
 	minted := 0
 	for _, id := range slices.Sorted(maps.Keys(s.byID)) {
@@ -403,10 +418,9 @@ func summarize(runDir string, in inputsSummary, all []node, edgeList []edge, edg
 	}
 }
 
-// gapEntry is a curated finding of the collect/normalize audit. Targets names the
-// rule targets whose unattached findings the gap explains, so findings_blocked is
-// computed from the run and cannot drift from it. A target belongs to exactly one
-// row, or the column double-counts and stops summing to findings.unattached.
+// Targets names the rule targets whose unattached findings the gap explains, so
+// findings_blocked is computed from the run rather than written down. A target belongs
+// to exactly one row, or the column stops summing to findings.unattached.
 type gapEntry struct {
 	Subject         string   `json:"subject"`
 	Kind            string   `json:"kind"`

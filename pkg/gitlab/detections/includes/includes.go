@@ -16,23 +16,19 @@ func init() {
 	})
 }
 
-// Detection detects include injection vulnerabilities in GitLab CI
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new include injection detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("include-injection", "gitlab", detections.SeverityHigh),
 	}
 }
 
-// Detect analyzes the graph for include injection vulnerabilities
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
-	// Get all workflow nodes
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
@@ -46,10 +42,8 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			continue
 		}
 
-		// Analyze each include for security issues
 		for _, inc := range wf.Includes {
-			// Check for variable interpolation first (most critical)
-			// If found, only report that and skip other checks
+			// Variable interpolation outranks the type-specific checks below.
 			if d.hasVariableInterpolation(inc) {
 				evidence := d.getVariableInterpolationEvidence(inc) + ". "
 				evidence += "Attacker-controlled variables (e.g., $CI_MERGE_REQUEST_SOURCE_PROJECT_PATH) can load malicious CI templates from attacker-controlled repositories."
@@ -80,13 +74,11 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 						Metadata:   metadata,
 					},
 				})
-				continue // Skip other checks for this include
+				continue
 			}
 
-			// Check type-specific issues only if no variable interpolation
 			switch inc.Type {
 			case "remote":
-				// CRITICAL: Remote includes from external URLs
 				findings = append(findings, detections.Finding{
 					Type:        detections.VulnIncludeInjection,
 					Platform:    "gitlab",
@@ -100,7 +92,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 				})
 
 			case "project":
-				// HIGH: Cross-project includes without pinned ref
 				if inc.Ref == "" {
 					findings = append(findings, detections.Finding{
 						Type:        detections.VulnIncludeInjection,
@@ -121,9 +112,7 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// hasVariableInterpolation checks if an include uses variable interpolation
 func (d *Detection) hasVariableInterpolation(inc graph.Include) bool {
-	// Check for $VARIABLE or ${VARIABLE} patterns
 	fields := []string{inc.Remote, inc.Path, inc.Project, inc.Template}
 	for _, field := range fields {
 		if containsVariable(field) {
@@ -133,16 +122,12 @@ func (d *Detection) hasVariableInterpolation(inc graph.Include) bool {
 	return false
 }
 
-// containsVariable checks if a string contains GitLab CI variable syntax
 func containsVariable(s string) bool {
-	// Check for $VARIABLE pattern
 	for i := 0; i < len(s); i++ {
 		if s[i] == '$' {
-			// Check if followed by uppercase letter or underscore
 			if i+1 < len(s) && (isUpperOrUnderscore(s[i+1])) {
 				return true
 			}
-			// Check for ${VARIABLE} pattern
 			if i+1 < len(s) && s[i+1] == '{' {
 				return true
 			}
@@ -151,12 +136,10 @@ func containsVariable(s string) bool {
 	return false
 }
 
-// isUpperOrUnderscore checks if a byte is an uppercase letter or underscore
 func isUpperOrUnderscore(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || b == '_'
 }
 
-// getVariableInterpolationEvidence returns the evidence string for variable interpolation
 func (d *Detection) getVariableInterpolationEvidence(inc graph.Include) string {
 	switch inc.Type {
 	case "remote":

@@ -112,15 +112,13 @@ func newNodeSet() *nodeSet {
 	}
 }
 
-// identifies rejects an identity value that is missing or is still an
-// unevaluated expression. "${{ inputs.artifact-name }}" names whatever the
-// caller passed, so minting a node for it splits one artifact in two and leaves
-// no path between the job that writes it and the job that reads it.
+// "${{ inputs.artifact-name }}" names whatever the caller passed, so minting a node
+// for it splits one artifact in two and leaves no path between the job that writes
+// it and the job that reads it.
 func identifies(v string) bool { return v != "" && !strings.Contains(v, "${{") }
 
-// upsert merges a source record into the node its identity tuple names, and
-// returns nil when an identity value does not identify — a placeholder would
-// have to invent identity, and every consumer asks reachability questions.
+// Returns nil when an identity value does not identify: a placeholder would have to
+// invent identity, and every consumer of the graph asks reachability questions.
 func (s *nodeSet) upsert(l NodeLabel, key map[string]string, props map[string]any, source string) *node {
 	k := make(map[string]string, len(IdentityKey(l)))
 	for _, name := range IdentityKey(l) {
@@ -267,8 +265,8 @@ func (s *nodeSet) propertyConflicts() []propertyConflict {
 	return out
 }
 
-// incompleteIdentities counts candidates dropped by upsert, per label, so an
-// unbacked endpoint is visible in the summary rather than silently absent.
+// Candidates dropped by upsert are counted per label so an unbacked endpoint shows
+// up in the summary rather than being silently absent.
 func (s *nodeSet) incompleteIdentities() map[NodeLabel]int {
 	return maps.Clone(s.incomplete)
 }
@@ -336,15 +334,12 @@ func emitApps(c *corpus, s *nodeSet) {
 	}
 }
 
-// A DeployKey is keyed on the fingerprint, which every installation of a reused
-// key shares, so the per-installation values would be first-writer-wins on it.
-// INSTALLED_ON already carries these four; added_by, created_at, last_used and
-// repo do not exist anywhere else and stay until the edge carries them too.
+// The identity is the fingerprint, which every installation of a reused key shares,
+// so a per-installation value would be first-writer-wins on the node. Those fields
+// are dropped here and carried on INSTALLED_ON instead.
 func emitDeployKeys(c *corpus, s *nodeSet) {
 	for _, r := range c.dirs["deploy-keys"] {
 		props := qualifyRepo(c, s.recordProps(DeployKey, r.fields))
-		// The identity is the fingerprint; everything below describes one
-		// installation of it and belongs on INSTALLED_ON.
 		for _, k := range []string{"key_id", "title", "read_only", "can_push", "repo", "added_by", "created_at", "last_used"} {
 			delete(props, k)
 		}
@@ -424,9 +419,9 @@ func emitSecrets(c *corpus, s *nodeSet) {
 	}
 }
 
-// Branch takes both chain arrays: they share all 162 _ids and agree on
-// repo/branch, but is_default_branch and has_active_ruleset exist only on
-// branch-coverage while the effective-* controls exist only on effective-ruleset.
+// Both chain arrays are read: they agree on repo/branch, but is_default_branch and
+// has_active_ruleset exist only on branch-coverage while the effective-* controls
+// exist only on effective-ruleset.
 func emitBranches(c *corpus, s *nodeSet) {
 	for _, src := range [][2]string{
 		{"effective-ruleset", "effective_per_branch"},
@@ -521,11 +516,9 @@ func emitArtifacts(c *corpus, s *nodeSet) {
 	}
 }
 
-// A reusable callee names its artifacts "${{ inputs.X }}" and only the call site
-// knows X, so without this the writer in the caller and the reader in the callee
-// land on two Artifact nodes with no path between them.
-// Two call sites disagreeing on an input leaves that input unresolvable: picking
-// either value would name an artifact the other caller never produces.
+// A callee names its artifacts "${{ inputs.X }}" and only the call site knows X, so
+// without this the caller's writer and the callee's reader land on two Artifact nodes.
+// Call sites disagreeing on an input leave it unresolvable rather than guessed.
 func calleeInputs(c *corpus) map[[2]string]map[string]any {
 	out := map[[2]string]map[string]any{}
 	disputed := map[[2]string]map[string]bool{}
@@ -620,8 +613,7 @@ func emitActions(c *corpus, s *nodeSet) {
 	}
 }
 
-// workflowPath returns the path Workflow is keyed on so Job.workflow and
-// Workflow.path join on string equality.
+// Job.workflow and Workflow.path have to join on string equality.
 func workflowPath(filename string) string {
 	if filename == "" {
 		return ""
@@ -638,11 +630,9 @@ func isWorkflowRef(uses string) bool {
 		(strings.HasSuffix(p, ".yml") || strings.HasSuffix(p, ".yaml"))
 }
 
-// qualifyRepo rewrites a bare repo property to "owner/repo". repo is an
-// identity key on Artifact, Branch, Environment, Job and Workflow, where it is
-// always qualified; the labels that carry it as a plain property would
-// otherwise put two conventions in one property name once the importer folds
-// key into properties.
+// repo is an identity key on Artifact, Branch, Environment, Job and Workflow, always
+// qualified there; a label carrying it as a plain property would otherwise put two
+// conventions in one property name once the importer folds key into properties.
 func qualifyRepo(c *corpus, props map[string]any) map[string]any {
 	if r := str(props["repo"]); r != "" {
 		props["repo"] = c.full(r)
@@ -681,13 +671,9 @@ func decimal(v any) string {
 	return strconv.FormatInt(i, 10)
 }
 
-// recordProps copies the Neo4j-legal top-level fields of a source record.
-// Nested structure is dropped: Neo4j cannot store it as a property and the
-// detail already lives in 10-normalize. The key is registered rather than just
-// skipped because legality is decided per value: an array of objects is legal
-// exactly when it is empty, so dropping it here alone would leave the property
-// present on the records that have nothing to say and absent on the ones that
-// do, inverting every predicate written against it.
+// Nested structure is dropped: Neo4j cannot store it and the detail lives in
+// 10-normalize. An array of objects is legal exactly when empty, so the key is
+// registered for the sweep — else the property survives only where it says nothing.
 func (s *nodeSet) recordProps(l NodeLabel, fields map[string]any) map[string]any {
 	ident := IdentityKey(l)
 	out := make(map[string]any, len(fields))

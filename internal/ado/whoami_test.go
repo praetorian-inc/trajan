@@ -33,10 +33,9 @@ func repointHosts(t *testing.T, base string) {
 	}
 }
 
-// whoamiStub serves connectionData plus every probe surface as a non-empty 2xx
-// list, overriding individual path suffixes from status/body. An override that
-// never matches fails the test, so a changed probe path can't silently disarm
-// the case that relies on it.
+// Serves connectionData plus every probe surface as a non-empty 2xx list, with
+// individual path suffixes overridden. An override that never matches fails the test,
+// so a renamed probe path cannot silently disarm the case that relies on it.
 func whoamiStub(t *testing.T, status map[string]int, body map[string]string) func() []string {
 	t.Helper()
 	var mu sync.Mutex
@@ -103,6 +102,12 @@ func whoamiStub(t *testing.T, status map[string]int, body map[string]string) fun
 
 func runWhoAmI(t *testing.T) (string, error) {
 	t.Helper()
+	for _, k := range []string{
+		"TRAJAN_ADO_TOKEN", "AZURE_DEVOPS_PAT", "AZDO_PAT", "AZURE_DEVOPS_EXT_PAT",
+		"AZURE_BEARER_TOKEN", "SYSTEM_ACCESSTOKEN",
+	} {
+		t.Setenv(k, "")
+	}
 	prev := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -113,7 +118,7 @@ func runWhoAmI(t *testing.T) (string, error) {
 		os.Stdout = prev
 		r.Close()
 	}()
-	callErr := WhoAmI(t.Context(), "Contoso", "")
+	callErr := WhoAmI(t.Context(), "Contoso", "", "")
 	w.Close()
 	out, err := io.ReadAll(r)
 	if err != nil {

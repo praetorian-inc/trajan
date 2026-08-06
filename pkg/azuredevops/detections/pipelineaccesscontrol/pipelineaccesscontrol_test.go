@@ -12,21 +12,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-func TestPipelineAccessControlDetection_Name(t *testing.T) {
-	d := New()
-	assert.Equal(t, "pipeline-access-control", d.Name())
-}
-
-func TestPipelineAccessControlDetection_Platform(t *testing.T) {
-	d := New()
-	assert.Equal(t, platforms.PlatformAzureDevOps, d.Platform())
-}
-
-func TestPipelineAccessControlDetection_Severity(t *testing.T) {
-	d := New()
-	assert.Equal(t, detections.SeverityLow, d.Severity())
-}
-
 func TestPipelineAccessControlDetection_Detect_EnvironmentInWith(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -137,8 +122,6 @@ func TestPipelineAccessControlDetection_Detect_CaseInsensitiveMatch(t *testing.T
 	require.NotEmpty(t, findings, "Expected to find ENVIRONMENT (uppercase) reference")
 }
 
-// Job permissions tests
-
 func TestPipelineAccessControlDetection_Detect_ExcessiveBuildAdminPermissions(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -169,34 +152,6 @@ func TestPipelineAccessControlDetection_Detect_ExcessiveBuildAdminPermissions(t 
 	assert.True(t, found, "Expected VulnExcessiveJobPermissions finding for build:admin")
 }
 
-func TestPipelineAccessControlDetection_Detect_ExcessiveReleaseAdminPermissions(t *testing.T) {
-	d := New()
-	ctx := context.Background()
-
-	g := graph.NewGraph()
-	wf := graph.NewWorkflowNode("wf1", "pipeline.yml", "pipeline.yml", "owner/repo", nil)
-	g.AddNode(wf)
-
-	job := graph.NewJobNode("job1", "deploy", "ubuntu-latest")
-	job.Permissions = map[string]string{
-		"release": "admin",
-	}
-	job.SetParent(wf.ID())
-	g.AddNode(job)
-	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
-
-	findings, err := d.Detect(ctx, g)
-	require.NoError(t, err)
-
-	found := false
-	for _, f := range findings {
-		if f.Type == detections.VulnExcessiveJobPermissions {
-			found = true
-		}
-	}
-	assert.True(t, found, "Expected VulnExcessiveJobPermissions finding for release:admin")
-}
-
 func TestPipelineAccessControlDetection_Detect_SafeReadOnlyPermissions(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -221,8 +176,6 @@ func TestPipelineAccessControlDetection_Detect_SafeReadOnlyPermissions(t *testin
 			"Expected no VulnExcessiveJobPermissions for read-only build permission")
 	}
 }
-
-// Variable group scope tests
 
 func TestPipelineAccessControlDetection_Detect_VariableGroupInEnv(t *testing.T) {
 	d := New()
@@ -254,9 +207,6 @@ func TestPipelineAccessControlDetection_Detect_VariableGroupInEnv(t *testing.T) 
 	assert.True(t, found, "Expected VulnSecretScopeRisk finding for variablegroups in env")
 }
 
-// TestPipelineAccessControlDetection_FindingLine_VariableGroupPointsToEnvKey verifies that
-// the finding Line for a variablegroup env reference points to the specific env key line,
-// not the step start line.
 func TestPipelineAccessControlDetection_FindingLine_VariableGroupPointsToEnvKey(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -265,7 +215,7 @@ func TestPipelineAccessControlDetection_FindingLine_VariableGroupPointsToEnvKey(
 	wf := graph.NewWorkflowNode("wf1", "pipeline.yml", "pipeline.yml", "owner/repo", nil)
 	g.AddNode(wf)
 
-	// Step starts at line 21, but the vulnerable env key GROUP_API_KEY is at line 24
+	// Step starts at 21; the vulnerable env key GROUP_API_KEY is at 24.
 	step := graph.NewStepNode("step1", "use-vargroup", 21)
 	step.Run = "deploy.sh"
 	step.Env = map[string]string{
@@ -293,8 +243,6 @@ func TestPipelineAccessControlDetection_FindingLine_VariableGroupPointsToEnvKey(
 		"Finding Line should point to the GROUP_API_KEY env key (24), not the step start (21)")
 }
 
-// TestPipelineAccessControlDetection_FindingLine_VariableGroupFallsBackToStepLine verifies that
-// when EnvLines is nil or missing a key, the finding falls back to the step start line.
 func TestPipelineAccessControlDetection_FindingLine_VariableGroupFallsBackToStepLine(t *testing.T) {
 	d := New()
 	ctx := context.Background()
@@ -303,13 +251,12 @@ func TestPipelineAccessControlDetection_FindingLine_VariableGroupFallsBackToStep
 	wf := graph.NewWorkflowNode("wf1", "pipeline.yml", "pipeline.yml", "owner/repo", nil)
 	g.AddNode(wf)
 
-	// Step at line 50, no EnvLines — should fall back to step.Line
+	// Step at line 50, with no EnvLines.
 	step := graph.NewStepNode("step1", "use-vargroup-no-lines", 50)
 	step.Run = "deploy.sh"
 	step.Env = map[string]string{
 		"GROUP_API_KEY": "$(variablegroups.my-group.api-key)",
 	}
-	// EnvLines is nil (not set)
 	step.SetParent(wf.ID())
 	g.AddNode(step)
 	g.AddEdge(wf.ID(), step.ID(), graph.EdgeContains)

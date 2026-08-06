@@ -1,4 +1,3 @@
-// pkg/search/sourcegraph.go
 package search
 
 import (
@@ -17,13 +16,11 @@ const (
 	DefaultSourceGraphBaseURL = "https://sourcegraph.com"
 )
 
-// SourceGraphSearchProvider implements SearchProvider using SourceGraph streaming API
 type SourceGraphSearchProvider struct {
 	httpClient *http.Client
 	baseURL    string
 }
 
-// NewSourceGraphSearchProvider creates a new SourceGraph search provider
 func NewSourceGraphSearchProvider(proxyURL string) *SourceGraphSearchProvider {
 	client := &http.Client{
 		Timeout: 60 * time.Second,
@@ -45,19 +42,16 @@ func NewSourceGraphSearchProvider(proxyURL string) *SourceGraphSearchProvider {
 	}
 }
 
-// Name returns "sourcegraph"
 func (p *SourceGraphSearchProvider) Name() string {
 	return "sourcegraph"
 }
 
-// DefaultSourceGraphQuery returns the default SourceGraph query for self-hosted runners
 func DefaultSourceGraphQuery(org string) string {
 	repoFilter := ""
 	if org != "" {
 		repoFilter = fmt.Sprintf("repo:%s/ ", org)
 	}
 
-	// GitHub-hosted labels to exclude
 	githubHostedLabels := []string{
 		"ubuntu-16.04", "ubuntu-18.04", "ubuntu-20.04", "ubuntu-22.04", "ubuntu-latest",
 		"windows-2019", "windows-2022", "windows-latest",
@@ -72,7 +66,6 @@ func DefaultSourceGraphQuery(org string) string {
 	)
 }
 
-// Search implements SearchProvider.Search using SourceGraph streaming API
 func (p *SourceGraphSearchProvider) Search(ctx context.Context, query string) (*SearchResult, error) {
 	result := &SearchResult{
 		Repositories: make([]string, 0),
@@ -101,17 +94,14 @@ func (p *SourceGraphSearchProvider) Search(ctx context.Context, query string) (*
 		return nil, fmt.Errorf("search failed (%d): %s", resp.StatusCode, body)
 	}
 
-	// Parse Server-Sent Events (SSE) stream
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Only process lines starting with "data:"
 		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
 
-		// Extract JSON data after "data:" prefix
 		jsonData := strings.TrimPrefix(line, "data:")
 		jsonData = strings.TrimSpace(jsonData)
 
@@ -119,7 +109,7 @@ func (p *SourceGraphSearchProvider) Search(ctx context.Context, query string) (*
 			continue
 		}
 
-		// Check for error response (single object with "title" field)
+		// The stream can carry an error object where a match array is expected.
 		var errorResp struct {
 			Title       string `json:"title"`
 			Description string `json:"description"`
@@ -130,18 +120,15 @@ func (p *SourceGraphSearchProvider) Search(ctx context.Context, query string) (*
 			}
 		}
 
-		// Parse array of results
 		var matches []struct {
 			Repository string `json:"repository"`
 		}
 		if err := json.Unmarshal([]byte(jsonData), &matches); err != nil {
-			continue // Skip non-array responses (could be progress events, etc.)
+			continue // progress events share the stream and are not match arrays
 		}
 
-		// Extract repositories
 		for _, match := range matches {
 			if match.Repository != "" {
-				// Remove "github.com/" prefix
 				repoName := strings.TrimPrefix(match.Repository, "github.com/")
 				if !seen[repoName] {
 					seen[repoName] = true

@@ -18,19 +18,16 @@ func init() {
 	})
 }
 
-// Detection detects agent security issues such as use of self-hosted agent pools
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new agent-security detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("agent-security", platforms.PlatformAzureDevOps, detections.SeverityHigh),
 	}
 }
 
-// Detect analyzes the graph for unrestricted self-hosted agent pools
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
@@ -82,9 +79,8 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// buildPoolMap reads agent pool metadata from the graph (set by the scan
-// command via ListAgentPools) and returns a map of lowercase pool name to
-// IsHosted status. Returns nil when no pool metadata is available (offline mode).
+// Maps lowercase pool name to the API's IsHosted flag; nil when the scan collected
+// no pool metadata (offline mode).
 func buildPoolMap(g *graph.Graph) map[string]bool {
 	data, ok := g.GetMetadata("ado_agent_pools")
 	if !ok {
@@ -101,10 +97,6 @@ func buildPoolMap(g *graph.Graph) map[string]bool {
 	return m
 }
 
-// isSelfHostedPool checks if the RunsOn value indicates a self-hosted agent pool.
-// When poolMap is non-nil (API data available), pool names are checked against
-// the API's IsHosted field first. The vmImage heuristic is only used for pool
-// names not found in the API data, or in offline mode.
 func isSelfHostedPool(runsOn string, poolMap map[string]bool) bool {
 	if runsOn == "" {
 		return false
@@ -112,30 +104,27 @@ func isSelfHostedPool(runsOn string, poolMap map[string]bool) bool {
 
 	runsOnLower := strings.ToLower(runsOn)
 
-	// When API pool data is available, it is authoritative
+	// API pool data is authoritative.
 	if poolMap != nil {
 		if isHosted, known := poolMap[runsOnLower]; known {
 			return !isHosted
 		}
 	}
 
-	// For pool names not in the API (or offline mode), use vmImage heuristic
 	if isVMImage(runsOnLower) {
 		return false
 	}
 
-	// Offline fallback for non-vmImage pool names
+	// "Azure Pipelines" is the default Microsoft-hosted pool.
 	if poolMap == nil {
 		return runsOnLower != "azure pipelines"
 	}
 
-	// API available but pool not listed -- conservative: flag as self-hosted
+	// Pool absent from the API data: flag conservatively.
 	return true
 }
 
-// isVMImage returns true if the RunsOn value (already lowercased) is a
-// Microsoft-hosted vmImage string. These follow predictable naming conventions
-// and don't need API validation.
+// runsOnLower must already be lowercased by the caller.
 func isVMImage(runsOnLower string) bool {
 	if strings.HasPrefix(runsOnLower, "vmimage:") {
 		return true

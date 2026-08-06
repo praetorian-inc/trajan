@@ -1,6 +1,5 @@
 package jenkins
 
-// Job represents a Jenkins job/pipeline
 type Job struct {
 	Class    string `json:"_class"`
 	Name     string `json:"name"`
@@ -11,18 +10,16 @@ type Job struct {
 	Jobs     []Job  `json:"jobs,omitempty"` // For folder recursion
 }
 
-// JobsResponse wraps the Jenkins API response for listing jobs
 type JobsResponse struct {
 	Jobs []Job `json:"jobs"`
 }
 
-// CrumbInfo holds Jenkins CSRF crumb data
 type CrumbInfo struct {
 	Crumb             string `json:"crumb"`
 	CrumbRequestField string `json:"crumbRequestField"`
 }
 
-// ServerInfo represents Jenkins server metadata from /api/json
+// From /api/json.
 type ServerInfo struct {
 	Mode            string `json:"mode"` // NORMAL or EXCLUSIVE
 	NodeDescription string `json:"nodeDescription"`
@@ -33,14 +30,14 @@ type ServerInfo struct {
 	Version         string `json:"-"` // Parsed from X-Jenkins response header
 }
 
-// WhoAmI represents the response from /whoAmI/api/json
+// From /whoAmI/api/json.
 type WhoAmI struct {
 	Name        string   `json:"name"`
 	Anonymous   bool     `json:"anonymous"`
 	Authorities []string `json:"authorities"`
 }
 
-// Node represents a Jenkins build agent from /computer/api/json
+// From /computer/api/json.
 type Node struct {
 	DisplayName        string  `json:"displayName"`
 	Offline            bool    `json:"offline"`
@@ -50,17 +47,14 @@ type Node struct {
 	AssignedLabels     []Label `json:"assignedLabels"`
 }
 
-// Label represents a Jenkins node label
 type Label struct {
 	Name string `json:"name"`
 }
 
-// NodesResponse wraps the Jenkins API response for /computer/api/json
 type NodesResponse struct {
 	Computer []Node `json:"computer"`
 }
 
-// PluginInfo represents an installed Jenkins plugin
 type PluginInfo struct {
 	ShortName string `json:"shortName"`
 	Version   string `json:"version"`
@@ -70,12 +64,10 @@ type PluginInfo struct {
 	LongName  string `json:"longName"`
 }
 
-// PluginsResponse wraps the Jenkins API response for /pluginManager/api/json
 type PluginsResponse struct {
 	Plugins []PluginInfo `json:"plugins"`
 }
 
-// BuildInfo represents a Jenkins build
 type BuildInfo struct {
 	Number    int    `json:"number"`
 	Result    string `json:"result"` // SUCCESS, FAILURE, UNSTABLE, ABORTED

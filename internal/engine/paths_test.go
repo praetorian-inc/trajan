@@ -172,9 +172,9 @@ func TestBranchBuildersNonDefault(t *testing.T) {
 	}
 }
 
-// NormalizeADOEdges must hash the composite key into a bounded, collision-free
-// filename: distinct keys never share a file (the adoKey "__"->"--" flattening
-// used to alias them), and a long key never overflows the 255-byte path limit.
+// The composite key must hash to a bounded, collision-free filename: distinct keys
+// never share a file (adoKey's "__"->"--" folding used to alias them), and a long key
+// never overflows the 255-byte path limit.
 func TestNormalizeADOEdgesBoundedDistinct(t *testing.T) {
 	a := NormalizeADOEdges("has-policy", "foo-bar__baz")
 	b := NormalizeADOEdges("has-policy", "foo__bar-baz")

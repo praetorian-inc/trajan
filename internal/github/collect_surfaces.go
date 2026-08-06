@@ -14,12 +14,9 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// Each per-repo collector (rulesets/secrets/variables/runners) also serves the
-// org scope when called with repo=="". Optional surfaces soft-fail (403/404 ->
-// skip + mark) rather than aborting.
-//
-// The secrets collector captures metadata only (names/scope/visibility/
-// updated_at) — never secret values.
+// Each per-repo collector (rulesets/secrets/variables/runners) also serves the org
+// scope when called with repo=="". Optional surfaces soft-fail (403/404 -> skip and
+// mark) rather than aborting. Secrets are captured as metadata only, never values.
 
 const collectorVer = "@0.1"
 
@@ -241,13 +238,11 @@ func fetchRepoBundle(ctx context.Context, gh GitHub, org, repo string) (map[stri
 	}, nil
 }
 
-// GitHub resolves CODEOWNERS from .github/, then the repository root, then
-// docs/, and the first file found wins. Most repositories have none, so an
-// exhausted search records content: null rather than failing the bundle — the
-// distinction between "collected, absent" and "never collected" is what stops a
-// rule from reading a missing file as an uncovered one. A search that only ever
-// saw 403s is a third state and carries _unavailable, because "absent" would be
-// an answer the token was never allowed to give.
+// GitHub resolves CODEOWNERS from .github/, then the repository root, then docs/,
+// first file found winning. An exhausted search records content: null rather than
+// failing the bundle, so a rule cannot read "collected, absent" as "never
+// collected"; a search that only ever saw 403s carries _unavailable instead,
+// because "absent" would be an answer the token was never allowed to give.
 var codeownersPaths = []string{".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"}
 
 func fetchCodeowners(ctx context.Context, gh GitHub, org, repo, branch string) (map[string]any, error) {
@@ -511,7 +506,6 @@ func collectSecretsRepo(ctx context.Context, gh GitHub, cp engine.CurrentPhase, 
 	return nil
 }
 
-// Adds a selected_repositories list to each "selected"-visibility org secret.
 func enrichSelectedRepos(ctx context.Context, gh GitHub, org string, secrets []json.RawMessage) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, 0, len(secrets))
 	for _, s := range secrets {
@@ -961,8 +955,8 @@ func loginIDType(items []json.RawMessage) []map[string]any {
 	return out
 }
 
-// Returns a JSON null (not nil) for an absent value so the field serializes as
-// null rather than being omitted, since rules key on it.
+// A JSON null (not nil) for an absent value, so the key serializes as null rather
+// than being omitted: rules key on it.
 func rawOrNull(raw json.RawMessage) json.RawMessage {
 	if len(raw) == 0 {
 		return json.RawMessage("null")

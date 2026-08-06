@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -13,7 +12,9 @@ import (
 	"strings"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 const pushBatch = 1000
@@ -26,13 +27,24 @@ func Push(ctx context.Context, cfg *engine.Config, runDir, neo4jURL, neo4jUser, 
 	if err := state.CheckPhase(engine.PhasePush); err != nil {
 		return err
 	}
+	ui.PhaseHeader("Push")
 	timer := engine.StartPhaseTimer(engine.PhasePush, "push")
-	pushErr := runPush(ctx, runDir, state, neo4jURL, neo4jUser, neo4jPass, reset)
-	state.RecordPhase(timer.Stop(pushErr))
-	return errors.Join(pushErr, state.Save(runDir))
+	stats, pushErr := runPush(ctx, runDir, state, neo4jURL, neo4jUser, neo4jPass, reset)
+	rec := timer.Stop(pushErr)
+	state.RecordPhase(rec)
+	saveErr := state.Save(runDir)
+	if pushErr == nil {
+		ui.Outcome("Push complete", []ui.Count{
+			{Label: "nodes", N: stats.nodes},
+			{Label: "edges", N: stats.edges},
+		}, engine.Elapsed(rec.DurationS))
+	}
+	return errors.Join(pushErr, saveErr)
 }
 
-func runPush(ctx context.Context, runDir string, state *engine.State, url, user, pass string, reset bool) error {
+type pushStats struct{ nodes, edges int }
+
+func runPush(ctx context.Context, runDir string, state *engine.State, url, user, pass string, reset bool) (pushStats, error) {
 	var nf nodesFile
 	var ef edgesFile
 	for _, in := range []struct {
@@ -41,49 +53,49 @@ func runPush(ctx context.Context, runDir string, state *engine.State, url, user,
 	}{{engine.GraphNodes(), &nf}, {engine.GraphEdges(), &ef}} {
 		b, err := os.ReadFile(filepath.Join(runDir, in.rel))
 		if err != nil {
-			return fmt.Errorf("read %s: %w (run graph first)", in.rel, err)
+			return pushStats{}, fmt.Errorf("read %s: %w (run graph first)", in.rel, err)
 		}
 		if err := json.Unmarshal(b, in.v); err != nil {
-			return fmt.Errorf("parse %s: %w", in.rel, err)
+			return pushStats{}, fmt.Errorf("parse %s: %w", in.rel, err)
 		}
 	}
 
 	drv, err := neo4j.NewDriverWithContext(url, neo4j.BasicAuth(user, pass, ""))
 	if err != nil {
-		return err
+		return pushStats{}, err
 	}
 	defer drv.Close(ctx)
 	if err := drv.VerifyConnectivity(ctx); err != nil {
-		return fmt.Errorf("connect %s: %w", url, err)
+		return pushStats{}, fmt.Errorf("connect %s: %w", url, err)
 	}
 
 	sess := drv.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer sess.Close(ctx)
 
 	if err := ensureConstraints(ctx, sess, nf.Nodes); err != nil {
-		return err
+		return pushStats{}, err
 	}
 	if reset {
 		if _, err := run(ctx, sess, "MATCH (n) DETACH DELETE n", nil); err != nil {
-			return err
+			return pushStats{}, err
 		}
 	}
 
 	nodesWritten, err := pushNodes(ctx, sess, nf.Nodes, state)
 	if err != nil {
-		return err
+		return pushStats{}, err
 	}
 	edgesWritten, err := pushEdges(ctx, sess, ef.Edges, state)
 	if err != nil {
-		return err
+		return pushStats{}, err
 	}
 
-	slog.Info("push complete", "url", url, "nodes", nodesWritten, "edges", edgesWritten,
-		"edges_skipped", len(ef.Edges)-edgesWritten)
+	// A skipped edge is an endpoint no node supplied — a build/push contract violation,
+	// so it fails the phase rather than degrading it, and the Outcome never prints.
 	if edgesWritten < len(ef.Edges) {
-		return fmt.Errorf("%d edge(s) named an endpoint no node supplied", len(ef.Edges)-edgesWritten)
+		return pushStats{}, fmt.Errorf("%d edge(s) named an endpoint no node supplied", len(ef.Edges)-edgesWritten)
 	}
-	return nil
+	return pushStats{nodes: nodesWritten, edges: edgesWritten}, nil
 }
 
 func run(ctx context.Context, sess neo4j.SessionWithContext, cypher string, params map[string]any) (int, error) {

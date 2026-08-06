@@ -6,8 +6,6 @@ import (
 	"net/url"
 )
 
-// ListGitRefs lists git refs (branches/tags) in a repository
-// API: GET {org}/{project}/_apis/git/repositories/{repo}/refs?api-version=7.1-preview.1
 func (c *Client) ListGitRefs(ctx context.Context, projectNameOrID, repoNameOrID string) ([]GitRef, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	encodedRepo := url.PathEscape(repoNameOrID)
@@ -20,8 +18,6 @@ func (c *Client) ListGitRefs(ctx context.Context, projectNameOrID, repoNameOrID 
 	return result.Value, nil
 }
 
-// ListGitBranches lists git branches (filter=heads) in a repository
-// API: GET {org}/{project}/_apis/git/repositories/{repo}/refs?filter=heads/&api-version=7.1-preview.1
 func (c *Client) ListGitBranches(ctx context.Context, projectNameOrID, repoNameOrID string) ([]GitRef, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	encodedRepo := url.PathEscape(repoNameOrID)
@@ -34,8 +30,6 @@ func (c *Client) ListGitBranches(ctx context.Context, projectNameOrID, repoNameO
 	return result.Value, nil
 }
 
-// CreateBranch creates a new branch in a repository
-// API: POST {org}/{project}/_apis/git/repositories/{repo}/refs?api-version=7.1-preview.1
 func (c *Client) CreateBranch(ctx context.Context, projectNameOrID, repoNameOrID, branchName, sourceCommitID string) error {
 	encodedProject := url.PathEscape(projectNameOrID)
 	encodedRepo := url.PathEscape(repoNameOrID)
@@ -60,8 +54,6 @@ func (c *Client) CreateBranch(ctx context.Context, projectNameOrID, repoNameOrID
 	return nil
 }
 
-// DeleteBranch deletes a branch from a repository
-// API: POST {org}/{project}/_apis/git/repositories/{repo}/refs?api-version=7.1-preview.1
 func (c *Client) DeleteBranch(ctx context.Context, projectNameOrID, repoNameOrID, branchName, objectID string) error {
 	encodedProject := url.PathEscape(projectNameOrID)
 	encodedRepo := url.PathEscape(repoNameOrID)
@@ -86,8 +78,6 @@ func (c *Client) DeleteBranch(ctx context.Context, projectNameOrID, repoNameOrID
 	return nil
 }
 
-// PushFile pushes a file to a repository
-// API: POST {org}/{project}/_apis/git/repositories/{repo}/pushes?api-version=7.1-preview.1
 func (c *Client) PushFile(ctx context.Context, projectNameOrID, repoNameOrID, branchName, filePath, content, commitMessage, oldObjectID string) error {
 	encodedProject := url.PathEscape(projectNameOrID)
 	encodedRepo := url.PathEscape(repoNameOrID)
@@ -120,8 +110,6 @@ func (c *Client) PushFile(ctx context.Context, projectNameOrID, repoNameOrID, br
 	return nil
 }
 
-// ListRepoItems lists files/folders in a repository
-// API: GET {org}/{project}/_apis/git/repositories/{repo}/items?recursionLevel=Full&api-version=7.1-preview.1
 func (c *Client) ListRepoItems(ctx context.Context, projectNameOrID, repoNameOrID string) ([]RepoItem, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	encodedRepo := url.PathEscape(repoNameOrID)
@@ -134,8 +122,6 @@ func (c *Client) ListRepoItems(ctx context.Context, projectNameOrID, repoNameOrI
 	return result.Value, nil
 }
 
-// CreatePullRequest creates a new pull request
-// API: POST {org}/{project}/_apis/git/repositories/{repo}/pullrequests?api-version=7.1
 func (c *Client) CreatePullRequest(ctx context.Context, projectNameOrID, repoNameOrID string, req PullRequestCreateRequest) (*PullRequest, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	encodedRepo := url.PathEscape(repoNameOrID)
@@ -148,8 +134,6 @@ func (c *Client) CreatePullRequest(ctx context.Context, projectNameOrID, repoNam
 	return &result, nil
 }
 
-// AbandonPullRequest sets a pull request status to abandoned
-// API: PATCH {org}/{project}/_apis/git/repositories/{repo}/pullrequests/{pullRequestId}?api-version=7.1
 func (c *Client) AbandonPullRequest(ctx context.Context, projectNameOrID, repoNameOrID string, pullRequestID int) error {
 	encodedProject := url.PathEscape(projectNameOrID)
 	encodedRepo := url.PathEscape(repoNameOrID)

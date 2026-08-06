@@ -17,19 +17,16 @@ func init() {
 	})
 }
 
-// Detection detects script injection vulnerabilities in GitLab CI
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new injection detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("script-injection", "gitlab", detections.SeverityHigh),
 	}
 }
 
-// Detect analyzes the graph for injection vulnerabilities
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
@@ -57,7 +54,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 					return true
 				}
 
-				// Check for all injectable contexts in scripts
 				var matched []string
 				for _, injectable := range common.InjectableContexts {
 					if strings.Contains(step.Run, "$"+injectable) ||
@@ -76,15 +72,12 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// createFinding creates a finding for script injection with all injectable contexts
 func (d *Detection) createFinding(g *graph.Graph, step *graph.StepNode, injectables []string) detections.Finding {
 	wf := common.GetStepParentWorkflow(g, step)
 	if wf == nil {
-		// Fallback to empty workflow info if parent not found
 		wf = &graph.WorkflowNode{}
 	}
 
-	// Build enhanced evidence listing all injectable variables
 	varList := make([]string, len(injectables))
 	ctxList := make([]string, len(injectables))
 	for i, injectable := range injectables {
@@ -94,10 +87,8 @@ func (d *Detection) createFinding(g *graph.Graph, step *graph.StepNode, injectab
 	evidence := "Script uses user-controllable variable(s) " + strings.Join(varList, ", ") + " which can be manipulated by external attackers to inject commands. "
 	evidence += "Attackers can craft malicious values (e.g., in merge request titles or commit messages) to execute arbitrary commands in the CI pipeline."
 
-	// Build attack chain
 	attackChain := detections.BuildChainFromNodes(wf, step)
 
-	// Create line ranges
 	var lineRanges []detections.LineRange
 	if step.Line > 0 {
 		lineRanges = append(lineRanges, detections.LineRange{
@@ -107,7 +98,6 @@ func (d *Detection) createFinding(g *graph.Graph, step *graph.StepNode, injectab
 		})
 	}
 
-	// Metadata
 	metadata := make(map[string]interface{})
 	metadata["injectableVariables"] = ctxList
 

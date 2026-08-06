@@ -7,32 +7,28 @@ import (
 )
 
 // InjectableContexts are user-controllable Azure DevOps pipeline variables.
-// These are real predefined variables per Microsoft documentation.
 var InjectableContexts = []string{
-	"Build.SourceVersionMessage",      // Commit message (user-controlled)
-	"Build.SourceBranchName",          // Short branch name (user-controlled via PR)
-	"Build.SourceBranch",              // Full branch ref e.g. refs/heads/feature/foo
-	"Build.RequestedFor",              // Display name of person who triggered build
-	"Build.RequestedForEmail",         // Email of person who triggered build
-	"System.PullRequest.SourceBranch", // PR source branch name
-	"System.PullRequest.TargetBranch", // PR target branch name
+	"Build.SourceVersionMessage",
+	"Build.SourceBranchName", // short name, unlike Build.SourceBranch
+	"Build.SourceBranch",     // full ref, e.g. refs/heads/feature/foo
+	"Build.RequestedFor",
+	"Build.RequestedForEmail",
+	"System.PullRequest.SourceBranch",
+	"System.PullRequest.TargetBranch",
 }
 
-// DangerousTokenVariables expose sensitive pipeline tokens
 var DangerousTokenVariables = []string{
 	"SYSTEM_ACCESSTOKEN",
 	"System.AccessToken",
 	"AZURE_DEVOPS_EXT_PAT",
 }
 
-// DangerousTriggers are PR-based triggers that allow untrusted input.
 // Uses exact match to avoid false positives (e.g. "sprint" matching "pr").
 var DangerousTriggers = map[string]bool{
 	"pr":          true,
 	"pullrequest": true,
 }
 
-// ContainsInjectableContext checks if a string references injectable variables.
 // Matches raw name (covers all syntaxes: $(Var), ${{ variables.Var }}, $[variables.Var]).
 func ContainsInjectableContext(s string) bool {
 	for _, ctx := range InjectableContexts {
@@ -43,7 +39,6 @@ func ContainsInjectableContext(s string) bool {
 	return false
 }
 
-// ContainsDangerousToken checks if a string references dangerous tokens
 func ContainsDangerousToken(s string) bool {
 	upper := strings.ToUpper(s)
 	for _, token := range DangerousTokenVariables {
@@ -54,8 +49,6 @@ func ContainsDangerousToken(s string) bool {
 	return false
 }
 
-// HasDangerousTrigger checks if any trigger is PR-based.
-// Uses exact match against known PR trigger keywords.
 func HasDangerousTrigger(triggers []string) bool {
 	for _, t := range triggers {
 		if DangerousTriggers[strings.ToLower(t)] {
@@ -65,7 +58,6 @@ func HasDangerousTrigger(triggers []string) bool {
 	return false
 }
 
-// LineForKey returns the line for a specific key if available, otherwise falls back.
 func LineForKey(lines map[string]int, key string, fallback int) int {
 	if line, ok := lines[key]; ok && line > 0 {
 		return line
@@ -73,10 +65,7 @@ func LineForKey(lines map[string]int, key string, fallback int) int {
 	return fallback
 }
 
-// ScriptLineForPattern returns the absolute line number where pattern first appears in step.Run.
-// For multi-line block scalars, content starts at step.Line+1.
-// For single-line inline scripts, content is on step.Line itself.
-// If caseInsensitive is true, matching is done case-insensitively.
+// A block scalar's content starts at step.Line+1; an inline script sits on step.Line.
 func ScriptLineForPattern(step *graph.StepNode, pattern string, caseInsensitive bool) int {
 	if step.Run == "" {
 		return step.Line
@@ -101,8 +90,7 @@ func ScriptLineForPattern(step *graph.StepNode, pattern string, caseInsensitive 
 	return step.Line
 }
 
-// SafeSystemVariablesMacro contains non-sensitive ADO predefined variables
-// in dot-notation, matching how they appear in $(…) macro expressions.
+// Dot-notation, as the variables appear in $(…) macro expressions.
 var SafeSystemVariablesMacro = map[string]bool{
 	"Build.BuildId":           true,
 	"Build.BuildNumber":       true,
@@ -138,8 +126,7 @@ var SafeSystemVariablesMacro = map[string]bool{
 	"Pipeline.Workspace":      true,
 }
 
-// SafeSystemVariablesTemplateExpr contains non-sensitive ADO predefined variables
-// in underscore-notation, matching how they appear in ${{ variables.… }} template expressions.
+// Underscore-notation, as the variables appear in ${{ variables.… }} template expressions.
 var SafeSystemVariablesTemplateExpr = map[string]bool{
 	"Build_BuildId":           true,
 	"Build_BuildNumber":       true,

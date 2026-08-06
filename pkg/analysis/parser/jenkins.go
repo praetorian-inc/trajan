@@ -1,4 +1,3 @@
-// Package parser provides workflow parsing for multiple CI/CD platforms
 package parser
 
 import (
@@ -9,25 +8,20 @@ import (
 	"strings"
 )
 
-// JenkinsParser implements WorkflowParser for Jenkins
 type JenkinsParser struct{}
 
-// NewJenkinsParser creates a new Jenkins parser
 func NewJenkinsParser() *JenkinsParser {
 	return &JenkinsParser{}
 }
 
-// Platform returns the platform identifier
 func (p *JenkinsParser) Platform() string {
 	return "jenkins"
 }
 
-// CanParse returns true if this parser can handle the given file path
 func (p *JenkinsParser) CanParse(path string) bool {
 	return path == "Jenkinsfile" || strings.Contains(path, "config.xml")
 }
 
-// Parse parses Jenkins workflow content (either config.xml or raw Groovy Jenkinsfile)
 func (p *JenkinsParser) Parse(data []byte) (*NormalizedWorkflow, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("empty Jenkins configuration")
@@ -40,11 +34,6 @@ func (p *JenkinsParser) Parse(data []byte) (*NormalizedWorkflow, error) {
 	return p.parseGroovy(trimmed)
 }
 
-// ---------------------------------------------------------------------------
-// XML config.xml parsing
-// ---------------------------------------------------------------------------
-
-// jenkinsFlowDefinition is used to parse pipeline config.xml
 type jenkinsFlowDefinition struct {
 	XMLName    xml.Name `xml:"flow-definition"`
 	Definition struct {
@@ -52,7 +41,6 @@ type jenkinsFlowDefinition struct {
 	} `xml:"definition"`
 }
 
-// jenkinsFreestyleProject is used to parse freestyle job config.xml
 type jenkinsFreestyleProject struct {
 	XMLName      xml.Name `xml:"project"`
 	AssignedNode string   `xml:"assignedNode"`
@@ -72,14 +60,11 @@ func (p *JenkinsParser) parseConfigXML(data []byte) (*NormalizedWorkflow, error)
 	data = bytes.Replace(data, []byte(`<?xml version='1.1'`), []byte(`<?xml version='1.0'`), 1)
 	data = bytes.Replace(data, []byte(`<?xml version="1.1"`), []byte(`<?xml version="1.0"`), 1)
 
-	// Try pipeline flow-definition first
 	var flowDef jenkinsFlowDefinition
 	if err := xml.Unmarshal(data, &flowDef); err == nil && flowDef.Definition.Script != "" {
-		// Pipeline job — extract the Groovy script and parse it
 		return p.parseGroovy(flowDef.Definition.Script)
 	}
 
-	// Try freestyle project
 	var freestyle jenkinsFreestyleProject
 	if err := xml.Unmarshal(data, &freestyle); err != nil {
 		return nil, fmt.Errorf("parsing Jenkins config.xml: %w", err)
@@ -128,11 +113,6 @@ func (p *JenkinsParser) convertFreestyle(f *jenkinsFreestyleProject) *Normalized
 	return wf
 }
 
-// ---------------------------------------------------------------------------
-// Groovy DSL parsing (declarative and scripted)
-// ---------------------------------------------------------------------------
-
-// Regex patterns for Groovy DSL parsing
 var (
 	reAgentAny    = regexp.MustCompile(`(?m)^\s*agent\s+any\s*$`)
 	reAgentNone   = regexp.MustCompile(`(?m)^\s*agent\s+none\s*$`)
@@ -152,7 +132,6 @@ func (p *JenkinsParser) parseGroovy(script string) (*NormalizedWorkflow, error) 
 		Env:      make(map[string]string),
 	}
 
-	// Determine if declarative (has pipeline { }) or scripted
 	pipelineStart := strings.Index(script, "pipeline {")
 	if pipelineStart == -1 {
 		pipelineStart = strings.Index(script, "pipeline{")
@@ -171,20 +150,15 @@ func (p *JenkinsParser) parseGroovy(script string) (*NormalizedWorkflow, error) 
 	return wf, nil
 }
 
-// parseDeclarative handles declarative pipeline syntax
 func (p *JenkinsParser) parseDeclarative(script string, wf *NormalizedWorkflow) {
-	// Global agent
 	globalAgent := p.extractGlobalAgent(script)
 
-	// Environment block at pipeline level
 	wf.Env = p.extractEnvBlock(script, "pipeline")
 
-	// Triggers: check for parameters block
 	if reParameters.MatchString(script) {
 		wf.Triggers = append(wf.Triggers, "parameterized")
 	}
 
-	// Find all stage blocks
 	stages := p.extractStages(script)
 	for i, stage := range stages {
 		jobID := fmt.Sprintf("stage-%d", i)
@@ -197,25 +171,21 @@ func (p *JenkinsParser) parseDeclarative(script string, wf *NormalizedWorkflow) 
 			Services: make(map[string]*NormalizedService),
 		}
 
-		// Stage-level agent override
 		if sa := p.extractStageAgent(stage.body); sa != "" {
 			job.RunsOn = sa
 		}
 
-		// Condition from when block
 		if reWhenBlock.MatchString(stage.body) {
 			whenBody := extractBraceBlock(stage.body, "when")
 			job.Condition = strings.TrimSpace(whenBody)
 		}
 
-		// Extract sh/bat steps
 		job.Steps = p.extractShSteps(stage.body)
 
 		wf.Jobs[jobID] = job
 	}
 }
 
-// parseScripted handles scripted pipeline syntax: node('label') { ... }
 func (p *JenkinsParser) parseScripted(script string, wf *NormalizedWorkflow) {
 	agent := ""
 	if m := reNodeAgent.FindStringSubmatch(script); m != nil {
@@ -234,12 +204,8 @@ func (p *JenkinsParser) parseScripted(script string, wf *NormalizedWorkflow) {
 	wf.Jobs["scripted"] = job
 }
 
-// ---------------------------------------------------------------------------
-// Agent extraction helpers
-// ---------------------------------------------------------------------------
-
 func (p *JenkinsParser) extractGlobalAgent(script string) string {
-	// Find pipeline block body first to scope the search
+	// Scope to the pipeline block so a stage-level agent is not read as global.
 	pipelineBody := extractBraceBlock(script, "pipeline")
 	if pipelineBody == "" {
 		pipelineBody = script
@@ -267,16 +233,11 @@ func (p *JenkinsParser) extractAgentFromText(text string) string {
 	return ""
 }
 
-// ---------------------------------------------------------------------------
-// Stage extraction
-// ---------------------------------------------------------------------------
-
 type stageInfo struct {
 	name string
 	body string
 }
 
-// extractStages finds all stage('Name') { ... } blocks
 func (p *JenkinsParser) extractStages(script string) []stageInfo {
 	var stages []stageInfo
 	idxs := reStage.FindAllStringIndex(script, -1)
@@ -288,7 +249,6 @@ func (p *JenkinsParser) extractStages(script string) []stageInfo {
 		}
 		stageName := m[1]
 
-		// Find the opening brace after the stage(...)
 		rest := script[idx[1]:]
 		braceIdx := strings.Index(rest, "{")
 		if braceIdx == -1 {
@@ -300,12 +260,7 @@ func (p *JenkinsParser) extractStages(script string) []stageInfo {
 	return stages
 }
 
-// ---------------------------------------------------------------------------
-// Environment block extraction
-// ---------------------------------------------------------------------------
-
-// extractEnvBlock finds an environment { ... } block and parses KEY = 'val' pairs.
-// The scope parameter is unused (for clarity) but signals intent.
+// The scope parameter is ignored; it records the caller's intent only.
 func (p *JenkinsParser) extractEnvBlock(text, _ string) map[string]string {
 	env := make(map[string]string)
 	envBody := extractBraceBlock(text, "environment")
@@ -318,17 +273,11 @@ func (p *JenkinsParser) extractEnvBlock(text, _ string) map[string]string {
 	return env
 }
 
-// ---------------------------------------------------------------------------
-// sh / bat step extraction
-// ---------------------------------------------------------------------------
-
-// extractShSteps finds all sh and bat commands in the given text block.
-// It handles: sh 'cmd', sh "cmd", sh ”'cmd”', sh """cmd"""
+// Handles single, double and triple-quoted command strings.
 func (p *JenkinsParser) extractShSteps(text string) []*NormalizedStep {
 	var steps []*NormalizedStep
 	i := 0
 	for i < len(text) {
-		// Look for next sh or bat keyword
 		shIdx := -1
 		shKind := ""
 		for _, kw := range []string{"sh ", "sh\t", "sh(", "bat ", "bat\t", "bat("} {
@@ -344,7 +293,6 @@ func (p *JenkinsParser) extractShSteps(text string) []*NormalizedStep {
 		absIdx := i + shIdx + len(shKind)
 		i = absIdx
 
-		// Skip whitespace and optional '('
 		for i < len(text) && (text[i] == ' ' || text[i] == '\t' || text[i] == '(') {
 			i++
 		}
@@ -367,12 +315,7 @@ func (p *JenkinsParser) extractShSteps(text string) []*NormalizedStep {
 	return steps
 }
 
-// ---------------------------------------------------------------------------
-// Brace matching and quoted string helpers
-// ---------------------------------------------------------------------------
-
-// extractBraceBlock finds the first occurrence of `keyword {` and returns the
-// content between the matching braces (exclusive).
+// Returns the content between the braces that follow keyword, exclusive.
 func extractBraceBlock(text, keyword string) string {
 	idx := strings.Index(text, keyword+" {")
 	if idx == -1 {
@@ -388,9 +331,8 @@ func extractBraceBlock(text, keyword string) string {
 	return extractBraceContent(text[idx+braceStart:])
 }
 
-// extractBraceContent returns the content inside the outermost braces of s,
-// which must start with '{'. It respects single-quoted, double-quoted,
-// triple-single-quoted, and triple-double-quoted strings.
+// s must start with '{'. Brace counting skips over single-, double- and
+// triple-quoted strings so braces inside them do not change depth.
 func extractBraceContent(s string) string {
 	if len(s) == 0 || s[0] != '{' {
 		return ""
@@ -398,7 +340,7 @@ func extractBraceContent(s string) string {
 	depth := 0
 	i := 0
 	for i < len(s) {
-		// Triple-quoted strings first
+		// Must precede the single-character quote cases.
 		if i+2 < len(s) {
 			triple := s[i : i+3]
 			if triple == `"""` || triple == "'''" {
@@ -421,7 +363,6 @@ func extractBraceContent(s string) string {
 			}
 			i++
 		case '"':
-			// Skip double-quoted string
 			i++
 			for i < len(s) && s[i] != '"' {
 				if s[i] == '\\' {
@@ -431,7 +372,6 @@ func extractBraceContent(s string) string {
 			}
 			i++ // closing quote
 		case '\'':
-			// Skip single-quoted string
 			i++
 			for i < len(s) && s[i] != '\'' {
 				if s[i] == '\\' {
@@ -447,15 +387,12 @@ func extractBraceContent(s string) string {
 	return ""
 }
 
-// extractQuotedString extracts the string value starting at position pos in text.
-// Returns the string content and number of bytes consumed. Returns ("", 0) if not a
-// recognized quote pattern.
+// Returns the content and the bytes consumed, or ("", 0) if pos is not a quote.
 func extractQuotedString(text string, pos int) (string, int) {
 	if pos >= len(text) {
 		return "", 0
 	}
 
-	// Triple-double-quote
 	if pos+2 < len(text) && text[pos:pos+3] == `"""` {
 		end := strings.Index(text[pos+3:], `"""`)
 		if end != -1 {
@@ -463,7 +400,6 @@ func extractQuotedString(text string, pos int) (string, int) {
 			return strings.TrimSpace(content), 3 + end + 3
 		}
 	}
-	// Triple-single-quote
 	if pos+2 < len(text) && text[pos:pos+3] == "'''" {
 		end := strings.Index(text[pos+3:], "'''")
 		if end != -1 {
@@ -471,7 +407,6 @@ func extractQuotedString(text string, pos int) (string, int) {
 			return strings.TrimSpace(content), 3 + end + 3
 		}
 	}
-	// Double-quote
 	if text[pos] == '"' {
 		i := pos + 1
 		for i < len(text) && text[i] != '"' && text[i] != '\n' {
@@ -484,7 +419,6 @@ func extractQuotedString(text string, pos int) (string, int) {
 			return text[pos+1 : i], i - pos + 1
 		}
 	}
-	// Single-quote
 	if text[pos] == '\'' {
 		i := pos + 1
 		for i < len(text) && text[i] != '\'' && text[i] != '\n' {
@@ -500,7 +434,6 @@ func extractQuotedString(text string, pos int) (string, int) {
 	return "", 0
 }
 
-// init registers the Jenkins parser
 func init() {
 	RegisterParser(NewJenkinsParser())
 }

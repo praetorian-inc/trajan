@@ -12,7 +12,6 @@ import (
 	"strings"
 )
 
-// AQLResult represents a single artifact result from AQL query
 type AQLResult struct {
 	Repo     string `json:"repo"`
 	Path     string `json:"path"`
@@ -22,37 +21,32 @@ type AQLResult struct {
 	Modified string `json:"modified"`
 }
 
-// AQLResponse represents the AQL API response
 type AQLResponse struct {
 	Results []AQLResult `json:"results"`
 }
 
-// ArtifactSearchOptions configures artifact search
 type ArtifactSearchOptions struct {
 	Name  string // Artifact name pattern (e.g., *.jar)
-	Repo  string // Repository to search in
+	Repo  string
 	Type  string // Artifact type (e.g., jar, war)
-	Limit int    // Maximum number of results
+	Limit int
 }
 
-// ArtifactDownloadOptions configures artifact downloads
 type ArtifactDownloadOptions struct {
-	Repo        string // Repository name
-	Path        string // Path within repository
-	OutputDir   string // Output directory for downloads
+	Repo        string
+	Path        string
+	OutputDir   string
 	MaxFileSize string // Maximum file size (e.g., "50MB", "1GB")
-	MaxTotal    string // Maximum total download size
-	MaxFiles    int    // Maximum number of files to download
+	MaxTotal    string
+	MaxFiles    int
 }
 
-// DownloadResult tracks download statistics
 type DownloadResult struct {
 	FilesDownloaded int
 	TotalSize       int64
 	Skipped         int
 }
 
-// ArtifactSecret represents a detected secret in an artifact
 type ArtifactSecret struct {
 	Artifact    string   `json:"artifact"`
 	Path        string   `json:"path"`
@@ -61,9 +55,7 @@ type ArtifactSecret struct {
 	Value       string   `json:"value,omitempty"`
 }
 
-// SearchArtifacts searches artifacts using AQL
 func (p *Platform) SearchArtifacts(ctx context.Context, opts ArtifactSearchOptions) ([]AQLResult, error) {
-	// Build AQL query
 	aql := buildAQLQuery(opts.Name, opts.Repo, opts.Type, opts.Limit)
 
 	resp, err := p.client.PostAQL(ctx, aql)
@@ -89,15 +81,12 @@ func (p *Platform) SearchArtifacts(ctx context.Context, opts ArtifactSearchOptio
 	return aqlResp.Results, nil
 }
 
-// DownloadArtifacts downloads artifacts with limits
 func (p *Platform) DownloadArtifacts(ctx context.Context, opts ArtifactDownloadOptions) (DownloadResult, error) {
 	result := DownloadResult{}
 
-	// Parse limits
 	maxFileSize := parseSize(opts.MaxFileSize)
 	maxTotal := parseSize(opts.MaxTotal)
 
-	// Build AQL query to list files
 	aql := fmt.Sprintf(`items.find({"repo":%q`, opts.Repo)
 	if opts.Path != "" {
 		aql += fmt.Sprintf(`,"path":{"$match":"*%s*"}`, opts.Path)
@@ -124,7 +113,6 @@ func (p *Platform) DownloadArtifacts(ctx context.Context, opts ArtifactDownloadO
 		return result, nil
 	}
 
-	// Create output directory
 	if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil {
 		return result, fmt.Errorf("creating output directory: %w", err)
 	}
@@ -132,23 +120,19 @@ func (p *Platform) DownloadArtifacts(ctx context.Context, opts ArtifactDownloadO
 	var totalDownloaded int64
 
 	for _, artifact := range aqlResp.Results {
-		// Check file size limit
 		if maxFileSize > 0 && artifact.Size > maxFileSize {
 			result.Skipped++
 			continue
 		}
 
-		// Check total size limit
 		if maxTotal > 0 && totalDownloaded+artifact.Size > maxTotal {
 			break
 		}
 
-		// Check file count limit
 		if opts.MaxFiles > 0 && result.FilesDownloaded >= opts.MaxFiles {
 			break
 		}
 
-		// Download artifact
 		artifactPath := fmt.Sprintf("/artifactory/%s/%s/%s", artifact.Repo, artifact.Path, artifact.Name)
 
 		resp, err := p.client.Get(ctx, artifactPath)
@@ -195,13 +179,10 @@ func (p *Platform) DownloadArtifacts(ctx context.Context, opts ArtifactDownloadO
 	return result, nil
 }
 
-// ScanArtifactsForSecrets scans artifacts for secrets
 func (p *Platform) ScanArtifactsForSecrets(ctx context.Context, repo, mode string) ([]ArtifactSecret, error) {
-	// Build AQL query for config files that may contain secrets
 	var aql string
 
 	if mode == "selective" || mode == "" {
-		// Scan only config-type files
 		aql = `items.find({"$and":[
 			{"type":"file"},
 			{"repo":{"$ne":"jfrog-usage-logs"}},
@@ -221,7 +202,6 @@ func (p *Platform) ScanArtifactsForSecrets(ctx context.Context, repo, mode strin
 		}
 		aql += `]}).include("repo","path","name","size").limit(500)`
 	} else {
-		// Scan all files (metadata mode)
 		aql = `items.find({"type":"file","repo":{"$ne":"jfrog-usage-logs"}}`
 		if repo != "" {
 			aql = fmt.Sprintf(`items.find({"type":"file","repo":%q}`, repo)
@@ -250,7 +230,6 @@ func (p *Platform) ScanArtifactsForSecrets(ctx context.Context, repo, mode strin
 	for _, artifact := range aqlResp.Results {
 		switch mode {
 		case "metadata":
-			// Scan just the artifact name/path for secret-like patterns
 			secretTypes := scanForSecrets(artifact.Name + "/" + artifact.Path)
 			if len(secretTypes) > 0 {
 				secrets = append(secrets, ArtifactSecret{
@@ -262,12 +241,11 @@ func (p *Platform) ScanArtifactsForSecrets(ctx context.Context, repo, mode strin
 			}
 
 		case "selective", "sample", "":
-			// Skip files larger than 1MB
 			if artifact.Size > 1024*1024 {
 				continue
 			}
 
-			// Build download path - handle "." path correctly
+			// AQL reports a root-level file with path "." or empty.
 			var downloadPath string
 			if artifact.Path == "." || artifact.Path == "" {
 				downloadPath = fmt.Sprintf("/artifactory/%s/%s", artifact.Repo, artifact.Name)
@@ -288,7 +266,6 @@ func (p *Platform) ScanArtifactsForSecrets(ctx context.Context, repo, mode strin
 			content, _ := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
 
-			// Scan content for secrets
 			secretTypes := scanForSecrets(string(content))
 			if len(secretTypes) > 0 {
 				secrets = append(secrets, ArtifactSecret{
@@ -305,14 +282,10 @@ func (p *Platform) ScanArtifactsForSecrets(ctx context.Context, repo, mode strin
 	return secrets, nil
 }
 
-// Helper functions
-
-// buildAQLQuery builds an AQL query from filters
 func buildAQLQuery(name, repo, artifactType string, limit int) string {
 	var filters []string
 
 	if name != "" {
-		// Use name pattern as-is for AQL match
 		filters = append(filters, fmt.Sprintf(`"name":{"$match":"%s*"}`, name))
 	}
 
@@ -328,14 +301,12 @@ func buildAQLQuery(name, repo, artifactType string, limit int) string {
 	if len(filters) > 0 {
 		filterStr = ".find({" + strings.Join(filters, ",") + "})"
 	} else {
-		// When no filters provided, use default wildcard query
 		filterStr = `.find({"type":"file"})`
 	}
 
 	return fmt.Sprintf(`items%s.limit(%d)`, filterStr, limit)
 }
 
-// parseSize parses size strings like "50MB", "1GB" into bytes
 func parseSize(s string) int64 {
 	if s == "" {
 		return 0
@@ -363,7 +334,6 @@ func parseSize(s string) int64 {
 	return value * multiplier
 }
 
-// secretPatterns defines patterns for detecting secrets
 var secretPatterns = []struct {
 	Name    string
 	Pattern *regexp.Regexp
@@ -374,7 +344,6 @@ var secretPatterns = []struct {
 	{"jwt", regexp.MustCompile(`eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+`)},
 }
 
-// scanForSecrets scans content for secret patterns
 func scanForSecrets(content string) []string {
 	var types []string
 	for _, sp := range secretPatterns {
@@ -385,8 +354,7 @@ func scanForSecrets(content string) []string {
 	return types
 }
 
-// maskSecretValue returns the secret value for display
-// Note: In a red team context, we want to see full values
+// Does not mask: an assessment report needs the full value.
 func maskSecretValue(content string) string {
 	return content
 }

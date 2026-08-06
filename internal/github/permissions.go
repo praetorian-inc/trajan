@@ -1,13 +1,4 @@
 // Package github collects, normalizes and scans a GitHub Actions estate.
-//
-// Several helpers here — pyStr and its siblings across the normalize and
-// correlate paths — deliberately reproduce the value rendering of the
-// implementation this package replaced: True/False for a boolean, None for an
-// absent value, and the same repr for a captured list. Normalized records and
-// the findings rendered from them are compared against that output byte for
-// byte, so a change in rendering is a diff in a customer's report rather than a
-// cosmetic edit. That is why those helpers exist and why their spellings look
-// un-Go-like; the constraint belongs here rather than at each of them.
 package github
 
 import (
@@ -15,12 +6,10 @@ import (
 	"maps"
 )
 
-// PermissionScopes is the workflow-syntax permissions table, plus models: that one
-// is absent from the table but real, and a job cannot reach GitHub Models without
-// it. repository-projects is gone with classic projects. It is exported because a
-// permissions: key outside this set is a workflow GitHub refuses to parse, which is
-// something a plan that composes a workflow document has to refuse before it
-// commits one.
+// The workflow-syntax permissions table, plus models — absent from the table but
+// real, and a job cannot reach GitHub Models without it. repository-projects went
+// with classic projects. Exported because a permissions: key outside this set is one
+// GitHub refuses to parse, so anything composing a workflow must reject it first.
 var PermissionScopes = []string{
 	"actions", "artifact-metadata", "attestations", "checks", "code-quality",
 	"contents", "deployments", "discussions", "id-token", "issues", "models",
@@ -28,11 +17,10 @@ var PermissionScopes = []string{
 	"vulnerability-alerts",
 }
 
-// OptInOnlyScopes are the scopes that appear in no GITHUB_TOKEN default-permission
-// table, so a workflow that does not name id-token cannot mint an OIDC token however
-// permissive the repository or organization default is. A workflow-level write-all
-// does grant them — it grants every available scope — so this applies to the default
-// layer only.
+// Scopes appearing in no GITHUB_TOKEN default-permission table, so a workflow that
+// does not name id-token cannot mint an OIDC token however permissive the repository
+// or organization default is. Workflow-level write-all does grant them, so this
+// applies to the default layer only.
 var OptInOnlyScopes = map[string]bool{"id-token": true, "attestations": true}
 
 type permInputs struct {
@@ -59,6 +47,9 @@ func normalizeBlock(block any) (str string, dict map[string]string, isDict bool)
 	}
 }
 
+// The True/False/None spellings are contractual: normalized records and the
+// findings rendered from them are compared byte for byte against a reference
+// corpus, so a Go-idiomatic rendering is a diff in a customer's report.
 func pyStr(v any) string {
 	switch x := v.(type) {
 	case string:
@@ -88,9 +79,8 @@ func expandShorthand(value string) map[string]string {
 	}
 }
 
-// shorthandScopes grants every scope one level, which is what read-all/write-all
-// mean, with the two scopes that do not have every level resolved to the one they
-// do: vulnerability-alerts has no write (write-all includes it as read), and
+// read-all/write-all mean every scope at one level, except the two that lack that
+// level: vulnerability-alerts has no write (write-all includes it as read), and
 // id-token is write or nothing (read-all therefore grants it nothing).
 func shorthandScopes(grant string) map[string]string {
 	out := make(map[string]string, len(PermissionScopes))
@@ -107,9 +97,8 @@ func shorthandScopes(grant string) map[string]string {
 	return out
 }
 
-// defaultScopeMap is the repository- or organization-wide default grant, which is
-// a smaller thing than a workflow's write-all: the opt-in scopes are never part
-// of it.
+// The repository- or organization-wide default grant is a smaller thing than a
+// workflow's write-all: the opt-in scopes are never part of it.
 func defaultScopeMap(grant string) map[string]string {
 	out := shorthandScopes(grant)
 	for s := range OptInOnlyScopes {

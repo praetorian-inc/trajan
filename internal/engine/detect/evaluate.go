@@ -6,9 +6,8 @@ import (
 	"github.com/praetorian-inc/trajan/internal/dsl"
 )
 
-// Empty all_of → true, empty any_of → false, empty none_of → true; present keys
-// are conjoined. Leaf predicates evaluate through the shared internal/dsl
-// operator set, the same one attack plans' when: uses.
+// Empty all_of → true, empty any_of → false, empty none_of → true; the keys that
+// are present are conjoined.
 func evaluateBlock(block *Block, subject any) (bool, error) {
 	if block == nil {
 		return true, nil

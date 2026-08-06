@@ -2,14 +2,12 @@ package base
 
 import "github.com/praetorian-inc/trajan/pkg/detections"
 
-// BaseDetection provides common functionality for all detections
 type BaseDetection struct {
 	name     string
 	platform string
 	severity detections.Severity
 }
 
-// NewBaseDetection creates a new base detection
 func NewBaseDetection(name, platform string, severity detections.Severity) BaseDetection {
 	return BaseDetection{
 		name:     name,

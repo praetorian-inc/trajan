@@ -11,7 +11,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// Security namespace GUIDs (verified against the live org, see api-exploration).
+// ADO security-namespace GUIDs.
 const (
 	gitNS      = "2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87"
 	buildNS    = "33344d9c-fc72-4d6f-aba5-fa317101a7e9"
@@ -49,9 +49,8 @@ func envelope(cp engine.CurrentPhase, rel, collector, sourcePath string, data an
 	})
 }
 
-// writeOrMark writes the collected data, or a {"_unobserved":<status>} marker
-// when the surface soft-failed (401/403/404) — so downstream can tell "no access"
-// from "never collected" (AGENTS.md: 403/404 → skip AND mark).
+// A soft-failed surface is written as a {"_unobserved":<status>} marker so downstream
+// can tell "no access" from "never collected".
 func writeOrMark(cp engine.CurrentPhase, rel, collector, sourcePath string, raw json.RawMessage, status int) error {
 	if status != 0 {
 		return envelope(cp, rel, collector, sourcePath, map[string]any{"_unobserved": status})
@@ -59,10 +58,8 @@ func writeOrMark(cp engine.CurrentPhase, rel, collector, sourcePath string, raw 
 	return envelope(cp, rel, collector, sourcePath, raw)
 }
 
-// listOrMark returns the list (never nil) on success, or a {"_unobserved":<status>}
-// marker when it soft-failed (401/403/404) — so downstream can tell "no access"
-// from "genuinely empty" (AGENTS.md: 403/404 → skip AND mark). Used for both
-// top-level list surfaces and embedded sub-lists (feed views/permissions).
+// Never nil on success, and a {"_unobserved":<status>} marker on a soft failure, so
+// downstream can tell "no access" from "genuinely empty".
 func listOrMark(items []json.RawMessage, status int) any {
 	if status != 0 {
 		return map[string]any{"_unobserved": status}
@@ -70,15 +67,13 @@ func listOrMark(items []json.RawMessage, status int) any {
 	return rawArray(items)
 }
 
-// writeListOrMark envelopes a list surface via listOrMark. The list analog of
-// writeOrMark; a forbidden list must not read to the scanner as "none exist".
+// A forbidden list must not read to the scanner as "none exist".
 func writeListOrMark(cp engine.CurrentPhase, rel, collector, sourcePath string, items []json.RawMessage, status int) error {
 	return envelope(cp, rel, collector, sourcePath, listOrMark(items, status))
 }
 
-// softGet returns (raw, status): status is 0 on success, or the soft HTTP code
-// (401/403/404) when the resource was unobservable (raw nil). A non-soft error
-// propagates.
+// status is 0 on success, or the soft HTTP code when the resource was unobservable
+// (raw nil). A non-soft error propagates.
 func softGet(ctx context.Context, cl ADO, host, api, p string, params url.Values) (json.RawMessage, int, error) {
 	raw, _, err := cl.Get(ctx, host, api, p, params, true)
 	if err != nil {
@@ -134,8 +129,7 @@ func collectIDs(items []json.RawMessage) []int64 {
 	return out
 }
 
-// addPipelineIDs merges numeric ids (first name wins) into a shared id->name map,
-// used to union /build/definitions and /pipelines.
+// First name wins; the shared map unions /build/definitions with /pipelines.
 func addPipelineIDs(dst map[int64]string, items []json.RawMessage) {
 	for _, raw := range items {
 		if id := numField(raw, "id"); id != 0 {
@@ -209,8 +203,8 @@ func collectAgentPools(ctx context.Context, cl ADO, cp engine.CurrentPhase) erro
 		if boolField(raw, "isHosted") {
 			continue // Microsoft-hosted pools have no self-hosted agents or elastic config
 		}
-		// Agents (with capabilities). A failed sub-call marks that pool's agents and
-		// continues — one flaky pool must not sink the whole surface.
+		// A failed sub-call marks that pool's agents and continues, so one flaky pool
+		// does not sink the whole surface.
 		agentsPath := fmt.Sprintf("/_apis/distributedtask/pools/%d/agents", id)
 		agents, astatus, aerr := softList(ctx, cl, "core", APIVersion, agentsPath,
 			url.Values{"includeCapabilities": []string{"true"}})
@@ -248,8 +242,8 @@ func collectConnectionData(ctx context.Context, cl ADO, cp engine.CurrentPhase, 
 	return writeOrMark(cp, engine.CollectADOConnectionData(org), "connection-data", "/_apis/connectionData", raw, status)
 }
 
-// collectEndpointACL pulls the ServiceEndpoints-namespace ACL for one connection
-// (Administer bit). Soft — needs vso.security_manage.
+// The ServiceEndpoints-namespace ACL carries the Administer bit and needs
+// vso.security_manage, so it soft-fails.
 func collectEndpointACL(ctx context.Context, cl ADO, cp engine.CurrentPhase, project, projectID, connID string) error {
 	token := fmt.Sprintf("endpoints/%s/%s", projectID, connID)
 	raw, status, err := softGet(ctx, cl, "core", APIVersion, "/_apis/accesscontrollists/"+endpointNS,
@@ -290,10 +284,9 @@ func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 	if err != nil {
 		return err
 	}
-	// direction=down memberships per group give the nested-group edges normalize
-	// needs to resolve effectiveAllow ACL descriptors to users (transitive closure
-	// is normalize's job; collect provides one hop per group). Every group is
-	// already listed, so no recursion is required here.
+	// direction=down gives the nested-group edges normalize needs to resolve ACL
+	// descriptors to users. Every group is already listed, so one hop each is enough
+	// and the transitive closure is normalize's job.
 	memberships := map[string][]json.RawMessage{}
 	for _, g := range groups {
 		desc := strField(g, "descriptor")
@@ -310,8 +303,8 @@ func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 		}
 	}
 	data := map[string]any{"groups": rawArray(groups), "users": rawArray(users), "memberships": memberships}
-	// Mark the bundle if either principal list was unobservable (groups and users
-	// need the same graph-read scope, but a partial failure must still signal).
+	// Groups and users need the same graph-read scope, but a partial failure must
+	// still signal, so either one marks the whole bundle.
 	if gstatus != 0 {
 		data["_unobserved"] = gstatus
 	} else if ustatus != 0 {
@@ -340,8 +333,8 @@ func collectServiceHooks(ctx context.Context, cl ADO, cp engine.CurrentPhase, or
 	return writeListOrMark(cp, engine.CollectADOServiceHooks(org), "service-hooks", "/_apis/hooks/subscriptions", items, status)
 }
 
-// collectFeeds pulls org-scoped feeds (feeds are org-scoped in practice) plus
-// each feed's views and permissions.
+// Feeds are org-scoped in practice, so the list is taken at the org and fanned out
+// to each feed's views and permissions.
 func collectFeeds(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {
 	feeds, status, err := softList(ctx, cl, "feeds", APIVersionPreview, "/_apis/packaging/feeds", nil)
 	if err != nil {
@@ -414,8 +407,7 @@ func collectRepos(ctx context.Context, cl ADO, cp engine.CurrentPhase, project s
 	return out, nil
 }
 
-// listSurface fetches a project list, stores it, and returns resourceRefs of the
-// given type for downstream pipeline-permissions / checks fan-out.
+// The returned refs drive the per-resource pipeline-permissions and checks fan-out.
 func listSurface(ctx context.Context, cl ADO, cp engine.CurrentPhase, project, host, api, apiPath, rel, collector, rtype string) ([]resourceRef, error) {
 	items, status, err := softList(ctx, cl, host, api, apiPath, nil)
 	if err != nil {
@@ -508,8 +500,7 @@ func collectEnvironmentDetail(ctx context.Context, cl ADO, cp engine.CurrentPhas
 	return writeOrMark(cp, engine.CollectADOEnvironmentDetail(project, envID), "environment-detail", p, raw, status)
 }
 
-// collectBuildDefFull returns the full definition so the caller can drive YAML +
-// template-closure collection.
+// Returns the definition so the caller can drive YAML and template-closure fetches.
 func collectBuildDefFull(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string, id int64) (json.RawMessage, error) {
 	p := fmt.Sprintf("/%s/_apis/build/definitions/%d", url.PathEscape(project), id)
 	raw, status, err := softGet(ctx, cl, "core", APIVersion, p, nil)
@@ -517,7 +508,7 @@ func collectBuildDefFull(ctx context.Context, cl ADO, cp engine.CurrentPhase, pr
 		return nil, err
 	}
 	if status != 0 {
-		// unobservable: mark and skip downstream YAML/preview (caller checks nil)
+		// Unobservable: mark it and let the caller skip YAML/preview on the nil.
 		return nil, writeOrMark(cp, engine.CollectADOBuildDefFull(project, id), "build-definition", p, nil, status)
 	}
 	if err := envelope(cp, engine.CollectADOBuildDefFull(project, id), "build-definition", p, raw); err != nil {
@@ -526,9 +517,8 @@ func collectBuildDefFull(ctx context.Context, cl ADO, cp engine.CurrentPhase, pr
 	return raw, nil
 }
 
-// collectReleaseFull fetches one classic release definition's full detail
-// (environments, pre/post-deploy approvals, gates, artifacts, triggers) — the
-// list endpoint returns only summaries. cat-14.
+// Environments, approvals, gates, artifacts and triggers live only on the
+// per-definition GET; the list endpoint returns summaries.
 func collectReleaseFull(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string, id int64) error {
 	p := fmt.Sprintf("/%s/_apis/release/definitions/%d", url.PathEscape(project), id)
 	raw, status, err := softGet(ctx, cl, "vsrm", APIVersion, p, nil)
@@ -538,13 +528,12 @@ func collectReleaseFull(ctx context.Context, cl ADO, cp engine.CurrentPhase, pro
 	return writeOrMark(cp, engine.CollectADOReleaseFull(project, id), "release-definition", p, raw, status)
 }
 
-// collectPipelinePreview soft-fails per pipeline (a template-consumer whose
-// resource-repo alias can't resolve returns HTTP 400).
+// Soft-fails per pipeline: a template consumer whose resource-repo alias cannot
+// resolve answers HTTP 400.
 func collectPipelinePreview(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string, id int64) error {
 	p := fmt.Sprintf("/%s/_apis/pipelines/%d/preview", url.PathEscape(project), id)
 	raw, err := cl.Post(ctx, "core", APIVersionPreview, p, nil, map[string]any{"previewRun": true})
 	if err != nil {
-		// preview validation errors (400) and permission (403) are non-fatal here
 		if isSoft(err) || softStatus(err) == 400 {
 			return envelope(cp, engine.CollectADOPipelinePreview(project, id), "pipeline-preview", p,
 				map[string]any{"_error": err.Error()})

@@ -12,11 +12,6 @@ import (
 	"time"
 )
 
-// Bumping apiVersion to 2026-03-10 makes the workflow-dispatch endpoint answer 200
-// with the run details unconditionally: the 204 row and the return_run_details body
-// parameter both go away. dispatchedRunID keeps reading the same field, but the key
-// workflowDispatch sends becomes surplus and the note about falling back to
-// correlation becomes dead.
 const (
 	userAgent  = "trajan-prototype/0.1"
 	accept     = "application/vnd.github+json"
@@ -91,16 +86,15 @@ func (c *Client) do(ctx context.Context, method, rawURL string, params url.Value
 	return c.http.Do(req)
 }
 
-func readAllClose(resp *http.Response) []byte {
-	b, _ := io.ReadAll(resp.Body)
+func readAllClose(resp *http.Response) ([]byte, error) {
+	b, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	return b
+	return b, err
 }
 
-// Both limits answer 403 or 429. Retry-After is checked first because it is the
-// only header a secondary limit is guaranteed to carry, then primary exhaustion
-// (remaining 0, wait for the reset), then the headerless case. Sleeps are capped
-// at 120s and the reset path adds 1s of slack.
+// Both rate limits answer 403 or 429. Retry-After is checked first because it is
+// the only header a secondary limit is guaranteed to carry, then primary
+// exhaustion (remaining 0, wait for the reset), then the headerless case.
 func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response, body []byte, attempt int) bool {
 	if resp.StatusCode != 403 && resp.StatusCode != 429 {
 		return false
@@ -120,10 +114,9 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response, bod
 			}
 		}
 	}
-	// Neither header: wait a minute, doubling into the same cap on later
-	// attempts. Gated on 429 or a body that names the limit, because a 403 is far
-	// more often a permission denial — sleeping through six of those would turn
-	// every soft-failed optional surface into a ten-minute stall.
+	// Gated on 429 or a body that names the limit: a 403 is far more often a
+	// permission denial, and sleeping through six of those would turn every
+	// soft-failed optional surface into a ten-minute stall.
 	if resp.StatusCode == 429 || secondaryLimit(body) {
 		sleepFn(ctx, float64(min(60<<min(attempt, 4), 120)))
 		return true
@@ -131,9 +124,9 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response, bod
 	return false
 }
 
-// secondaryLimit reads the only thing that separates a headerless secondary
-// limit from a permission denial: the message. Both wordings are live — hosted
-// GitHub says "secondary rate limit", older GHES says "abuse detection".
+// The message is the only thing separating a headerless secondary limit from a
+// permission denial. Both wordings are live: hosted GitHub says "secondary rate
+// limit", older GHES "abuse detection".
 func secondaryLimit(body []byte) bool {
 	msg := strings.ToLower(string(body))
 	return strings.Contains(msg, "secondary rate") || strings.Contains(msg, "abuse detection")
@@ -157,18 +150,22 @@ func (c *Client) Get(ctx context.Context, pathOrURL string, params url.Values, a
 		}
 		switch {
 		case resp.StatusCode == 200:
-			b := readAllClose(resp)
+			b, rerr := readAllClose(resp)
+			if rerr != nil {
+				return nil, nil, fmt.Errorf("read response body from %s: %w", u, rerr)
+			}
 			return json.RawMessage(b), resp.Header, nil
 		case resp.StatusCode == 404 && allow404:
 			hdr := resp.Header
 			resp.Body.Close()
 			return nil, hdr, nil
 		case resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504:
-			lastStatus, lastBody = resp.StatusCode, readAllClose(resp)
+			b, _ := readAllClose(resp)
+			lastStatus, lastBody = resp.StatusCode, b
 			sleepFn(ctx, 2)
 			continue
 		default:
-			b := readAllClose(resp)
+			b, _ := readAllClose(resp)
 			if c.sleepForRateLimit(ctx, resp, b, i) {
 				lastStatus, lastBody = resp.StatusCode, b
 				continue
@@ -191,14 +188,18 @@ func (c *Client) GetRaw(ctx context.Context, pathOrURL string, params url.Values
 		}
 		switch resp.StatusCode {
 		case 200:
-			b := readAllClose(resp)
+			b, rerr := readAllClose(resp)
+			if rerr != nil {
+				return nil, nil, fmt.Errorf("read response body from %s: %w", u, rerr)
+			}
 			return b, resp.Header, nil
 		case 502, 503, 504:
-			lastStatus, lastBody = resp.StatusCode, readAllClose(resp)
+			b, _ := readAllClose(resp)
+			lastStatus, lastBody = resp.StatusCode, b
 			sleepFn(ctx, 2)
 			continue
 		default:
-			b := readAllClose(resp)
+			b, _ := readAllClose(resp)
 			if c.sleepForRateLimit(ctx, resp, b, i) {
 				lastStatus, lastBody = resp.StatusCode, b
 				continue
@@ -209,11 +210,9 @@ func (c *Client) GetRaw(ctx context.Context, pathOrURL string, params url.Values
 	return nil, nil, &GhError{Status: lastStatus, URL: u, Body: string(lastBody)}
 }
 
-// GetDownload retrieves an endpoint that answers with a redirect to a
-// short-lived signed URL — Actions run logs, artifact archives. The signed hop is
-// issued by a bare client: the storage host rejects a request carrying an
-// Authorization header, and authTransport would otherwise re-add ours on every
-// redirect the http.Client follows.
+// Follows the redirect to a short-lived signed URL (Actions run logs, artifact
+// archives) by hand: the storage host rejects a request carrying an Authorization
+// header, and authTransport would re-add ours on every redirect http.Client follows.
 func (c *Client) GetDownload(ctx context.Context, pathOrURL string) ([]byte, error) {
 	u := resolveURL(pathOrURL)
 	api := &http.Client{
@@ -231,7 +230,11 @@ func (c *Client) GetDownload(ctx context.Context, pathOrURL string) ([]byte, err
 	}
 	switch {
 	case resp.StatusCode == 200:
-		return readAllClose(resp), nil
+		b, rerr := readAllClose(resp)
+		if rerr != nil {
+			return nil, fmt.Errorf("read response body from %s: %w", u, rerr)
+		}
+		return b, nil
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
 		loc := resp.Header.Get("Location")
 		resp.Body.Close()
@@ -240,13 +243,14 @@ func (c *Client) GetDownload(ctx context.Context, pathOrURL string) ([]byte, err
 		}
 		return getSigned(ctx, loc)
 	default:
-		return nil, &GhError{Status: resp.StatusCode, URL: u, Body: string(readAllClose(resp))}
+		b, _ := readAllClose(resp)
+		return nil, &GhError{Status: resp.StatusCode, URL: u, Body: string(b)}
 	}
 }
 
-// getSigned fetches a pre-signed URL with no credential of ours attached. The
-// query string is the signature, so it is stripped from any error: an error
-// string reaches a run directory and a report.
+// No credential of ours is attached, and the query string — the signature — is
+// stripped from any error, because an error string reaches a run directory and a
+// report.
 func getSigned(ctx context.Context, rawURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -257,9 +261,14 @@ func getSigned(ctx context.Context, rawURL string) ([]byte, error) {
 		return nil, fmt.Errorf("download from %s: %w", redactQuery(rawURL), err)
 	}
 	if resp.StatusCode != 200 {
-		return nil, &GhError{Status: resp.StatusCode, URL: redactQuery(rawURL), Body: string(readAllClose(resp))}
+		b, _ := readAllClose(resp)
+		return nil, &GhError{Status: resp.StatusCode, URL: redactQuery(rawURL), Body: string(b)}
 	}
-	return readAllClose(resp), nil
+	b, err := readAllClose(resp)
+	if err != nil {
+		return nil, fmt.Errorf("read response body from %s: %w", redactQuery(rawURL), err)
+	}
+	return b, nil
 }
 
 func redactQuery(rawURL string) string {

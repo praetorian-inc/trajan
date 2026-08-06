@@ -45,9 +45,8 @@ func envelopeSrc(cp engine.CurrentPhase, rel, collector, api, sourcePath string,
 	})
 }
 
-// writeOrMark writes the collected data, or a {"_unobserved":<status>} marker when
-// the surface soft-failed (401/403/404) — so downstream can tell "no access" from
-// "never collected".
+// A soft-failed surface is written as a {"_unobserved":<status>} marker so downstream
+// can tell "no access" from "never collected".
 func writeOrMark(cp engine.CurrentPhase, rel, collector, sourcePath string, raw json.RawMessage, status int) error {
 	if status != 0 {
 		return envelope(cp, rel, collector, sourcePath, map[string]any{"_unobserved": status})
@@ -55,8 +54,8 @@ func writeOrMark(cp engine.CurrentPhase, rel, collector, sourcePath string, raw 
 	return envelope(cp, rel, collector, sourcePath, raw)
 }
 
-// listOrMark returns the list (never nil) on success, or a {"_unobserved":<status>}
-// marker on soft-fail — so a forbidden list never reads as "none exist".
+// Never nil on success, and a marker on a soft failure, so a forbidden list never
+// reads as "none exist".
 func listOrMark(items []json.RawMessage, status int) any {
 	if status != 0 {
 		return map[string]any{"_unobserved": status}
@@ -68,9 +67,8 @@ func writeListOrMark(cp engine.CurrentPhase, rel, collector, sourcePath string, 
 	return envelope(cp, rel, collector, sourcePath, listOrMark(items, status))
 }
 
-// softGet returns (raw, status): status is 0 on success, or the soft HTTP code
-// (401/403/404) when the resource was unobservable (raw nil). A non-soft error
-// propagates.
+// status is 0 on success, or the soft HTTP code when the resource was unobservable
+// (raw nil). A non-soft error propagates.
 func softGet(ctx context.Context, cl GitLab, p string, params url.Values) (json.RawMessage, int, error) {
 	raw, _, err := cl.Get(ctx, p, params, true)
 	if err != nil {
@@ -96,9 +94,8 @@ func softList(ctx context.Context, cl GitLab, p string, params url.Values) ([]js
 	return items, 0, nil
 }
 
-// graphQLSoft posts a query and returns the raw `data` object, or a soft status
-// (403) when the response carries a FORBIDDEN error, so a permission-denied
-// GraphQL surface marks _unobserved instead of aborting.
+// GraphQL answers 200 with an errors array rather than an HTTP status, so a response
+// carrying errors and no data is reported as a soft 403 and marks _unobserved.
 func graphQLSoft(ctx context.Context, cl GitLab, query string, vars map[string]any) (json.RawMessage, int, error) {
 	raw, err := cl.GraphQL(ctx, query, vars)
 	if err != nil {

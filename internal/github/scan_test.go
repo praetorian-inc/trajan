@@ -42,7 +42,7 @@ func TestScanClearsOutputOnlyAfterInputsValidate(t *testing.T) {
 		t.Error("an aborted scan destroyed the previous run's output")
 	}
 
-	if err := os.Remove(filepath.Join(runDir, "10-normalize/jobs/broken.json")); err != nil {
+	if err := os.Remove(filepath.Join(runDir, "10-normalize", "jobs", "broken.json")); err != nil {
 		t.Fatal(err)
 	}
 	if err := Scan(t.Context(), runDir, ScanOptions{}); err != nil {

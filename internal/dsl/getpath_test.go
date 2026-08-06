@@ -62,7 +62,7 @@ func TestGetPathListProjectionStepsUses(t *testing.T) {
 	}
 }
 
-// A non-map element projects to nil, and projection consumes all remaining segments at once.
+// A non-map element in the list projects to nil.
 func TestGetPathProjectionNestedAndNonMapElement(t *testing.T) {
 	subj := map[string]any{
 		"reviewers_required": []any{

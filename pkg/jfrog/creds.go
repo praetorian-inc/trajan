@@ -13,9 +13,7 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/detections/shared/secrets"
 )
 
-// ExtractRemoteRepoCredentials extracts credentials from remote repositories
 func (p *Platform) ExtractRemoteRepoCredentials(ctx context.Context) ([]RemoteRepoCredentials, error) {
-	// Get all repos
 	resp, err := p.client.Get(ctx, "/api/repositories")
 	if err != nil {
 		return nil, fmt.Errorf("listing repositories: %w", err)
@@ -31,7 +29,6 @@ func (p *Platform) ExtractRemoteRepoCredentials(ctx context.Context) ([]RemoteRe
 		return nil, fmt.Errorf("parsing repositories response: %w", err)
 	}
 
-	// Filter remote repos and get their configs
 	results := []RemoteRepoCredentials{}
 	for _, repo := range repos {
 		if repo.Type != "REMOTE" {
@@ -73,7 +70,6 @@ func (p *Platform) ExtractRemoteRepoCredentials(ctx context.Context) ([]RemoteRe
 	return results, nil
 }
 
-// GetAPIKey retrieves the current user's API key
 func (p *Platform) GetAPIKey(ctx context.Context) (string, error) {
 	resp, err := p.client.Get(ctx, "/api/security/apiKey")
 	if err != nil {
@@ -97,7 +93,6 @@ func (p *Platform) GetAPIKey(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-// GetLDAPConfig retrieves LDAP configuration
 func (p *Platform) GetLDAPConfig(ctx context.Context) ([]LDAPSetting, error) {
 	resp, err := p.client.Get(ctx, "/api/system/configuration")
 	if err != nil {
@@ -126,9 +121,7 @@ func (p *Platform) GetLDAPConfig(ctx context.Context) ([]LDAPSetting, error) {
 	return config.Security.LdapSettings.Settings, nil
 }
 
-// ScanBuildsForSecrets scans builds for secrets
 func (p *Platform) ScanBuildsForSecrets(ctx context.Context, limit int) ([]BuildSecret, error) {
-	// Get build list
 	resp, err := p.client.Get(ctx, "/api/build")
 	if err != nil {
 		return nil, fmt.Errorf("listing builds: %w", err)
@@ -151,12 +144,10 @@ func (p *Platform) ScanBuildsForSecrets(ctx context.Context, limit int) ([]Build
 	detector := secrets.New()
 	allSecrets := []BuildSecret{}
 
-	// For each build, get build numbers and scan
 	for _, build := range buildList.Builds {
 		// API returns URI as "/build-name" not "/api/build/build-name"
 		buildName := strings.TrimPrefix(build.URI, "/")
 
-		// Get build numbers
 		resp, err := p.client.Get(ctx, fmt.Sprintf("/api/build/%s", url.PathEscape(buildName)))
 		if err != nil {
 			continue
@@ -178,19 +169,16 @@ func (p *Platform) ScanBuildsForSecrets(ctx context.Context, limit int) ([]Build
 		}
 		_ = resp.Body.Close()
 
-		// Limit build numbers scanned per project
 		numToScan := limit
 		if numToScan > len(buildNumbers.BuildsNumbers) {
 			numToScan = len(buildNumbers.BuildsNumbers)
 		}
 
-		// For each build number (up to limit), get build info and scan
 		for i := 0; i < numToScan; i++ {
 			buildNum := buildNumbers.BuildsNumbers[i]
 			// API returns URI as "/42" not "/api/build/build-name/42"
 			buildNumber := strings.TrimPrefix(buildNum.URI, "/")
 
-			// Get build info
 			resp, err := p.client.Get(ctx, fmt.Sprintf("/api/build/%s/%s", url.PathEscape(buildName), url.PathEscape(buildNumber)))
 			if err != nil {
 				continue
@@ -212,12 +200,10 @@ func (p *Platform) ScanBuildsForSecrets(ctx context.Context, limit int) ([]Build
 			}
 			_ = resp.Body.Close()
 
-			// Scan properties for secrets
 			for key, value := range buildInfo.BuildInfo.Properties {
 				if strings.HasPrefix(key, "buildInfo.env.") {
 					envName := strings.TrimPrefix(key, "buildInfo.env.")
 
-					// Check for secrets using detector
 					matches := detector.DetectSecretPattern(value)
 					if len(matches) > 0 {
 						secretTypes := make([]string, len(matches))

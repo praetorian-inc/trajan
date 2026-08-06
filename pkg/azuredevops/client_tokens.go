@@ -7,13 +7,10 @@ import (
 )
 
 const (
-	// sshKeyContributionID is the data provider used by the ADO web UI for both
-	// PAT and SSH key creation via the Contribution/HierarchyQuery API.
+	// The data provider the ADO web UI uses for both PAT and SSH key creation.
 	sshKeyContributionID = "ms.vss-token-web.personal-access-token-issue-session-token-provider"
 )
 
-// ListPersonalAccessTokens lists PATs for the authenticated user
-// API: GET https://vssps.dev.azure.com/{org}/_apis/tokens/pats?api-version=7.1-preview.1
 func (c *Client) ListPersonalAccessTokens(ctx context.Context) ([]PersonalAccessToken, error) {
 	vssps := c.VSSPSClient()
 	path := fmt.Sprintf("/_apis/tokens/pats?api-version=%s", APIVersionPreview)
@@ -25,8 +22,6 @@ func (c *Client) ListPersonalAccessTokens(ctx context.Context) ([]PersonalAccess
 	return result.Value, nil
 }
 
-// CreatePersonalAccessToken creates a new PAT
-// API: POST https://vssps.dev.azure.com/{org}/_apis/tokens/pats?api-version=7.1-preview.1
 func (c *Client) CreatePersonalAccessToken(ctx context.Context, req CreatePATRequest) (*PersonalAccessToken, error) {
 	vssps := c.VSSPSClient()
 	path := fmt.Sprintf("/_apis/tokens/pats?api-version=%s", APIVersionPreview)
@@ -38,8 +33,6 @@ func (c *Client) CreatePersonalAccessToken(ctx context.Context, req CreatePATReq
 	return &result, nil
 }
 
-// RevokePersonalAccessToken revokes a PAT
-// API: DELETE https://vssps.dev.azure.com/{org}/_apis/tokens/pats?authorizationId={id}&api-version=7.1-preview.1
 func (c *Client) RevokePersonalAccessToken(ctx context.Context, authorizationID string) error {
 	vssps := c.VSSPSClient()
 	path := fmt.Sprintf("/_apis/tokens/pats?authorizationId=%s&api-version=%s", authorizationID, APIVersionPreview)
@@ -50,9 +43,6 @@ func (c *Client) RevokePersonalAccessToken(ctx context.Context, authorizationID 
 	return nil
 }
 
-// ListSSHKeys lists SSH public keys for the authenticated user.
-// Uses the SessionTokens API with isPublic=true to filter SSH keys.
-// API: GET https://vssps.dev.azure.com/{org}/_apis/Token/SessionTokens?isPublic=true&includePublicData=true&api-version=7.0-preview.1
 func (c *Client) ListSSHKeys(ctx context.Context) ([]SSHKey, error) {
 	vssps := c.VSSPSClient()
 	path := "/_apis/Token/SessionTokens?isPublic=true&includePublicData=true&api-version=7.0-preview.1"
@@ -64,12 +54,8 @@ func (c *Client) ListSSHKeys(ctx context.Context) ([]SSHKey, error) {
 	return result.Value, nil
 }
 
-// CreateSSHKey creates a new SSH public key via the Contribution/HierarchyQuery API.
-// This is the same internal API the Azure DevOps web UI uses — there is no standalone
-// REST endpoint for SSH key creation.
-// API: POST https://dev.azure.com/{org}/_apis/Contribution/HierarchyQuery
+// The web UI's internal API; ADO has no standalone REST endpoint for SSH key creation.
 func (c *Client) CreateSSHKey(ctx context.Context, req CreateSSHKeyRequest) (*SSHKey, error) {
-	// Get org account ID for targetAccounts
 	connData, err := c.GetConnectionData(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting connection data for org ID: %w", err)
@@ -78,7 +64,6 @@ func (c *Client) CreateSSHKey(ctx context.Context, req CreateSSHKeyRequest) (*SS
 		return nil, fmt.Errorf("could not determine organization account ID from connection data")
 	}
 
-	// Build the HierarchyQuery request matching ADO web UI format
 	hq := hierarchyQueryRequest{
 		ContributionIDs: []string{sshKeyContributionID},
 		DataProviderContext: hierarchyDataProviderContext{
@@ -99,7 +84,6 @@ func (c *Client) CreateSSHKey(ctx context.Context, req CreateSSHKeyRequest) (*SS
 		return nil, fmt.Errorf("creating SSH key via HierarchyQuery: %w", err)
 	}
 
-	// Extract SSH key from nested dataProviders response
 	providerData, ok := hqResp.DataProviders[sshKeyContributionID]
 	if !ok {
 		return nil, fmt.Errorf("SSH key creation response missing data provider %q", sshKeyContributionID)
@@ -113,9 +97,6 @@ func (c *Client) CreateSSHKey(ctx context.Context, req CreateSSHKeyRequest) (*SS
 	return &sshKey, nil
 }
 
-// DeleteSSHKey deletes an SSH public key.
-// Uses the SessionTokens API (same as ADOKit).
-// API: DELETE https://vssps.dev.azure.com/{org}/_apis/Token/SessionTokens/{authorizationId}?isPublic=true&api-version=5.0-preview.1
 func (c *Client) DeleteSSHKey(ctx context.Context, authorizationID string) error {
 	vssps := c.VSSPSClient()
 	path := fmt.Sprintf("/_apis/Token/SessionTokens/%s?isPublic=true&api-version=5.0-preview.1", authorizationID)

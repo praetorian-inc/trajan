@@ -8,9 +8,8 @@ import (
 	"time"
 )
 
-// MintRunDir creates a fresh run directory named "<ts>-<platform>-<scopeSlug>"
-// with a minute-precision UTC timestamp, so lexical sort == chronological and
-// ResolveRunDir can pick the latest run for a platform.
+// The minute-precision UTC timestamp leads the name so lexical order is
+// chronological and ResolveRunDir can pick the latest run for a platform.
 func MintRunDir(cfg *Config, platform, scopeSlug string) (string, error) {
 	ts := time.Now().UTC().Format("2006-01-02-1504")
 	name := fmt.Sprintf("%s-%s-%s", ts, platform, scopeSlug)
@@ -21,9 +20,6 @@ func MintRunDir(cfg *Config, platform, scopeSlug string) (string, error) {
 	return dir, nil
 }
 
-// ResolveRunDir returns explicit if set, else the lexically-largest (most recent,
-// since the timestamp prefix is chronological) run dir whose name contains
-// "-<platform>-", or ErrNoRunDir if none match.
 func ResolveRunDir(cfg *Config, platform, explicit string) (string, error) {
 	if explicit != "" {
 		return explicit, nil

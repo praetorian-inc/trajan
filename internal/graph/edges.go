@@ -100,10 +100,9 @@ func edgeKey(t EdgeType, from, to NodeLabel) string {
 	return fmt.Sprintf("%s{%s,%s}", t, from, to)
 }
 
-// add merges into the existing edge when (type, from, to) repeats: parallel
-// edges of one type between one pair do not exist in this model. An endpoint
-// with an incomplete identity is dropped and counted rather than invented,
-// because every consumer of this graph asks reachability questions.
+// Merges into the existing edge when (type, from, to) repeats: parallel edges of one
+// type between one pair do not exist in this model. An endpoint with an incomplete
+// identity is dropped and counted rather than invented.
 func (s *edgeSet) add(t EdgeType, from, to endpoint, props map[string]any) {
 	if !from.complete() || !to.complete() {
 		s.unbuilt[edgeKey(t, from.label, to.label)]++
@@ -157,9 +156,8 @@ func (s *edgeSet) propertyConflicts() []edgeConflict {
 	return out
 }
 
-// emptyEdgeTriples names the declared endpoint pairs no edge was written for.
-// byType cannot: a pair with no writer at all hides behind a sibling pair of the
-// same type, and the types with the most missing code look the healthiest.
+// byType cannot report this: a pair with no writer hides behind a sibling pair of the
+// same type, so the types with the most missing code look the healthiest.
 func emptyEdgeTriples(edgeList []edge) []string {
 	present := make(map[string]bool, len(edgeList))
 	for _, e := range edgeList {
@@ -278,9 +276,8 @@ func runnerEndpoint(c *corpus, f map[string]any) endpoint {
 }
 
 // A callee names its role "${{ inputs.role-arn }}" and only the caller knows the
-// literal, so the identifier is resolved across the call edge the same way an
-// artifact name is — including the rule that two callers disagreeing on an input
-// leave it unresolvable.
+// literal, so the identifier resolves across the call edge the way an artifact name
+// does — callers disagreeing on an input leave it unresolvable.
 func emitCanAssume(c *corpus, _ *nodeSet, s *edgeSet) {
 	inputs := calleeInputs(c)
 	for _, r := range c.dirs["jobs"] {
@@ -297,10 +294,9 @@ func emitCanAssume(c *corpus, _ *nodeSet, s *edgeSet) {
 	}
 }
 
-// Org secret visibility is the secret's blast radius, and it is not derivable
-// from the node: "selected" names a repository list that only the secret record
-// carries, and an empty list means the secret is reachable by nothing — a fact
-// no fan-out from Secret.visibility could produce.
+// A secret's blast radius is not derivable from the node: "selected" names a list only
+// the secret record carries, and an empty list means the secret is reachable by
+// nothing — the exact inverse of a fan-out from Secret.visibility.
 func emitOrgSecretAccess(c *corpus, _ *nodeSet, s *edgeSet) {
 	for _, r := range c.dirs["org"] {
 		src := r.rel + "#org_actions_secrets"
@@ -315,14 +311,12 @@ func emitOrgSecretAccess(c *corpus, _ *nodeSet, s *edgeSet) {
 	}
 }
 
-// The App an out-of-band installation token is minted as. app is null when the
-// mint site names an app id the corpus cannot resolve to an installation, which
-// leaves the token's identity — and so its permissions — unknown.
+// app is null where the mint site names an app id the corpus cannot resolve to an
+// installation, leaving the token's identity — and so its permissions — unknown.
 func emitMintsTokenAs(c *corpus, _ *nodeSet, s *edgeSet) {
 	src := c.chainSource("app-mintable", "mints")
-	// Job identity omits branch, so one minting job observed on four branches is
-	// four chain rows and at most one edge; the miss is counted per job for the
-	// same reason.
+	// Job identity omits branch, so one minting job seen on several branches is several
+	// chain rows and at most one edge; the miss is counted per job, not per row.
 	unresolved := map[string]bool{}
 	for _, m := range c.chainArray("app-mintable", "mints") {
 		from := jobEndpoint(c, obj(m["minter"]))
@@ -399,9 +393,8 @@ func emitContains(c *corpus, _ *nodeSet, s *edgeSet) {
 	unslugged := 0
 	for _, r := range c.dirs["jobs"] {
 		wf := workflowEndpoint(c, r.fields)
-		// The job record's branch is filename-slugged, so it reaches the Branch
-		// node's identity only through trueBranch; an ambiguous slug names no
-		// branch and the file's containment is unrecoverable.
+		// The job record's branch is filename-slugged, so it reaches Branch identity only
+		// through trueBranch; an ambiguous slug leaves containment unrecoverable.
 		repo := str(r.fields["repo"])
 		if name := c.trueBranch[c.full(repo)+"\x00"+str(r.fields["branch"])]; name != "" {
 			s.add(Contains, branchEndpoint(c, repo, name), wf, source(r.rel))
@@ -622,9 +615,8 @@ func emitCanApprove(c *corpus, _ *nodeSet, s *edgeSet) {
 	}
 	for _, r := range c.dirs["jobs"] {
 		repo := str(r.fields["repo"])
-		// Both halves of the capability. The repo setting alone is already a
-		// Repository property, so an edge that restated it would assert nothing
-		// about the job it starts from.
+		// Both halves of the capability: the repo setting alone is already a Repository
+		// property, so an edge restating it would assert nothing about the job.
 		if !approves[repo] || str(obj(r.fields["permissions"])["pull-requests"]) != "write" {
 			continue
 		}
@@ -809,11 +801,9 @@ func emitTargets(c *corpus, _ *nodeSet, s *edgeSet) {
 	}
 }
 
-// trigger_filters is a workflow-level fact replicated onto every job record of
-// that workflow, so a filter is emitted and counted once however many jobs the
-// workflow has. A filter is a glob pattern rather than a ref identity, so it only
-// yields an edge when it names a Branch node that already exists — the same rule
-// emitDeployableFrom applies to deployment_branch_policy patterns.
+// trigger_filters is a workflow-level fact replicated onto every job record of that
+// workflow, so a filter is emitted and counted once however many jobs it has. A glob
+// is not a ref identity: it only yields an edge against a Branch node that exists.
 func emitTargetsBranch(c *corpus, n *nodeSet, s *edgeSet) {
 	seen := map[[3]string]bool{}
 	for _, r := range c.dirs["jobs"] {
@@ -897,10 +887,9 @@ func branchPattern(f string) (*regexp.Regexp, bool) {
 	return re, err == nil
 }
 
-// action_refs carries no step index and secrets_referenced carries no action, so
-// the only join between a credential and the third-party code that receives it is
-// through the step the reference sits on. step_index -1 marks a job-env-level
-// reference, which belongs to no step and must not be credited to one.
+// action_refs carries no step index and secrets_referenced carries no action, so the
+// step a reference sits on is the only join between a credential and the third-party
+// code that receives it. step_index -1 is job-env-level and belongs to no step.
 func emitPassesSecret(c *corpus, _ *nodeSet, s *edgeSet) {
 	for _, r := range c.dirs["jobs"] {
 		steps := list(r.fields["steps"])
@@ -969,11 +958,9 @@ func emitDeployableFrom(c *corpus, n *nodeSet, s *edgeSet) {
 	}
 }
 
-// scopedRepos is the repository set a visibility setting admits — org secrets
-// and runner groups spell it the same way. An empty "selected" list reaches
-// nothing, which is the whole point of the setting. An archived repository runs
-// no workflow, so it can neither consume a secret nor take a job however the
-// scope is written; deriveCapabilityEdges gates its write routes the same way.
+// Org secrets and runner groups spell visibility the same way. An empty "selected"
+// list reaches nothing, which is the point of the setting. An archived repository runs
+// no workflow, so it consumes no secret and takes no job however the scope is written.
 func scopedRepos(c *corpus, f map[string]any) []string {
 	live := func(g map[string]any) bool { return !truthy(g["archived"]) }
 	switch str(f["visibility"]) {
@@ -1003,12 +990,9 @@ func emitRunnerGroupAccess(c *corpus, _ *nodeSet, s *edgeSet) {
 	}
 }
 
-// A job names runner labels and a runner group NAME; neither is an identity, so
-// the join is whatever the collected inventory supports — a runner whose label
-// set covers every label the job asks for, and a group whose name is unique in
-// the org. A job that resolves to nothing is counted, never given a placeholder:
-// one stand-in Runner would make every self-hosted job appear to share one
-// machine, which is the exact claim the cat-07 rules exist to test.
+// Neither a runner label nor a group NAME is an identity: the join is a runner whose
+// labels cover the job's, and a group whose name is unique in the org. An unresolved
+// job is counted but gets no placeholder: one stand-in Runner would fake a shared machine.
 func emitRunsOn(c *corpus, _ *nodeSet, s *edgeSet) {
 	reach := map[string][]string{}
 	byName := map[string][]map[string]any{}
@@ -1091,10 +1075,9 @@ func runnerHasLabels(f map[string]any, want []string) bool {
 	return true
 }
 
-// A repo runner serves only its own repository. An org runner serves whatever
-// its group reaches. The runner listing omits runner_group_id on every runner it
-// returns, so membership is read back off the groups' member_runner_ids; a runner
-// no group claims is left ungated rather than excluded.
+// A repo runner serves only its own repository; an org runner serves whatever its
+// group reaches. The listing omits runner_group_id, so membership comes off the groups'
+// member_runner_ids; a runner no group claims is left ungated, not excluded.
 func runnerServes(c *corpus, f map[string]any, repo string, reach map[string][]string, groupOf map[string]string) bool {
 	switch str(f["scope"]) {
 	case "repo":

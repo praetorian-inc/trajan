@@ -2,22 +2,16 @@ package ado
 
 import (
 	"errors"
-	"os"
-	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-var ErrNoToken = errors.New("no Azure DevOps PAT: pass --token or set ADO_PAT, AZURE_DEVOPS_PAT, or AZDO_PAT")
+var ErrNoToken = errors.New("no Azure DevOps credential: pass --token/--azure-bearer-token or set TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT/AZURE_BEARER_TOKEN/SYSTEM_ACCESSTOKEN")
 
-// ResolveToken prefers --token, then the environment. AZURE_DEVOPS_PAT and
-// AZDO_PAT are accepted after ADO_PAT because the legacy CLI documents them.
-func ResolveToken(explicit string) (string, error) {
-	if v := strings.TrimSpace(explicit); v != "" {
-		return v, nil
+func ResolveCredential(explicitPAT, explicitBearer string) (engine.Credential, error) {
+	c, ok := engine.ResolveADO(explicitPAT, explicitBearer)
+	if !ok {
+		return engine.Credential{}, ErrNoToken
 	}
-	for _, k := range []string{"ADO_PAT", "AZURE_DEVOPS_PAT", "AZDO_PAT"} {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-			return v, nil
-		}
-	}
-	return "", ErrNoToken
+	return c, nil
 }

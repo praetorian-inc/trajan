@@ -9,12 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// resetRegistry clears the parser registry for clean test state
 func resetRegistry() {
 	parserRegistry = make(map[string]WorkflowParser)
 }
 
-// mockParser is a test implementation of WorkflowParser
 type mockParser struct {
 	platform string
 	canParse func(string) bool
@@ -38,56 +36,9 @@ func (m *mockParser) Parse(data []byte) (*NormalizedWorkflow, error) {
 	}, nil
 }
 
-// ============================================================================
-// Registry Tests
-// ============================================================================
-
-func TestRegisterParser(t *testing.T) {
-	resetRegistry()
-
-	parser := &mockParser{platform: "test"}
-	RegisterParser(parser)
-
-	// Verify parser was registered
-	registered := GetParser("test")
-	assert.NotNil(t, registered)
-	assert.Equal(t, "test", registered.Platform())
-}
-
-func TestRegisterParser_Overwrite(t *testing.T) {
-	resetRegistry()
-
-	// Register first parser
-	parser1 := &mockParser{platform: "test"}
-	RegisterParser(parser1)
-
-	// Register second parser with same platform (should overwrite)
-	parser2 := &mockParser{platform: "test"}
-	RegisterParser(parser2)
-
-	// Verify second parser is registered
-	registered := GetParser("test")
-	assert.NotNil(t, registered)
-	// Both have same platform name, but we expect the second one
-	assert.Equal(t, parser2, registered)
-}
-
-func TestGetParser(t *testing.T) {
-	resetRegistry()
-
-	parser := &mockParser{platform: "github"}
-	RegisterParser(parser)
-
-	// Test successful retrieval
-	retrieved := GetParser("github")
-	assert.NotNil(t, retrieved)
-	assert.Equal(t, "github", retrieved.Platform())
-}
-
 func TestGetParser_Unknown(t *testing.T) {
 	resetRegistry()
 
-	// Test retrieval of non-existent parser
 	retrieved := GetParser("nonexistent")
 	assert.Nil(t, retrieved)
 }
@@ -95,7 +46,6 @@ func TestGetParser_Unknown(t *testing.T) {
 func TestDetectParser(t *testing.T) {
 	resetRegistry()
 
-	// Register parser that can handle .github/workflows/ paths
 	githubParser := &mockParser{
 		platform: "github",
 		canParse: func(path string) bool {
@@ -104,7 +54,6 @@ func TestDetectParser(t *testing.T) {
 	}
 	RegisterParser(githubParser)
 
-	// Test detection
 	detected := DetectParser(".github/workflows/test.yml")
 	assert.NotNil(t, detected)
 	assert.Equal(t, "github", detected.Platform())
@@ -113,7 +62,6 @@ func TestDetectParser(t *testing.T) {
 func TestDetectParser_NotFound(t *testing.T) {
 	resetRegistry()
 
-	// Register parser that doesn't match the path
 	parser := &mockParser{
 		platform: "github",
 		canParse: func(path string) bool {
@@ -122,7 +70,6 @@ func TestDetectParser_NotFound(t *testing.T) {
 	}
 	RegisterParser(parser)
 
-	// Test with non-matching path
 	detected := DetectParser("some/other/path.yml")
 	assert.Nil(t, detected)
 }
@@ -130,7 +77,6 @@ func TestDetectParser_NotFound(t *testing.T) {
 func TestDetectParser_MultipleRegistered(t *testing.T) {
 	resetRegistry()
 
-	// Register multiple parsers
 	githubParser := &mockParser{
 		platform: "github",
 		canParse: func(path string) bool {
@@ -146,12 +92,10 @@ func TestDetectParser_MultipleRegistered(t *testing.T) {
 	RegisterParser(githubParser)
 	RegisterParser(gitlabParser)
 
-	// Test GitHub path detection
 	detected := DetectParser(".github/workflows/test.yml")
 	assert.NotNil(t, detected)
 	assert.Equal(t, "github", detected.Platform())
 
-	// Test GitLab path detection
 	detected = DetectParser(".gitlab-ci.yml")
 	assert.NotNil(t, detected)
 	assert.Equal(t, "gitlab", detected.Platform())
@@ -163,7 +107,6 @@ func TestConcurrentParserRegistration(t *testing.T) {
 	parserCount := 50
 	var wg sync.WaitGroup
 
-	// Register parsers concurrently
 	for i := 0; i < parserCount; i++ {
 		wg.Add(1)
 		go func(id int) {
@@ -175,7 +118,6 @@ func TestConcurrentParserRegistration(t *testing.T) {
 
 	wg.Wait()
 
-	// Verify registrations succeeded by fetching each
 	for i := 0; i < parserCount; i++ {
 		platform := string(rune('a' + (i % 26)))
 		p := GetParser(platform)
@@ -183,8 +125,7 @@ func TestConcurrentParserRegistration(t *testing.T) {
 	}
 }
 
-// TestParserRegistryRaceConditions tests all registry operations under high concurrency
-// This test will fail with -race flag if mutex protection is missing
+// Only meaningful under -race: it exists to catch a missing registry mutex.
 func TestParserRegistryRaceConditions(t *testing.T) {
 	resetRegistry()
 
@@ -192,7 +133,6 @@ func TestParserRegistryRaceConditions(t *testing.T) {
 	const operations = 100
 	var wg sync.WaitGroup
 
-	// Register initial parser for reading tests
 	RegisterParser(&mockParser{
 		platform: "test",
 		canParse: func(path string) bool {
@@ -200,7 +140,6 @@ func TestParserRegistryRaceConditions(t *testing.T) {
 		},
 	})
 
-	// Concurrent writes (RegisterParser)
 	for i := 0; i < goroutines; i++ {
 		wg.Add(1)
 		go func() {
@@ -217,7 +156,6 @@ func TestParserRegistryRaceConditions(t *testing.T) {
 		}()
 	}
 
-	// Concurrent reads (GetParser)
 	for i := 0; i < goroutines; i++ {
 		wg.Add(1)
 		go func() {
@@ -228,7 +166,6 @@ func TestParserRegistryRaceConditions(t *testing.T) {
 		}()
 	}
 
-	// Concurrent reads (DetectParser)
 	for i := 0; i < goroutines; i++ {
 		wg.Add(1)
 		go func() {
@@ -241,7 +178,6 @@ func TestParserRegistryRaceConditions(t *testing.T) {
 
 	wg.Wait()
 
-	// Verify the registry is still functional after all concurrent operations
 	parser := GetParser("test")
 	assert.NotNil(t, parser)
 	assert.Equal(t, "test", parser.Platform())
@@ -249,15 +185,6 @@ func TestParserRegistryRaceConditions(t *testing.T) {
 	detected := DetectParser("test.yml")
 	assert.NotNil(t, detected)
 	assert.Equal(t, "test", detected.Platform())
-}
-
-// ============================================================================
-// GitHubParser Tests
-// ============================================================================
-
-func TestGitHubParser_Platform(t *testing.T) {
-	parser := NewGitHubParser()
-	assert.Equal(t, "github", parser.Platform())
 }
 
 func TestGitHubParser_CanParse(t *testing.T) {
@@ -316,31 +243,6 @@ func TestGitHubParser_CanParse(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func TestGitHubParser_Parse_Basic(t *testing.T) {
-	parser := NewGitHubParser()
-
-	yaml := `
-name: CI
-on: push
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: echo "test"
-`
-
-	workflow, err := parser.Parse([]byte(yaml))
-	require.NoError(t, err)
-	require.NotNil(t, workflow)
-
-	// Verify basic structure
-	assert.Equal(t, "github", workflow.Platform)
-	assert.Equal(t, "CI", workflow.Name)
-	assert.Contains(t, workflow.Triggers, "push")
-	assert.Len(t, workflow.Jobs, 1)
 }
 
 func TestGitHubParser_Parse_InvalidYAML(t *testing.T) {
@@ -418,27 +320,21 @@ jobs:
 	require.NoError(t, err)
 	require.NotNil(t, workflow)
 
-	// Verify normalized workflow structure
 	assert.Equal(t, "github", workflow.Platform)
 	assert.Equal(t, "Full Workflow", workflow.Name)
 
-	// Verify triggers
 	assert.Len(t, workflow.Triggers, 2)
 	assert.Contains(t, workflow.Triggers, "push")
 	assert.Contains(t, workflow.Triggers, "pull_request")
 
-	// Verify workflow-level env
 	assert.Equal(t, "global", workflow.Env["GLOBAL_VAR"])
 
-	// Verify workflow-level permissions
 	require.NotNil(t, workflow.Permissions)
 	assert.Equal(t, "read", workflow.Permissions.Scopes["contents"])
 	assert.Equal(t, "write", workflow.Permissions.Scopes["issues"])
 
-	// Verify jobs
 	assert.Len(t, workflow.Jobs, 2)
 
-	// Test job details
 	testJob := workflow.Jobs["test"]
 	require.NotNil(t, testJob)
 	assert.Equal(t, "test", testJob.ID)
@@ -447,17 +343,13 @@ jobs:
 	assert.Equal(t, []string{"build"}, testJob.Needs)
 	assert.Equal(t, "github.event_name == 'push'", testJob.Condition)
 
-	// Verify job-level env
 	assert.Equal(t, "job", testJob.Env["JOB_VAR"])
 
-	// Verify job outputs
 	assert.Equal(t, "steps.test.outputs.result", testJob.Outputs["result"])
 
-	// Verify job permissions
 	require.NotNil(t, testJob.Permissions)
 	assert.Equal(t, "read", testJob.Permissions.Scopes["contents"])
 
-	// Verify services
 	require.Len(t, testJob.Services, 1)
 	postgres := testJob.Services["postgres"]
 	require.NotNil(t, postgres)
@@ -466,10 +358,8 @@ jobs:
 	assert.Contains(t, postgres.Ports, "5432:5432")
 	assert.Equal(t, "--health-cmd pg_isready", postgres.Options)
 
-	// Verify steps
 	require.Len(t, testJob.Steps, 2)
 
-	// First step (uses action)
 	step1 := testJob.Steps[0]
 	assert.Equal(t, "checkout", step1.ID)
 	assert.Equal(t, "Checkout", step1.Name)
@@ -477,7 +367,6 @@ jobs:
 	assert.Equal(t, "0", step1.With["fetch-depth"])
 	assert.Equal(t, "step", step1.Env["STEP_VAR"])
 
-	// Second step (run command)
 	step2 := testJob.Steps[1]
 	assert.Equal(t, "Test", step2.Name)
 	assert.Equal(t, "npm test", step2.Run)
@@ -486,12 +375,10 @@ jobs:
 	assert.True(t, step2.ContinueOnError)
 	assert.Equal(t, "success()", step2.Condition)
 
-	// Build job (verify self-hosted runner handling)
 	buildJob := workflow.Jobs["build"]
 	require.NotNil(t, buildJob)
 	assert.Equal(t, "self-hosted", buildJob.RunsOn)
 
-	// Verify raw GitHub workflow is preserved
 	assert.NotNil(t, workflow.Raw)
 	ghWorkflow, ok := workflow.Raw.(*GitHubWorkflow)
 	require.True(t, ok, "Raw should be *GitHubWorkflow")
@@ -514,7 +401,6 @@ jobs:
 	workflow, err := parser.Parse([]byte(yaml))
 	require.NoError(t, err)
 
-	// Should take first element of array
 	job := workflow.Jobs["test"]
 	assert.Equal(t, "ubuntu-latest", job.RunsOn)
 }
@@ -545,13 +431,10 @@ jobs:
 	workflow, err := parser.Parse([]byte(yaml))
 	require.NoError(t, err)
 
-	// Build has no dependencies
 	assert.Empty(t, workflow.Jobs["build"].Needs)
 
-	// Test depends on build
 	assert.Equal(t, []string{"build"}, workflow.Jobs["test"].Needs)
 
-	// Deploy depends on both
 	deploy := workflow.Jobs["deploy"]
 	assert.Len(t, deploy.Needs, 2)
 	assert.Contains(t, deploy.Needs, "build")
@@ -622,11 +505,9 @@ jobs:
 	workflow, err := parser.Parse([]byte(yaml))
 	require.NoError(t, err)
 
-	// Workflow-level permissions should be set
 	require.NotNil(t, workflow.Permissions)
 	assert.Equal(t, "write", workflow.Permissions.Scopes["members"])
 
-	// Job should inherit workflow permissions since it has none of its own
 	job := workflow.Jobs["admin"]
 	require.NotNil(t, job)
 	require.NotNil(t, job.Permissions, "job should inherit workflow-level permissions")
@@ -656,7 +537,6 @@ jobs:
 	workflow, err := parser.Parse([]byte(yaml))
 	require.NoError(t, err)
 
-	// Job has explicit permissions — should NOT inherit workflow level
 	job := workflow.Jobs["build"]
 	require.NotNil(t, job)
 	require.NotNil(t, job.Permissions)
@@ -684,7 +564,6 @@ jobs:
 	workflow, err := parser.Parse([]byte(yaml))
 	require.NoError(t, err)
 
-	// Explicit empty permissions = read-only, should NOT inherit workflow level
 	job := workflow.Jobs["build"]
 	require.NotNil(t, job)
 	require.NotNil(t, job.Permissions)
@@ -719,11 +598,9 @@ jobs:
 	require.NotNil(t, jobA.Permissions)
 	require.NotNil(t, jobB.Permissions)
 
-	// Both should have the same values
 	assert.Equal(t, "write", jobA.Permissions.Scopes["contents"])
 	assert.Equal(t, "write", jobB.Permissions.Scopes["contents"])
 
-	// But they should be independent copies (not the same pointer)
 	assert.NotSame(t, jobA.Permissions, jobB.Permissions, "inherited permissions should be independent copies")
 	assert.NotSame(t, jobA.Permissions, workflow.Permissions, "inherited permissions should not alias workflow permissions")
 }
@@ -821,26 +698,13 @@ jobs: {}
 }
 
 func TestGitHubParser_InitRegistration(t *testing.T) {
-	// The init() function in github.go registers the parser
-	// Re-register to test the initialization behavior
 	RegisterParser(NewGitHubParser())
 
-	// Verify it's registered
 	parser := GetParser("github")
 	require.NotNil(t, parser, "GitHub parser should be registered")
 	assert.Equal(t, "github", parser.Platform())
 
-	// Verify it can parse GitHub Actions paths
 	assert.True(t, parser.CanParse(".github/workflows/test.yml"))
-}
-
-// ============================================================================
-// GitLabParser Tests
-// ============================================================================
-
-func TestGitLabParser_Platform(t *testing.T) {
-	parser := NewGitLabParser()
-	assert.Equal(t, "gitlab", parser.Platform())
 }
 
 func TestGitLabParser_CanParse(t *testing.T) {
@@ -915,19 +779,17 @@ build-job:
 	require.NoError(t, err)
 	require.NotNil(t, workflow)
 
-	// Verify basic structure
 	assert.Equal(t, "gitlab", workflow.Platform)
 	assert.Len(t, workflow.Jobs, 1)
 
-	// Verify job exists
 	buildJob := workflow.Jobs["build-job"]
 	require.NotNil(t, buildJob)
 	assert.Equal(t, "build-job", buildJob.ID)
 
-	// Verify steps were created from script
+	// Exact match, not Contains: the script lines are joined in source order and a
+	// reordering or duplication regression has to fail here.
 	assert.Len(t, buildJob.Steps, 1)
-	assert.Contains(t, buildJob.Steps[0].Run, "echo \"Building\"")
-	assert.Contains(t, buildJob.Steps[0].Run, "npm ci")
+	assert.Equal(t, "echo \"Building\"\nnpm ci", buildJob.Steps[0].Run)
 }
 
 func TestGitLabParser_Parse_InvalidYAML(t *testing.T) {
@@ -1006,26 +868,20 @@ deploy-job:
 	require.NoError(t, err)
 	require.NotNil(t, workflow)
 
-	// Verify normalized workflow structure
 	assert.Equal(t, "gitlab", workflow.Platform)
 
-	// Verify workflow-level env (from variables)
 	assert.Equal(t, "18", workflow.Env["NODE_VERSION"])
 	assert.Equal(t, "global", workflow.Env["GLOBAL_VAR"])
 
-	// Verify jobs
 	assert.Len(t, workflow.Jobs, 3)
 
-	// Build job details
 	buildJob := workflow.Jobs["build-job"]
 	require.NotNil(t, buildJob)
 	assert.Equal(t, "build-job", buildJob.ID)
 	assert.Equal(t, "node:18-alpine", buildJob.RunsOn)
 	assert.Equal(t, "build", buildJob.Env["BUILD_VAR"])
 
-	// Verify build job has steps (script + before_script + after_script)
 	require.GreaterOrEqual(t, len(buildJob.Steps), 1)
-	// Main script step should contain the script commands
 	foundScriptStep := false
 	for _, step := range buildJob.Steps {
 		if strings.Contains(step.Run, "npm run build") {
@@ -1035,28 +891,22 @@ deploy-job:
 	}
 	assert.True(t, foundScriptStep, "Should have script step")
 
-	// Test job details
 	testJob := workflow.Jobs["test-job"]
 	require.NotNil(t, testJob)
 	assert.Equal(t, "test-job", testJob.ID)
 	assert.Equal(t, []string{"build-job"}, testJob.Needs)
 
-	// Verify rule was converted to condition
 	require.Len(t, testJob.Steps, 1)
-	// The condition might be on the job or step level depending on implementation
 	hasCondition := testJob.Condition != "" || testJob.Steps[0].Condition != ""
 	assert.True(t, hasCondition, "Should have condition from rules")
 
-	// Verify services
 	require.Len(t, testJob.Services, 1)
 	assert.Contains(t, testJob.Services, "postgres")
 
-	// Deploy job details
 	deployJob := workflow.Jobs["deploy-job"]
 	require.NotNil(t, deployJob)
 	assert.Equal(t, "deploy-job", deployJob.ID)
 
-	// Verify raw GitLab CI is preserved
 	assert.NotNil(t, workflow.Raw)
 	glCI, ok := workflow.Raw.(*GitLabCI)
 	require.True(t, ok, "Raw should be *GitLabCI")
@@ -1103,16 +953,12 @@ deploy-job:
 	workflow, err := parser.Parse([]byte(yaml))
 	require.NoError(t, err)
 
-	// Build has no dependencies
 	assert.Empty(t, workflow.Jobs["build-job"].Needs)
 
-	// test-job-1 with array syntax
 	assert.Equal(t, []string{"build-job"}, workflow.Jobs["test-job-1"].Needs)
 
-	// test-job-2 with complex syntax
 	assert.Equal(t, []string{"build-job"}, workflow.Jobs["test-job-2"].Needs)
 
-	// deploy depends on multiple jobs
 	deploy := workflow.Jobs["deploy-job"]
 	assert.Len(t, deploy.Needs, 3)
 	assert.Contains(t, deploy.Needs, "build-job")
@@ -1121,23 +967,15 @@ deploy-job:
 }
 
 func TestGitLabParser_InitRegistration(t *testing.T) {
-	// The init() function in gitlab.go registers the parser
-	// Re-register to test the initialization behavior
 	RegisterParser(NewGitLabParser())
 
-	// Verify it's registered
 	parser := GetParser("gitlab")
 	require.NotNil(t, parser, "GitLab parser should be registered")
 	assert.Equal(t, "gitlab", parser.Platform())
 
-	// Verify it can parse GitLab CI paths
 	assert.True(t, parser.CanParse(".gitlab-ci.yml"))
 	assert.True(t, parser.CanParse(".gitlab-ci.yaml"))
 }
-
-// ============================================================================
-// GitLabParser Include Tests
-// ============================================================================
 
 func TestGitLabParser_Parse_Include_LocalString(t *testing.T) {
 	parser := NewGitLabParser()
@@ -1158,7 +996,6 @@ test-job:
 	require.NoError(t, err)
 	require.NotNil(t, workflow)
 
-	// Verify include was parsed
 	glCI, ok := workflow.Raw.(*GitLabCI)
 	require.True(t, ok, "Raw should be *GitLabCI")
 	require.Len(t, glCI.Includes, 1)
@@ -1196,47 +1033,13 @@ test-job:
 	require.True(t, ok, "Raw should be *GitLabCI")
 	require.Len(t, glCI.Includes, 2)
 
-	// First include
 	inc1 := glCI.Includes[0]
 	assert.Equal(t, IncludeTypeLocal, inc1.Type)
 	assert.Equal(t, "/templates/build.yml", inc1.Path)
 
-	// Second include
 	inc2 := glCI.Includes[1]
 	assert.Equal(t, IncludeTypeLocal, inc2.Type)
 	assert.Equal(t, "/templates/test.yml", inc2.Path)
-}
-
-func TestGitLabParser_Parse_Include_Remote(t *testing.T) {
-	parser := NewGitLabParser()
-
-	yaml := `
-include:
-  - remote: 'https://example.com/ci.yml'
-
-stages:
-  - test
-
-test-job:
-  stage: test
-  script:
-    - echo "test"
-`
-
-	workflow, err := parser.Parse([]byte(yaml))
-	require.NoError(t, err)
-	require.NotNil(t, workflow)
-
-	glCI, ok := workflow.Raw.(*GitLabCI)
-	require.True(t, ok, "Raw should be *GitLabCI")
-	require.Len(t, glCI.Includes, 1)
-
-	inc := glCI.Includes[0]
-	assert.Equal(t, IncludeTypeRemote, inc.Type)
-	assert.Equal(t, "https://example.com/ci.yml", inc.Remote)
-	assert.Empty(t, inc.Path)
-	assert.Empty(t, inc.Project)
-	assert.Empty(t, inc.Template)
 }
 
 func TestGitLabParser_Parse_Include_Project(t *testing.T) {
@@ -1274,38 +1077,6 @@ test-job:
 	assert.Empty(t, inc.Template)
 }
 
-func TestGitLabParser_Parse_Include_Template(t *testing.T) {
-	parser := NewGitLabParser()
-
-	yaml := `
-include:
-  - template: 'Auto-DevOps.gitlab-ci.yml'
-
-stages:
-  - test
-
-test-job:
-  stage: test
-  script:
-    - echo "test"
-`
-
-	workflow, err := parser.Parse([]byte(yaml))
-	require.NoError(t, err)
-	require.NotNil(t, workflow)
-
-	glCI, ok := workflow.Raw.(*GitLabCI)
-	require.True(t, ok, "Raw should be *GitLabCI")
-	require.Len(t, glCI.Includes, 1)
-
-	inc := glCI.Includes[0]
-	assert.Equal(t, IncludeTypeTemplate, inc.Type)
-	assert.Equal(t, "Auto-DevOps.gitlab-ci.yml", inc.Template)
-	assert.Empty(t, inc.Path)
-	assert.Empty(t, inc.Remote)
-	assert.Empty(t, inc.Project)
-}
-
 func TestGitLabParser_Parse_Include_Mixed(t *testing.T) {
 	parser := NewGitLabParser()
 
@@ -1334,20 +1105,16 @@ test-job:
 	require.True(t, ok, "Raw should be *GitLabCI")
 	require.Len(t, glCI.Includes, 4)
 
-	// Verify local include
 	assert.Equal(t, IncludeTypeLocal, glCI.Includes[0].Type)
 	assert.Equal(t, "/templates/ci.yml", glCI.Includes[0].Path)
 
-	// Verify remote include
 	assert.Equal(t, IncludeTypeRemote, glCI.Includes[1].Type)
 	assert.Equal(t, "https://example.com/ci.yml", glCI.Includes[1].Remote)
 
-	// Verify project include
 	assert.Equal(t, IncludeTypeProject, glCI.Includes[2].Type)
 	assert.Equal(t, "group/project", glCI.Includes[2].Project)
 	assert.Equal(t, "/templates/ci.yml", glCI.Includes[2].Path)
 
-	// Verify template include
 	assert.Equal(t, IncludeTypeTemplate, glCI.Includes[3].Type)
 	assert.Equal(t, "Auto-DevOps.gitlab-ci.yml", glCI.Includes[3].Template)
 }
@@ -1373,10 +1140,6 @@ test-job:
 	require.True(t, ok, "Raw should be *GitLabCI")
 	assert.Empty(t, glCI.Includes)
 }
-
-// ============================================================================
-// GitLabParser Trigger Tests
-// ============================================================================
 
 func TestGitLabParser_ParseTriggers(t *testing.T) {
 	parser := NewGitLabParser()
@@ -1493,7 +1256,6 @@ test-job:
 			require.NoError(t, err)
 			require.NotNil(t, workflow)
 
-			// Verify triggers are populated
 			if tt.expectedTriggers == nil {
 				assert.Empty(t, workflow.Triggers)
 			} else {

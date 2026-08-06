@@ -13,7 +13,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
-// AggregatedFinding groups findings by type within a repository
 type AggregatedFinding struct {
 	Type        detections.VulnerabilityType
 	Severity    detections.Severity
@@ -22,65 +21,60 @@ type AggregatedFinding struct {
 	Count       int
 }
 
-// typeDescriptions maps vulnerability types to human-readable descriptions
 var typeDescriptions = map[detections.VulnerabilityType]string{
-	detections.VulnUnpinnedAction:              "Actions using version tags instead of SHA",
-	detections.VulnExcessivePermissions:        "Missing or excessive permissions block",
-	detections.VulnActionsInjection:            "Potential command injection via context",
-	detections.VulnPwnRequest:                  "Pull request target with unsafe checkout",
-	detections.VulnReviewInjection:             "Code review trigger with unsafe operations",
-	detections.VulnTOCTOU:                      "Time-of-check/time-of-use vulnerability",
-	detections.VulnArtifactPoison:              "Artifact poisoning vulnerability",
-	detections.VulnCachePoisoning:              "Cache poisoning vulnerability",
-	detections.VulnSelfHostedRunner:            "Self-hosted runner security risk",
-	detections.VulnSelfHostedAgent:             "Self-hosted agent security risk",
-	detections.VulnIncludeInjection:            "GitLab include injection vulnerability",
-	detections.VulnMergeRequestUnsafeCheckout:  "Merge request with unsafe code checkout and execution",
-	detections.VulnMergeRequestSecretsExposure: "Secrets accessible in merge request pipelines",
-	detections.VulnPullRequestSecretsExposure:  "Secrets accessible in pull request pipelines",
-	detections.VulnTokenExposure:               "Pipeline tokens exposed in untrusted pipeline contexts",
-	detections.VulnAITokenExfiltration:         "AI token exfiltration risk",
-	detections.VulnAICodeInjection:             "AI code injection vulnerability",
-	detections.VulnAIWorkflowSabotage:          "AI workflow sabotage risk",
-	detections.VulnAIMCPAbuse:                  "AI MCP abuse vulnerability",
-	detections.VulnAIPrivilegeEscalation:       "AI privilege escalation risk",
-	detections.VulnAISupplyChainPoisoning:      "AI supply chain poisoning risk",
-	// Zizmor-inspired detections
-	detections.VulnOverprovisionedSecrets:  "Job has broader secret access than needed",
-	detections.VulnGitHubEnv:               "Unsafe write to GITHUB_ENV file",
-	detections.VulnHardcodedContainerCreds: "Hardcoded credentials in container config",
-	detections.VulnArtipacked:              "Artifact upload may leak credentials",
-	detections.VulnKnownVulnerableActions:  "Action with known security vulnerability",
-	detections.VulnImpostorCommit:          "Commit impersonation risk via actions",
-	detections.VulnUnsoundContains:         "Unsafe use of contains() in conditions",
-	detections.VulnUnsoundCondition:        "Unsound conditional security check",
-	detections.VulnUnredactedSecrets:       "Potential secret values exposed in logs",
-	detections.VulnSecretsInherit:          "Broad secret inheritance in reusable workflow",
-	detections.VulnRefVersionMismatch:      "Git ref and version tag mismatch",
-	detections.VulnRefConfusion:            "Ambiguous git ref resolution risk",
-	detections.VulnBotConditions:           "Insufficient bot actor filtering",
-	detections.VulnArchivedUses:            "Usage of archived/unmaintained action",
-	detections.VulnAnonymousDefinition:     "Workflow with missing or anonymous name",
-	detections.VulnUseTrustedPublishing:    "Should use trusted publishing for releases",
-	detections.VulnUnpinnedImages:          "Container image without digest pin",
-	detections.VulnUndocumentedPermissions: "Permissions not explicitly documented",
-	detections.VulnStaleActionRefs:         "Action reference to outdated version",
-	detections.VulnObfuscation:             "Obfuscated or encoded content in workflow",
-	detections.VulnMisfeature:              "Usage of dangerous workflow features",
-	detections.VulnInsecureCommands:        "Use of deprecated insecure commands",
-	detections.VulnForbiddenUses:           "Usage of forbidden/blocked actions",
-	detections.VulnConcurrencyLimits:       "Missing concurrency limits on workflow",
-	// Advanced detections
-	detections.VulnSecretScopeRisk:          "Secret accessible beyond intended scope",
-	detections.VulnEnvironmentBypass:        "Environment protection bypass risk",
-	detections.VulnCompositeActionRisk:      "Composite action with security risk",
-	detections.VulnDynamicTemplateInjection: "Dynamic template injection risk",
-	detections.VulnReusableWorkflowRisk:     "Reusable workflow trust boundary risk",
-	// Jenkins-specific detections
-	detections.VulnJenkinsScriptConsole:   "Jenkins script console accessible (RCE risk)",
-	detections.VulnJenkinsAnonymousAccess: "Jenkins allows unauthenticated access",
-	detections.VulnJenkinsCSRFDisabled:    "Jenkins CSRF protection is disabled",
-	// ADO umbrella plugin types
+	detections.VulnUnpinnedAction:                "Actions using version tags instead of SHA",
+	detections.VulnExcessivePermissions:          "Missing or excessive permissions block",
+	detections.VulnActionsInjection:              "Potential command injection via context",
+	detections.VulnPwnRequest:                    "Pull request target with unsafe checkout",
+	detections.VulnReviewInjection:               "Code review trigger with unsafe operations",
+	detections.VulnTOCTOU:                        "Time-of-check/time-of-use vulnerability",
+	detections.VulnArtifactPoison:                "Artifact poisoning vulnerability",
+	detections.VulnCachePoisoning:                "Cache poisoning vulnerability",
+	detections.VulnSelfHostedRunner:              "Self-hosted runner security risk",
+	detections.VulnSelfHostedAgent:               "Self-hosted agent security risk",
+	detections.VulnIncludeInjection:              "GitLab include injection vulnerability",
+	detections.VulnMergeRequestUnsafeCheckout:    "Merge request with unsafe code checkout and execution",
+	detections.VulnMergeRequestSecretsExposure:   "Secrets accessible in merge request pipelines",
+	detections.VulnPullRequestSecretsExposure:    "Secrets accessible in pull request pipelines",
+	detections.VulnTokenExposure:                 "Pipeline tokens exposed in untrusted pipeline contexts",
+	detections.VulnAITokenExfiltration:           "AI token exfiltration risk",
+	detections.VulnAICodeInjection:               "AI code injection vulnerability",
+	detections.VulnAIWorkflowSabotage:            "AI workflow sabotage risk",
+	detections.VulnAIMCPAbuse:                    "AI MCP abuse vulnerability",
+	detections.VulnAIPrivilegeEscalation:         "AI privilege escalation risk",
+	detections.VulnAISupplyChainPoisoning:        "AI supply chain poisoning risk",
+	detections.VulnOverprovisionedSecrets:        "Job has broader secret access than needed",
+	detections.VulnGitHubEnv:                     "Unsafe write to GITHUB_ENV file",
+	detections.VulnHardcodedContainerCreds:       "Hardcoded credentials in container config",
+	detections.VulnArtipacked:                    "Artifact upload may leak credentials",
+	detections.VulnKnownVulnerableActions:        "Action with known security vulnerability",
+	detections.VulnImpostorCommit:                "Commit impersonation risk via actions",
+	detections.VulnUnsoundContains:               "Unsafe use of contains() in conditions",
+	detections.VulnUnsoundCondition:              "Unsound conditional security check",
+	detections.VulnUnredactedSecrets:             "Potential secret values exposed in logs",
+	detections.VulnSecretsInherit:                "Broad secret inheritance in reusable workflow",
+	detections.VulnRefVersionMismatch:            "Git ref and version tag mismatch",
+	detections.VulnRefConfusion:                  "Ambiguous git ref resolution risk",
+	detections.VulnBotConditions:                 "Insufficient bot actor filtering",
+	detections.VulnArchivedUses:                  "Usage of archived/unmaintained action",
+	detections.VulnAnonymousDefinition:           "Workflow with missing or anonymous name",
+	detections.VulnUseTrustedPublishing:          "Should use trusted publishing for releases",
+	detections.VulnUnpinnedImages:                "Container image without digest pin",
+	detections.VulnUndocumentedPermissions:       "Permissions not explicitly documented",
+	detections.VulnStaleActionRefs:               "Action reference to outdated version",
+	detections.VulnObfuscation:                   "Obfuscated or encoded content in workflow",
+	detections.VulnMisfeature:                    "Usage of dangerous workflow features",
+	detections.VulnInsecureCommands:              "Use of deprecated insecure commands",
+	detections.VulnForbiddenUses:                 "Usage of forbidden/blocked actions",
+	detections.VulnConcurrencyLimits:             "Missing concurrency limits on workflow",
+	detections.VulnSecretScopeRisk:               "Secret accessible beyond intended scope",
+	detections.VulnEnvironmentBypass:             "Environment protection bypass risk",
+	detections.VulnCompositeActionRisk:           "Composite action with security risk",
+	detections.VulnDynamicTemplateInjection:      "Dynamic template injection risk",
+	detections.VulnReusableWorkflowRisk:          "Reusable workflow trust boundary risk",
+	detections.VulnJenkinsScriptConsole:          "Jenkins script console accessible (RCE risk)",
+	detections.VulnJenkinsAnonymousAccess:        "Jenkins allows unauthenticated access",
+	detections.VulnJenkinsCSRFDisabled:           "Jenkins CSRF protection is disabled",
 	detections.VulnScriptInjection:               "Pipeline script injection via parameter or variable",
 	detections.VulnTriggerExploitation:           "Exploitable pipeline trigger configuration",
 	detections.VulnExcessiveJobPermissions:       "Job configured with elevated admin permissions",
@@ -89,7 +83,6 @@ var typeDescriptions = map[detections.VulnerabilityType]string{
 }
 
 func init() {
-	// Validate typeDescriptions covers all types
 	for _, vt := range detections.AllVulnerabilityTypes {
 		if _, ok := typeDescriptions[vt]; !ok {
 			panic(fmt.Sprintf("typeDescriptions missing entry for %s", vt))
@@ -97,15 +90,14 @@ func init() {
 	}
 }
 
-// getDescription returns human-readable description for a vulnerability type
 func getDescription(vulnType detections.VulnerabilityType) string {
 	if desc, ok := typeDescriptions[vulnType]; ok {
 		return desc
 	}
-	return string(vulnType) // Fallback to type name
+	return string(vulnType)
 }
 
-// severityRank returns numeric rank for sorting (lower = more severe)
+// Lower rank sorts first: critical is 0.
 func severityRank(s detections.Severity) int {
 	switch s {
 	case detections.SeverityCritical:
@@ -123,7 +115,6 @@ func severityRank(s detections.Severity) int {
 	}
 }
 
-// severityColor returns tablewriter color code for severity
 func severityColor(s detections.Severity) int {
 	switch s {
 	case detections.SeverityCritical:
@@ -141,15 +132,13 @@ func severityColor(s detections.Severity) int {
 	}
 }
 
-// typeSeverityKey is a composite key for grouping findings by both type and severity.
 type typeSeverityKey struct {
 	Type     detections.VulnerabilityType
 	Severity detections.Severity
 }
 
-// AggregateByRepoWithAllTypes groups findings by repository.
-// Findings of the same type but different severities are listed as separate rows.
-// Only types with actual findings are included.
+// One row per (type, severity) pair, so a type can appear more than once.
+// Despite the name, only types that actually have findings are included.
 func AggregateByRepoWithAllTypes(findings []detections.Finding) map[string][]AggregatedFinding {
 	byRepo := make(map[string]map[typeSeverityKey][]detections.Finding)
 	repos := make(map[string]bool)
@@ -178,7 +167,6 @@ func AggregateByRepoWithAllTypes(findings []detections.Finding) map[string][]Agg
 			})
 		}
 
-		// Sort by severity (critical first) then by type name
 		sort.Slice(result[repo], func(i, j int) bool {
 			ri, rj := severityRank(result[repo][i].Severity), severityRank(result[repo][j].Severity)
 			if ri != rj {
@@ -191,12 +179,10 @@ func AggregateByRepoWithAllTypes(findings []detections.Finding) map[string][]Agg
 	return result
 }
 
-// RenderTable renders aggregated findings as a table to the given writer
 func RenderTable(w io.Writer, aggregated []AggregatedFinding) {
 	table := tablewriter.NewWriter(w)
 	table.SetHeader([]string{"Severity", "Title", "Description", "Count"})
 
-	// Configure table style
 	table.SetBorder(true)
 	table.SetRowLine(false)
 	table.SetHeaderLine(true)
@@ -206,10 +192,8 @@ func RenderTable(w io.Writer, aggregated []AggregatedFinding) {
 	table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
 
-	// Set column widths for consistent formatting
 	table.SetColWidth(45)
 
-	// Enable colors
 	table.SetAutoWrapText(false)
 
 	for _, agg := range aggregated {

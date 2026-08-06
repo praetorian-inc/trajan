@@ -13,9 +13,8 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// correlate reads the normalized corpus back off disk as generic maps (so chain
-// records match the .get()-keyed shapes field-for-field) rather than the typed
-// jobs slice, which it ignores.
+// Reads the normalized corpus back off disk as generic maps, ignoring the typed
+// jobs slice, so chain records mirror the on-disk shapes field-for-field.
 func correlate(prior engine.PriorPhase, cp engine.CurrentPhase, _ []Job) error {
 	jobs, err := loadRecords(prior, "10-normalize/jobs")
 	if err != nil {
@@ -214,11 +213,9 @@ func deriveReusableCallgraph(jobs []map[string]any) map[string]any {
 	}
 }
 
-// deriveJobOutputFlow emits one edge per consumer-step needs.<job>.outputs.<var>
-// reference, joined single-hop to the producer job in the same workflow. needs
-// is intra-workflow and names the producer explicitly, so the join key is
-// (repo, workflow_filename, job_id); a producer absent from the workflow is
-// silently skipped (no recursion).
+// needs is intra-workflow and names the producer explicitly, so the join key is
+// (repo, workflow_filename, job_id) and the join is single-hop; a producer absent
+// from the workflow is silently skipped.
 func deriveJobOutputFlow(jobs []map[string]any) map[string]any {
 	byKey := map[[3]string]map[string]any{}
 	for _, j := range jobs {
@@ -486,10 +483,9 @@ func orEmptyMap(v any) any {
 }
 
 // A reusable callee names its artifacts "${{ inputs.X }}" and only the call site
-// knows X, so without resolving it the handoff from the caller's writer to the
-// callee's reader is invisible.
-// Two call sites disagreeing on an input leaves that input unresolvable: picking
-// either value would name an artifact the other caller never produces.
+// knows X, so unresolved the handoff to the callee's reader is invisible. Two call
+// sites disagreeing on an input leave it unresolvable: either value would name an
+// artifact the other caller never produces.
 func calleeInputsByWorkflow(jobs []map[string]any) map[[2]string]map[string]any {
 	out := map[[2]string]map[string]any{}
 	disputed := map[[2]string]map[string]bool{}
@@ -585,15 +581,16 @@ func deriveCacheKeyspace(jobs []map[string]any) map[string]any {
 		for _, c := range mList(job, opKey) {
 			var key, scope string
 			var restore any
-			if cm, ok := c.(map[string]any); ok {
-				key, _ = (mGet(cm, "key_template")).(string)
+			switch cm := c.(type) {
+			case map[string]any:
+				key, _ = mGet(cm, "key_template").(string)
 				if key == "" {
 					key, _ = mGet(cm, "key").(string)
 				}
 				scope, _ = mGet(cm, "scope").(string)
 				restore = mGet(cm, "restore_keys")
-			} else if s, ok := c.(string); ok {
-				key = s
+			case string:
+				key = cm
 			}
 			prefix, ok := strings.CutPrefix(scope, "scope-prefix:")
 			if !ok {
@@ -680,8 +677,8 @@ func deriveCacheKeyspace(jobs []map[string]any) map[string]any {
 	}
 }
 
-// nilIfEmpty: a map-source op with no key, or a nil source, serializes as null
-// (Python's None default); a bare string op keeps its string even when empty.
+// A map-source op with no key, or a nil source, serializes as null; a bare string
+// op keeps its string even when empty.
 func nilIfEmpty(key string, src any) any {
 	if _, isMap := src.(map[string]any); isMap && key == "" {
 		return nil
@@ -788,9 +785,9 @@ func deriveBranchCoverage(repos, rulesets []map[string]any, branchesByRepo map[s
 				if mStr(rs, "scope") == "org" {
 					decoded := decodeConditions(conds)
 					if !orgRepoGate(decoded, repoName, repoID, nil) {
-						// Repo properties are not collected, so a property-scoped
-						// org ruleset fails the gate for want of data rather than
-						// because it does not apply.
+						// Repo properties are not collected, so a property-scoped org
+						// ruleset fails the gate for want of data, not because it
+						// does not apply.
 						if decoded.RepositoryProperty != nil {
 							unevaluable = append(unevaluable, mGet(rs, "ruleset_id"))
 						}
@@ -876,9 +873,9 @@ func anyApplicable(items []map[string]any, pred func(map[string]any) bool) bool 
 	return false
 }
 
-// correlate sees conditions as a decoded map while orgRepoGate takes the typed
-// shape collect parses; round-tripping keeps one implementation of the gate
-// rather than a second, subtly different copy.
+// Conditions arrive here as a decoded map while orgRepoGate takes the typed shape
+// collect parses; round-tripping keeps one implementation of the gate rather than a
+// second, subtly different copy.
 func decodeConditions(conds map[string]any) rulesetConditions {
 	var out rulesetConditions
 	if b, err := json.Marshal(conds); err == nil {
@@ -1057,11 +1054,9 @@ type writePrincipal struct {
 	Prov    []any
 }
 
-// deriveCapabilityEdges joins every write-capable principal against the branches
-// effective-ruleset resolved a control state for, one record per (principal,
-// branch). The branch-level gaps live on the effective record; the edge carries
-// only what depends on the principal — which controls it circumvents and which
-// routes onto the branch that leaves open.
+// One record per (principal, branch). Branch-level gaps live on the effective
+// record; the edge carries only what depends on the principal — which controls it
+// circumvents and which routes onto the branch that leaves open.
 func deriveCapabilityEdges(effective, principals, deployKeys, repos, apps []map[string]any, mintRepos map[string][]string) map[string]any {
 	defaultBranch := map[string]string{}
 	archived := map[string]bool{}
@@ -1133,12 +1128,11 @@ func deriveCapabilityEdges(effective, principals, deployKeys, repos, apps []map[
 			Prov: listOrEmpty(k, "_provenance"),
 		})
 	}
-	// repository_selection "all" IS the repo set. A "selected" installation needs
-	// the installation-repositories list collect never fetches, so its scope is
-	// narrowed to the repositories where a job actually mints its token — sound
-	// without that call, and the only repositories where the grant is reachable
-	// from a workflow anyway. administration:write is the app analogue of repo
-	// admin — it is the permission that removes the control itself.
+	// repository_selection "all" IS the repo set. A "selected" installation needs the
+	// installation-repositories list collect never fetches, so its scope narrows to
+	// the repositories where a job actually mints its token — the only ones where the
+	// grant is reachable from a workflow anyway. administration:write is the app
+	// analog of repo admin: the permission that removes the control itself.
 	for _, a := range apps {
 		perms := mMap(a, "permissions")
 		if mStr(perms, "contents") != "write" {
@@ -1224,12 +1218,11 @@ func deriveCapabilityEdges(effective, principals, deployKeys, repos, apps []map[
 				"direct_push":  !archived[repo] && !legacyBlocksDirect && !appliedDirect["pull_request"] && !appliedDirect["update"],
 				"pull_request": !archived[repo] && wp.Kind != "deploy_key" && !legacyLock && !(appliedPR["update"] && !appliedPR["pull_request"]),
 			}
-			// The PR route is only a control if an approval is actually demanded of
-			// this principal, and the token's approval only counts when the gate
-			// still binds them — a bypass holder was never gated in the first place.
-			// Exactly one, not one-or-more: a repository has a single Actions
-			// identity and GitHub refuses a self-review, so two required approvals
-			// still cost the attacker a human.
+			// The PR route is only a control if an approval is demanded of this
+			// principal, and the token's approval counts only while the gate still
+			// binds them — a bypass holder was never gated. Exactly one, not
+			// one-or-more: a repository has a single Actions identity and GitHub
+			// refuses a self-review, so two required approvals still cost a human.
 			prGate := appliedPR["pull_request"] || (legacyRequiresPR && !(wp.IsAdmin && legacyExemptsAdmins))
 			selfApproves := open["pull_request"] && prGate && approvals == 1 && tokenCanApprove[repo]
 
@@ -1296,13 +1289,11 @@ func activeRulesetDetail(eff map[string]any) []map[string]any {
 	return out
 }
 
-// A RepositoryRole actor names a role the principal's own grant already states,
-// so it resolves for a user or a team; OrganizationAdmin does not, because
-// nothing collected maps it back to a login, and a human facing one is reported
-// unresolved rather than guessed — the gate is unproven, not proven absent.
-// Neither role reaches a non-human principal: a deploy key and an app
-// installation hold no repository role, and an app is named by app_id through the
-// Integration actor instead.
+// A RepositoryRole actor names a role the principal's own grant already states, so
+// it resolves for a user or a team; OrganizationAdmin does not, and a human facing
+// one is reported unresolved rather than guessed — the gate is unproven, not proven
+// absent. Neither reaches a non-human principal: a deploy key and an app
+// installation hold no repository role, and an app is named by app_id instead.
 func capabilityBypassMatch(actors []any, wp writePrincipal) ([]any, bool) {
 	matched := []any{}
 	unresolved := false
@@ -1351,11 +1342,10 @@ var baseRoleRanks = map[string]int{
 	"admin":    5,
 }
 
-// Base repository role ids 1..5 ascend read, triage, write, maintain, admin, and
-// a role bypass covers every role at or above it — an admin bypasses a
-// triage-scoped actor. The ordering is GitHub's; nothing collected maps an id to
-// a role name, so it cannot be confirmed against a run. An id outside 1..5 is a
-// custom role and stays unresolved rather than ranked.
+// Base repository role ids 1..5 ascend read, triage, write, maintain, admin, and a
+// role bypass covers every role at or above it — an admin bypasses a triage-scoped
+// actor. Nothing collected maps an id to a role name, so the ordering cannot be
+// confirmed against a run; an id outside 1..5 is a custom role and stays unresolved.
 func baseRoleRank(actorID string) int {
 	switch actorID {
 	case "1", "2", "3", "4", "5":
@@ -1373,9 +1363,9 @@ func principalRoleRank(wp writePrincipal) int {
 }
 
 // A generic minter takes the App identity as an app-id input. An action that
-// authenticates as its own published App has no such input — its slug is fixed
-// by the action itself, and the token it hands the job carries that App's
-// installation permissions whatever the workflow declared.
+// authenticates as its own published App has no such input: its slug is fixed by
+// the action, and the token it hands the job carries that App's installation
+// permissions whatever the workflow declared.
 var minterActions = []struct{ prefix, appIDKey, appSlug string }{
 	{prefix: "actions/create-github-app-token", appIDKey: "app-id"},
 	{prefix: "tibdex/github-app-token", appIDKey: "app_id"},

@@ -19,29 +19,25 @@ func init() {
 	})
 }
 
-// exprRegex matches ${{ }} compile-time template expressions
+// ${{ }}: compile-time template expression
 var exprRegex = regexp.MustCompile(`\$\{\{\s*(.+?)\s*\}\}`)
 
-// runtimeExprRegex matches $[ ] runtime expressions
+// $[ ]: runtime expression
 var runtimeExprRegex = regexp.MustCompile(`\$\[\s*(.+?)\s*\]`)
 
-// macroRefRegex matches $(VarName) macro expressions
+// $(Var): macro expression
 var macroRefRegex = regexp.MustCompile(`\$\(([^)]+)\)`)
 
-// Detection detects pipeline injection vulnerabilities in Azure Pipelines,
-// combining script injection, template reference injection, and trigger exploitation checks.
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new pipeline injection detection.
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("pipeline-injection", platforms.PlatformAzureDevOps, detections.SeverityCritical),
 	}
 }
 
-// Detect analyzes the graph for pipeline injection vulnerabilities.
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 	for _, node := range g.GetNodesByType(graph.NodeTypeWorkflow) {
@@ -73,9 +69,7 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// checkScriptInjection checks for template injection in script commands.
 func checkScriptInjection(wf *graph.WorkflowNode, step *graph.StepNode) *detections.Finding {
-	// First, check compile-time template expressions ${{ }}
 	compileTimeMatches := exprRegex.FindAllStringSubmatch(step.Run, -1)
 	for _, match := range compileTimeMatches {
 		if len(match) < 2 {
@@ -83,7 +77,6 @@ func checkScriptInjection(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 		}
 		expr := strings.TrimSpace(match[1])
 
-		// Check for parameter interpolation (user-controllable at runtime)
 		if strings.HasPrefix(expr, "parameters.") {
 			injLine := common.ScriptLineForPattern(step, match[0], false)
 			return &detections.Finding{
@@ -114,14 +107,10 @@ func checkScriptInjection(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 			}
 		}
 
-		// Check for variable interpolation from potentially untrusted sources
 		if strings.HasPrefix(expr, "variables.") {
-			// Extract the variable name after "variables."
 			varName := strings.TrimPrefix(expr, "variables.")
 
-			// Check if this is a safe system variable
 			if common.SafeSystemVariablesTemplateExpr[varName] {
-				// Safe system variable - skip detection
 				continue
 			}
 
@@ -156,7 +145,6 @@ func checkScriptInjection(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 		}
 	}
 
-	// Second, check runtime expressions $[ ]
 	runtimeMatches := runtimeExprRegex.FindAllStringSubmatch(step.Run, -1)
 	for _, match := range runtimeMatches {
 		if len(match) < 2 {
@@ -164,7 +152,6 @@ func checkScriptInjection(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 		}
 		expr := strings.TrimSpace(match[1])
 
-		// Check for parameter interpolation in runtime expressions
 		if strings.HasPrefix(expr, "parameters.") || strings.HasPrefix(expr, "variables.") {
 			injLine := common.ScriptLineForPattern(step, match[0], false)
 			return &detections.Finding{
@@ -196,7 +183,6 @@ func checkScriptInjection(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 		}
 	}
 
-	// Third, check macro expressions $(VarName)
 	macroMatches := macroRefRegex.FindAllStringSubmatch(step.Run, -1)
 	for _, match := range macroMatches {
 		if len(match) < 2 {
@@ -204,12 +190,10 @@ func checkScriptInjection(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 		}
 		varName := strings.TrimSpace(match[1])
 
-		// Skip safe system variables
 		if common.SafeSystemVariablesMacro[varName] {
 			continue
 		}
 
-		// Flag if this macro references an injectable context
 		for _, injectable := range common.InjectableContexts {
 			if varName == injectable {
 				injLine := common.ScriptLineForPattern(step, match[0], false)
@@ -246,12 +230,9 @@ func checkScriptInjection(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 	return nil
 }
 
-// checkTemplateReference checks for template injection in template references.
 func checkTemplateReference(wf *graph.WorkflowNode, step *graph.StepNode) *detections.Finding {
-	// Extract template path from "template:..." format
 	templatePath := strings.TrimPrefix(step.Uses, "template:")
 
-	// First, check compile-time template expressions ${{ }}
 	compileTimeMatches := exprRegex.FindAllStringSubmatch(templatePath, -1)
 	for _, match := range compileTimeMatches {
 		if len(match) < 2 {
@@ -259,7 +240,6 @@ func checkTemplateReference(wf *graph.WorkflowNode, step *graph.StepNode) *detec
 		}
 		expr := strings.TrimSpace(match[1])
 
-		// Any dynamic template reference is dangerous
 		if strings.HasPrefix(expr, "parameters.") || strings.HasPrefix(expr, "variables.") {
 			return &detections.Finding{
 				Type:       detections.VulnDynamicTemplateInjection,
@@ -291,7 +271,6 @@ func checkTemplateReference(wf *graph.WorkflowNode, step *graph.StepNode) *detec
 		}
 	}
 
-	// Second, check runtime expressions $[ ]
 	runtimeMatches := runtimeExprRegex.FindAllStringSubmatch(templatePath, -1)
 	for _, match := range runtimeMatches {
 		if len(match) < 2 {
@@ -299,7 +278,6 @@ func checkTemplateReference(wf *graph.WorkflowNode, step *graph.StepNode) *detec
 		}
 		expr := strings.TrimSpace(match[1])
 
-		// Runtime expressions in template references are CRITICAL
 		if strings.HasPrefix(expr, "parameters.") || strings.HasPrefix(expr, "variables.") {
 			return &detections.Finding{
 				Type:       detections.VulnDynamicTemplateInjection,
@@ -334,7 +312,6 @@ func checkTemplateReference(wf *graph.WorkflowNode, step *graph.StepNode) *detec
 	return nil
 }
 
-// triggerLine returns the source line for a trigger string.
 // Triggers containing "pr" map to the "pr:" YAML key; all others map to "trigger:".
 func triggerLine(wf *graph.WorkflowNode, trigger string) int {
 	if wf.TriggerLines == nil {
@@ -347,19 +324,16 @@ func triggerLine(wf *graph.WorkflowNode, trigger string) int {
 	return wf.TriggerLines["trigger"]
 }
 
-// checkTriggerPatterns checks for exploitable trigger configurations.
 func checkTriggerPatterns(wf *graph.WorkflowNode) []detections.Finding {
 	var findings []detections.Finding
 
 	for _, trigger := range wf.Triggers {
 		triggerLower := strings.ToLower(trigger)
 
-		// Check for wildcard branch triggers (refs/heads/*)
 		if strings.Contains(trigger, "*") {
 			severity := detections.SeverityHigh
 			evidence := "Wildcard branch trigger: " + trigger
 
-			// Check for particularly dangerous patterns
 			if strings.Contains(triggerLower, "refs/heads/*") ||
 				strings.Contains(triggerLower, "users/*") ||
 				strings.Contains(triggerLower, "feature/*") {
@@ -391,7 +365,6 @@ func checkTriggerPatterns(wf *graph.WorkflowNode) []detections.Finding {
 			})
 		}
 
-		// Check for CI triggers without path filters
 		if strings.Contains(triggerLower, "ci") || strings.Contains(triggerLower, "batch") {
 			tLine := triggerLine(wf, trigger)
 			findings = append(findings, detections.Finding{

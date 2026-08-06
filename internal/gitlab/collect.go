@@ -45,7 +45,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	state.Platform = "gl"
 	state.Scope = scopeString(scope)
 	state.Org = scope.Group
-	state.Invocation = os.Args[1:]
+	state.SetInvocation(os.Args[1:])
 	if state.StartedAt == "" {
 		state.StartedAt = engine.IsoformatUTC(timeNow())
 	}
@@ -74,8 +74,8 @@ type projectRef struct {
 }
 
 func runCollect(ctx context.Context, cfg *engine.Config, cl GitLab, cp engine.CurrentPhase, scope *Scope, state *engine.State, timer *engine.PhaseTimer) error {
-	// Depth resolution: try the full path as a group; on 404 treat the last segment
-	// as a project whose owning group is its namespace full_path.
+	// The scope depth is undecided until probed: try the whole path as a group, and on
+	// 404 treat it as a project whose owning group is its namespace full_path.
 	groupPath := scope.Group
 	groupRaw, gstatus, err := softGet(ctx, cl, "/groups/"+url.PathEscape(scope.path), nil)
 	if err != nil {
@@ -135,9 +135,8 @@ func namespaceFullPath(projRaw json.RawMessage) string {
 	return strField(ns, "full_path")
 }
 
-// enumerateProjects lists all projects under the group (including subgroups) — the
-// seed list for the fan-out. This is the one fatal list: a genuine transport error
-// sinks the run, but a soft 403/404 yields an empty (marked) list and continues.
+// The seed list for the whole fan-out, and the one list whose transport error sinks
+// the run. A soft 403/404 still only yields an empty list and continues.
 func enumerateProjects(ctx context.Context, cl GitLab, cp engine.CurrentPhase, groupPath string, gid int64) ([]projectRef, error) {
 	gref := groupRef(groupPath, gid)
 	items, status, err := softList(ctx, cl, "/groups/"+gref+"/projects", url.Values{"include_subgroups": []string{"true"}})
@@ -167,7 +166,7 @@ func filterProjects(projects []projectRef, fullPath string) []projectRef {
 	return nil
 }
 
-// groupRef prefers the numeric id (URL-safe) when known, else the escaped path.
+// The numeric id needs no escaping, so it is preferred over a nested group path.
 func groupRef(groupPath string, gid int64) string {
 	if gid != 0 {
 		return fmt.Sprintf("%d", gid)

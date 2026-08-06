@@ -10,26 +10,21 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms/shared/proxy"
 )
 
-// DefaultBaseURL is the default Jenkins base URL
 const DefaultBaseURL = "https://jenkins.example.com"
 
-// Platform implements the platforms.Platform interface for Jenkins
 type Platform struct {
 	client *Client
 	config platforms.Config
 }
 
-// NewPlatform creates a new Jenkins platform adapter
 func NewPlatform() *Platform {
 	return &Platform{}
 }
 
-// Name returns the platform identifier
 func (p *Platform) Name() string {
 	return "jenkins"
 }
 
-// Init initializes the platform with configuration
 func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 	p.config = config
 
@@ -50,7 +45,7 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 		opts = append(opts, WithUsername(config.Jenkins.Username))
 	}
 
-	// Resolve proxy transport: explicit HTTPTransport takes precedence, then proxy config
+	// An explicit HTTPTransport wins over the proxy config.
 	transport := config.HTTPTransport
 	if transport == nil {
 		t, err := proxy.NewTransport(proxy.Config{
@@ -70,12 +65,10 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 	return nil
 }
 
-// Client returns the underlying Jenkins client
 func (p *Platform) Client() *Client {
 	return p.client
 }
 
-// Scan retrieves jobs and Jenkinsfiles from the target
 func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platforms.ScanResult, error) {
 	result := &platforms.ScanResult{
 		Workflows: make(map[string][]platforms.Workflow),
@@ -83,7 +76,7 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 
 	switch target.Type {
 	case platforms.TargetRepo:
-		// Single job: "folder/job-name" or "job-name"
+		// target.Value is "job-name" or "folder/job-name".
 		workflow, err := p.getWorkflow(ctx, target.Value)
 		if err != nil {
 			return nil, fmt.Errorf("getting job: %w", err)
@@ -97,7 +90,6 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 		}
 
 	case platforms.TargetOrg:
-		// List all jobs
 		jobs, err := p.client.ListJobsRecursive(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("listing jobs: %w", err)
@@ -126,16 +118,14 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 	return result, nil
 }
 
-// getWorkflow retrieves the Jenkinsfile for a job
 func (p *Platform) getWorkflow(ctx context.Context, jobName string) (*platforms.Workflow, error) {
-	// Jenkins Pipeline Multibranch jobs store Jenkinsfile in SCM
-	// The config.xml endpoint returns the job configuration
+	// A multibranch job keeps its Jenkinsfile in SCM, so only config.xml is reachable.
 	jobPath := encodeJobPath(jobName)
 	path := fmt.Sprintf("/job/%s/config.xml", jobPath)
 
 	content, err := p.client.getRaw(ctx, path)
 	if err != nil {
-		// If job doesn't have a pipeline config, that's okay
+		// A 404 is not an error: the job simply has no pipeline config.
 		if strings.Contains(err.Error(), "404") {
 			return nil, nil
 		}
@@ -150,5 +140,4 @@ func (p *Platform) getWorkflow(ctx context.Context, jobName string) (*platforms.
 	}, nil
 }
 
-// Ensure Platform implements the interface
 var _ platforms.Platform = (*Platform)(nil)

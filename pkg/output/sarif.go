@@ -1,4 +1,3 @@
-// Package output provides output formatting for scan results
 package output
 
 import (
@@ -17,7 +16,6 @@ const (
 	toolInfoURI = "https://github.com/praetorian-inc/trajan"
 )
 
-// severityToLevel converts Trajan severity to SARIF level
 func severityToLevel(s detections.Severity) string {
 	switch s {
 	case detections.SeverityCritical, detections.SeverityHigh:
@@ -31,9 +29,8 @@ func severityToLevel(s detections.Severity) string {
 	}
 }
 
-// vulnTypeToRuleID maps vulnerability types to stable SARIF rule IDs with platform prefix
+// Rule IDs are part of the report contract: never renumber an existing one.
 func vulnTypeToRuleID(vt detections.VulnerabilityType, platform string) string {
-	// Default to github if platform is empty
 	if platform == "" {
 		platform = "github"
 	}
@@ -75,7 +72,6 @@ func vulnTypeToRuleID(vt detections.VulnerabilityType, platform string) string {
 	return platform + "/" + baseID
 }
 
-// getRuleDescription returns human-readable description for rule
 func getRuleDescription(vt detections.VulnerabilityType) string {
 	descriptions := map[detections.VulnerabilityType]string{
 		detections.VulnActionsInjection:              "Command injection via GitHub Actions expression context",
@@ -111,12 +107,11 @@ func getRuleDescription(vt detections.VulnerabilityType) string {
 	return string(vt)
 }
 
-// GenerateSARIF converts findings to SARIF format
 func GenerateSARIF(findings []detections.Finding) ([]byte, error) {
 	rep := report.NewV210Report()
 	run := sarif.NewRunWithInformationURI(toolName, toolInfoURI)
 
-	// Register all rules upfront (using platform+type combination as key)
+	// SARIF wants every rule declared before the results that reference it.
 	type ruleKey struct {
 		platform string
 		vulnType detections.VulnerabilityType
@@ -134,12 +129,10 @@ func GenerateSARIF(findings []detections.Finding) ([]byte, error) {
 		}
 	}
 
-	// Add results
 	for _, f := range findings {
 		ruleID := vulnTypeToRuleID(f.Type, f.Platform)
 		level := severityToLevel(f.Severity)
 
-		// Build artifact URI: repo/workflow
 		artifactURI := f.Repository + "/" + f.Workflow
 
 		run.AddDistinctArtifact(artifactURI)
@@ -148,7 +141,6 @@ func GenerateSARIF(findings []detections.Finding) ([]byte, error) {
 			WithLevel(level).
 			WithMessage(sarif.NewTextMessage(f.Evidence))
 
-		// Add location if we have line info
 		if f.Line > 0 {
 			result.AddLocation(
 				sarif.NewLocationWithPhysicalLocation(
@@ -162,7 +154,6 @@ func GenerateSARIF(findings []detections.Finding) ([]byte, error) {
 			)
 		}
 
-		// Add properties for confidence and complexity
 		pb := sarif.NewPropertyBag()
 		if f.Confidence != "" {
 			pb.Add("confidence", string(f.Confidence))
@@ -184,12 +175,10 @@ func GenerateSARIF(findings []detections.Finding) ([]byte, error) {
 
 	rep.AddRun(run)
 
-	// Validate before returning
 	if err := rep.Validate(); err != nil {
 		return nil, fmt.Errorf("SARIF validation failed: %w", err)
 	}
 
-	// Write to bytes buffer
 	var buf bytes.Buffer
 	if err := rep.Write(&buf); err != nil {
 		return nil, fmt.Errorf("failed to write SARIF: %w", err)

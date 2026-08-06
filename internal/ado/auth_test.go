@@ -2,85 +2,79 @@ package ado
 
 import (
 	"errors"
-	"slices"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-func TestResolveTokenExplicitBeatsEnv(t *testing.T) {
-	t.Setenv("ADO_PAT", "env-pat")
-
-	tok, err := ResolveToken("  explicit-pat  ")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if tok != "explicit-pat" {
-		t.Fatalf("expected the explicit token to win (trimmed), got %q", tok)
+func clearADOEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{
+		"TRAJAN_ADO_TOKEN", "ADO_PAT", "AZURE_DEVOPS_PAT", "AZDO_PAT", "AZURE_DEVOPS_EXT_PAT",
+		"AZURE_BEARER_TOKEN", "SYSTEM_ACCESSTOKEN",
+	} {
+		t.Setenv(k, "")
 	}
 }
 
-func TestResolveTokenEnvPrecedence(t *testing.T) {
+func TestResolveCredentialEnvBeatsExplicit(t *testing.T) {
+	clearADOEnv(t)
+	t.Setenv("ADO_PAT", "env-pat")
+
+	c, err := ResolveCredential("  explicit-pat  ", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Value != "env-pat" || c.Kind != engine.CredPAT {
+		t.Fatalf("expected env PAT to beat flag, got %+v", c)
+	}
+}
+
+func TestResolveCredentialEnvPrecedence(t *testing.T) {
+	clearADOEnv(t)
 	t.Setenv("ADO_PAT", "ado-pat")
 	t.Setenv("AZURE_DEVOPS_PAT", "azure-devops-pat")
 	t.Setenv("AZDO_PAT", "azdo-pat")
 
-	tok, err := ResolveToken("")
+	c, err := ResolveCredential("", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if tok != "ado-pat" {
-		t.Fatalf("expected ADO_PAT to win, got %q", tok)
+	if c.Value != "ado-pat" {
+		t.Fatalf("expected ADO_PAT to win, got %q", c.Value)
 	}
 }
 
-// A variable set to whitespace is as good as unset — otherwise `export ADO_PAT=`
-// in a sourced env file would mask a real token further down the list.
-func TestResolveTokenSkipsBlankEnvAndFallsThrough(t *testing.T) {
+func TestResolveCredentialSkipsBlankEnvAndFallsThrough(t *testing.T) {
+	clearADOEnv(t)
 	t.Setenv("ADO_PAT", "   ")
 	t.Setenv("AZURE_DEVOPS_PAT", "")
 	t.Setenv("AZDO_PAT", "azdo-pat")
 
-	tok, err := ResolveToken("   ")
+	c, err := ResolveCredential("   ", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if tok != "azdo-pat" {
-		t.Fatalf("expected fall-through to AZDO_PAT, got %q", tok)
+	if c.Value != "azdo-pat" {
+		t.Fatalf("expected fall-through to AZDO_PAT, got %q", c.Value)
 	}
 }
 
-func TestResolveTokenNoneSetReturnsErrNoToken(t *testing.T) {
-	t.Setenv("ADO_PAT", "")
-	t.Setenv("AZURE_DEVOPS_PAT", "")
-	t.Setenv("AZDO_PAT", "")
-
-	if _, err := ResolveToken(""); !errors.Is(err, ErrNoToken) {
+func TestResolveCredentialNoneSetReturnsErrNoToken(t *testing.T) {
+	clearADOEnv(t)
+	if _, err := ResolveCredential("", ""); !errors.Is(err, ErrNoToken) {
 		t.Fatalf("expected ErrNoToken, got %v", err)
 	}
 }
 
-func TestRedactedInvocation(t *testing.T) {
-	cases := []struct {
-		name string
-		in   []string
-		want []string
-	}{
-		{"token space", []string{"collect", "Org", "--token", "secret"}, []string{"collect", "Org", "--token", "REDACTED"}},
-		{"token equals", []string{"collect", "--token=secret", "Org"}, []string{"collect", "--token=REDACTED", "Org"}},
-		{"bearer space", []string{"run", "--azure-bearer-token", "jwt"}, []string{"run", "--azure-bearer-token", "REDACTED"}},
-		{"bearer equals", []string{"run", "--azure-bearer-token=jwt"}, []string{"run", "--azure-bearer-token=REDACTED"}},
-		{"non-credential untouched", []string{"collect", "Org", "--concurrency", "8"}, []string{"collect", "Org", "--concurrency", "8"}},
-		{"trailing flag without value", []string{"collect", "--token"}, []string{"collect", "--token"}},
+func TestResolveCredentialBearerKind(t *testing.T) {
+	clearADOEnv(t)
+	t.Setenv("AZURE_BEARER_TOKEN", "jwt")
+	c, err := ResolveCredential("", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			orig := slices.Clone(tc.in)
-			got := redactedInvocation(tc.in)
-			if !slices.Equal(got, tc.want) {
-				t.Fatalf("redactedInvocation(%v) = %v, want %v", tc.in, got, tc.want)
-			}
-			if !slices.Equal(tc.in, orig) {
-				t.Fatalf("input slice was mutated: %v", tc.in)
-			}
-		})
+	if c.Kind != engine.CredBearer || c.Value != "jwt" {
+		t.Fatalf("expected bearer, got %+v", c)
 	}
 }

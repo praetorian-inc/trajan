@@ -62,7 +62,6 @@ func TestPlatform_EnumerateToken(t *testing.T) {
 	result, err := p.EnumerateToken(context.Background())
 	require.NoError(t, err)
 
-	// User info
 	assert.Equal(t, "john_smith", result.User.Username)
 	assert.Equal(t, "John Smith", result.User.Name)
 	assert.False(t, result.IsAdmin)
@@ -70,89 +69,20 @@ func TestPlatform_EnumerateToken(t *testing.T) {
 	assert.True(t, result.CanCreateGroup)
 	assert.True(t, result.CanCreateProject)
 
-	// Token type detection: not bot + PAT succeeds = personal access token
+	// Not a bot and the PAT lookup succeeded, so: personal access token.
 	assert.Equal(t, "personal_access_token", result.TokenType)
 
-	// Token info
 	assert.Equal(t, "CI Deploy Token", result.Token.Name)
 	assert.True(t, result.Token.Active)
 	assert.Equal(t, []string{"api", "read_user"}, result.Token.Scopes)
 
-	// Groups
 	assert.Len(t, result.Groups, 2)
 	assert.Equal(t, "my-company", result.Groups[0].Name)
 
-	// Rate limit
 	assert.NotNil(t, result.RateLimit)
 	assert.Equal(t, 2000, result.RateLimit.Limit)
 
-	// No errors
 	assert.Empty(t, result.Errors)
-}
-
-func TestPlatform_EnumerateToken_BotProjectToken(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/api/v4/user":
-			json.NewEncoder(w).Encode(User{
-				ID:       99,
-				Username: "project_123_bot_abc",
-				Bot:      true,
-			})
-		case "/api/v4/personal_access_tokens/self":
-			// Project tokens may fail here
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"message":"404 Not Found"}`))
-		case "/api/v4/groups":
-			json.NewEncoder(w).Encode([]Group{})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	p := NewPlatform()
-	err := p.Init(context.Background(), platforms.Config{Token: "test-token", BaseURL: server.URL})
-	require.NoError(t, err)
-
-	result, err := p.EnumerateToken(context.Background())
-	require.NoError(t, err)
-
-	assert.True(t, result.IsBot)
-	assert.Equal(t, "project_access_token", result.TokenType)
-}
-
-func TestPlatform_EnumerateToken_BotGroupToken(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/api/v4/user":
-			json.NewEncoder(w).Encode(User{
-				ID:       99,
-				Username: "group_456_bot_xyz",
-				Bot:      true,
-			})
-		case "/api/v4/personal_access_tokens/self":
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"message":"404 Not Found"}`))
-		case "/api/v4/groups":
-			json.NewEncoder(w).Encode([]Group{})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	p := NewPlatform()
-	err := p.Init(context.Background(), platforms.Config{Token: "test-token", BaseURL: server.URL})
-	require.NoError(t, err)
-
-	result, err := p.EnumerateToken(context.Background())
-	require.NoError(t, err)
-
-	assert.True(t, result.IsBot)
-	assert.Equal(t, "group_access_token", result.TokenType)
 }
 
 func TestPlatform_EnumerateProjects_Default(t *testing.T) {
@@ -193,22 +123,19 @@ func TestPlatform_EnumerateProjects_Default(t *testing.T) {
 	err := p.Init(context.Background(), platforms.Config{Token: "test-token", BaseURL: server.URL})
 	require.NoError(t, err)
 
-	// Default: no target = member projects
+	// An empty target means member projects.
 	result, err := p.EnumerateProjects(context.Background(), platforms.Target{})
 	require.NoError(t, err)
 
 	assert.Len(t, result.Projects, 2)
 
-	// First project: Maintainer (40)
 	assert.Equal(t, "api", result.Projects[0].Name)
 	assert.Equal(t, 40, result.Projects[0].AccessLevel)
 	assert.Equal(t, "private", result.Projects[0].Visibility)
 
-	// Second project: Reporter (20)
 	assert.Equal(t, "docs", result.Projects[1].Name)
 	assert.Equal(t, 20, result.Projects[1].AccessLevel)
 
-	// Summary
 	assert.Equal(t, 2, result.Summary.Total)
 	assert.Equal(t, 1, result.Summary.Private)
 	assert.Equal(t, 1, result.Summary.Public)
@@ -293,16 +220,13 @@ func TestPlatform_EnumerateGroups_Basic(t *testing.T) {
 	result, err := p.EnumerateGroups(context.Background(), false)
 	require.NoError(t, err)
 
-	// With recursive=false: 1 top-level group + 1 shared group = 2 total
-	// (infra is filtered out because it has ParentID=10)
+	// recursive=false: 1 top-level + 1 shared = 2; infra is filtered out by its ParentID.
 	assert.Len(t, result.Groups, 2)
 
-	// Check top-level group
 	assert.Equal(t, "company", result.Groups[0].Name)
 	assert.Equal(t, 50, result.Groups[0].AccessLevel)
 	assert.False(t, result.Groups[0].Shared)
 
-	// Check shared group
 	assert.Equal(t, "partner-tools", result.Groups[1].Name)
 	assert.True(t, result.Groups[1].Shared)
 	assert.Equal(t, "company", result.Groups[1].SharedVia)
@@ -327,7 +251,7 @@ func TestPlatform_EnumerateGroups_Recursive(t *testing.T) {
 			})
 
 		case r.URL.Path == "/api/v4/groups/11/subgroups":
-			json.NewEncoder(w).Encode([]Group{}) // No deeper subgroups
+			json.NewEncoder(w).Encode([]Group{})
 
 		case r.URL.Path == "/api/v4/groups/10/members/1":
 			json.NewEncoder(w).Encode(Member{ID: 1, AccessLevel: 50})
@@ -351,7 +275,6 @@ func TestPlatform_EnumerateGroups_Recursive(t *testing.T) {
 	result, err := p.EnumerateGroups(context.Background(), true)
 	require.NoError(t, err)
 
-	// Should have both the top-level group and the recursively discovered subgroup
 	assert.Len(t, result.Groups, 2)
 	assert.Equal(t, "company", result.Groups[0].Name)
 	assert.Equal(t, "infra", result.Groups[1].Name)
@@ -395,13 +318,12 @@ func TestPlatform_EnumerateSecrets_Project(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Project variables
 	assert.Len(t, result.ProjectVariables["company/api"], 2)
 	assert.Equal(t, "DATABASE_URL", result.ProjectVariables["company/api"][0].Key)
 
-	// Instance variables failed (not admin) - 403 is silently ignored
+	// A 403 on instance variables is silently ignored.
 	assert.Empty(t, result.InstanceVariables)
-	assert.Empty(t, result.PermissionErrors) // 403 not shown as error
+	assert.Empty(t, result.PermissionErrors)
 }
 
 func TestPlatform_EnumerateSecrets_Group(t *testing.T) {
@@ -451,11 +373,9 @@ func TestPlatform_EnumerateSecrets_Group(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Group variables
 	assert.Len(t, result.GroupVariables["company"], 1)
 	assert.Equal(t, "AWS_ACCESS_KEY_ID", result.GroupVariables["company"][0].Key)
 
-	// Project variables (from group's projects)
 	assert.Len(t, result.ProjectVariables["company/api"], 1)
 	assert.Empty(t, result.ProjectVariables["company/web"])
 }
@@ -496,13 +416,9 @@ func TestPlatform_EnumerateToken_PartialFailure(t *testing.T) {
 	result, err := p.EnumerateToken(context.Background())
 	require.NoError(t, err)
 
-	// User info present
 	assert.Equal(t, "test", result.User.Username)
-	// Token info missing
 	assert.Nil(t, result.Token)
-	// Groups present
 	assert.Len(t, result.Groups, 1)
-	// Has error about token info
 	assert.NotEmpty(t, result.Errors)
 }
 

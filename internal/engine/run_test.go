@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -63,7 +64,7 @@ func TestRun_FirstErrorCancels(t *testing.T) {
 			return 0, wantErr
 		}
 		// Block on ctx so non-failing goroutines unwind on cancel rather than racing
-		// to completion, which would make the out!=nil assertion flaky.
+		// to completion, which would make the nil-out assertion flaky.
 		select {
 		case <-ctx.Done():
 			return 0, ctx.Err()
@@ -126,6 +127,63 @@ func TestRunPartial_NilOnError(t *testing.T) {
 		func(_ context.Context, i int) (int, error) {
 			if i == 2 {
 				return 0, errors.New("bad")
+			}
+			return i, nil
+		}, nil)
+	if len(out) != 2 {
+		t.Fatalf("len(out) = %d, want 2", len(out))
+	}
+}
+
+func TestRunPartial_RecoversPanic(t *testing.T) {
+	items := []int{1, 2, 3}
+	panicItem := 2
+
+	var mu sync.Mutex
+	var onErrItems []int
+	var onErrErrs []string
+
+	out := RunPartial(context.Background(), 2, items,
+		func(_ context.Context, i int) (int, error) {
+			if i == panicItem {
+				panic("boom")
+			}
+			return i * 10, nil
+		},
+		func(i int, err error) {
+			mu.Lock()
+			onErrItems = append(onErrItems, i)
+			onErrErrs = append(onErrErrs, err.Error())
+			mu.Unlock()
+		},
+	)
+
+	if len(onErrItems) != 1 || onErrItems[0] != panicItem {
+		t.Fatalf("onError items = %v, want [%d]", onErrItems, panicItem)
+	}
+	if !strings.Contains(onErrErrs[0], "boom") {
+		t.Fatalf("onError err = %q, want it to mention the recovered value", onErrErrs[0])
+	}
+	if len(out) != len(items)-1 {
+		t.Fatalf("len(out) = %d, want %d", len(out), len(items)-1)
+	}
+	sort.Ints(out)
+	want := []int{10, 30}
+	for i := range want {
+		if out[i] != want[i] {
+			t.Fatalf("out = %v, want %v", out, want)
+		}
+	}
+}
+
+// A panicking item with onError == nil must be dropped silently, exactly like a
+// returned error, and must never propagate as a panic out of RunPartial itself.
+func TestRunPartial_NilOnErrorPanic(t *testing.T) {
+	items := []int{1, 2, 3}
+	out := RunPartial(context.Background(), 2, items,
+		func(_ context.Context, i int) (int, error) {
+			if i == 2 {
+				panic("boom")
 			}
 			return i, nil
 		}, nil)

@@ -25,13 +25,11 @@ jobs:
 	require.NoError(t, err)
 	require.NotNil(t, normalized)
 
-	// Check that jobs have line numbers
 	buildJob, ok := normalized.Jobs["build"]
 	require.True(t, ok, "should have 'build' job")
 	assert.Greater(t, buildJob.Line, 0, "job should have line number > 0")
 	assert.Equal(t, 4, buildJob.Line, "build job should be on line 4")
 
-	// Check that steps have line numbers
 	require.Len(t, buildJob.Steps, 2, "should have 2 steps")
 
 	checkoutStep := buildJob.Steps[0]

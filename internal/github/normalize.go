@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 func Normalize(ctx context.Context, runDir string) error {
@@ -33,18 +34,25 @@ func Normalize(ctx context.Context, runDir string) error {
 		return fmt.Errorf("org not set in %s; run collect first", engine.RunMeta())
 	}
 
+	ui.PhaseHeader("Normalize")
+
 	timer := engine.StartPhaseTimer(engine.PhaseNormalize, "normalize")
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
 
 	jobs, normErr := normalizeJobs(prior, cp, org, timer)
 	if normErr == nil {
+		ui.Row(ui.RowLine{Seq: 1, Total: 3, Label: "jobs", Status: "ok"})
 		normErr = normalizeEntities(runDir, func(err error) {
 			timer.Errors = append(timer.Errors, err.Error())
 		})
 	}
 	if normErr == nil {
+		ui.Row(ui.RowLine{Seq: 2, Total: 3, Label: "entities", Status: "ok"})
 		normErr = correlate(prior, cp, jobs)
+	}
+	if normErr == nil {
+		ui.Row(ui.RowLine{Seq: 3, Total: 3, Label: "correlate", Status: "ok"})
 	}
 
 	rec := timer.Stop(normErr)
@@ -55,7 +63,10 @@ func Normalize(ctx context.Context, runDir string) error {
 	if normErr != nil {
 		return normErr
 	}
-	engine.PhaseDone(rec)
+	ui.Outcome("Normalize complete", []ui.Count{
+		{Label: "jobs", N: len(jobs)},
+		{Label: "degraded", N: len(rec.Errors)},
+	}, engine.Elapsed(rec.DurationS))
 	return nil
 }
 
@@ -124,8 +135,8 @@ func normalizeJobs(prior engine.PriorPhase, cp engine.CurrentPhase, org string, 
 	return allJobs, nil
 }
 
-// workflowYAMLNames orders .yml before .yaml so jobs with the same stem in both
-// files keep a stable on-disk precedence.
+// .yml before .yaml so jobs with the same stem in both files keep a stable on-disk
+// precedence.
 func workflowYAMLNames(dir string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -152,8 +163,8 @@ func workflowYAMLNames(dir string) []string {
 	return append(yml, yaml...)
 }
 
-// splitRepoBranchDir inverts engine.repoBranchDir: "<repo>" is the default
-// branch, "<repo>@<branchSlug>" is a non-default branch.
+// Inverts the collect-side directory naming: "<repo>" is the default branch,
+// "<repo>@<branchSlug>" a non-default one.
 func splitRepoBranchDir(dirName string) (repo, branch string, isDefault bool) {
 	if i := strings.LastIndex(dirName, "@"); i >= 0 {
 		return dirName[:i], dirName[i+1:], false
@@ -609,8 +620,8 @@ func extractTriggers(onNode *LineNode) ([]string, map[string]TriggerFilter) {
 	}
 }
 
-// orderedKeys sorts rather than preserving YAML order; rules key on trigger
-// membership, not order, so sorting is sufficient and deterministic.
+// Sorts rather than preserving YAML order: rules key on trigger membership, not
+// order, so sorting is enough and is deterministic.
 func orderedKeys(node *LineNode) []string {
 	m, ok := node.Value.(map[string]*LineNode)
 	if !ok {
@@ -749,8 +760,8 @@ func stepBindingText(step map[string]any) string {
 	return strings.Join(parts, "\n")
 }
 
-// mapStringValues sorts by key for determinism; downstream references are deduped
-// on first sight, so value order is immaterial.
+// Sorted by key for determinism; downstream references are deduped on first sight,
+// so value order is immaterial.
 func mapStringValues(value any) []string {
 	m, ok := value.(map[string]any)
 	if !ok {
@@ -894,9 +905,8 @@ func cacheEntry(k string) CacheRef {
 	return CacheRef{KeyTemplate: k, Scope: "scope-prefix:" + cacheKeyPrefix(k)}
 }
 
-// The literal head of the key template, which is what restore-keys prefix
-// matching compares against — everything from the first expression on is
-// unknowable statically.
+// The literal head of the key template is what restore-keys prefix matching compares
+// against; everything from the first expression on is unknowable statically.
 func cacheKeyPrefix(k string) string {
 	return strings.Trim(strings.SplitN(k, "${{", 2)[0], "-_/")
 }
@@ -922,12 +932,11 @@ func restoreKeyLines(value any) []string {
 	}
 }
 
-// The identifier is whatever the action names as the assumable identity, kept
-// verbatim the way ArtifactRef.Name is: a reusable callee names its role
-// "${{ inputs.role-arn }}" and only the call site knows the literal, so
-// discarding the expression here severs the callee from the role it assumes.
-// Resolution against the caller's inputs happens in internal/graph, which has
-// the call graph; an expression that stays unresolved never becomes a node.
+// The identifier is kept verbatim the way ArtifactRef.Name is: a reusable callee
+// names its role "${{ inputs.role-arn }}" and only the call site knows the literal,
+// so discarding the expression here severs the callee from the role it assumes.
+// internal/graph resolves it against the caller's inputs; one left unresolved never
+// becomes a node.
 var cloudLogins = []struct{ prefix, provider, key string }{
 	{"aws-actions/configure-aws-credentials", "aws", "role-to-assume"},
 	{"azure/login", "azure", "client-id"},
@@ -1189,8 +1198,8 @@ func loadRepoDefaultPerms(prior engine.PriorPhase, repo string) string {
 	return env.Data.WorkflowPermissions.DefaultWorkflowPermissions
 }
 
-// loadRefResolutions reads the two collect sources in order; action-resolutions
-// overwrite action meta on key collision.
+// Reads the two collect sources in order, so action-resolutions overwrite action
+// meta on a key collision.
 func loadRefResolutions(prior engine.PriorPhase) map[string]string {
 	out := map[string]string{}
 	collect := func(dir, suffix string) {
@@ -1226,9 +1235,9 @@ func loadRefResolutions(prior engine.PriorPhase) map[string]string {
 	return out
 }
 
-// secretScopeIndex answers "which inventory defines this name" from the
-// 00-collect/secrets bundles. Only the actions bucket is consulted: a workflow's
-// secrets.<NAME> reads Actions secrets. The zero value resolves nothing.
+// Answers "which inventory defines this name" from the 00-collect/secrets bundles.
+// Only the actions bucket is consulted, because a workflow's secrets.<NAME> reads
+// Actions secrets. The zero value resolves nothing.
 type secretScopeIndex struct {
 	scoped       map[string]map[string]bool // "<repo>" or "<repo>__<env>" -> names
 	org          map[string]orgSecret
@@ -1329,9 +1338,9 @@ func (ix secretScopeIndex) ref(name, repo, envName string, stepIndex int) Secret
 	return out
 }
 
-// resolve applies GitHub's precedence, most specific first. A name no inventory
-// defines is left unresolved: it may be a typo, or a secret the token could not
-// read, and either way it keys no :Secret node.
+// GitHub's precedence, most specific first. A name no inventory defines is left
+// unresolved: it may be a typo or a secret the token could not read, and either way
+// it keys no :Secret node.
 func (ix secretScopeIndex) resolve(name, repo, envName string) (scope, key string, ok bool) {
 	if envName != "" {
 		if envKey := repo + "__" + envName; ix.scoped[envKey][name] {
@@ -1417,8 +1426,6 @@ func appendUniqueNeedsRef(s []NeedsOutputRef, v NeedsOutputRef) []NeedsOutputRef
 	return append(s, v)
 }
 
-// outputFieldRange returns the range of a single output entry under the outputs
-// node, falling back to the whole outputs block when the child is absent.
 func outputFieldRange(outputsNode *LineNode, name string) *LineRange {
 	if child := outputsNode.Field(name); child != nil {
 		return child.Range()
@@ -1426,7 +1433,7 @@ func outputFieldRange(outputsNode *LineNode, name string) *LineRange {
 	return outputsNode.Range()
 }
 
-// nonNilSlice forces a nil slice to a non-nil empty so it marshals as [] not null.
+// Forces a nil slice to a non-nil empty so it marshals as [] not null.
 func nonNilSlice[S ~[]E, E any](s S) S {
 	if s == nil {
 		return S{}
@@ -1460,8 +1467,8 @@ func isAllOrAny(v string) bool {
 	return s == "all" || s == "any"
 }
 
-// pyListStr reproduces Python's str(list) repr ('a', 'b') for the raw allowlist
-// capture so the stored value matches the Python output byte-for-byte.
+// Renders the raw allowlist capture as a Python list repr, ['a', 'b']; the spelling
+// is contractual for the same reason pyStr's is.
 func pyListStr(v []any) string {
 	parts := make([]string, len(v))
 	for i, x := range v {

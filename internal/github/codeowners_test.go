@@ -10,10 +10,8 @@ func ownersOf(t *testing.T, content, path string) []string {
 	return codeownersOwners(codeownersRules(content), path)
 }
 
-// GitHub reads CODEOWNERS with gitignore path semantics. Each case below is a
-// rule of that syntax, not of this implementation: a leading slash anchors, a
-// bare name floats to any depth, a trailing slash owns a subtree, and * stops
-// at a separator.
+// GitHub reads CODEOWNERS with gitignore path semantics; each case states a rule
+// of that syntax, not of this implementation.
 func TestCodeownersPathMatching(t *testing.T) {
 	for _, tc := range []struct {
 		name, content, path string

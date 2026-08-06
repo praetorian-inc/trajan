@@ -3,10 +3,9 @@ package gitlab
 import "testing"
 
 // The cat-06 approval-policy rules read approval_policy.{fallback_behavior,
-// enforcement_type, bypass_actor_broad, scanners}. These assert the P2-collected
-// policy YAML is parsed into those literals. The oracle is the GitLab scan-result
-// policy schema (fallback_behavior.fail: open|closed; require_approval action;
-// bypass_settings actor lists) and the three frozen rule predicates.
+// enforcement_type, bypass_actor_broad, scanners}. The oracle is GitLab's own
+// scan-result policy schema — fallback_behavior.fail: open|closed, the require_approval
+// action, bypass_settings actor lists — plus the three frozen rule predicates.
 
 func TestApprovalPolicyFallbackFailOpen(t *testing.T) {
 	spec := parsePolicyYAML(`

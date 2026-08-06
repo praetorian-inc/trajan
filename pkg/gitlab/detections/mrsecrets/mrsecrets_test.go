@@ -11,16 +11,13 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
-// TestDetect_SecretsInMRPipeline tests that secrets accessible in MR pipelines are detected
 func TestDetect_SecretsInMRPipeline(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow with merge_request trigger
 	wf := graph.NewWorkflowNode("wf1", "test", ".gitlab-ci.yml", "test/repo", []string{})
 	wf.AddTag(graph.TagMergeRequest)
 	g.AddNode(wf)
 
-	// Create job that runs on merge requests (job-level If condition)
 	job := graph.NewJobNode("job1", "test-job", "docker")
 	job.If = "$CI_PIPELINE_SOURCE == \"merge_request_event\""
 	job.SetParent(wf.ID())
@@ -28,7 +25,6 @@ func TestDetect_SecretsInMRPipeline(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create step that accesses sensitive variable
 	step := graph.NewStepNode("step1", "deploy", 15)
 	step.Run = "echo \"Deploying with token: $DEPLOY_TOKEN\""
 	step.SetParent(job.ID())
@@ -46,7 +42,6 @@ func TestDetect_SecretsInMRPipeline(t *testing.T) {
 	assert.Contains(t, findings[0].Remediation, "protected branch")
 }
 
-// TestDetect_ProtectedBranchOnly tests that jobs restricted to protected branches don't trigger findings
 func TestDetect_ProtectedBranchOnly(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -54,7 +49,6 @@ func TestDetect_ProtectedBranchOnly(t *testing.T) {
 	wf.AddTag(graph.TagMergeRequest)
 	g.AddNode(wf)
 
-	// Job restricted to main branch (protected)
 	job := graph.NewJobNode("job1", "deploy-job", "docker")
 	job.If = "$CI_COMMIT_BRANCH == \"main\" && $CI_PIPELINE_SOURCE == \"merge_request_event\""
 	job.SetParent(wf.ID())
@@ -75,7 +69,6 @@ func TestDetect_ProtectedBranchOnly(t *testing.T) {
 	assert.Len(t, findings, 1, "Should detect secrets when job explicitly runs on MR events even if restricted to main branch")
 }
 
-// TestDetect_MultipleSecretsInMR tests detection of multiple sensitive variables
 func TestDetect_MultipleSecretsInMR(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -89,7 +82,6 @@ func TestDetect_MultipleSecretsInMR(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Multiple secrets in different steps
 	step1 := graph.NewStepNode("step1", "auth", 15)
 	step1.Run = "aws configure set aws_access_key_id $AWS_KEY"
 	step1.SetParent(job.ID())
@@ -110,12 +102,10 @@ func TestDetect_MultipleSecretsInMR(t *testing.T) {
 
 	assert.Equal(t, detections.VulnMergeRequestSecretsExposure, findings[0].Type)
 	assert.Equal(t, detections.SeverityHigh, findings[0].Severity)
-	// Check evidence contains both variables
 	assert.Contains(t, findings[0].Evidence, "AWS_KEY")
 	assert.Contains(t, findings[0].Evidence, "API_TOKEN")
 }
 
-// TestDetect_NoSecretsInScript tests that jobs without sensitive variables are ignored
 func TestDetect_NoSecretsInScript(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -141,7 +131,6 @@ func TestDetect_NoSecretsInScript(t *testing.T) {
 	assert.Len(t, findings, 0, "Should not detect findings when no secrets are used")
 }
 
-// TestDetect_ExternalPullRequest tests detection on external_pull_request events
 func TestDetect_ExternalPullRequest(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -170,7 +159,6 @@ func TestDetect_ExternalPullRequest(t *testing.T) {
 	assert.Equal(t, detections.VulnMergeRequestSecretsExposure, findings[0].Type)
 }
 
-// TestDetect_MasterBranchProtected tests detection for master branch protection
 func TestDetect_MasterBranchProtected(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -178,7 +166,6 @@ func TestDetect_MasterBranchProtected(t *testing.T) {
 	wf.AddTag(graph.TagMergeRequest)
 	g.AddNode(wf)
 
-	// Job restricted to master branch (protected)
 	job := graph.NewJobNode("job1", "deploy-job", "docker")
 	job.If = "$CI_COMMIT_REF_NAME == \"master\""
 	job.SetParent(wf.ID())
@@ -199,7 +186,6 @@ func TestDetect_MasterBranchProtected(t *testing.T) {
 	assert.Len(t, findings, 0, "Should not detect secrets when job is restricted to master branch")
 }
 
-// TestDetect_VariousSecretKeywords tests detection of different secret keywords
 func TestDetect_VariousSecretKeywords(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -275,11 +261,9 @@ func TestDetect_VariousSecretKeywords(t *testing.T) {
 	}
 }
 
-// TestDetect_NoMRTrigger tests that non-MR pipelines are ignored
 func TestDetect_NoMRTrigger(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Workflow without MR trigger
 	wf := graph.NewWorkflowNode("wf1", "test", ".gitlab-ci.yml", "test/repo", []string{"push"})
 	g.AddNode(wf)
 

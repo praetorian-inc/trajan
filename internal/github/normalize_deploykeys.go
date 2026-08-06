@@ -12,10 +12,9 @@ import (
 )
 
 // A write-capable deploy key is a push path into the repo, so CanPush mirrors
-// PrincipalRepoGrant.CanPush. Two fields carry the cross-repo identity of the key
-// material, because two consumers key on different things: Fingerprint is the
-// graph's repo-independent DeployKey node key, and KeyBody is what the
-// deploy-key-reuse chain groups by.
+// PrincipalRepoGrant.CanPush. Two fields carry the key material's cross-repo
+// identity because two consumers key on different things: Fingerprint is the graph's
+// DeployKey node key, KeyBody is what the deploy-key-reuse chain groups by.
 type DeployKeyFact struct {
 	ID    string `json:"_id"`
 	Repo  string `json:"repo"`
@@ -37,17 +36,17 @@ type DeployKeyFact struct {
 	Provenance []SourceProvenance `json:"_provenance"`
 }
 
-// deployKeyBody splits exactly the way deriveDeployKeyReuse does, comment and all,
+// Splits exactly the way deriveDeployKeyReuse does — trailing SSH comment included —
 // so the emitted key_body is the value that chain groups instances by.
 func deployKeyBody(pub string) string {
 	parts := strings.SplitN(strings.TrimSpace(pub), " ", 2)
 	return parts[len(parts)-1]
 }
 
-// deployKeyFingerprint is the OpenSSH SHA256 fingerprint (`ssh-keygen -lf`) of the
-// base64 blob, which unlike KeyBody ignores the trailing comment and so still
-// matches when the same key was installed under different comments. An
-// undecodable blob falls back to the body so the graph key stays unique per key.
+// The OpenSSH SHA256 fingerprint (`ssh-keygen -lf`) of the base64 blob ignores the
+// trailing comment, so unlike KeyBody it still matches when the same key was
+// installed under different comments. An undecodable blob falls back to the body so
+// the graph key stays unique per key.
 func deployKeyFingerprint(pub string) string {
 	fields := strings.Fields(pub)
 	if len(fields) == 0 {

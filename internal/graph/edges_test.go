@@ -191,11 +191,9 @@ func TestTargetsMergesBranchesAndCountsExpressionEnvironments(t *testing.T) {
 	}
 }
 
-// Approving a PR from a workflow needs the repo's "allow Actions to create and
-// approve pull requests" toggle AND pull-requests:write on the job token. The
-// three firing-range rows below hold one, the other and both: fr-03-01 is the
-// scenario cat-03/01 was built for, and fr-03-11 exists precisely because the
-// repo toggle is off and only an App token gets around it.
+// Approving a PR from a workflow needs the repo's "allow Actions to create and approve
+// pull requests" toggle AND pull-requests:write on the job token. The three rows below
+// hold one, the other and both; fr-03-11's toggle is off and only an App token passes.
 func TestCanApproveNeedsBothTheRepoToggleAndTheJobToken(t *testing.T) {
 	files := map[string]any{"org/ghektestorg.json": map[string]any{"_id": "ghektestorg", "org": "ghektestorg"}}
 	for _, tc := range []struct {
@@ -350,11 +348,9 @@ func TestAddDropsIncompleteIdentity(t *testing.T) {
 	}
 }
 
-// GitHub caches are repo-scoped. fr-09-01 and fr-09-03 are unrelated scenarios
-// that both cache "npm-${{ runner.os }}-...", and fr-09-01's writer.yml
-// documents its poisoning path as prefix matching within its own repo. A Cache
-// keyed on the prefix alone puts one repo's writer on the other repo's reader,
-// which is the canonical cache-poisoning query answering with a fabrication.
+// GitHub caches are repo-scoped. fr-09-01 and fr-09-03 are unrelated scenarios that both
+// cache "npm-${{ runner.os }}-...", so a Cache keyed on the prefix alone puts one repo's
+// writer on the other's reader and answers the poisoning query with a fabrication.
 func TestCacheIOStaysInsideOneRepo(t *testing.T) {
 	row := func(repo, workflow, job string) any {
 		return map[string]any{
@@ -399,13 +395,9 @@ func TestCacheIOStaysInsideOneRepo(t *testing.T) {
 	}
 }
 
-// A branch filter is a glob: it must resolve against the branches that exist and
-// never mint one. fr-11-02's deploy fires from "release/*", which is the whole
-// premise of that scenario — protection targets the default branch while the
-// deploy runs elsewhere — so the pair has to be reachable. GitHub's "*" stops at
-// a path separator and "**" does not, which is the difference between
-// release/1.0 and release/2.0/hotfix. fr-03-02's "attacker-dev" is the branch
-// that scenario says an attacker would have to create, so it stays unbuilt.
+// A branch filter is a glob: it resolves against the branches that exist and never mints
+// one. GitHub's "*" stops at a path separator and "**" does not — the difference between
+// fr-11-02's release/1.0 and release/2.0/hotfix. fr-03-02's "attacker-dev" does not exist.
 func TestTargetsBranchResolvesOnlyRefsThatExist(t *testing.T) {
 	const glob = "fr-11-02-protection-targets-default-branch-only-but-deploy-fires-from"
 	const absent = "fr-03-02-workflow-on-unprotected-branch"
@@ -467,10 +459,9 @@ func TestTargetsBranchResolvesOnlyRefsThatExist(t *testing.T) {
 	}
 }
 
-// step_index -1 marks a job-env-level secret reference, which is exactly what
-// fr-02-11 is built on: the composite action reads the caller's secrets through
-// job env, not through a step's `with`. Indexing steps[-1] would credit the
-// last step of the job instead. fr-05-06 is the positive control.
+// step_index -1 marks a job-env-level secret reference, which is what fr-02-11 is built
+// on: the composite action reads the caller's secrets through job env, not a step's
+// `with`. Indexing steps[-1] would credit the last step. fr-05-06 is the control.
 func TestPassesSecretIgnoresJobLevelSecretReferences(t *testing.T) {
 	job := func(repo, wf string, uses []any, refs []any) map[string]any {
 		steps := make([]any, len(uses))

@@ -17,15 +17,15 @@ import (
 const (
 	userAgent = "trajan-prototype/0.1"
 
-	// API version defaults. Individual surfaces override where a preview is required.
+	// Individual surfaces override these where a preview is required.
 	APIVersion        = "7.1"
 	APIVersionPreview = "7.1-preview.1"
 	APIVersionSEP     = "7.1-preview.4" // service endpoints
 	APIVersionGraph   = "7.1-preview.1" // vssps graph
 )
 
-// Multi-host bases (var, not const, so tests can repoint them at an httptest
-// server). Keyed by the short host name collectors pass.
+// Keyed by the short host name collectors pass. A var, not a const, so tests can
+// repoint these at an httptest server.
 var hostBase = map[string]string{
 	"core":      "https://dev.azure.com",
 	"vsrm":      "https://vsrm.dev.azure.com",
@@ -148,11 +148,10 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response) boo
 	return true
 }
 
-// request is the shared retry loop for JSON/raw GETs and POSTs. body is []byte
-// (not io.Reader) so it can be re-sent on each retry — an io.Reader would be at
-// EOF after the first attempt, sending an empty body on a 429/5xx retry. A 404
-// with allow404 yields (nil, header, nil). HTML (invalid PAT) is surfaced as an
-// AdoError so it soft-fails rather than corrupting stored JSON.
+// body is []byte rather than io.Reader so it can be re-sent on each retry: a Reader
+// would be at EOF after the first attempt and send an empty body on a 429/5xx retry.
+// A 404 with allow404 yields (nil, header, nil). An HTML response means an invalid
+// PAT and becomes an AdoError, so it soft-fails instead of corrupting stored JSON.
 func (c *Client) request(ctx context.Context, method, u, accept string, body []byte, allow404 bool) ([]byte, http.Header, error) {
 	var lastStatus int
 	var lastBody []byte

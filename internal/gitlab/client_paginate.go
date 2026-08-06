@@ -10,9 +10,8 @@ import (
 	"net/url"
 )
 
-// Paginate follows GitLab's X-Next-Page header, accumulating each page's array
-// into one raw slice. per_page=100. A non-array body is returned as a single
-// element so callers stay uniform.
+// Pages are followed via the X-Next-Page header. A non-array body comes back as a
+// single element so callers stay uniform.
 func (c *Client) Paginate(ctx context.Context, p string, params url.Values) ([]json.RawMessage, error) {
 	q := maps.Clone(params)
 	if q == nil {
@@ -55,8 +54,7 @@ func softStatus(err error) int {
 	return 0
 }
 
-// isSoft reports an optional-surface failure that should skip-and-mark rather
-// than abort: 401/403 (permission) or 404 (absent).
+// A soft failure skips and marks an optional surface instead of aborting the phase.
 func isSoft(err error) bool {
 	switch softStatus(err) {
 	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
@@ -103,7 +101,7 @@ func numField(raw json.RawMessage, key string) int64 {
 	return n
 }
 
-// rawArray ensures a nil slice marshals as [] (rules key on it).
+// Rules key on these lists, so a nil slice must still marshal as [].
 func rawArray(items []json.RawMessage) []json.RawMessage {
 	if items == nil {
 		return []json.RawMessage{}

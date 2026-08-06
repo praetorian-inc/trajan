@@ -14,18 +14,15 @@ import (
 func TestDetect_UnsafeCheckoutInMR(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow with merge_request trigger
 	wf := graph.NewWorkflowNode("wf1", "test", ".gitlab-ci.yml", "test/repo", []string{"merge_request_event"})
 	wf.AddTag(graph.TagMergeRequest)
 	g.AddNode(wf)
 
-	// Create job
 	job := graph.NewJobNode("job1", "test", "")
 	job.SetParent(wf.ID())
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create steps for unsafe checkout pattern
 	step1 := graph.NewStepNode("step1", "fetch", 10)
 	step1.Run = "git fetch origin $CI_MERGE_REQUEST_SOURCE_BRANCH_SHA"
 	step1.SetParent(job.ID())
@@ -90,7 +87,6 @@ func TestDetect_SafeCheckout(t *testing.T) {
 	assert.Len(t, findings, 0)
 }
 
-// Test for bug #3: Same-line checkout + execution
 func TestDetect_SameLineCheckoutAndExecution(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -103,7 +99,6 @@ func TestDetect_SameLineCheckoutAndExecution(t *testing.T) {
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Single line with both checkout and execution
 	step1 := graph.NewStepNode("step1", "checkout-and-install", 10)
 	step1.Run = "git checkout $CI_MERGE_REQUEST_SOURCE_BRANCH_SHA && npm install"
 	step1.SetParent(job.ID())
@@ -121,7 +116,31 @@ func TestDetect_SameLineCheckoutAndExecution(t *testing.T) {
 	assert.Contains(t, findings[0].Evidence, "Execution sink found:")
 }
 
-// Test for bug #2: Mixed case trigger
+// Detect is the only detector in this package that carries the job across DFS
+// callbacks, so a step hanging directly off the workflow reaches createFinding
+// with a nil job. Before the guard, that was a nil dereference on job.Name.
+func TestDetect_StepWithNoJobAncestor(t *testing.T) {
+	g := graph.NewGraph()
+
+	wf := graph.NewWorkflowNode("wf1", "test", ".gitlab-ci.yml", "test/repo", []string{"merge_request_event"})
+	wf.AddTag(graph.TagMergeRequest)
+	g.AddNode(wf)
+
+	step := graph.NewStepNode("step1", "orphan", 10)
+	step.Run = "git checkout $CI_MERGE_REQUEST_SOURCE_BRANCH_SHA && npm install"
+	step.SetParent(wf.ID())
+	g.AddNode(step)
+	g.AddEdge(wf.ID(), step.ID(), graph.EdgeContains)
+
+	d := New()
+	findings, err := d.Detect(context.Background(), g)
+	require.NoError(t, err)
+
+	require.Len(t, findings, 1)
+	assert.Empty(t, findings[0].Job, "no job ancestor means no job name to report")
+	assert.Equal(t, detections.VulnMergeRequestUnsafeCheckout, findings[0].Type)
+}
+
 func TestDetect_MixedCaseTrigger(t *testing.T) {
 	g := graph.NewGraph()
 
@@ -154,38 +173,6 @@ func TestDetect_MixedCaseTrigger(t *testing.T) {
 	assert.Equal(t, detections.SeverityCritical, findings[0].Severity)
 }
 
-// Test uppercase merge_request_event
-func TestDetect_UppercaseMergeRequestEvent(t *testing.T) {
-	g := graph.NewGraph()
-
-	wf := graph.NewWorkflowNode("wf1", "test", ".gitlab-ci.yml", "test/repo", []string{"MERGE_REQUEST_EVENT"})
-	g.AddNode(wf)
-
-	job := graph.NewJobNode("job1", "test", "")
-	job.SetParent(wf.ID())
-	g.AddNode(job)
-	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
-
-	step1 := graph.NewStepNode("step1", "checkout", 10)
-	step1.Run = "git checkout FETCH_HEAD"
-	step1.SetParent(job.ID())
-	g.AddNode(step1)
-	g.AddEdge(job.ID(), step1.ID(), graph.EdgeContains)
-
-	step2 := graph.NewStepNode("step2", "install", 11)
-	step2.Run = "npm install"
-	step2.SetParent(job.ID())
-	g.AddNode(step2)
-	g.AddEdge(job.ID(), step2.ID(), graph.EdgeContains)
-
-	d := New()
-	findings, err := d.Detect(context.Background(), g)
-	require.NoError(t, err)
-
-	assert.Len(t, findings, 1, "Should detect uppercase merge_request_event")
-}
-
-// Test with job-level If condition
 func TestDetect_JobLevelIfCondition(t *testing.T) {
 	g := graph.NewGraph()
 

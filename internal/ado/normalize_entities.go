@@ -8,9 +8,8 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// normalizeEntities emits one structural record per node from the API-JSON
-// surfaces. Resource-scoped properties (checks, pipeline authorization, secrets)
-// fold onto their owning node. Per-item failures are recorded and skipped.
+// Resource-scoped properties (checks, pipeline authorization, secrets) fold onto their
+// owning node rather than becoming records of their own.
 func normalizeEntities(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org, onlyProject string, timer *engine.PhaseTimer) error {
 	projs := projects(prior, org, onlyProject)
 
@@ -32,9 +31,8 @@ func normalizeEntities(ctx context.Context, prior engine.PriorPhase, cp engine.C
 	if err := normalizeServiceHooks(prior, cp, org, timer); err != nil {
 		return err
 	}
-	// Service connections and variable groups are deduped across projects (a
-	// shared resource appears in every project it is shared into), so they run
-	// org-level, not per-project.
+	// A shared service connection or variable group appears in every project it is
+	// shared into, so these run org-level and dedup rather than per-project.
 	if err := normalizeServiceConnectionsShared(prior, cp, org, projs, timer); err != nil {
 		return err
 	}
@@ -60,9 +58,8 @@ func generalSettings(prior engine.PriorPhase, project string) map[string]any {
 	return entLoadData(prior, engine.CollectADOGeneralSettings(project))
 }
 
-// orgInheritedSettings are the general-settings keys (schema names) that resolve
-// down from the org. Only these gate org_settings_uniform; the remaining
-// settingsView keys are project-scoped posture.
+// The general-settings keys that resolve down from the org. Only these gate
+// org_settings_uniform; the remaining settingsView keys are project-scoped posture.
 var orgInheritedSettings = []string{
 	"limit_job_auth_scope_to_current_project", "limit_job_auth_scope_for_releases",
 	"limit_job_auth_scope_to_referenced_repos", "enforce_settable_var",
@@ -70,10 +67,9 @@ var orgInheritedSettings = []string{
 	"disable_classic_release_creation", "disable_implied_yaml_ci_trigger",
 }
 
-// settingsView projects the load-bearing general-settings booleans under the
-// schema_reference property names (the values are effective/server-clamped). These
-// are spread FLAT onto :Organization and :Project per the schema. settings_observed
-// is false when the surface soft-failed, so an absent flag is not read as false.
+// The values ADO returns are already effective and server-clamped. These are spread
+// flat onto both :Organization and :Project; settings_observed is false when the
+// surface soft-failed, so an absent flag is never read as false.
 func settingsView(gs map[string]any) map[string]any {
 	observed := gs != nil
 	if _, un := gs["_unobserved"]; un {
@@ -95,8 +91,7 @@ func settingsView(gs map[string]any) map[string]any {
 	}
 }
 
-// mergeFlat spreads src's keys onto dst (dst wins on conflict is not expected;
-// settings keys are disjoint from the node's own keys).
+// Settings keys are disjoint from a node's own keys, so nothing is ever clobbered.
 func mergeFlat(dst, src map[string]any) {
 	for k, v := range src {
 		dst[k] = v
@@ -104,10 +99,10 @@ func mergeFlat(dst, src map[string]any) {
 }
 
 func normalizeOrg(prior engine.PriorPhase, cp engine.CurrentPhase, org string, projs []projectMeta, timer *engine.PhaseTimer) error {
-	// No org-level generalsettings endpoint exists (404): the org enforce flags
-	// are only observable as the per-project effective values. Present a sample
-	// project's view, but only assert it as the org baseline when ALL projects
-	// agree — an override on any project would otherwise be reported as the org's.
+	// No org-level generalsettings endpoint exists (404), so the org enforce flags are
+	// only observable as the per-project effective values. A sample project's view is
+	// presented, but asserted as the org baseline only when every project agrees:
+	// otherwise one project's override would be reported as the org's posture.
 	var sample map[string]any
 	var sampleProject string
 	uniform := true
@@ -139,8 +134,6 @@ func normalizeOrg(prior engine.PriorPhase, cp engine.CurrentPhase, org string, p
 		"authenticated_user":   entObj(conn, "authenticatedUser"),
 		"_provenance":          prov(engine.CollectADOProjects(org), engine.CollectADOConnectionData(org)),
 	}
-	// The org has no generalsettings endpoint; attach the enforce/disable booleans
-	// flat from the (uniform) per-project effective values per schema §2.
 	mergeFlat(rec, orDefaultMap(sample))
 	return emit(cp, timer, engine.NormalizeADOOrg(org), rec)
 }
@@ -158,8 +151,8 @@ func normalizeProject(prior engine.PriorPhase, cp engine.CurrentPhase, org strin
 		"process_template": entStr(entGetIn(detail, "capabilities", "processTemplate", "templateName")),
 		"_provenance":      prov(engine.CollectADOProject(p.Name), engine.CollectADOGeneralSettings(p.Name)),
 	}
-	// Schema §2: the job-auth/classic/fork settings sit flat on :Project (they
-	// override the org). deriveRunsAs reads limit_job_auth_scope_to_current_project.
+	// The job-auth, classic and fork settings sit flat on :Project because a project
+	// overrides the org. deriveRunsAs reads limit_job_auth_scope_to_current_project.
 	mergeFlat(rec, settingsView(gs))
 	return emit(cp, timer, engine.NormalizeADOProject(p.Name), rec)
 }
@@ -191,8 +184,7 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string,
 	return nil
 }
 
-// checksObserved reports whether the checks surface was actually readable. A
-// soft-failed one must not read downstream as "no gate configured".
+// A soft-failed checks surface must not read downstream as "no gate configured".
 func checksObserved(prior engine.PriorPhase, project, rtype, id string) bool {
 	var env map[string]any
 	if err := engine.ReadJSON(prior.Abs(engine.CollectADOChecks(project, rtype, id)), &env); err != nil {
@@ -216,10 +208,9 @@ func foldChecks(prior engine.PriorPhase, project, rtype, id string) []any {
 	return out
 }
 
-// foldAuthorization projects the pipeline-permissions object. A soft-failed
-// surface (collector wrote {_unobserved:status}) must NOT collapse to
-// all_pipelines:false — "unknown" is not "not granted". A present-but-absent
-// allPipelines key genuinely means no blanket grant.
+// A soft-failed surface must not collapse to all_pipelines:false, because "unknown"
+// is not "not granted". An allPipelines key absent from a surface that WAS read does
+// genuinely mean no blanket grant.
 func foldAuthorization(prior engine.PriorPhase, project, rtype, id string) map[string]any {
 	d := entLoadData(prior, engine.CollectADOPipelinePerms(project, rtype, id))
 	if st, ok := d["_unobserved"]; ok {
@@ -241,11 +232,10 @@ func foldAuthorization(prior engine.PriorPhase, project, rtype, id string) map[s
 	}
 }
 
-// resAgg accumulates one shared resource (service connection or variable group)
-// across every project it is visible in, so it collapses to a single owner-keyed
-// node with per-project authorization (which legitimately differs per consuming
-// project) retained. The static record is built from the owner's copy, not
-// whichever project happened to iterate first.
+// Accumulates one shared resource across every project it is visible in so it
+// collapses to a single owner-keyed node, keeping the per-project authorization that
+// legitimately differs per consumer. The static record comes from the owner's copy,
+// never from whichever project happened to iterate first.
 type resAgg struct {
 	owner   string
 	seen    map[string]bool
@@ -258,9 +248,9 @@ func newResAgg(owner string) *resAgg {
 	return &resAgg{owner: owner, seen: map[string]bool{}, perProj: map[string]any{}, copies: map[string]map[string]any{}}
 }
 
-// sourceCopy returns the owner's raw copy (the authoritative one) and the project
-// it came from, falling back deterministically to the first-collected copy when
-// the owner project was not itself collected.
+// The owner's copy is authoritative. When the owner project was not itself collected
+// this falls back to the first-collected copy, in collection order so the choice is
+// deterministic.
 func (a *resAgg) sourceCopy() (map[string]any, string) {
 	if c := a.copies[a.owner]; c != nil {
 		return c, a.owner
@@ -351,8 +341,8 @@ func serviceConnectionRec(e map[string]any) map[string]any {
 	}
 }
 
-// emitWIFCredential emits a bare :WIFCredential + FEDERATES_TO once per WIF
-// connection (subject/issuer are server-generated, absent for manual).
+// Subject and issuer are server-generated and absent on a manually created
+// connection, so the node is emitted bare.
 func emitWIFCredential(cp engine.CurrentPhase, timer *engine.PhaseTimer, e map[string]any, id, owner string) error {
 	params := entObj(entObj(e, "authorization"), "parameters")
 	if entStr(entObj(e, "authorization")["scheme"]) != "WorkloadIdentityFederation" {
@@ -436,8 +426,6 @@ func normalizeVariableGroupsShared(prior engine.PriorPhase, cp engine.CurrentPha
 	return nil
 }
 
-// emitKeyVaultLink materializes a :KeyVault node + LINKS_TO edge for an
-// AzureKeyVault-backed variable group (schema §; empty in estates with no KV VG).
 func emitKeyVaultLink(cp engine.CurrentPhase, timer *engine.PhaseTimer, rec map[string]any, owner string, gid int64) error {
 	if !mBool(rec, "is_linked_to_keyvault") {
 		return nil
@@ -508,8 +496,8 @@ func emitSecretVariables(cp engine.CurrentPhase, timer *engine.PhaseTimer, g map
 	return nil
 }
 
-// ownerFromRefs picks the owning project of a (possibly shared) resource: the
-// first project reference (ADO lists the owner first), else the collecting one.
+// ADO lists the owner first, so the first project reference is the owning project;
+// with no references, the collecting project is it.
 func ownerFromRefs(refs any, fallback string) string {
 	list, _ := refs.([]any)
 	if len(list) > 0 {
@@ -546,8 +534,8 @@ func sortedStrSet(m map[string]bool) []any {
 	return out
 }
 
-// ownerAuth returns the owner project's authorization/checks (the primary), or
-// any collected project's deterministically if the owner wasn't collected.
+// The owner's authorization and checks are primary; if the owner was not collected,
+// any collected project's are used in sorted order so the pick is deterministic.
 func ownerAuth(perProj map[string]any, owner string, seen map[string]bool) map[string]any {
 	if a, ok := perProj[owner].(map[string]any); ok {
 		return a
@@ -560,9 +548,6 @@ func ownerAuth(perProj map[string]any, owner string, seen map[string]bool) map[s
 	return map[string]any{"checks": []any{}, "pipeline_permissions": map[string]any{}}
 }
 
-// normalizeAgentQueues emits a :ProjectAgentPool per agent queue, folding its
-// checks + pipeline-authorization (queue resource type) and a REFERENCES_POOL
-// edge to the org-level pool.
 func normalizeAgentQueues(prior engine.PriorPhase, cp engine.CurrentPhase, org string, p projectMeta, timer *engine.PhaseTimer) error {
 	for _, raw := range entLoadList(prior, engine.CollectADOAgentQueues(p.Name)) {
 		q := entMap(raw)
@@ -633,9 +618,9 @@ func normalizeEnvironments(prior engine.PriorPhase, cp engine.CurrentPhase, org 
 	return nil
 }
 
-// policySettings maps raw REST camelCase branch-policy settings to the schema's
-// snake_case property names (reviewer + build-validation fields as a union; absent
-// keys serialize as zero-values, harmless to the rule that reads the other subtype).
+// Reviewer and build-validation fields are projected as one union. A key absent for
+// this policy's subtype serializes as a zero value, which is harmless to the rule
+// reading the other subtype.
 func policySettings(s map[string]any) map[string]any {
 	return map[string]any{
 		"minimum_approver_count":          entInt64(s["minimumApproverCount"]),
@@ -666,8 +651,8 @@ func policyTypeNames(prior engine.PriorPhase, project string) map[string]string 
 	return out
 }
 
-// normalizePolicies emits one BranchPolicy record per policy configuration
-// (scope[] preserved); repo/branch attribution is the policy-by-scope join.
+// scope[] is preserved verbatim because repo and branch attribution is the
+// policy-by-scope join's job, not this pass's.
 func normalizePolicies(prior engine.PriorPhase, cp engine.CurrentPhase, org string, p projectMeta, timer *engine.PhaseTimer) error {
 	types := policyTypeNames(prior, p.Name)
 	for _, raw := range entLoadList(prior, engine.CollectADOPolicies(p.Name)) {
@@ -773,8 +758,7 @@ func normalizeFeeds(prior engine.PriorPhase, cp engine.CurrentPhase, org string,
 	return nil
 }
 
-// normalizePrincipals emits User / SecurityGroup / BuildServiceIdentity records
-// from the graph bundle. Build Service identities are users with domain "Build".
+// A Build Service identity arrives as a graph user with domain "Build".
 func normalizePrincipals(prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) error {
 	graph := entLoadData(prior, engine.CollectADOGraph(org))
 	if graph == nil {

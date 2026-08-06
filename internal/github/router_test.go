@@ -9,13 +9,10 @@ import (
 	"testing"
 )
 
-// fakeTransport records the calls it serves and returns a scripted error
-// sequence so tests can simulate throttle-then-success and exhaustion.
 type fakeTransport struct {
 	k     transportKind
 	calls int
-	// errs is consumed one per attempt; nil means success. Once exhausted the
-	// last value repeats.
+	// errs is consumed one per attempt, nil meaning success; the last value repeats.
 	errs []error
 }
 
@@ -95,7 +92,6 @@ func TestRouterPrefersHighestCapableTransport(t *testing.T) {
 	rest := &fakeTransport{k: transportREST}
 	r := newFakeRouter(git, gql, rest)
 
-	// workflow files: git capable -> git serves
 	raw, _, err := r.Get(context.Background(), "/repos/o/p/contents/.github/workflows/ci.yml", nil, false)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -104,7 +100,7 @@ func TestRouterPrefersHighestCapableTransport(t *testing.T) {
 		t.Fatalf("workflow files served by %q, want git", got)
 	}
 
-	// org members: git NOT capable -> graphql serves (preference over rest)
+	// git cannot serve org members, so graphql takes it in preference to rest.
 	raw, _, err = r.Get(context.Background(), "/orgs/o/members", nil, false)
 	if err != nil {
 		t.Fatalf("Get members: %v", err)
@@ -120,7 +116,7 @@ func TestRouterRESTFloorNeverOffloaded(t *testing.T) {
 	rest := &fakeTransport{k: transportREST}
 	r := newFakeRouter(git, gql, rest)
 
-	// secrets are rest-only; even with git/graphql registered, rest must serve.
+	// Secrets are a rest-only surface.
 	raw, _, err := r.Get(context.Background(), "/orgs/o/actions/secrets", nil, false)
 	if err != nil {
 		t.Fatalf("Get secrets: %v", err)
@@ -135,8 +131,6 @@ func TestRouterRESTFloorNeverOffloaded(t *testing.T) {
 
 func TestRouterLocalRetryThenSuccess(t *testing.T) {
 	noSleep(t)
-	// graphql throttles twice then succeeds within its local budget; the router
-	// must NOT fall through to rest.
 	throttle := &GhError{Status: 429, Body: "rate limited"}
 	gql := &fakeTransport{k: transportGraphQL, errs: []error{throttle, throttle, nil}}
 	rest := &fakeTransport{k: transportREST}
@@ -159,7 +153,6 @@ func TestRouterLocalRetryThenSuccess(t *testing.T) {
 
 func TestRouterFallThroughOnExhaustedThrottle(t *testing.T) {
 	noSleep(t)
-	// graphql throttles past its local budget -> router falls through to rest.
 	throttle := &GhError{Status: 503, Body: "unavailable"}
 	gql := &fakeTransport{k: transportGraphQL, errs: []error{throttle}}
 	rest := &fakeTransport{k: transportREST}
@@ -197,8 +190,7 @@ func TestRouterUnservableFallsThroughWithoutRetry(t *testing.T) {
 }
 
 func TestRouterDefinitiveErrorNoFallThrough(t *testing.T) {
-	// a 404/permission soft-fail is definitive: collectors handle it. The router
-	// must surface it as-is without retry or fall-through.
+	// A 404 is a soft-fail the collectors handle, not a transport problem.
 	notFound := &GhError{Status: 404, Body: "not found"}
 	gql := &fakeTransport{k: transportGraphQL, errs: []error{notFound}}
 	rest := &fakeTransport{k: transportREST}
@@ -224,7 +216,6 @@ func TestRouterForceRESTPinsToFloor(t *testing.T) {
 	r := newFakeRouter(git, gql, rest)
 	r.forceREST = true
 
-	// even a git-preferred surface must route to rest under TRAJAN_FORCE_REST.
 	raw, _, err := r.Get(context.Background(), "/repos/o/p/contents/.github/workflows/ci.yml", nil, false)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -238,8 +229,6 @@ func TestRouterForceRESTPinsToFloor(t *testing.T) {
 }
 
 func TestRouterNoCapableTransportErrors(t *testing.T) {
-	// only graphql registered, but a rest-floor surface has no capable
-	// registered transport -> explicit error (not a silent nil).
 	gql := &fakeTransport{k: transportGraphQL}
 	r := newFakeRouter(gql)
 
@@ -277,8 +266,7 @@ func TestClassifyGetSurfaces(t *testing.T) {
 		"/repos/o/p/branches":                          surfaceBranchRefs,
 		"/repos/o/p/branches/main/protection":          surfaceRESTFloor,
 		"/repos/o/p/commits/v1":                        surfaceRefResolve,
-		// rulesets / environments / teams / outside collaborators / branch
-		// protection have no GraphQL equivalent, so they fall to the REST floor.
+		// These have no GraphQL equivalent, so they fall to the REST floor.
 		"/orgs/o/rulesets":              surfaceRESTFloor,
 		"/repos/o/p/rulesets":           surfaceRESTFloor,
 		"/repos/o/p/environments/prod":  surfaceRESTFloor,

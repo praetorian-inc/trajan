@@ -5,26 +5,23 @@ import (
 	"strings"
 )
 
-// Trigger, ref-protection, include and sink classification over a parsed job.
-// Kept literal and conservative: a rule keys on the emitted set/enum, so a
-// false-negative (missing trigger) is safer than inventing one.
+// Deliberately literal and conservative: a rule keys on the emitted set or enum, so
+// missing a trigger is safer than inventing one.
 
-// allTriggers is the default pipeline-source set a job runs on when neither
-// rules: nor workflow: constrains it (GitLab runs a job on every source unless
-// gated). Mirrors $CI_PIPELINE_SOURCE values the corpus reasons about.
+// GitLab runs a job on every pipeline source unless rules: or workflow: gates it, so
+// this is the unconstrained default. The values are $CI_PIPELINE_SOURCE literals.
 var allTriggers = []string{
 	"push", "web", "api", "schedule", "trigger", "pipeline",
 	"merge_request_event", "external_pull_request_event",
 }
 
-// pipelineSourceFor maps a rules:/workflow: `if:` expression's referenced
-// $CI_PIPELINE_SOURCE literal to a trigger. Multiple may appear.
+// An `if:` expression may reference $CI_PIPELINE_SOURCE by equality or by regex, and
+// may name more than one source.
 var reSourceEq = regexp.MustCompile(`\$CI_PIPELINE_SOURCE\s*==\s*["']([a-z_]+)["']`)
 var reSourceIn = regexp.MustCompile(`\$CI_PIPELINE_SOURCE\s*=~\s*/([^/]+)/`)
 
-// resolveTriggers derives the trigger set from workflow:rules then job rules.
-// When rules constrain $CI_PIPELINE_SOURCE, only the named sources survive;
-// otherwise the job is reachable from every source.
+// workflow: rules apply before the job's own. Only sources the rules name survive;
+// with no constraint the job is reachable from all of them.
 func resolveTriggers(job, workflow map[string]any) []string {
 	jobRules := ruleExprs(job["rules"])
 	wfRules := ruleExprs(workflow["rules"])
@@ -46,8 +43,7 @@ func resolveTriggers(job, workflow map[string]any) []string {
 	return out
 }
 
-// ruleExprs extracts the `if:` strings from a rules: list (or the string form of
-// each entry). only:/except: are handled separately.
+// only: and except: are a separate legacy syntax, handled by their own callers.
 func ruleExprs(rules any) []string {
 	out := []string{}
 	list, ok := rules.([]any)
@@ -85,8 +81,6 @@ func sourcesFromRules(exprs []string) (bool, map[string]bool) {
 	return constrained, sources
 }
 
-// hasMergeRequestTrigger reports the merge_request_event membership used across
-// cat-01/03/09.
 func hasMergeRequestTrigger(triggers []string) bool {
 	for _, t := range triggers {
 		if t == "merge_request_event" {
@@ -102,9 +96,8 @@ var (
 	reCommitTag     = regexp.MustCompile(`\$CI_COMMIT_TAG`)
 )
 
-// protectedRefGate classifies how strongly a job's rules: gate its execution to a
-// protected-ref context: strong (explicit $CI_COMMIT_REF_PROTECTED), weak (pins a
-// specific protected branch/tag by name), or none.
+// strong is an explicit $CI_COMMIT_REF_PROTECTED test; weak only pins a protected
+// branch or tag by name, which a rename or a new protection rule can undo.
 func protectedRefGate(job, workflow map[string]any) string {
 	exprs := append(ruleExprs(workflow["rules"]), ruleExprs(job["rules"])...)
 	if only := asStrList(job["only"]); len(only) > 0 {
@@ -123,8 +116,8 @@ func protectedRefGate(job, workflow map[string]any) string {
 	return "none"
 }
 
-// runsOnUntrustedRef reports whether the job is reachable on an attacker-nameable
-// / unprotected ref: MR-event reachable, or no protected-ref gating on its rules.
+// Reachable on a ref an attacker can name: MR-event reachable, or no protected-ref
+// gate at all.
 func runsOnUntrustedRef(triggers []string, gate string) bool {
 	if gate == "strong" {
 		return false
@@ -135,8 +128,6 @@ func runsOnUntrustedRef(triggers []string, gate string) bool {
 	return gate != "weak"
 }
 
-// ---- attacker input surface (cat-01) ----
-
 var (
 	reMRMeta        = regexp.MustCompile(`\$CI_MERGE_REQUEST_(TITLE|DESCRIPTION|SOURCE_BRANCH_NAME|LABELS|MILESTONE|ASSIGNEES)`)
 	reRefName       = regexp.MustCompile(`\$CI_COMMIT_REF_(NAME|SLUG)|\$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`)
@@ -144,8 +135,7 @@ var (
 	reComponentIn   = regexp.MustCompile(`\$\[\[\s*inputs\.`)
 )
 
-// attackerInputFields returns the categories of untrusted input reaching an exec
-// context (the job's script blocks). Order-stable.
+// Order is fixed rather than discovered, so the emitted list is stable across runs.
 func attackerInputFields(scriptText string) []string {
 	out := []string{}
 	if reMRMeta.MatchString(scriptText) {
@@ -163,13 +153,10 @@ func attackerInputFields(scriptText string) []string {
 	return out
 }
 
-// ---- include classification (cat-02) ----
-
 var reVarInterp = regexp.MustCompile(`\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\$\[\[`)
 
-// classifyIncludes parses the pipeline `include:` into normalized include tuples
-// {type, ref, pinned, source_host, cross_trust}. selfHost is the instance host
-// (project.web_url host) used to decide first-party vs third-party for remote.
+// selfHost is the instance's own host, taken from project.web_url, and is what decides
+// whether a remote include is first- or third-party.
 func classifyIncludes(includeNode any, selfHost, ownerNamespace string) ([]any, includeFlags) {
 	out := []any{}
 	var f includeFlags
@@ -202,8 +189,8 @@ func (f *includeFlags) merge(o includeFlags) {
 	f.bareRefShadowable = f.bareRefShadowable || o.bareRefShadowable
 }
 
-// includeEntries normalizes the several YAML shapes of include: (string, list of
-// strings, single map, list of maps) into a list of entries.
+// include: is accepted by GitLab as a string, a list of strings, one map, or a list of
+// maps.
 func includeEntries(node any) []any {
 	switch x := node.(type) {
 	case nil:
@@ -317,8 +304,8 @@ func fileInterpolated(v any) bool {
 	return false
 }
 
-// isPinnedRef reports whether a ref is immutable: a 40-hex commit SHA or a
-// semver-looking tag. Branch names and moving tags (latest, ~x) are mutable.
+// Only a 40-hex SHA or a semver-looking tag counts as immutable; a branch name and a
+// moving tag such as latest are not.
 func isPinnedRef(ref string) bool {
 	if ref == "" {
 		return false
@@ -340,8 +327,8 @@ func isHex(s string) bool {
 	return true
 }
 
-// componentVersion extracts the @version suffix of a component reference
-// (gitlab.com/pub/comp@1.0). Absent → "" (treated mutable).
+// A component reference pins its version as an @suffix; absent means unpinned, which
+// callers treat as mutable.
 func componentVersion(comp string) string {
 	if i := strings.LastIndex(comp, "@"); i >= 0 {
 		return comp[i+1:]

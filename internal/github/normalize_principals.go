@@ -72,7 +72,7 @@ func principalCanPush(role string, perms map[string]any) bool {
 }
 
 func principalIsAdmin(role string, perms map[string]any) bool {
-	return entTruthy(perms["admin"]) || strings.ToLower(role) == "admin"
+	return entTruthy(perms["admin"]) || strings.EqualFold(role, "admin")
 }
 
 func normalizePrincipals(prior engine.PriorPhase, cp engine.CurrentPhase, org string, onError func(error)) error {

@@ -8,11 +8,8 @@ import (
 	"strings"
 )
 
-// WhoAmI resolves the token/endpoint, then prints the authenticated identity,
-// detected token type, scopes, admin flag, accessible groups, and a rate-limit
-// snapshot. It writes nothing to a run dir.
-func WhoAmI(ctx context.Context) error {
-	token, err := ResolveToken("")
+func WhoAmI(ctx context.Context, explicit string) error {
+	token, err := ResolveToken(explicit)
 	if err != nil {
 		return err
 	}
@@ -67,8 +64,6 @@ func WhoAmI(ctx context.Context) error {
 	return nil
 }
 
-// detectTokenType infers the token kind from the authenticated user: bot usernames
-// prefixed project_/group_ with _bot_ are project/group access tokens.
 func detectTokenType(username string, bot bool) string {
 	if bot {
 		if strings.HasPrefix(username, "project_") && strings.Contains(username, "_bot_") {

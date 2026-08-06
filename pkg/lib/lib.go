@@ -1,23 +1,5 @@
-// Package lib provides the Trajan SDK for embedding CI/CD security scanning
-// as a library. It exposes platform initialization, workflow scanning, and
-// detection execution through a public API.
-//
-// Usage:
-//
-//	import "github.com/praetorian-inc/trajan/pkg/lib"
-//
-//	// High-level scan
-//	result, err := lib.Scan(ctx, lib.ScanConfig{
-//	    Platform:    "github",
-//	    Token:       token,
-//	    Org:         "myorg",
-//	    Repo:        "myrepo",
-//	    Concurrency: 10,
-//	})
-//
-//	// Low-level access
-//	platform, err := lib.GetPlatform("github")
-//	detections := lib.GetDetectionsForPlatform("github")
+// Package lib is the Trajan SDK for embedding CI/CD security scanning: platform
+// initialization, workflow discovery, and detection execution.
 package lib
 
 import (
@@ -34,10 +16,8 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 	"github.com/praetorian-inc/trajan/pkg/scanner"
 
-	// Trigger all platform registrations
 	_ "github.com/praetorian-inc/trajan/pkg/platforms/all"
 
-	// Trigger all detection registrations
 	_ "github.com/praetorian-inc/trajan/pkg/detections/all"
 )
 
@@ -64,9 +44,8 @@ type ScanConfig struct {
 	// Timeout is the maximum duration for the scan (default: 5 minutes).
 	Timeout time.Duration
 
-	// LocalPath, if set, scans this local filesystem path for the configured
-	// Platform's workflow files instead of contacting the platform API.
-	// Org/Repo/Token/BaseURL are ignored in this mode.
+	// LocalPath, if set, scans this filesystem path for the Platform's workflow
+	// files instead of the platform API; Org/Repo/Token/BaseURL are ignored.
 	LocalPath string
 }
 
@@ -81,13 +60,11 @@ type ScanResult struct {
 	// Errors are non-fatal errors encountered during scanning.
 	Errors []error
 
-	// SkippedDetections lists detection names that were not executed because
-	// they require platform API access and the scan ran in LocalPath mode.
-	// Always empty in API-mode scans.
+	// SkippedDetections names the API-requiring detections a LocalPath scan could
+	// not run. Always empty in API-mode scans.
 	SkippedDetections []string
 }
 
-// applyDefaults fills in zero-value fields of cfg with their defaults.
 func applyDefaults(cfg ScanConfig) ScanConfig {
 	if cfg.Concurrency <= 0 {
 		cfg.Concurrency = 10
@@ -99,29 +76,23 @@ func applyDefaults(cfg ScanConfig) ScanConfig {
 }
 
 // Scan performs a complete CI/CD security scan: platform initialization,
-// workflow discovery, and detection execution.
-//
-// When cfg.LocalPath is set, the scan reads workflow files from the local
-// filesystem instead of contacting the platform API.  In that mode
-// Org/Repo/Token/BaseURL are ignored and API-only detections are skipped.
+// workflow discovery, and detection execution. With cfg.LocalPath set it reads
+// the filesystem instead of the platform API and skips API-only detections.
 func Scan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 	cfg = applyDefaults(cfg)
 
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	// Local-path mode: skip platform Init/Scan entirely.
 	if cfg.LocalPath != "" {
 		return scanLocal(ctx, cfg)
 	}
 
-	// Get the platform adapter
 	p, err := registry.GetPlatform(cfg.Platform)
 	if err != nil {
 		return nil, fmt.Errorf("getting platform %s: %w", cfg.Platform, err)
 	}
 
-	// Initialize with credentials
 	platCfg := platforms.Config{
 		Token:       cfg.Token,
 		BaseURL:     cfg.BaseURL,
@@ -132,7 +103,6 @@ func Scan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 		return nil, fmt.Errorf("initializing platform %s: %w", cfg.Platform, err)
 	}
 
-	// Build target
 	target := platforms.Target{
 		Type:  platforms.TargetRepo,
 		Value: cfg.Org + "/" + cfg.Repo,
@@ -142,13 +112,11 @@ func Scan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 		target.Value = cfg.Org
 	}
 
-	// Scan for workflows
 	scanResult, err := p.Scan(ctx, target)
 	if err != nil {
 		return nil, fmt.Errorf("scanning %s: %w", target.Value, err)
 	}
 
-	// Execute detections against the workflow map
 	dets := registry.GetDetectionsForPlatform(cfg.Platform)
 	executor := scanner.NewDetectionExecutor(dets, cfg.Concurrency)
 	execResult, err := executor.Execute(ctx, scanResult.Workflows)
@@ -156,7 +124,6 @@ func Scan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 		return nil, fmt.Errorf("executing detections: %w", err)
 	}
 
-	// Flatten workflows for the result
 	var workflows []platforms.Workflow
 	for _, wfs := range scanResult.Workflows {
 		workflows = append(workflows, wfs...)
@@ -167,14 +134,11 @@ func Scan(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 		Workflows: workflows,
 		Errors:    scanResult.Errors,
 	}
-	// Merge non-fatal detection errors
 	result.Errors = append(result.Errors, execResult.Errors...)
 
 	return result, nil
 }
 
-// scanLocal executes a local-path scan: walks the filesystem for workflow files,
-// partitions detections by API requirement, and runs only the local-safe subset.
 func scanLocal(ctx context.Context, cfg ScanConfig) (*ScanResult, error) {
 	if cfg.Platform == "" {
 		return nil, fmt.Errorf("local scan requires Platform to be set")

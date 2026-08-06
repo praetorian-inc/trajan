@@ -2,14 +2,14 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
 )
 
-// Run fans fn over items with at most limit concurrent calls; the first error
-// cancels the group. Results are in completion order, not input order — embed the
-// key in the result if pairing is needed.
+// The first error cancels the group. Results are in completion order, not input
+// order — embed the key in the result if pairing is needed.
 func Run[I, O any](ctx context.Context, limit int, items []I, fn func(context.Context, I) (O, error)) ([]O, error) {
 	if limit < 1 {
 		limit = 1
@@ -36,8 +36,8 @@ func Run[I, O any](ctx context.Context, limit int, items []I, fn func(context.Co
 	return out, nil
 }
 
-// RunPartial is like Run but routes a per-item failure to onError and drops the
-// item instead of aborting the batch. Results are in completion order.
+// Like Run, but a per-item failure — including a panic — goes to onError and the
+// item is dropped instead of aborting the batch. Results are in completion order.
 func RunPartial[I, O any](ctx context.Context, limit int, items []I,
 	fn func(context.Context, I) (O, error), onError func(I, error)) []O {
 	if limit < 1 {
@@ -49,7 +49,16 @@ func RunPartial[I, O any](ctx context.Context, limit int, items []I,
 	out := make([]O, 0, len(items))
 	for _, it := range items {
 		g.Go(func() error {
-			o, err := fn(ctx, it)
+			var o O
+			var err error
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						err = fmt.Errorf("panic: %v", r)
+					}
+				}()
+				o, err = fn(ctx, it)
+			}()
 			if err != nil {
 				if onError != nil {
 					onError(it, err)

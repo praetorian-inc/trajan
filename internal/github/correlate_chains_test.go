@@ -22,13 +22,9 @@ func cacheJob(repo, workflow, job, trigger string, writes, reads []any) map[stri
 	}
 }
 
-// restore-keys matching is literal prefix matching, so the grouping unit is the
-// literal head of the key and nothing else can be a candidate for restore.
-// fr-09-02 pins that: "Fixed key, no restore-keys. Eviction is the only way in."
-// — the whole key is the unit, so a shortened head models a match GitHub would
-// never make. And GitHub scopes caches per repository, so fr-09-01 and fr-09-03,
-// unrelated scenarios that both cache "npm-${{ runner.os }}-...", share nothing;
-// the poisoning path fr-09-01's writer.yml documents is inside its own repo.
+// restore-keys match on a literal prefix, so the grouping unit is the literal head
+// of the key; and GitHub scopes caches per repository, so fr-09-01 and fr-09-03
+// caching the same "npm-..." key share nothing.
 func TestCacheOverlapsGroupPerRepoOnTheLiteralKeyHead(t *testing.T) {
 	const npmKey = "npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}"
 	const npmRestore = "npm-${{ runner.os }}-"
@@ -84,11 +80,8 @@ func TestCacheOverlapsGroupPerRepoOnTheLiteralKeyHead(t *testing.T) {
 	}
 }
 
-// fr-05-09: upstream.yml's fork-PR job writes "build-out"; downstream.yml passes
-// it to the reusable callee as artifact-name, and the callee downloads
-// "${{ inputs.artifact-name }}" under secrets: inherit. The scenario exists to
-// show the fork-controlled artifact reaching that callee, so the handoff is only
-// visible once the callee's name is resolved against the call site.
+// fr-05-09: the callee downloads "${{ inputs.artifact-name }}", so the handoff is
+// only visible once that name is resolved against the caller's input value.
 func TestArtifactHandoffResolvesTheCalleeInputName(t *testing.T) {
 	const repo = "fr-05-09-reusable-workflow-laundering"
 	jobs := []map[string]any{

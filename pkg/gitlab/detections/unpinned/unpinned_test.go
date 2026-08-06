@@ -11,36 +11,16 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
-func TestDetection_ImplementsInterface(t *testing.T) {
-	var _ detections.Detection = (*Detection)(nil)
-}
-
-func TestDetection_Name(t *testing.T) {
-	d := New()
-	assert.Equal(t, "unpinned-include", d.Name())
-}
-
-func TestDetection_Platform(t *testing.T) {
-	d := New()
-	assert.Equal(t, "gitlab", d.Platform())
-}
-
-func TestDetection_Severity(t *testing.T) {
-	d := New()
-	assert.Equal(t, detections.SeverityLow, d.Severity())
-}
-
 func TestDetect_UnpinnedProjectInclude(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow with unpinned project include
 	wf := graph.NewWorkflowNode("wf1", "test-workflow", ".gitlab-ci.yml", "test/repo", []string{"merge_request"})
 	wf.Includes = []graph.Include{
 		{
 			Type:    "project",
 			Project: "group/project",
 			Path:    "/templates/ci.yml",
-			Ref:     "", // Unpinned - no ref specified
+			Ref:     "",
 		},
 	}
 	g.AddNode(wf)
@@ -60,7 +40,6 @@ func TestDetect_UnpinnedProjectInclude(t *testing.T) {
 func TestDetect_PinnedProjectIncludeWithBranch(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow with project include pinned to branch (not SHA)
 	wf := graph.NewWorkflowNode("wf1", "test-workflow", ".gitlab-ci.yml", "test/repo", []string{"merge_request"})
 	wf.Includes = []graph.Include{
 		{
@@ -82,7 +61,6 @@ func TestDetect_PinnedProjectIncludeWithBranch(t *testing.T) {
 func TestDetect_PinnedProjectIncludeWithSHA(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow with project include pinned to commit SHA
 	wf := graph.NewWorkflowNode("wf1", "test-workflow", ".gitlab-ci.yml", "test/repo", []string{"merge_request"})
 	wf.Includes = []graph.Include{
 		{
@@ -104,7 +82,6 @@ func TestDetect_PinnedProjectIncludeWithSHA(t *testing.T) {
 func TestDetect_LocalInclude(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow with local include
 	wf := graph.NewWorkflowNode("wf1", "test-workflow", ".gitlab-ci.yml", "test/repo", []string{"merge_request"})
 	wf.Includes = []graph.Include{
 		{
@@ -124,7 +101,6 @@ func TestDetect_LocalInclude(t *testing.T) {
 func TestDetect_TemplateInclude(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow with GitLab template include
 	wf := graph.NewWorkflowNode("wf1", "test-workflow", ".gitlab-ci.yml", "test/repo", []string{"merge_request"})
 	wf.Includes = []graph.Include{
 		{
@@ -144,7 +120,6 @@ func TestDetect_TemplateInclude(t *testing.T) {
 func TestDetect_RemoteInclude(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow with remote include
 	wf := graph.NewWorkflowNode("wf1", "test-workflow", ".gitlab-ci.yml", "test/repo", []string{"merge_request"})
 	wf.Includes = []graph.Include{
 		{
@@ -165,7 +140,6 @@ func TestDetect_RemoteInclude(t *testing.T) {
 func TestDetect_MultipleIncludes(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow with multiple includes
 	wf := graph.NewWorkflowNode("wf1", "test-workflow", ".gitlab-ci.yml", "test/repo", []string{"merge_request"})
 	wf.Includes = []graph.Include{
 		{

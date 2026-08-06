@@ -4,6 +4,6 @@ type Config struct {
 	Concurrency int
 	OutputDir   string
 	Dev         bool
-	Token       string // explicit API token from --token; overrides env when set
-	BearerToken string
+	Token       string // explicit --token; env vars outrank this
+	BearerToken string // explicit --azure-bearer-token; env vars outrank this
 }

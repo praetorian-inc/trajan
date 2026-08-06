@@ -19,19 +19,16 @@ func init() {
 	})
 }
 
-// Detection is the AI risk detection for GitLab CI.
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new AI risk detection for GitLab CI.
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("ai-risk", "gitlab", detections.SeverityMedium),
 	}
 }
 
-// Detect walks each workflow graph and runs AI checks on every step.
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
@@ -67,10 +64,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// ---------------------------------------------------------------------------
-// Check 1: Token Exfiltration
-// ---------------------------------------------------------------------------
-
 func checkTokenExfiltration(g *graph.Graph, step *graph.StepNode) []detections.Finding {
 	wf := common.GetStepParentWorkflow(g, step)
 	if wf == nil {
@@ -105,10 +98,6 @@ func checkTokenExfiltration(g *graph.Graph, step *graph.StepNode) []detections.F
 	}}
 }
 
-// ---------------------------------------------------------------------------
-// Check 2: Code Injection
-// ---------------------------------------------------------------------------
-
 func checkCodeInjection(g *graph.Graph, step *graph.StepNode) []detections.Finding {
 	wf := common.GetStepParentWorkflow(g, step)
 	if wf == nil {
@@ -136,10 +125,6 @@ func checkCodeInjection(g *graph.Graph, step *graph.StepNode) []detections.Findi
 		Remediation:  "Avoid passing user-controlled input directly to AI steps. Validate and sanitize input before use.",
 	}}
 }
-
-// ---------------------------------------------------------------------------
-// Check 3: MCP Abuse
-// ---------------------------------------------------------------------------
 
 func checkMCPAbuse(g *graph.Graph, step *graph.StepNode) []detections.Finding {
 	wf := common.GetStepParentWorkflow(g, step)
@@ -189,10 +174,6 @@ func checkMCPAbuse(g *graph.Graph, step *graph.StepNode) []detections.Finding {
 		Remediation:  "Disable MCP functionality in AI steps or ensure CI tokens are not provided. If MCP is necessary, restrict to trusted inputs only.",
 	}}
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 func hasZeroClickTrigger(wf *graph.WorkflowNode) bool {
 	for _, tag := range wf.Tags() {

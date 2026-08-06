@@ -28,20 +28,6 @@ func TestClassifyStepEmptyStepNoSink(t *testing.T) {
 	}
 }
 
-// docker_build_with_login is never set true anywhere; verify even docker sinks leave it false.
-func TestClassifyStepDockerBuildWithLoginAlwaysFalse(t *testing.T) {
-	for _, s := range []Step{
-		runStep("docker build -t x ."),
-		usesStep("docker/build-push-action@v5"),
-		usesStep("actions/checkout@v4"),
-		{},
-	} {
-		if classifyStep(s).DockerBuildWithLogin {
-			t.Errorf("docker_build_with_login should always be false, step=%+v", s)
-		}
-	}
-}
-
 func TestClassifyStepRunRegexSinks(t *testing.T) {
 	cases := []struct {
 		run   string
@@ -162,7 +148,6 @@ func TestClassifyStepMatchFieldDispatch(t *testing.T) {
 	}
 }
 
-// A bare checkout is both is_checkout=true and sink_class=actions_checkout (the last sink), execs=false.
 func TestClassifyStepCheckoutGetsBothFlags(t *testing.T) {
 	got := classifyStep(usesStep("actions/checkout@v4"))
 	if !got.IsCheckout {
@@ -209,7 +194,6 @@ func TestClassifyStepCheckoutFieldCapture(t *testing.T) {
 	}
 }
 
-// Empty-string with.ref is treated as absent (falsy) and not captured; non-string values yield no capture.
 func TestClassifyStepCheckoutEmptyOrNonStringFieldsNotCaptured(t *testing.T) {
 	emptyRef := classifyStep(Step{
 		Uses: ptr("actions/checkout@v4"),
@@ -227,7 +211,6 @@ func TestClassifyStepCheckoutEmptyOrNonStringFieldsNotCaptured(t *testing.T) {
 	}
 }
 
-// is_checkout (from uses) and sink_class (from run) are set independently in the same step.
 func TestClassifyStepCheckoutWithRunSinkIndependent(t *testing.T) {
 	step := Step{
 		Uses: ptr("actions/checkout@v4"),
@@ -237,7 +220,6 @@ func TestClassifyStepCheckoutWithRunSinkIndependent(t *testing.T) {
 	if !got.IsCheckout {
 		t.Error("is_checkout should still be true with a run set")
 	}
-	// the run sink (npm_install) precedes actions_checkout in order, so it wins sink_class
 	if n := sinkClassOf(t, got); n != "npm_install" {
 		t.Errorf("sink_class = %q, want npm_install (run match precedes checkout)", n)
 	}
@@ -288,7 +270,7 @@ func TestHasCheckoutOfPRRefRepositoryWithoutRefStillFlags(t *testing.T) {
 	}
 }
 
-// The ref and repo needle sets are disjoint and field-specific, so a needle in the wrong field must not fire.
+// The ref and repo needle sets are disjoint, so a needle in the wrong field must not fire.
 func TestHasCheckoutOfPRRefFieldSpecificNeedles(t *testing.T) {
 	repoNeedleInRef := "${{ github.event.pull_request.head.repo }}"
 	if hasCheckoutOfPRRef(&repoNeedleInRef, nil) {
@@ -300,7 +282,6 @@ func TestHasCheckoutOfPRRefFieldSpecificNeedles(t *testing.T) {
 	}
 }
 
-// A benign, non-attacker ref (e.g. a fixed branch or the base ref) must not flag.
 func TestHasCheckoutOfPRRefBenignRefFalse(t *testing.T) {
 	for _, v := range []string{
 		"main",
@@ -314,7 +295,6 @@ func TestHasCheckoutOfPRRefBenignRefFalse(t *testing.T) {
 	}
 }
 
-// Matching is case-sensitive substring containment: an upper-cased needle does not match.
 func TestHasCheckoutOfPRRefCaseSensitive(t *testing.T) {
 	upper := "${{ GITHUB.HEAD_REF }}"
 	if hasCheckoutOfPRRef(&upper, nil) {

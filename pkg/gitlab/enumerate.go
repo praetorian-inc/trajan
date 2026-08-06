@@ -8,11 +8,9 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// EnumerateToken validates the token and returns comprehensive token information.
 func (p *Platform) EnumerateToken(ctx context.Context) (*TokenEnumerateResult, error) {
 	result := &TokenEnumerateResult{}
 
-	// Get user info
 	user, err := p.client.GetUser(ctx)
 	if err != nil {
 		result.Errors = append(result.Errors, "getting user: "+err.Error())
@@ -24,19 +22,16 @@ func (p *Platform) EnumerateToken(ctx context.Context) (*TokenEnumerateResult, e
 	result.CanCreateGroup = user.CanCreateGroup
 	result.CanCreateProject = user.CanCreateProject
 
-	// Get personal access token info (may fail for project/group tokens)
 	pat, err := p.client.GetPersonalAccessToken(ctx)
 	if err != nil {
-		// Not fatal - project/group tokens can't access this endpoint
+		// Project and group tokens cannot read this endpoint.
 		result.Errors = append(result.Errors, "getting token info: "+err.Error())
 	} else {
 		result.Token = pat
 	}
 
-	// Detect token type from user info
 	result.TokenType = detectTokenType(user, pat)
 
-	// Get accessible groups
 	groups, err := p.client.ListGroups(ctx)
 	if err != nil {
 		result.Errors = append(result.Errors, "listing groups: "+err.Error())
@@ -51,7 +46,6 @@ func (p *Platform) EnumerateToken(ctx context.Context) (*TokenEnumerateResult, e
 		}
 	}
 
-	// Get rate limit info
 	rl := p.client.rateLimiter
 	if rl != nil {
 		result.RateLimit = &RateLimitInfo{
@@ -63,8 +57,6 @@ func (p *Platform) EnumerateToken(ctx context.Context) (*TokenEnumerateResult, e
 	return result, nil
 }
 
-// detectTokenType determines the token type from API responses.
-// See design doc: Token Type Detection section.
 func detectTokenType(user *User, pat *PersonalAccessToken) string {
 	if user == nil {
 		return "unknown"
@@ -87,7 +79,6 @@ func detectTokenType(user *User, pat *PersonalAccessToken) string {
 	return "unknown"
 }
 
-// EnumerateProjects discovers projects accessible to the authenticated token.
 func (p *Platform) EnumerateProjects(ctx context.Context, target platforms.Target) (*ProjectsEnumerateResult, error) {
 	result := &ProjectsEnumerateResult{
 		Projects: make([]ProjectWithPermissions, 0),
@@ -106,7 +97,6 @@ func (p *Platform) EnumerateProjects(ctx context.Context, target platforms.Targe
 		}
 		needExplicitAccessLevels = true // Group projects may not have accurate permissions
 	default:
-		// Default: member projects
 		projects, err = p.client.ListMemberProjects(ctx)
 		if err != nil {
 			result.Errors = append(result.Errors, "listing member projects: "+err.Error())
@@ -114,13 +104,12 @@ func (p *Platform) EnumerateProjects(ctx context.Context, target platforms.Targe
 		}
 	}
 
-	// Get user ID for access level lookups (only if needed)
 	var userID int
 	if needExplicitAccessLevels {
 		user, err := p.client.GetUser(ctx)
 		if err != nil {
 			result.Errors = append(result.Errors, "getting user: "+err.Error())
-			needExplicitAccessLevels = false // Fall back to permissions from API
+			needExplicitAccessLevels = false // fall back to the API's permissions
 		} else {
 			userID = user.ID
 		}
@@ -130,13 +119,11 @@ func (p *Platform) EnumerateProjects(ctx context.Context, target platforms.Targe
 		proj := &projects[i]
 		var accessLevel int
 		if needExplicitAccessLevels {
-			// Try to get direct project access level first
 			level, err := p.client.GetProjectAccessLevel(ctx, proj.ID, userID)
 			if err == nil {
 				accessLevel = level
 			} else {
-				// User not a direct project member - check group access
-				// Use the project's actual namespace (the group that owns it)
+				// An error means the user is not a direct member, so try the owning group.
 				if proj.Namespace.FullPath != "" {
 					group, err := p.client.GetGroup(ctx, proj.Namespace.FullPath)
 					if err == nil {
@@ -146,7 +133,6 @@ func (p *Platform) EnumerateProjects(ctx context.Context, target platforms.Targe
 						}
 					}
 				}
-				// If still no access level, fall back to API permissions
 				if accessLevel == 0 {
 					accessLevel = getEffectiveAccessLevel(proj.Permissions)
 				}
@@ -171,7 +157,7 @@ func (p *Platform) EnumerateProjects(ctx context.Context, target platforms.Targe
 			},
 			AccessLevel:  accessLevel,
 			Visibility:   proj.Visibility,
-			LastActivity: "", // populated if available
+			LastActivity: "",
 		})
 	}
 
@@ -179,7 +165,6 @@ func (p *Platform) EnumerateProjects(ctx context.Context, target platforms.Targe
 	return result, nil
 }
 
-// getEffectiveAccessLevel returns the highest access level from project and group access.
 func getEffectiveAccessLevel(perms *ProjectPermissions) int {
 	if perms == nil {
 		return 0
@@ -194,7 +179,6 @@ func getEffectiveAccessLevel(perms *ProjectPermissions) int {
 	return level
 }
 
-// buildProjectsSummary generates summary statistics from project list.
 func buildProjectsSummary(projects []ProjectWithPermissions) ProjectsSummary {
 	s := ProjectsSummary{Total: len(projects)}
 	for _, p := range projects {
@@ -218,39 +202,33 @@ func buildProjectsSummary(projects []ProjectWithPermissions) ProjectsSummary {
 	return s
 }
 
-// EnumerateGroups discovers groups accessible to the authenticated token.
-// When recursive is true, subgroups are also enumerated.
 func (p *Platform) EnumerateGroups(ctx context.Context, recursive bool) (*GroupsEnumerateResult, error) {
 	result := &GroupsEnumerateResult{
 		Groups: make([]GroupWithAccess, 0),
 	}
 
-	// Get current user ID for access level lookups
 	user, err := p.client.GetUser(ctx)
 	if err != nil {
 		result.Errors = append(result.Errors, "getting user: "+err.Error())
 		return result, nil
 	}
 
-	// Get all groups (GitLab /groups API returns all groups including subgroups)
+	// GitLab's /groups returns subgroups too, hence the ParentID filtering below.
 	groups, err := p.client.ListGroups(ctx)
 	if err != nil {
 		result.Errors = append(result.Errors, "listing groups: "+err.Error())
 		return result, nil
 	}
 
-	// Collect groups to process
 	var allGroups []Group
 	if recursive {
-		// Explicitly enumerate subgroups via /subgroups endpoint
-		// Start with top-level groups only
 		for _, g := range groups {
 			if g.ParentID == nil {
 				allGroups = append(allGroups, g)
 			}
 		}
 
-		// Recursively discover subgroups
+		// The loop appends to allGroups while walking it, so nested subgroups are covered.
 		for i := 0; i < len(allGroups); i++ {
 			subgroups, err := p.client.ListSubgroups(ctx, allGroups[i].ID)
 			if err != nil {
@@ -260,7 +238,6 @@ func (p *Platform) EnumerateGroups(ctx context.Context, recursive bool) (*Groups
 			allGroups = append(allGroups, subgroups...)
 		}
 	} else {
-		// Non-recursive: only top-level groups (ParentID == nil)
 		for _, g := range groups {
 			if g.ParentID == nil {
 				allGroups = append(allGroups, g)
@@ -268,11 +245,9 @@ func (p *Platform) EnumerateGroups(ctx context.Context, recursive bool) (*Groups
 		}
 	}
 
-	// Get access levels and shared groups for each group
-	seen := make(map[int]bool) // track by ID to avoid duplicates
+	seen := make(map[int]bool)
 	var sharedGroups []GroupWithAccess
 
-	// First pass: add all direct groups with access levels
 	for _, group := range allGroups {
 		if seen[group.ID] {
 			continue
@@ -291,10 +266,9 @@ func (p *Platform) EnumerateGroups(ctx context.Context, recursive bool) (*Groups
 			Shared:      false,
 		})
 
-		// Discover shared groups for later addition
 		shared, err := p.client.ListSharedGroups(ctx, group.ID)
 		if err != nil {
-			// Non-fatal - may not have permission
+			// Non-fatal: listing shared groups needs permission we may lack.
 			continue
 		}
 
@@ -318,13 +292,11 @@ func (p *Platform) EnumerateGroups(ctx context.Context, recursive bool) (*Groups
 		}
 	}
 
-	// Second pass: add all shared groups
 	result.Groups = append(result.Groups, sharedGroups...)
 
 	return result, nil
 }
 
-// EnumerateSecrets discovers CI/CD variables at project, group, and instance level.
 func (p *Platform) EnumerateSecrets(ctx context.Context, target platforms.Target) (*SecretsEnumerateResult, error) {
 	result := &SecretsEnumerateResult{
 		ProjectVariables: make(map[string][]Variable),
@@ -333,7 +305,6 @@ func (p *Platform) EnumerateSecrets(ctx context.Context, target platforms.Target
 
 	switch target.Type {
 	case platforms.TargetRepo:
-		// Single project
 		project, err := p.client.GetProject(ctx, target.Value)
 		if err != nil {
 			result.Errors = append(result.Errors, "getting project: "+err.Error())
@@ -342,14 +313,12 @@ func (p *Platform) EnumerateSecrets(ctx context.Context, target platforms.Target
 		p.enumerateProjectVariables(ctx, result, project)
 
 	case platforms.TargetOrg:
-		// Group: get group variables + all project variables
 		group, err := p.client.GetGroup(ctx, target.Value)
 		if err != nil {
 			result.Errors = append(result.Errors, "getting group: "+err.Error())
 			return result, nil
 		}
 
-		// Group-level variables
 		groupVars, err := p.client.ListGroupVariables(ctx, group.ID)
 		if err != nil {
 			result.PermissionErrors = append(result.PermissionErrors,
@@ -358,7 +327,6 @@ func (p *Platform) EnumerateSecrets(ctx context.Context, target platforms.Target
 			result.GroupVariables[group.FullPath] = groupVars
 		}
 
-		// Project-level variables for each project in the group
 		projects, err := p.client.ListGroupProjects(ctx, target.Value)
 		if err != nil {
 			result.Errors = append(result.Errors, "listing group projects: "+err.Error())
@@ -374,10 +342,9 @@ func (p *Platform) EnumerateSecrets(ctx context.Context, target platforms.Target
 		return result, nil
 	}
 
-	// Always try instance-level variables (requires admin)
 	instanceVars, err := p.client.ListInstanceVariables(ctx)
 	if err != nil {
-		// 403 is expected for non-admin users - don't show as error
+		// 403 is expected for non-admins.
 		if !IsPermissionError(err) {
 			result.PermissionErrors = append(result.PermissionErrors,
 				fmt.Sprintf("GET /admin/ci/variables: %s", err.Error()))
@@ -389,7 +356,6 @@ func (p *Platform) EnumerateSecrets(ctx context.Context, target platforms.Target
 	return result, nil
 }
 
-// enumerateProjectVariables fetches CI/CD variables for a single project.
 func (p *Platform) enumerateProjectVariables(ctx context.Context, result *SecretsEnumerateResult, project *Project) {
 	vars, err := p.client.ListProjectVariables(ctx, project.ID)
 	if err != nil {

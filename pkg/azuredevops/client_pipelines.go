@@ -6,8 +6,6 @@ import (
 	"net/url"
 )
 
-// CreatePipeline creates a new pipeline from a YAML file
-// API: POST {org}/{project}/_apis/pipelines?api-version=7.1-preview.1
 func (c *Client) CreatePipeline(ctx context.Context, projectNameOrID string, req CreatePipelineRequest) (*Pipeline, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/pipelines?api-version=%s", encodedProject, APIVersion)
@@ -19,8 +17,6 @@ func (c *Client) CreatePipeline(ctx context.Context, projectNameOrID string, req
 	return &result, nil
 }
 
-// RunPipeline triggers a pipeline run
-// API: POST {org}/{project}/_apis/pipelines/{pipelineId}/runs?api-version=7.1-preview.1
 func (c *Client) RunPipeline(ctx context.Context, projectNameOrID string, pipelineID int, req RunPipelineRequest) (*PipelineRun, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/pipelines/%d/runs?api-version=%s", encodedProject, pipelineID, APIVersion)
@@ -32,8 +28,6 @@ func (c *Client) RunPipeline(ctx context.Context, projectNameOrID string, pipeli
 	return &result, nil
 }
 
-// GetPipelineRun gets a specific pipeline run
-// API: GET {org}/{project}/_apis/pipelines/{pipelineId}/runs/{runId}?api-version=7.1-preview.1
 func (c *Client) GetPipelineRun(ctx context.Context, projectNameOrID string, pipelineID, runID int) (*PipelineRun, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/pipelines/%d/runs/%d?api-version=%s", encodedProject, pipelineID, runID, APIVersion)
@@ -45,8 +39,6 @@ func (c *Client) GetPipelineRun(ctx context.Context, projectNameOrID string, pip
 	return &result, nil
 }
 
-// DeletePipeline deletes a pipeline (build definition)
-// API: DELETE {org}/{project}/_apis/build/definitions/{definitionId}?api-version=7.1-preview.1
 func (c *Client) DeletePipeline(ctx context.Context, projectNameOrID string, definitionID int) error {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/build/definitions/%d?api-version=%s", encodedProject, definitionID, APIVersion)
@@ -57,8 +49,6 @@ func (c *Client) DeletePipeline(ctx context.Context, projectNameOrID string, def
 	return nil
 }
 
-// DeleteBuild deletes a build (pipeline run) by its build ID
-// API: DELETE {org}/{project}/_apis/build/builds/{buildId}?api-version=7.1-preview.1
 func (c *Client) DeleteBuild(ctx context.Context, projectNameOrID string, buildID int) error {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/build/builds/%d?api-version=%s", encodedProject, buildID, APIVersion)
@@ -69,8 +59,6 @@ func (c *Client) DeleteBuild(ctx context.Context, projectNameOrID string, buildI
 	return nil
 }
 
-// ListPipelinePermissions lists pipeline permissions for a resource
-// API: GET {org}/{project}/_apis/pipelines/pipelinePermissions/{resourceType}/{resourceId}?api-version=7.1-preview.1
 func (c *Client) ListPipelinePermissions(ctx context.Context, projectNameOrID, resourceType string, resourceID int) (map[string]interface{}, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/pipelines/pipelinePermissions/%s/%d?api-version=%s",
@@ -83,8 +71,6 @@ func (c *Client) ListPipelinePermissions(ctx context.Context, projectNameOrID, r
 	return result, nil
 }
 
-// AuthorizePipelineResource authorizes a pipeline to access a resource (like variable groups)
-// API: PATCH {org}/{project}/_apis/pipelines/pipelinePermissions/{resourceType}/{resourceId}?api-version=7.1-preview.1
 func (c *Client) AuthorizePipelineResource(ctx context.Context, projectNameOrID, resourceType string, resourceID, pipelineID int) error {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/pipelines/pipelinePermissions/%s/%d?api-version=%s",
@@ -106,9 +92,7 @@ func (c *Client) AuthorizePipelineResource(ctx context.Context, projectNameOrID,
 	return nil
 }
 
-// AuthorizePipelineResourceStr authorizes a pipeline to access a resource using a string resource ID
-// This is needed for resources like secure files and service endpoints that use GUID identifiers instead of integer IDs
-// API: PATCH {org}/{project}/_apis/pipelines/pipelinePermissions/{resourceType}/{resourceId}?api-version=7.1-preview.1
+// Secure files and service endpoints are keyed by GUID, not by integer id.
 func (c *Client) AuthorizePipelineResourceStr(ctx context.Context, projectNameOrID, resourceType, resourceID string, pipelineID int) error {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/pipelines/pipelinePermissions/%s/%s?api-version=%s",
@@ -130,9 +114,7 @@ func (c *Client) AuthorizePipelineResourceStr(ctx context.Context, projectNameOr
 	return nil
 }
 
-// GetPipelineArtifact gets a pipeline artifact with a signed download URL
-// This is the correct API for artifacts created by PublishPipelineArtifact@1
-// API: GET {org}/{project}/_apis/pipelines/{pipelineId}/runs/{runId}/artifacts?artifactName={name}&$expand=signedContent&api-version=7.1
+// The API that serves artifacts created by PublishPipelineArtifact@1.
 func (c *Client) GetPipelineArtifact(ctx context.Context, projectNameOrID string, pipelineID, runID int, artifactName string) (*PipelineArtifact, error) {
 	encodedProject := url.PathEscape(projectNameOrID)
 	path := fmt.Sprintf("/%s/_apis/pipelines/%d/runs/%d/artifacts?artifactName=%s&$expand=signedContent&api-version=%s",

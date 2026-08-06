@@ -12,36 +12,29 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms/shared/proxy"
 )
 
-// DefaultBaseURL is the default JFrog base URL
 const DefaultBaseURL = "https://artifactory.jfrog.io"
 
-// Platform implements the platforms.Platform interface for JFrog
 type Platform struct {
 	client *Client
 	config platforms.Config
 }
 
-// NewPlatform creates a new JFrog platform adapter
 func NewPlatform() *Platform {
 	return &Platform{}
 }
 
-// Name returns the platform identifier
 func (p *Platform) Name() string {
 	return "jfrog"
 }
 
-// SetClient allows setting a custom client (useful for testing or advanced auth)
 func (p *Platform) SetClient(client *Client) {
 	p.client = client
 }
 
-// Client returns the underlying JFrog client
 func (p *Platform) Client() *Client {
 	return p.client
 }
 
-// Init initializes the platform with configuration
 func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 	p.config = config
 
@@ -49,10 +42,9 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
-	// Trim trailing slash to avoid double slashes in URL construction
+	// A trailing slash would double up in every constructed URL.
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
-	// Check if JFrog-specific auth is provided
 	if config.JFrog != nil {
 		clientConfig := ClientConfig{
 			BaseURL:     baseURL,
@@ -65,7 +57,6 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 		}
 		p.client = NewClientWithConfig(clientConfig)
 
-		// Apply proxy transport
 		transport := config.HTTPTransport
 		if transport == nil {
 			t, err := proxy.NewTransport(proxy.Config{
@@ -83,7 +74,6 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 		return nil
 	}
 
-	// Fallback to token-based auth
 	var opts []ClientOption
 	if config.Timeout > 0 {
 		opts = append(opts, WithTimeout(config.Timeout))
@@ -92,7 +82,6 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 		opts = append(opts, WithConcurrency(int64(config.Concurrency)))
 	}
 
-	// Resolve proxy transport
 	transport := config.HTTPTransport
 	if transport == nil {
 		t, err := proxy.NewTransport(proxy.Config{
@@ -112,7 +101,6 @@ func (p *Platform) Init(ctx context.Context, config platforms.Config) error {
 	return nil
 }
 
-// Scan retrieves repositories and build info from the target
 func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platforms.ScanResult, error) {
 	result := &platforms.ScanResult{
 		Workflows: make(map[string][]platforms.Workflow),
@@ -120,14 +108,14 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 
 	switch target.Type {
 	case platforms.TargetOrg:
-		// For JFrog, TargetOrg means scanning the entire JFrog instance
+		// For JFrog, TargetOrg means the whole instance.
 		repositories, err := p.listRepositories(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("listing repositories: %w", err)
 		}
 		result.Repositories = repositories
 
-		// Get build info (conceptual mapping to "Workflows")
+		// Builds are surfaced as Workflows.
 		buildInfo, err := p.getBuildInfo(ctx)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("getting build info: %w", err))
@@ -144,7 +132,6 @@ func (p *Platform) Scan(ctx context.Context, target platforms.Target) (*platform
 	return result, nil
 }
 
-// listRepositories retrieves all repositories from JFrog
 func (p *Platform) listRepositories(ctx context.Context) ([]platforms.Repository, error) {
 	resp, err := p.client.Get(ctx, "/api/repositories")
 	if err != nil {
@@ -161,7 +148,6 @@ func (p *Platform) listRepositories(ctx context.Context) ([]platforms.Repository
 		return nil, fmt.Errorf("failed to parse repositories response: %w", err)
 	}
 
-	// Convert JFrog repositories to platform repositories
 	repos := make([]platforms.Repository, len(jfrogRepos))
 	for i, r := range jfrogRepos {
 		repos[i] = platforms.Repository{
@@ -173,7 +159,6 @@ func (p *Platform) listRepositories(ctx context.Context) ([]platforms.Repository
 	return repos, nil
 }
 
-// getBuildInfo retrieves build information from JFrog
 func (p *Platform) getBuildInfo(ctx context.Context) ([]platforms.Workflow, error) {
 	resp, err := p.client.Get(ctx, "/api/build")
 	if err != nil {
@@ -194,37 +179,30 @@ func (p *Platform) getBuildInfo(ctx context.Context) ([]platforms.Workflow, erro
 		return nil, fmt.Errorf("failed to parse build info response: %w", err)
 	}
 
-	// Convert builds to workflows (conceptual mapping)
 	workflows := make([]platforms.Workflow, 0, len(buildList.Builds))
 	for _, build := range buildList.Builds {
 		name := strings.TrimPrefix(build.URI, "/")
 
 		workflows = append(workflows, platforms.Workflow{
 			Name:     name,
-			RepoSlug: name, // Use build name as repo slug
+			RepoSlug: name,
 		})
 	}
 
 	return workflows, nil
 }
 
-// Get forwards the Get method to the underlying client
-// This allows Platform to implement the tokenprobe.JFrogClient interface
+// Get, GetUser and GetSystemInfo forward so Platform satisfies tokenprobe.JFrogClient.
 func (p *Platform) Get(ctx context.Context, path string) (*http.Response, error) {
 	return p.client.Get(ctx, path)
 }
 
-// GetUser forwards the GetUser method to the underlying client
-// This allows Platform to implement the tokenprobe.JFrogClient interface
 func (p *Platform) GetUser(ctx context.Context) (*User, error) {
 	return p.client.GetUser(ctx)
 }
 
-// GetSystemInfo forwards the GetSystemInfo method to the underlying client
-// This allows Platform to implement the tokenprobe.JFrogClient interface
 func (p *Platform) GetSystemInfo(ctx context.Context) (map[string]interface{}, error) {
 	return p.client.GetSystemInfo(ctx)
 }
 
-// Ensure Platform implements the interface
 var _ platforms.Platform = (*Platform)(nil)

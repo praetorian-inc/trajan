@@ -20,7 +20,6 @@ const (
 	DefaultTimeout = 30 * time.Second
 )
 
-// GitLab is the surface collectors depend on; Client is the production impl.
 type GitLab interface {
 	Get(ctx context.Context, path string, params url.Values, allow404 bool) (json.RawMessage, http.Header, error)
 	GetRaw(ctx context.Context, path string, params url.Values) ([]byte, http.Header, error)
@@ -37,10 +36,9 @@ type Client struct {
 
 var _ GitLab = (*Client)(nil)
 
-// NewClient builds a REST client. baseURL is the instance root ("https://gitlab.com"
-// or a self-hosted URL); "/api/v4" is appended if absent. insecure skips TLS verify
-// for self-signed self-hosted certs. concurrency is bound by the engine's runner,
-// so the client does not self-limit.
+// baseURL is the instance root and "/api/v4" is appended if absent. insecure skips TLS
+// verification for a self-signed self-hosted cert. concurrency is accepted but unused:
+// the engine's runner already bounds the work, so the client does not self-limit.
 func NewClient(baseURL, token string, insecure bool, concurrency int) *Client {
 	baseURL = normalizeBaseURL(baseURL)
 	tr := http.DefaultTransport
@@ -85,8 +83,7 @@ func (e *GitLabError) Error() string {
 	return fmt.Sprintf("HTTP %d from %s: %s", e.Status, e.URL, b)
 }
 
-func IsPermissionError(err error) bool { return softStatus(err) == http.StatusForbidden }
-func IsNotFoundError(err error) bool   { return softStatus(err) == http.StatusNotFound }
+func IsNotFoundError(err error) bool { return softStatus(err) == http.StatusNotFound }
 
 var sleepFn = sleep
 
@@ -130,8 +127,7 @@ func readAllClose(resp *http.Response) []byte {
 	return b
 }
 
-// sleepForRateLimit honors Retry-After on 429 (seconds; default 60 per GitLab);
-// returns true if it slept.
+// GitLab's Retry-After is in seconds and its documented default is 60.
 func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response) bool {
 	if resp.StatusCode != http.StatusTooManyRequests {
 		return false
@@ -146,8 +142,8 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response) boo
 	return true
 }
 
-// request is the shared retry loop. body is []byte (not io.Reader) so it can be
-// re-sent on each retry. A 404 with allow404 yields (nil, header, nil).
+// body is []byte rather than io.Reader so it can be re-sent on each retry. A 404 with
+// allow404 yields (nil, header, nil).
 func (c *Client) request(ctx context.Context, method, u, accept string, body []byte, allow404 bool) ([]byte, http.Header, error) {
 	var lastStatus int
 	var lastBody []byte
@@ -196,8 +192,8 @@ func (c *Client) GetRaw(ctx context.Context, p string, params url.Values) ([]byt
 	return c.request(ctx, http.MethodGet, c.buildURL(p, params), "text/plain", nil, true)
 }
 
-// GraphQL posts to <instance>/api/graphql (not under /api/v4) and returns the raw
-// envelope so callers can read both `data` and `errors`.
+// GraphQL lives at <instance>/api/graphql, not under /api/v4. The raw envelope comes
+// back so callers can read both `data` and `errors`.
 func (c *Client) GraphQL(ctx context.Context, query string, vars map[string]any) (json.RawMessage, error) {
 	gqlURL := strings.TrimSuffix(c.baseURL, "/api/v4") + "/api/graphql"
 	buf, err := json.Marshal(map[string]any{"query": query, "variables": vars})

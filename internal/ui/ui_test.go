@@ -197,6 +197,62 @@ func TestColorLeavesTheStepTableIntact(t *testing.T) {
 	}
 }
 
+// A successful surface says so in green on its label, so the status word is spent only
+// on the degraded ones — where it also names the reason. A redirected log (color off)
+// keeps no trailing space on the rows that succeeded.
+func TestRowNamesADegradedSurfaceAndStaysSilentOnOk(t *testing.T) {
+	got := render(t, Human, false, func(p *Printer) {
+		p.Row(RowLine{Seq: 1, Total: 8, Label: "org", Status: "ok"})
+		p.Row(RowLine{Seq: 3, Total: 8, Label: "secrets", Status: "degraded", Note: "403"})
+	})
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if strings.Contains(lines[0], "ok") || strings.HasSuffix(lines[0], " ") {
+		t.Errorf("a collected surface should not spend a column saying ok, nor trail: %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "degraded") || !strings.Contains(lines[1], "403") {
+		t.Errorf("a degraded surface must name itself and its reason: %q", lines[1])
+	}
+}
+
+// The label carries the outcome color: green when the surface was collected, yellow
+// when it degraded. That color is the whole reason a successful row needs no word.
+func TestRowColorsItsLabelByOutcome(t *testing.T) {
+	green := render(t, Human, true, func(p *Printer) { p.Row(RowLine{Seq: 1, Total: 8, Label: "org", Status: "ok"}) })
+	if !strings.Contains(green, "\x1b[92m") {
+		t.Errorf("a collected surface should be green: %q", green)
+	}
+	yellow := render(t, Human, true, func(p *Printer) { p.Row(RowLine{Seq: 3, Total: 8, Label: "secrets", Status: "degraded", Note: "403"}) })
+	if !strings.Contains(yellow, "\x1b[93m") {
+		t.Errorf("a degraded surface should be yellow: %q", yellow)
+	}
+}
+
+// The status word aligns across rows so the degraded ones read as a column; that holds
+// only while the label cell keeps its width under a shorter value.
+func TestRowStatusColumnAligns(t *testing.T) {
+	got := render(t, Human, false, func(p *Printer) {
+		p.Row(RowLine{Seq: 1, Total: 8, Label: "org", Status: "degraded", Note: "403"})
+		p.Row(RowLine{Seq: 5, Total: 8, Label: "runners", Status: "degraded", Note: "404"})
+	})
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if a, b := strings.Index(lines[0], "degraded"), strings.Index(lines[1], "degraded"); a != b {
+		t.Errorf("status column diverges: %d vs %d", a, b)
+	}
+}
+
+// --debug is the machine-parseable tier; a phase row becomes a stock slog line whose
+// keys a script can read.
+func TestRowUnderDebugKeepsAParseableLine(t *testing.T) {
+	got := render(t, Debug, false, func(p *Printer) {
+		p.Row(RowLine{Seq: 7, Total: 8, Label: "repositories", Status: "failed", Note: "3 unreadable"})
+	})
+	for _, want := range []string{"msg=repositories", "status=failed", "note="} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in %q", want, got)
+		}
+	}
+}
+
 func TestOutcomeDropsZeroCounts(t *testing.T) {
 	got := render(t, Human, false, func(p *Printer) {
 		p.Outcome("attack complete", []Count{{"ok", 15}, {"failed", 0}, {"mutations", 14}}, "")

@@ -1,4 +1,3 @@
-// pkg/detections/helpers.go
 package detections
 
 import (
@@ -7,8 +6,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
 )
 
-// BuildChainFromNodes creates an attack chain from a sequence of graph nodes.
-// Useful for detections that track attack paths (pwn-request, injection, toctou).
 func BuildChainFromNodes(nodes ...graph.Node) []ChainNode {
 	if len(nodes) == 0 {
 		return nil
@@ -18,18 +15,16 @@ func BuildChainFromNodes(nodes ...graph.Node) []ChainNode {
 	for _, node := range nodes {
 		chainNode := ChainNode{}
 
-		// Set node type and extract fields based on graph node type
 		switch node.Type() {
 		case graph.NodeTypeWorkflow:
 			chainNode.NodeType = "trigger"
 			if wf, ok := node.(*graph.WorkflowNode); ok {
 				chainNode.Name = wf.Name
-				// Get first trigger as name
 				if len(wf.Triggers) > 0 {
 					chainNode.Name = wf.Triggers[0]
 				}
 			}
-			// If workflow has no trigger, try to get from first job in chain
+			// nodes[1] is the job that follows the workflow in the chain.
 			if chainNode.Name == "" && len(nodes) > 1 {
 				if job, ok := nodes[1].(*graph.JobNode); ok {
 					if len(job.ComputedTriggers) > 0 {
@@ -61,8 +56,8 @@ func BuildChainFromNodes(nodes ...graph.Node) []ChainNode {
 	return chain
 }
 
-// IsExecutionSink determines if a run command actually executes code vs just validates.
-// Used by artifact-poisoning and cache-poisoning detections to reduce false positives.
+// Distinguishes a run: that executes downloaded content from one that merely inspects it;
+// artifact- and cache-poisoning detections use it to suppress false positives.
 func IsExecutionSink(runCmd string) bool {
 	if runCmd == "" {
 		return false
@@ -70,26 +65,25 @@ func IsExecutionSink(runCmd string) bool {
 
 	cmdLower := strings.ToLower(runCmd)
 
-	// Execution patterns (actual code execution from artifact/cache)
 	executionPatterns := []string{
-		"./",        // Execute local script
-		" bash ",    // Bash execution (with spaces to avoid matching "subash")
-		"\nbash ",   // Bash at line start
-		" sh ",      // Shell execution (with spaces to avoid matching "sha256sum")
-		"\nsh ",     // Shell at line start
-		"/bin/",     // Binary execution
-		" python ",  // Python execution
-		"\npython ", // Python at line start
-		" node ",    // Node execution
-		"\nnode ",   // Node at line start
-		" npm ",     // npm commands
-		"\nnpm ",    // npm at line start
-		" yarn ",    // yarn commands
-		"\nyarn ",   // yarn at line start
-		" source ",  // Source script
-		"\nsource ", // Source at line start
-		" eval ",    // Eval command
-		" exec ",    // Exec command
+		"./",
+		" bash ", // Spaced so that "subash" does not match.
+		"\nbash ",
+		" sh ", // Spaced so that "sha256sum" does not match.
+		"\nsh ",
+		"/bin/",
+		" python ",
+		"\npython ",
+		" node ",
+		"\nnode ",
+		" npm ",
+		"\nnpm ",
+		" yarn ",
+		"\nyarn ",
+		" source ",
+		"\nsource ",
+		" eval ",
+		" exec ",
 	}
 
 	for _, pattern := range executionPatterns {
@@ -98,9 +92,8 @@ func IsExecutionSink(runCmd string) bool {
 		}
 	}
 
-	// Check if command starts with a known execution command.
-	// The patterns above require a leading space/newline, but run: values
-	// like "npm run build" start directly with the command.
+	// The patterns above need a leading space or newline, but a run: value like
+	// "npm run build" starts directly with the command.
 	commandPrefixes := []string{
 		"bash ", "sh ", "python ", "node ", "npm ", "yarn ",
 		"source ", "eval ", "exec ",

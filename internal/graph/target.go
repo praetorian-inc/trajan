@@ -13,10 +13,9 @@ const (
 	TargetAttack TargetKind = "attack"
 )
 
-// Target is where a rule lands in the graph. Findings are never nodes: a rule is
-// either a property on the node or edge it names, or an attack edge in its own
-// right. Attack targets resolve their endpoints from the schema, so every kind
-// carries enough to write the graph without re-consulting the rule text.
+// A rule lands as a property on the node or edge it names, or as an attack edge in
+// its own right; findings are never nodes. Attack targets resolve their endpoints
+// from the schema, so every kind is writable without re-consulting the rule text.
 type Target struct {
 	Kind  TargetKind
 	Label NodeLabel

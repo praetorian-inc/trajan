@@ -11,15 +11,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
-func TestDetection_ImplementsInterface(t *testing.T) {
-	var _ detections.Detection = (*Detection)(nil)
-}
-
-func TestDetection_Name(t *testing.T) {
-	d := New()
-	assert.Equal(t, "script-injection", d.Name())
-}
-
 func TestDetect_InjectionInScript(t *testing.T) {
 	g := graph.NewGraph()
 

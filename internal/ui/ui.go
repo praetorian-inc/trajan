@@ -82,9 +82,9 @@ func (p *Printer) c(idx int, s string) string {
 func severityColor(s string) int {
 	switch s {
 	case "critical":
-		return magenta
-	case "high":
 		return red
+	case "high":
+		return magenta
 	case "medium":
 		return yellow
 	case "low":
@@ -93,16 +93,15 @@ func severityColor(s string) int {
 	return plain
 }
 
-// stepColor grades an attack step by outcome. Green is spent only here, on the
-// one word that says what the step did, because a run where every line is
-// colored is a run where a failure no longer stands out.
+// Green is spent only here, on the one word that says what the step did, because a
+// run where every line is colored is a run where a failure no longer stands out.
 func stepColor(status string) int {
 	switch status {
 	case "ok":
 		return green
 	case "failed":
 		return red
-	case "skipped", "unresolved":
+	case "skipped", "unresolved", "degraded":
 		return yellow
 	}
 	return plain
@@ -114,7 +113,7 @@ func countColor(label string) int {
 	switch label {
 	case "failed":
 		return red
-	case "skipped", "unresolved", "partial", "irreversible":
+	case "skipped", "unresolved", "partial", "irreversible", "degraded":
 		return yellow
 	}
 	return plain
@@ -235,9 +234,8 @@ func (p *Printer) row(indent string, cs ...cell) string {
 	return b.String()
 }
 
-// Head opens a run: a bold subject, then indented label/value rows whose labels
-// recede because the value is the news — the rule humanAttrs applies to an attr
-// key, in a shape a single line could not hold.
+// The labels recede because the value is the news, the rule humanAttrs applies to
+// an attr key, in a shape a single line could not hold.
 func (p *Printer) Head(subject string, fields ...[2]string) {
 	if p.tier != Human {
 		args := make([]any, 0, 2*len(fields))
@@ -249,6 +247,9 @@ func (p *Printer) Head(subject string, fields ...[2]string) {
 		p.log.Info(subject, args...)
 		return
 	}
+	// Opens with a blank so the run's first line has the same air as a phase block,
+	// rather than butting against the shell prompt that launched it.
+	p.raw("")
 	p.raw(p.c(bold, clean(subject)))
 	for _, f := range fields {
 		if f[1] == "" {
@@ -258,8 +259,8 @@ func (p *Printer) Head(subject string, fields ...[2]string) {
 	}
 }
 
-// Section titles a block of rows. Debug carries the per-item records and has no
-// use for a heading to group them under.
+// Debug carries the per-item records and has no use for a heading to group them
+// under.
 func (p *Printer) Section(name string) {
 	if p.tier != Human {
 		return
@@ -268,11 +269,25 @@ func (p *Printer) Section(name string) {
 	p.raw(p.c(bold, clean(name)))
 }
 
-// StepLine is one row of an attack's step table. Resource is the object the step
-// acted on and carries the row; Note is a clause the caller has already reduced to
-// what a column can hold. Uses and Target reach only --debug, which keeps the
-// machine-parseable line it had before this renderer existed; ID reaches the table
-// itself on the rows another step can refer to.
+// PhaseHeader opens a phase block with a leading blank, a bold name, and a rule the
+// width of the name. The rule is the demarcation: stacked phases in one run each begin
+// with an underlined name, so where one ends and the next starts is unmistakable.
+// Unlike Section it survives --debug, where it is the only marker of that boundary.
+func (p *Printer) PhaseHeader(name string) {
+	if p.tier != Human {
+		p.log.Info(name)
+		return
+	}
+	name = clean(name)
+	p.raw("")
+	p.raw(p.c(bold, name))
+	p.raw(p.c(dim, strings.Repeat("─", len([]rune(name)))))
+}
+
+// Resource is the object the step acted on and carries the row; Note is a clause the
+// caller has already reduced to what a column can hold. Uses and Target reach only
+// --debug, which keeps the machine-parseable line it had before this renderer
+// existed; ID reaches the table itself on the rows another step can refer to.
 type StepLine struct {
 	Seq, Total int
 	ID, Uses   string
@@ -283,9 +298,8 @@ type StepLine struct {
 	Note       string
 }
 
-// Step renders one row of the table. Any status but ok also names itself: the color
-// on the action is decoration, and a log read without it still has to distinguish a
-// step that ran from one that did not.
+// Any status but ok also names itself: the color on the action is decoration, and a
+// log read without it still has to distinguish a step that ran from one that did not.
 func (p *Printer) Step(l StepLine) {
 	if p.tier != Human {
 		args := []any{"step", l.ID, "uses", l.Uses, "target", l.Target, "resource", l.Resource}
@@ -327,12 +341,55 @@ const (
 	maxNote     = 40
 )
 
-func clip(s string, max int) string {
+func clip(s string, limit int) string {
 	r := []rune(s)
-	if len(r) <= max {
+	if len(r) <= limit {
 		return s
 	}
-	return string(r[:max-1]) + "…"
+	return string(r[:limit-1]) + "…"
+}
+
+// RowLine is one row of a phase's work table: a numbered unit of work and how it came
+// out. It carries none of StepLine's id/uses/target — those are attack's, where one
+// step names an earlier one. The label takes the outcome color, so a collected surface
+// reads green and a degraded one yellow; the status word is then spent only when it
+// adds something the color does not, which on success is nothing. Total 0 drops the
+// seq cell, for a phase whose stages are not worth counting.
+type RowLine struct {
+	Seq, Total int
+	Label      string
+	Status     string
+	Note       string
+}
+
+func (p *Printer) Row(l RowLine) {
+	if p.tier != Human {
+		args := []any{}
+		if l.Status != "" && l.Status != "ok" {
+			args = append(args, "status", l.Status)
+		}
+		if l.Note != "" {
+			args = append(args, "note", l.Note)
+		}
+		p.log.Info(l.Label, args...)
+		return
+	}
+	seq, seqW := "", 0
+	if l.Total > 0 {
+		w := len(strconv.Itoa(l.Total))
+		seq = fmt.Sprintf("%*d/%d", w, l.Seq, l.Total)
+		seqW = 2*w + 1
+	}
+	status := l.Status
+	if status == "ok" {
+		status = ""
+	}
+	p.raw(p.row("  ",
+		cell{seq, seqW, dim},
+		cell{l.Label, 16, stepColor(l.Status)},
+		cell{status, 0, stepColor(l.Status)},
+		cell{clip(l.Note, maxNote), 0, dim},
+	))
 }
 
 type Count struct {
@@ -340,8 +397,7 @@ type Count struct {
 	N     int
 }
 
-// Outcome closes a run with its counts and a dim trailer. Zero counts go unsaid
-// for the same reason Severities drops them.
+// Zero counts go unsaid for the same reason Severities drops them.
 func (p *Printer) Outcome(subject string, counts []Count, trailer string) {
 	if p.tier != Human {
 		args := make([]any, 0, 2*len(counts))
@@ -380,5 +436,7 @@ func Severities(counts map[string]int) { std.Severities(counts) }
 func Note(s string)                                          { std.Note(s) }
 func Head(subject string, fields ...[2]string)               { std.Head(subject, fields...) }
 func Section(name string)                                    { std.Section(name) }
+func PhaseHeader(name string)                                { std.PhaseHeader(name) }
 func Step(l StepLine)                                        { std.Step(l) }
+func Row(l RowLine)                                          { std.Row(l) }
 func Outcome(subject string, counts []Count, trailer string) { std.Outcome(subject, counts, trailer) }

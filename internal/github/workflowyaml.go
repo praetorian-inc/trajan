@@ -16,9 +16,9 @@ type LineNode struct {
 	EndLine   int
 }
 
-// DecodeWorkflow substitutes ${{ ... }} expressions out before decode and
-// restores them on the walk, because a raw expression in flow context is not
-// parseable YAML. Empty input returns (nil, nil).
+// ${{ ... }} expressions are substituted out before decode and restored on the walk,
+// because a raw expression in flow context is not parseable YAML. Empty input returns
+// (nil, nil).
 func DecodeWorkflow(text string) (*LineNode, error) {
 	preprocessed, originals := substituteExpressions(text)
 	var doc yaml.Node

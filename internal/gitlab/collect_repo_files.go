@@ -8,8 +8,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// defaultBranch reads the project's default_branch, falling back to "main" when
-// the detail surface was unobservable.
+// Falls back to "main" when the project detail surface was unobservable.
 func defaultBranch(projRaw []byte) string {
 	if ref := strField(projRaw, "default_branch"); ref != "" {
 		return ref
@@ -17,9 +16,8 @@ func defaultBranch(projRaw []byte) string {
 	return "main"
 }
 
-// fetchRepoFile GETs a raw repository file on ref and writes it under repo-files
-// if present. A soft 404 (file absent) or 401/403 (blocked) skips silently — the
-// downstream rules treat an absent CODEOWNERS/duo file as "control not present".
+// A soft 404 or 403 skips silently, because the rules downstream already read an
+// absent CODEOWNERS or Duo file as "control not present".
 func fetchRepoFile(ctx context.Context, cl GitLab, cp engine.CurrentPhase, base, fp, ref, repoPath string) error {
 	p := base + "/repository/files/" + url.PathEscape(repoPath) + "/raw"
 	b, _, err := cl.GetRaw(ctx, p, url.Values{"ref": {ref}})
@@ -37,10 +35,8 @@ func fetchRepoFile(ctx context.Context, cl GitLab, cp engine.CurrentPhase, base,
 
 var codeownersPaths = []string{"CODEOWNERS", ".gitlab/CODEOWNERS", "docs/CODEOWNERS"}
 
-// collectCodeowners fetches the CODEOWNERS file from each of GitLab's three valid
-// locations on the default branch (cat-06 codeowners.* and cat-04
-// source_ci_writable_by_lower_trust). At most one normally exists; whichever is
-// present is written raw.
+// GitLab honors CODEOWNERS in three locations and normally only one exists, so all
+// three are tried and whichever answers is written raw.
 func collectCodeowners(ctx context.Context, cl GitLab, cp engine.CurrentPhase, fp, base string, projRaw []byte) error {
 	ref := defaultBranch(projRaw)
 	for _, rp := range codeownersPaths {
@@ -51,11 +47,8 @@ func collectCodeowners(ctx context.Context, cl GitLab, cp engine.CurrentPhase, f
 	return nil
 }
 
-// collectDuoFiles fetches the Duo-flow wiring files (cat-13): the agent config,
-// the MCP server manifest, and every flow definition under .gitlab/duo/flows/.
-// These feed job.is_duo_flow, duo_flow_context_sources, duo_flow_autonomous_write,
-// duo_mcp_endpoint_untrusted_host, duo_external_agent_untrusted_host, and
-// project.duo.{config_present,flows,mcp_endpoint}.
+// The Duo agent config, the MCP server manifest, and every flow definition under
+// .gitlab/duo/flows/ — together the whole wiring the Duo job and project folds read.
 func collectDuoFiles(ctx context.Context, cl GitLab, cp engine.CurrentPhase, fp, base string, projRaw []byte) error {
 	ref := defaultBranch(projRaw)
 	for _, rp := range []string{".gitlab/duo/agent-config.yml", ".gitlab/duo/mcp.json"} {

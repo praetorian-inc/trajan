@@ -71,8 +71,8 @@ func normRulesetSentinelPath(scopeKey, suffix string) string {
 
 func normAppPath(slug string) string { return path.Join("10-normalize", "apps", slug+".json") }
 
-// "write" on one of these (or any "admin") makes an installation admin-class for
-// the org aggregate.
+// "write" on one of these, or any "admin", makes an installation admin-class for the
+// org aggregate.
 var orgAdminClassAppPerms = map[string]bool{
 	"administration": true, "organization_administration": true, "members": true,
 	"secrets": true, "organization_secrets": true,
@@ -810,8 +810,7 @@ func classifyAppPerms(perms map[string]any) (write, admin, broad []string) {
 	return write, admin, broad
 }
 
-// entLoadData returns nil for a missing file or null data so the caller can skip
-// the surface.
+// nil for a missing file or null data, so the caller can skip the surface.
 func entLoadData(prior engine.PriorPhase, rel string) map[string]any {
 	var env map[string]any
 	if err := engine.ReadJSON(prior.Abs(rel), &env); err != nil {
@@ -838,8 +837,8 @@ func entList(v any) []any {
 	return l
 }
 
-// entListOrEmpty never returns nil so a schema list field serializes as [] rather
-// than null when the source key is absent.
+// Never nil, so a schema list field serializes as [] rather than null when the
+// source key is absent.
 func entListOrEmpty(v any) []any {
 	if l, ok := v.([]any); ok {
 		return l
@@ -847,7 +846,7 @@ func entListOrEmpty(v any) []any {
 	return []any{}
 }
 
-// entObj never returns nil so chained indexing is safe.
+// Never nil, so chained indexing is safe.
 func entObj(m map[string]any, key string) map[string]any {
 	if o := entMap(m[key]); o != nil {
 		return o
@@ -874,7 +873,7 @@ func entStr(v any) string {
 	return s
 }
 
-// entStrPtr yields nil for a non-string so the field serializes as JSON null.
+// nil for a non-string, so the field serializes as JSON null.
 func entStrPtr(v any) *string {
 	s, ok := v.(string)
 	if !ok {
@@ -891,8 +890,8 @@ func entBoolPtr(v any) *bool {
 	return &b
 }
 
-// entTruthy mirrors Python truthiness over the JSON value set: numbers != 0,
-// strings/lists/maps non-empty, nil false.
+// Python truthiness over the JSON value set: numbers != 0, strings/lists/maps
+// non-empty, nil false.
 func entTruthy(v any) bool {
 	switch x := v.(type) {
 	case nil:
@@ -948,8 +947,7 @@ func entInt64(v any) int64 {
 	return 0
 }
 
-// entCoalesce falls back on falsy (Python `a or b`), unlike entOrDefault which
-// falls back only on nil.
+// Falls back on any falsy a, unlike entOrDefault which falls back only on nil.
 func entCoalesce(a, b any) any {
 	if entTruthy(a) {
 		return a
@@ -964,8 +962,8 @@ func entOrDefault(v, def any) any {
 	return v
 }
 
-// entIDLabel renders an integral JSON number without a decimal point and nil as
-// "None" to match the Python f-string on a missing id.
+// An integral JSON number renders without a decimal point and a missing id as
+// "None"; the spelling is contractual for the same reason pyStr's is.
 func entIDLabel(v any) string {
 	switch x := v.(type) {
 	case nil:

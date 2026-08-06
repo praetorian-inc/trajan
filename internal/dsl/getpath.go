@@ -2,7 +2,6 @@ package dsl
 
 import "strings"
 
-// GetPath resolves a dotted path against a decoded JSON/YAML subject.
 // A non-numeric segment against a list projects the remaining path across every
 // element (steps.uses → the list of each element's uses) and returns immediately.
 func GetPath(subject any, path string) any {

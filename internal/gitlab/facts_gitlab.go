@@ -9,13 +9,9 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// Normalize-side read helpers, ported from the ADO/GitHub stacks (platform
-// agnostic): safe navigation over the collected {_meta,data} envelopes, raw-file
-// reads, and reading the normalized corpus back as generic maps for correlate.
-//
-// A soft-failed surface is written as data == {"_unobserved": <status>}. The
-// unwrap helpers return that object verbatim so a caller can distinguish "observed
-// empty" from "not observed" (entUnobserved) rather than collapsing to false/[].
+// A soft-failed surface is written as data == {"_unobserved": <status>}. These unwrap
+// helpers return that object verbatim so a caller can tell "observed empty" from "not
+// observed" instead of collapsing both to false or [].
 
 func entLoadData(prior engine.PriorPhase, rel string) map[string]any {
 	var env map[string]any
@@ -25,8 +21,8 @@ func entLoadData(prior engine.PriorPhase, rel string) map[string]any {
 	return entMap(env["data"])
 }
 
-// entLoadList returns the data array of a list surface, or nil for a missing file
-// / soft-failed surface (whose data is a {_unobserved} object, not an array).
+// Nil for a missing file and also for a soft-failed surface, whose data is an
+// {_unobserved} object rather than an array.
 func entLoadList(prior engine.PriorPhase, rel string) []any {
 	var env map[string]any
 	if err := engine.ReadJSON(prior.Abs(rel), &env); err != nil {
@@ -35,8 +31,8 @@ func entLoadList(prior engine.PriorPhase, rel string) []any {
 	return entList(env["data"])
 }
 
-// entLoadRaw reads a non-enveloped raw file (.gitlab-ci.yml, agent config,
-// CODEOWNERS, Duo files) written via WriteRaw. nil for a missing file.
+// The .gitlab-ci.yml, agent configs, CODEOWNERS and Duo files are stored unenveloped
+// via WriteRaw, so they are read back as bytes rather than JSON.
 func entLoadRaw(prior engine.PriorPhase, rel string) []byte {
 	b, err := os.ReadFile(prior.Abs(rel))
 	if err != nil {
@@ -45,9 +41,8 @@ func entLoadRaw(prior engine.PriorPhase, rel string) []byte {
 	return b
 }
 
-// entUnobserved reports whether a surface soft-failed (data == {_unobserved}).
 // A rule that keys on the observed/unobserved difference must not read absence as
-// false; callers use this to leave the field null instead.
+// false, so callers leave the field null when this is true.
 func entUnobserved(m map[string]any) bool {
 	if m == nil {
 		return false
@@ -66,8 +61,8 @@ func entList(v any) []any {
 	return l
 }
 
-// entListOrEmpty never returns nil so a list field serializes as [] not null
-// (hard contract C1: valuesEqual(nil, []any{}) is false).
+// Never nil: the engine's equality treats null and [] as different values, so an empty
+// list a rule keys on has to serialize as [].
 func entListOrEmpty(v any) []any {
 	if l, ok := v.([]any); ok {
 		return l
@@ -117,8 +112,6 @@ func entInt64(v any) int64 {
 	return 0
 }
 
-// ---- correlate read-side (normalized corpus as maps) ----
-
 func loadRecords(prior engine.PriorPhase, dir string) ([]map[string]any, error) {
 	files, err := prior.IterJSON(dir)
 	if err != nil {
@@ -160,9 +153,7 @@ func prov(files ...string) []provenance {
 	return out
 }
 
-// ---- GitLab-specific fact helpers ----
-
-// GitLab numeric access levels. Rules read >=30, ∋{30}, ==30 (hard contract C3).
+// Rules compare against these numbers directly, not against the role names.
 const (
 	accessGuest      int64 = 10
 	accessReporter   int64 = 20
@@ -182,8 +173,8 @@ var nameLevels = map[string]int64{
 
 func levelToRoleName(lvl int64) string { return levelNames[lvl] }
 
-// roleNameToLevel maps a group default_membership_role that GitLab may return
-// either as the numeric access level (REST) or the string enum.
+// GitLab returns default_membership_role as a number over REST and as a string enum
+// over GraphQL.
 func roleNameToLevel(v any) int64 {
 	switch x := v.(type) {
 	case string:
@@ -196,10 +187,9 @@ func roleNameToLevel(v any) int64 {
 	}
 }
 
-// accessLevelValues extracts the numeric access_level from a protected-branch /
-// protected-tag access-level list ([{access_level, group_id, user_id, ...}]). A
-// group/user entry (non-null group_id/user_id) is a named grant broader than the
-// bare role; it is surfaced as its numeric level and flagged by hasNamedGrant.
+// A protected-branch entry with a non-null group_id or user_id is a named grant
+// broader than the bare role. Its numeric level still comes out here; hasNamedGrant is
+// what tells them apart.
 func accessLevelValues(list any) []any {
 	out := []any{}
 	for _, raw := range entList(list) {
@@ -219,7 +209,6 @@ func hasNamedGrant(list any) bool {
 	return false
 }
 
-// levelsInclude reports whether a numeric access-level list contains lvl.
 func levelsInclude(levels []any, lvl int64) bool {
 	for _, v := range levels {
 		if entInt64(v) == lvl {
@@ -229,8 +218,8 @@ func levelsInclude(levels []any, lvl int64) bool {
 	return false
 }
 
-// levelsIncludeAtMost reports whether the list grants access to any actor at or
-// below maxLvl (i.e. a lower-trust actor than a strict Maintainer/Owner gate).
+// Zero is skipped because GitLab uses it for "no one", which is the strictest gate
+// rather than the most permissive.
 func levelsIncludeAtMost(levels []any, maxLvl int64) bool {
 	for _, v := range levels {
 		if l := entInt64(v); l > 0 && l <= maxLvl {
@@ -240,8 +229,8 @@ func levelsIncludeAtMost(levels []any, maxLvl int64) bool {
 	return false
 }
 
-// hasMemberAtLevel precomputes an existential over a members list (hard contract
-// C4): ∃ member with access_level == lvl. The engine's ∋ cannot express this.
+// Precomputed because the rule engine's contains operator cannot express "some member
+// of this list has access_level == lvl".
 func hasMemberAtLevel(members []any, lvl int64) bool {
 	for _, raw := range members {
 		if entInt64(entMap(raw)["access_level"]) == lvl {
@@ -251,9 +240,8 @@ func hasMemberAtLevel(members []any, lvl int64) bool {
 	return false
 }
 
-// secretShapedKey is the secret-name heuristic (cat-03/11). The three
-// unprotected-secret-var derived booleans rest entirely on it, so it must not
-// fire on ordinary config keys. Matches common credential-bearing key fragments.
+// The three unprotected-secret-variable booleans rest entirely on this heuristic, so
+// the fragment list is the whole of their precision.
 func secretShapedKey(key string) bool {
 	u := strings.ToUpper(key)
 	for _, frag := range []string{

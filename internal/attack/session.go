@@ -63,6 +63,12 @@ type Session struct {
 	// held here because the public half is injected into rendered payloads and
 	// the private half must never touch disk.
 	privateKey *rsa.PrivateKey
+
+	// publicKeyPEM is derived once at mint time: PayloadEnv cannot report a
+	// failure, and an empty value there composes a job that skips sealing.
+	publicKeyPEM string
+
+	explicitToken string
 }
 
 type identityClient struct {
@@ -109,16 +115,17 @@ type Provocation struct {
 	At     time.Time `json:"at"`
 }
 
-func NewSession(ctx context.Context, p *Plan, planDir string, ledger *Ledger, execute bool) (*Session, error) {
+func NewSession(ctx context.Context, p *Plan, planDir string, ledger *Ledger, execute bool, explicitToken string) (*Session, error) {
 	s := &Session{
-		Plan:       p,
-		PlanDir:    planDir,
-		Ledger:     ledger,
-		Execute:    execute,
-		StartedAt:  time.Now(),
-		identities: map[string]*identityClient{},
-		aliases:    map[string]string{},
-		extraScope: map[string]string{},
+		Plan:          p,
+		PlanDir:       planDir,
+		Ledger:        ledger,
+		Execute:       execute,
+		StartedAt:     time.Now(),
+		identities:    map[string]*identityClient{},
+		aliases:       map[string]string{},
+		extraScope:    map[string]string{},
+		explicitToken: explicitToken,
 	}
 
 	def, err := s.resolveIdentity(ctx, "", cmp.Or(p.Identity, kindEnv))
@@ -155,7 +162,12 @@ func NewSession(ctx context.Context, p *Plan, planDir string, ledger *Ledger, ex
 		if err != nil {
 			return nil, fmt.Errorf("mint run keypair: %w", err)
 		}
+		pub, err := publicKeyPEM(key)
+		if err != nil {
+			return nil, fmt.Errorf("encode run public key: %w", err)
+		}
 		s.privateKey = key
+		s.publicKeyPEM = pub
 	}
 
 	return s, nil
@@ -171,7 +183,7 @@ func (s *Session) resolveIdentity(ctx context.Context, name, from string) (*iden
 		s.identities[ic.name] = ic
 	}
 
-	token, kind, err := resolveCredential(ctx, from)
+	token, kind, err := resolveCredential(ctx, from, s.explicitToken)
 	if err != nil {
 		ic.err = err
 		slog.Warn("identity unresolved", "identity", ic.name, "from", from, "err", err)
@@ -465,13 +477,7 @@ func (s *Session) OrgAllowed(owner string) error {
 // rendered fragment. The public half of the run keypair lands here with the
 // encryption engine.
 func (s *Session) PayloadEnv() payload.Env {
-	pub := ""
-	if s.privateKey != nil {
-		if p, err := publicKeyPEM(s.privateKey); err == nil {
-			pub = p
-		}
-	}
-	return payload.Env{PubKey: pub, Collector: s.Plan.collector()}
+	return payload.Env{PubKey: s.publicKeyPEM, Collector: s.Plan.collector()}
 }
 
 // Mutation is one state change: the request, the repository it lands in, and the

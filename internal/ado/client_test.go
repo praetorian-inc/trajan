@@ -130,7 +130,6 @@ func TestSoftClassification(t *testing.T) {
 	if softStatus(err) != http.StatusForbidden {
 		t.Fatalf("softStatus = %d", softStatus(err))
 	}
-	// a 500 is not soft
 	if isSoft(&AdoError{Status: 500}) {
 		t.Fatal("500 must not be soft")
 	}
@@ -218,7 +217,6 @@ func TestPaginate_NonAdvancingTokenTerminates(t *testing.T) {
 func TestWriteOrMark(t *testing.T) {
 	dir := t.TempDir()
 	cp := engineCP(dir)
-	// soft-failed surface -> marker
 	if err := writeOrMark(cp, "x/marked.json", "t", "/p", nil, 403); err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +224,6 @@ func TestWriteOrMark(t *testing.T) {
 	if got["_unobserved"] != float64(403) {
 		t.Fatalf("want _unobserved:403 marker, got %v", got)
 	}
-	// success -> data
 	if err := writeOrMark(cp, "x/ok.json", "t", "/p", []byte(`{"a":1}`), 0); err != nil {
 		t.Fatal(err)
 	}

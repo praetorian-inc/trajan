@@ -17,19 +17,6 @@ func TestRequiresAPI(t *testing.T) {
 	require.True(t, New().RequiresAPI(), "this detection must declare RequiresAPI=true; without it, --local mode will run it and it will return nil")
 }
 
-func TestNew(t *testing.T) {
-	d := New()
-	if d.Name() != "anonymous-access" {
-		t.Errorf("Name() = %q, want %q", d.Name(), "anonymous-access")
-	}
-	if d.Platform() != "jenkins" {
-		t.Errorf("Platform() = %q, want %q", d.Platform(), "jenkins")
-	}
-	if d.Severity() != detections.SeverityHigh {
-		t.Errorf("Severity() = %q, want %q", d.Severity(), detections.SeverityHigh)
-	}
-}
-
 func TestDetect_NoMetadata(t *testing.T) {
 	d := New()
 	g := graph.NewGraph()

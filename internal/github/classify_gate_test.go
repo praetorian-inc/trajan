@@ -93,7 +93,6 @@ func TestGateAuthorAssocBeatsStrongFromJSON(t *testing.T) {
 }
 
 func TestGateLabelBeatsAuthorAssoc(t *testing.T) {
-	// label predicate + author_association substring in one expr: label wins.
 	expr := "contains(github.event.pull_request.labels.*.name, 'ok') && github.event.pull_request.author_association == 'MEMBER'"
 	checkGate(t, ptr(expr), gateWant{strength: "weak", label: true})
 }

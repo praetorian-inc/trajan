@@ -1,4 +1,3 @@
-// pkg/analysis/graph/graph_test.go
 package graph
 
 import (
@@ -9,17 +8,6 @@ import (
 
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
-
-func TestGraph_AddNode(t *testing.T) {
-	g := NewGraph()
-
-	workflow := NewWorkflowNode("wf1", "Build", ".github/workflows/build.yml", "owner/repo", []string{"push"})
-	g.AddNode(workflow)
-
-	node, ok := g.GetNode("wf1")
-	require.True(t, ok)
-	assert.Equal(t, "Build", node.(*WorkflowNode).Name)
-}
 
 func TestGraph_AddEdge(t *testing.T) {
 	g := NewGraph()
@@ -34,6 +22,10 @@ func TestGraph_AddEdge(t *testing.T) {
 	children := g.Children("wf1")
 	require.Len(t, children, 1)
 	assert.Equal(t, "job1", children[0])
+
+	// AddEdge also sets the reverse link; gitlab's GetJobParentWorkflow /
+	// GetStepParentWorkflow walk up the graph through Parent() during detections.
+	assert.Equal(t, "wf1", job.Parent())
 }
 
 func TestGraph_GetNodesByTag(t *testing.T) {
@@ -78,59 +70,9 @@ func TestGraph_GetNodesByType(t *testing.T) {
 	assert.Len(t, actions, 0)
 }
 
-func TestGraph_Nodes(t *testing.T) {
-	g := NewGraph()
-
-	assert.Len(t, g.Nodes(), 0)
-
-	wf := NewWorkflowNode("wf1", "Build", "build.yml", "owner/repo", []string{"push"})
-	job := NewJobNode("job1", "build", "ubuntu-latest")
-
-	g.AddNode(wf)
-	g.AddNode(job)
-
-	nodes := g.Nodes()
-	assert.Len(t, nodes, 2)
-}
-
-func TestGraph_NodeCount(t *testing.T) {
-	g := NewGraph()
-
-	assert.Equal(t, 0, g.NodeCount())
-
-	g.AddNode(NewWorkflowNode("wf1", "Build", "build.yml", "owner/repo", []string{"push"}))
-	assert.Equal(t, 1, g.NodeCount())
-
-	g.AddNode(NewJobNode("job1", "build", "ubuntu-latest"))
-	assert.Equal(t, 2, g.NodeCount())
-}
-
-func TestGraph_UpdateNodeTag(t *testing.T) {
-	g := NewGraph()
-
-	wf := NewWorkflowNode("wf1", "Build", "build.yml", "owner/repo", []string{"push"})
-	g.AddNode(wf)
-
-	// Initially no injectable tag
-	assert.False(t, wf.HasTag(TagInjectable))
-
-	// Update tag
-	g.UpdateNodeTag("wf1", TagInjectable)
-
-	// Now should have tag
-	node, _ := g.GetNode("wf1")
-	assert.True(t, node.HasTag(TagInjectable))
-
-	// Tag should be in index
-	tagged := g.GetNodesByTag(TagInjectable)
-	assert.Len(t, tagged, 1)
-}
-
 func TestGraph_GetIncludedWorkflows(t *testing.T) {
 	g := NewGraph()
 
-	// Create included workflows from external repos
-	// These represent workflows that were included from other repositories
 	wf1 := platforms.Workflow{
 		Name:     "build.yml",
 		Path:     "local:123:.gitlab/ci/build.yml:main",
@@ -152,19 +94,15 @@ func TestGraph_GetIncludedWorkflows(t *testing.T) {
 		RepoSlug: "other/repo",
 	}
 
-	// Store as metadata with included_workflow: prefix
 	g.SetMetadata("included_workflow:local:123:.gitlab/ci/build.yml:main", wf1)
 	g.SetMetadata("included_workflow:local:456:.gitlab/ci/test.yml:main", wf2)
 	g.SetMetadata("included_workflow:local:789:.gitlab/ci/deploy.yml:main", wf3)
 	g.SetMetadata("other_metadata", "some value") // Should be ignored
 
-	// Get all included workflows (repoSlug parameter kept for API consistency)
 	included := g.GetIncludedWorkflows("current/repo")
 
-	// Should return all 3 included workflows
 	require.Len(t, included, 3)
 
-	// Verify all workflows are present
 	paths := make(map[string]bool)
 	repoSlugs := make(map[string]int)
 	for _, wf := range included {
@@ -176,7 +114,6 @@ func TestGraph_GetIncludedWorkflows(t *testing.T) {
 	assert.True(t, paths[wf2.Path])
 	assert.True(t, paths[wf3.Path])
 
-	// Verify repo slug distribution
 	assert.Equal(t, 2, repoSlugs["shared/templates"])
 	assert.Equal(t, 1, repoSlugs["other/repo"])
 }
@@ -280,14 +217,12 @@ func TestGraph_GetIncomingEdges(t *testing.T) {
 			assert.Len(t, incoming, tt.expectedCount, "Unexpected number of incoming edges")
 
 			if tt.expectedCount > 0 {
-				// Verify edge types
 				actualTypes := make([]EdgeType, len(incoming))
 				for i, edge := range incoming {
 					actualTypes[i] = edge.Type
 					assert.Equal(t, nodeID, edge.To, "Edge should point to the target node")
 				}
 
-				// Check that all expected types are present
 				for _, expectedType := range tt.expectedTypes {
 					found := false
 					for _, actualType := range actualTypes {

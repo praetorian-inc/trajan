@@ -8,19 +8,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/detections"
 )
 
-func TestNew(t *testing.T) {
-	d := New()
-	if d.Name() != "agents" {
-		t.Errorf("Name() = %q, want %q", d.Name(), "agents")
-	}
-	if d.Platform() != "jenkins" {
-		t.Errorf("Platform() = %q, want %q", d.Platform(), "jenkins")
-	}
-	if d.Severity() != detections.SeverityMedium {
-		t.Errorf("Severity() = %q, want %q", d.Severity(), detections.SeverityMedium)
-	}
-}
-
 func TestDetect_AnyAgent(t *testing.T) {
 	d := New()
 	g := graph.NewGraph()

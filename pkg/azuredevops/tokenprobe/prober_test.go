@@ -112,7 +112,6 @@ func TestTokenProber_Probe_ValidPAT(t *testing.T) {
 	assert.NotNil(t, result.User)
 	assert.Equal(t, "Test User", result.User.DisplayName)
 
-	// Check capabilities detected
 	assert.True(t, result.HasCapability(CapabilityIdentityRead))
 	assert.True(t, result.HasCapability(CapabilityProjectsRead))
 	assert.True(t, result.HasCapability(CapabilityRepositoriesRead))
@@ -122,12 +121,10 @@ func TestTokenProber_Probe_ValidPAT(t *testing.T) {
 	assert.True(t, result.HasCapability(CapabilityServiceConnectionsRead))
 	assert.True(t, result.HasCapability(CapabilityArtifactsRead))
 
-	// Check high-value access
 	assert.True(t, result.HasHighValueAccess())
 	assert.True(t, result.HasSecretVariables)
 	assert.True(t, result.HasSelfHostedAgents)
 
-	// Check counts
 	assert.Equal(t, 1, result.ProjectCount)
 	assert.Equal(t, 1, result.RepositoryCount)
 	assert.Equal(t, 1, result.PipelineCount)
@@ -149,7 +146,7 @@ func TestTokenProber_Probe_InvalidPAT(t *testing.T) {
 
 	result, err := prober.Probe(context.Background())
 
-	require.NoError(t, err) // Probe should not error, just return invalid result
+	require.NoError(t, err) // an invalid PAT is not an error, just an invalid result
 	assert.False(t, result.Valid)
 	assert.Nil(t, result.User)
 	assert.Empty(t, result.Capabilities)
@@ -176,7 +173,6 @@ func TestTokenProber_Probe_LimitedAccess(t *testing.T) {
 			json.NewEncoder(w).Encode(resp)
 
 		default:
-			// Return 403 for everything else
 			w.WriteHeader(http.StatusForbidden)
 		}
 	}))
@@ -197,7 +193,6 @@ func TestTokenProber_Probe_LimitedAccess(t *testing.T) {
 }
 
 func TestTokenProber_Probe_MultipleProjects(t *testing.T) {
-	// Track which projects were queried for repositories
 	queriedProjects := make(map[string]bool)
 	var mu sync.Mutex
 
@@ -212,7 +207,6 @@ func TestTokenProber_Probe_MultipleProjects(t *testing.T) {
 			json.NewEncoder(w).Encode(resp)
 
 		case strings.HasSuffix(path, "/_apis/projects"):
-			// Return 8 projects (Imladris, Gondor, Lothlorien, Erebor, etc.)
 			resp := azuredevops.ProjectList{
 				Value: []azuredevops.Project{
 					{ID: "proj-imladris", Name: "Imladris", Visibility: "private"},
@@ -229,7 +223,6 @@ func TestTokenProber_Probe_MultipleProjects(t *testing.T) {
 			json.NewEncoder(w).Encode(resp)
 
 		case strings.Contains(path, "/_apis/git/repositories"):
-			// Track which project was queried
 			projectName := ""
 			if strings.Contains(path, "/Imladris/") {
 				projectName = "Imladris"
@@ -245,7 +238,6 @@ func TestTokenProber_Probe_MultipleProjects(t *testing.T) {
 				mu.Unlock()
 			}
 
-			// Return different repos based on project
 			var repos []azuredevops.Repository
 			switch projectName {
 			case "Imladris":
@@ -271,8 +263,7 @@ func TestTokenProber_Probe_MultipleProjects(t *testing.T) {
 			json.NewEncoder(w).Encode(resp)
 
 		case strings.Contains(path, "/_apis/pipelines"):
-			// Return 1 pipeline for each project queried
-			// Extract project name from path (format: /org/PROJECT/_apis/pipelines)
+			// Path format: /org/PROJECT/_apis/pipelines
 			pathParts := strings.Split(path, "/")
 			projectName := ""
 			for i, part := range pathParts {
@@ -296,7 +287,6 @@ func TestTokenProber_Probe_MultipleProjects(t *testing.T) {
 			json.NewEncoder(w).Encode(resp)
 
 		case strings.Contains(path, "/_apis/distributedtask/variablegroups"):
-			// Return 1 variable group for each project queried
 			resp := azuredevops.VariableGroupList{
 				Value: []azuredevops.VariableGroup{
 					{ID: 1, Name: "Vars"},
@@ -306,7 +296,6 @@ func TestTokenProber_Probe_MultipleProjects(t *testing.T) {
 			json.NewEncoder(w).Encode(resp)
 
 		case strings.Contains(path, "/_apis/serviceendpoint/endpoints"):
-			// Return 1 service connection for each project queried
 			resp := azuredevops.ServiceConnectionList{
 				Value: []azuredevops.ServiceConnection{
 					{ID: "conn-1", Name: "Azure"},
@@ -348,20 +337,15 @@ func TestTokenProber_Probe_MultipleProjects(t *testing.T) {
 	assert.True(t, result.Valid)
 	assert.Equal(t, 8, result.ProjectCount)
 
-	// The bug: without the fix, only Imladris (first project) is queried
-	// With the fix: all projects with repos should be queried (Imladris, Erebor, Lothlorien)
 	mu.Lock()
 	assert.True(t, queriedProjects["Imladris"], "Imladris should be queried for repos")
 	assert.True(t, queriedProjects["Erebor"], "Erebor should be queried for repos")
 	assert.True(t, queriedProjects["Lothlorien"], "Lothlorien should be queried for repos")
 	mu.Unlock()
 
-	// With the fix, total repo count should be 3 (1 from each project)
-	// Without the fix, it's only 1 (from first project)
 	assert.Equal(t, 3, result.RepositoryCount, "Should enumerate repos from ALL projects")
 
-	// Pipelines, variable groups, and service connections should also be summed across projects
-	// For this test, we return 1 of each per project, so expect 8 for each
+	// One of each per project, across 8 projects.
 	assert.Equal(t, 8, result.PipelineCount, "Should enumerate pipelines from ALL projects")
 	assert.Equal(t, 8, result.VariableGroupCount, "Should enumerate variable groups from ALL projects")
 	assert.Equal(t, 8, result.ServiceConnectionCount, "Should enumerate service connections from ALL projects")

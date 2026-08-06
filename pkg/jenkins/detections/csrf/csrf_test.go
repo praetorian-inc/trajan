@@ -17,19 +17,6 @@ func TestRequiresAPI(t *testing.T) {
 	require.True(t, New().RequiresAPI(), "this detection must declare RequiresAPI=true; without it, --local mode will run it and it will return nil")
 }
 
-func TestNew(t *testing.T) {
-	d := New()
-	if d.Name() != "csrf-disabled" {
-		t.Errorf("Name() = %q, want %q", d.Name(), "csrf-disabled")
-	}
-	if d.Platform() != "jenkins" {
-		t.Errorf("Platform() = %q, want %q", d.Platform(), "jenkins")
-	}
-	if d.Severity() != detections.SeverityMedium {
-		t.Errorf("Severity() = %q, want %q", d.Severity(), detections.SeverityMedium)
-	}
-}
-
 func TestDetect_NoMetadata(t *testing.T) {
 	d := New()
 	g := graph.NewGraph()

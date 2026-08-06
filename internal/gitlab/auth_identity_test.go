@@ -28,12 +28,15 @@ func TestDetectTokenType(t *testing.T) {
 }
 
 func TestResolveTokenPrecedence(t *testing.T) {
+	for _, k := range []string{"TRAJAN_GL_TOKEN", "GITLAB_TOKEN", "GL_TOKEN", "CI_JOB_TOKEN"} {
+		t.Setenv(k, "")
+	}
 	t.Setenv("GITLAB_TOKEN", "env-gitlab")
 	t.Setenv("GL_TOKEN", "env-gl")
 
-	// explicit wins over environment
-	if got, _ := ResolveToken("  explicit  "); got != "explicit" {
-		t.Errorf("ResolveToken(explicit) = %q, want explicit (trimmed)", got)
+	// env beats explicit flag
+	if got, _ := ResolveToken("  explicit  "); got != "env-gitlab" {
+		t.Errorf("ResolveToken(explicit) = %q, want env-gitlab (env before flag)", got)
 	}
 	// GITLAB_TOKEN preferred over GL_TOKEN
 	if got, _ := ResolveToken(""); got != "env-gitlab" {
@@ -42,7 +45,9 @@ func TestResolveTokenPrecedence(t *testing.T) {
 }
 
 func TestResolveTokenGLFallbackAndMissing(t *testing.T) {
-	t.Setenv("GITLAB_TOKEN", "")
+	for _, k := range []string{"TRAJAN_GL_TOKEN", "GITLAB_TOKEN", "GL_TOKEN", "CI_JOB_TOKEN"} {
+		t.Setenv(k, "")
+	}
 	t.Setenv("GL_TOKEN", "env-gl")
 	if got, _ := ResolveToken(""); got != "env-gl" {
 		t.Errorf("ResolveToken(GL_TOKEN only) = %q, want env-gl", got)

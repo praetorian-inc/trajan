@@ -19,13 +19,11 @@ func init() {
 	})
 }
 
-// Detection detects hardcoded credentials in Jenkins pipeline definitions
 type Detection struct {
 	base.BaseDetection
 	structural *secrets.Detector
 }
 
-// New creates a new credentials detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("credentials", "jenkins", detections.SeverityHigh),
@@ -34,7 +32,6 @@ func New() *Detection {
 }
 
 var (
-	// secretPatterns detects hardcoded secrets in pipeline config
 	secretPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)(password|passwd|pwd)\s*[=:]\s*['"][\w!@#$%^&*()+\-=\[\]{};:,.<>?]{8,}['"]`),
 		regexp.MustCompile(`(?i)(api[_-]?key|apikey)\s*[=:]\s*['"][\w-]{20,}['"]`),
@@ -43,7 +40,6 @@ var (
 	}
 )
 
-// Detect finds hardcoded credentials in the workflow graph
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
@@ -62,7 +58,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 					return true
 				}
 
-				// Check run commands — keyword patterns first, then structural
 				if step.Run != "" {
 					if containsHardcodedSecret(step.Run) {
 						findings = append(findings, d.createFinding(wf, step, step.Run))
@@ -71,7 +66,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 					}
 				}
 
-				// Check environment variables
 				for key, value := range step.Env {
 					if containsHardcodedSecret(value) {
 						findings = append(findings, d.createEnvFinding(wf, step, key, value))
@@ -80,7 +74,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 					}
 				}
 
-				// Check With parameters
 				for key, value := range step.With {
 					if containsHardcodedSecret(value) {
 						findings = append(findings, d.createWithFinding(wf, step, key, value))
@@ -96,7 +89,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// containsHardcodedSecret checks if a string contains hardcoded secret patterns
 func containsHardcodedSecret(s string) bool {
 	for _, pattern := range secretPatterns {
 		if pattern.MatchString(s) {
@@ -106,8 +98,6 @@ func containsHardcodedSecret(s string) bool {
 	return false
 }
 
-// detectStructural runs the shared secrets detector on a value and returns findings
-// for high-confidence structural matches only.
 func (d *Detection) detectStructural(wf *graph.WorkflowNode, step *graph.StepNode, value, source string) []detections.Finding {
 	var findings []detections.Finding
 	matches := d.structural.DetectSecretPattern(value)
@@ -134,7 +124,6 @@ func (d *Detection) detectStructural(wf *graph.WorkflowNode, step *graph.StepNod
 	return findings
 }
 
-// createFinding creates a finding for hardcoded secret in run command
 func (d *Detection) createFinding(wf *graph.WorkflowNode, step *graph.StepNode, evidence string) detections.Finding {
 	return detections.Finding{
 		Type:        detections.VulnHardcodedContainerCreds,
@@ -153,7 +142,6 @@ func (d *Detection) createFinding(wf *graph.WorkflowNode, step *graph.StepNode, 
 	}
 }
 
-// createEnvFinding creates a finding for hardcoded secret in environment variable
 func (d *Detection) createEnvFinding(wf *graph.WorkflowNode, step *graph.StepNode, key, value string) detections.Finding {
 	return detections.Finding{
 		Type:        detections.VulnHardcodedContainerCreds,
@@ -172,7 +160,6 @@ func (d *Detection) createEnvFinding(wf *graph.WorkflowNode, step *graph.StepNod
 	}
 }
 
-// createWithFinding creates a finding for hardcoded secret in with parameter
 func (d *Detection) createWithFinding(wf *graph.WorkflowNode, step *graph.StepNode, key, value string) detections.Finding {
 	return detections.Finding{
 		Type:        detections.VulnHardcodedContainerCreds,

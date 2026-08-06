@@ -44,7 +44,7 @@ git checkout -b feature/my-change
 
 - **Go 1.24+** (the module is set to Go 1.25.3, but 1.24+ will work)
 - **golangci-lint** for linting (`go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`)
-- **Docker** (optional, needed for Jenkins integration tests)
+- **Neo4j** (optional, needed for `graph` and `push`)
 
 ### Build and run
 
@@ -65,165 +65,123 @@ make fmt
 make lint
 ```
 
-### WASM / browser build
-
-Trajan can also run in the browser via WebAssembly:
-
-```bash
-./browser/build.sh   # Build WASM binary
-./browser/serve.sh   # Start dev server at http://localhost:8080
-```
-
 ## Project layout
 
 ```
 cmd/
-  trajan/               CLI entry point and subcommands
-    github/             GitHub subcommands (scan, enumerate, search)
-    ado/                Azure DevOps subcommands
+  trajan/               CLI entry point
+    github/             GitHub subcommands
     gitlab/             GitLab subcommands
-    jenkins/            Jenkins subcommands
-    jfrog/              JFrog subcommands
-  trajan-wasm/          WASM entry point for browser builds
+    ado/                Azure DevOps subcommands
 
-internal/
-  registry/             Global detection and platform registries
-  cmdutil/              Shared CLI flag helpers
+internal/               The current phased pipeline
+  engine/               Run directories, phase state, bounded runners, credential resolution
+  github/               GitHub: collect, normalize, scan, correlate
+  gitlab/               GitLab: collect, normalize, scan
+  ado/                  Azure DevOps: collect, normalize, scan
+  detection-rules/      Embedded YAML rule corpus, one directory per category
+  dsl/                  Rule expression language: operators and evaluation
+  finding/              Finding shape and severity/confidence handling
+  report/               Renderers (json, jsonl, md, html)
+  graph/                Neo4j schema, node/edge construction, push
+  attack/               Attack primitives, plan loading, session and cleanup
+  attack-plans/         Embedded attack plan YAML
+  attack-payloads/      Embedded job-template corpus rendered into plans
+  registry/             Detection and platform registries
+  ui/                   Humanized phase output
 
-pkg/
+pkg/                    Legacy stack, no longer reachable from the CLI
   platforms/            Platform interface and shared config types
-  analysis/
-    graph/              Workflow graph (nodes, edges, tags, traversal)
-    parser/             Per-platform YAML parsers → NormalizedWorkflow
-    flow/               Taint tracking, flow context, gate types
-    gates/              Gate detection patterns and confidence adjustment
-    expression/         GitHub Actions expression evaluator with taint propagation
-  detections/           Detection interface, base helpers, shared logic
-    shared/             Cross-platform helpers (taint sources, AI patterns)
+  analysis/             Workflow graph, per-platform parsers, taint and gate analysis
+  detections/           Go detection-plugin interface and shared helpers
   scanner/              Scan orchestration
-  output/               Terminal output or JSON
-  config/               Configuration and local storage
-
-  github/               GitHub: platform, client, detections
-  gitlab/               GitLab: platform, client, detections
-  azuredevops/          Azure DevOps: platform, client, detections
-  jenkins/              Jenkins: platform, client, detections
-  jfrog/                JFrog: platform, client, token probing
-
-browser/                WASM UI (HTML, JS, CSS, build scripts)
+  output/               Terminal and JSON output
+  lib/                  Library surface wrapping the legacy engine
+  gitlab/ azuredevops/ jenkins/ jfrog/ bitbucket/
+                        Per-platform clients and Go detection plugins
 ```
+
+Detections for the three supported platforms are YAML under `internal/detection-rules/`, evaluated by `internal/dsl`. The Go detection plugins under `pkg/detections/` belong to the retired engine and are not run by any CLI command.
 
 ## Architecture overview
 
-The analysis pipeline has four layers, each defined by an interface:
+A run is a sequence of phases, each reading the previous phase's output from disk and writing its own. Every phase is independently re-runnable against an existing run directory, which is what makes a failed scan cheap to retry without re-collecting.
 
-### 1. Platform (fetch workflows)
-
-Every CI/CD platform implements `platforms.Platform`:
-
-```go
-type Platform interface {
-    Name() string
-    Init(ctx context.Context, config Config) error
-    Scan(ctx context.Context, target Target) (*ScanResult, error)
-}
+```
+collect → normalize → scan → findings
+                   ↘ graph → push (Neo4j)
+                   ↘ attack
 ```
 
-`Scan` enumerates repositories and returns raw workflow YAML.
-
-### 2. Parser (normalize YAML)
-
-Each platform provides a `parser.WorkflowParser` that converts its native YAML into a shared `NormalizedWorkflow`:
+Each platform package under `internal/` exposes the same three entry points:
 
 ```go
-type WorkflowParser interface {
-    Platform() string
-    CanParse(path string) bool
-    Parse(data []byte) (*NormalizedWorkflow, error)
-}
+func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, error)
+func Normalize(ctx context.Context, runDir string) error
+func Scan(ctx context.Context, runDir string, opts ScanOptions) error
 ```
 
-### 3. Graph (unified representation)
+**Collect** talks to the platform API and writes raw responses as `json.RawMessage` under `00-collect/`, one file per surface. Optional surfaces that return 403 or 404 are recorded as unobserved rather than treated as empty, so a rule can tell "no branch protection" apart from "could not read branch protection".
 
-`analysis.BuildGraphFromNormalized()` turns any `NormalizedWorkflow` into a `graph.Graph`, a directed graph of `WorkflowNode → JobNode → StepNode` with typed edges (`contains`, `uses`, `depends`, `triggers`, `includes`) and security-relevant tags (`TagInjectable`, `TagCheckout`, `TagSelfHostedRunner`, etc.).
+**Normalize** folds those raw responses into explicit per-subject records under `10-normalize/`. This is where the fields rules key on are computed. Empty values that rules test against serialize as `[]` or `null` rather than being omitted.
 
-### 4. Detection (find vulnerabilities)
+**Scan** evaluates the rule corpus over those records and writes findings to `20-scan/`.
 
-All detections implement `detections.Detection` and operate on the shared graph:
-
-```go
-type Detection interface {
-    Name() string
-    Platform() string
-    Severity() Severity
-    Detect(ctx context.Context, g *graph.Graph) ([]Finding, error)
-}
-```
+`internal/engine` owns the run directory layout, phase state, the bounded concurrency runners (`engine.Run` and `engine.RunPartial`), and credential resolution.
 
 ### Taint and gates
 
 - **Taint** tracks user-controllable data (PR titles, comment bodies, workflow inputs, etc.) as it flows through env vars, expressions, and steps. When tainted data reaches a dangerous sink (like a `run:` command), it's an injection vulnerability.
 - **Gates** are security controls along the path to an injectable step. Blocking gates (deployment approval, permission checks) suppress findings. Soft gates (label requirements, author association checks) reduce confidence.
 
-## Adding a detection plugin
+## Adding a detection
 
-Detection plugins live under `pkg/<platform>/detections/<name>/`. They all follow the same pattern:
+Detections are YAML, not Go. There is no plugin to register and no code to compile — drop a file under `internal/detection-rules/<platform>/<category>/` and it is embedded and evaluated on the next build. The corpus is currently 94 GitHub, 141 GitLab and 66 ADO rules.
 
-1. Create the package, e.g. `pkg/github/detections/myplugin/myplugin.go`
+```yaml
+id: cat-01/issue-comment-checkout
+scenario_id: cat-01/10
+title: "issue_comment chatops checks out PR ref and executes it"
+subject: job
+graph: attack(PWN_REQUEST)
+severity: critical
+confidence: high
+description: >
+  A workflow triggered by issue_comment resolves the PR linked from the comment,
+  checks out its head ref, and executes code from that ref.
 
-2. Register in `init()` so the scanner picks it up automatically:
+where:
+  all_of:
+    - triggers ∋ {issue_comment}
+    - has_checkout_of_pr_ref == true
+    - executes_checked_out_code == true
+  none_of:
+    - if_conditions_summary.gate_strength == "strong"
 
-```go
-package myplugin
+evidence:
+  - "issue_comment job checks out PR head and runs code from it."
+  - "Gate strength: {{ if_conditions_summary.gate_strength }}"
 
-import (
-    "context"
-
-    "github.com/praetorian-inc/trajan/internal/registry"
-    "github.com/praetorian-inc/trajan/pkg/analysis/graph"
-    "github.com/praetorian-inc/trajan/pkg/detections"
-    "github.com/praetorian-inc/trajan/pkg/detections/base"
-)
-
-func init() {
-    registry.RegisterDetection("github", "my-plugin", func() detections.Detection {
-        return New()
-    })
-}
-
-type Plugin struct {
-    base.BaseDetection
-}
-
-func New() *Plugin {
-    return &Plugin{
-        BaseDetection: base.NewBaseDetection("my-plugin", "github", detections.SeverityHigh),
-    }
-}
-
-func (p *Plugin) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
-    // Query nodes by type or tag, traverse edges, check taint, etc.
-    return nil, nil
-}
+remediation_hint: >
+  Require author-association == OWNER or compare against an explicit maintainer
+  list; do not gate on a substring match of the comment body alone.
 ```
 
-3. Add a blank import in `pkg/detections/all/all.go` so the `init()` runs.
+`subject` selects which normalized record kind the rule runs against — `job`, `chain`, `project`, `org`, `merge_request`, `environment` and others. `where` combines predicates under `all_of`, `any_of` and `none_of`. Predicate operators come from `internal/dsl`: `==`, `!=`, `>=`, `<=`, `>`, `<`, `∋` (contains), `⊆` (subset of), `matches`, and `in`. The word forms ` contains ` and ` subset_of ` are accepted as aliases of the symbols. `evidence` strings interpolate record fields with `{{ field }}`.
 
-4. Add `myplugin_test.go` with table-driven tests that build a graph from YAML fixtures and assert on expected findings.
+The important constraint: **a rule can only test fields that normalize actually emits.** If the field you need does not exist on the record, the work is in `internal/<platform>/normalize_entities.go`, not in the rule. Adding a computed boolean there is usually the right move when a predicate would otherwise need logic the DSL cannot express.
+
+Test rules against the firing-range scenarios rather than against what the implementation happens to produce.
 
 ## Adding a platform
 
-To add support for a new CI/CD platform:
+1. Create `internal/<platform>/` with `Collect`, `Normalize` and `Scan` matching the signatures above.
+2. Add a client with pagination, rate-limit handling and soft-fail on 403/404 for optional surfaces.
+3. Add credential resolution to `internal/engine/credential.go`, following the existing precedence: `TRAJAN_<PLATFORM>_TOKEN`, then the platform's conventional variables, then `--token`.
+4. Add `internal/detection-rules/<platform>/` and include it in that package's `//go:embed` directive. A `.keep` stub is enough to start — the `all:` embed prefix makes an otherwise-empty directory embeddable.
+5. Wire subcommands under `cmd/trajan/<platform>/`, declaring `--token` leaf-locally on the subcommands that authenticate.
 
-1. Create the platform package: `pkg/<platform>/platform.go` implementing `platforms.Platform`.
-2. Create a parser: `pkg/analysis/parser/<platform>.go` implementing `parser.WorkflowParser`. Register it in the parser's `init()`.
-3. Create an API client: `pkg/<platform>/client.go` with rate limiting, pagination, and authentication.
-4. Add platform-specific taint sources: if the platform has its own expression language with user-controllable inputs, add them to `pkg/detections/shared/taintsources/`.
-5. Add detections: create detection plugins under `pkg/<platform>/detections/`.
-6. Add CLI commands: wire up subcommands under `cmd/trajan/<platform>/`.
-7. Add tests: unit tests for the parser and client, integration tests for detections.
-
-Use `pkg/github/` and `pkg/azuredevops/` as a reference.
+Use `internal/gitlab/` as the reference; it is the most recently built of the three.
 
 ## Testing
 
@@ -234,7 +192,7 @@ Use `pkg/github/` and `pkg/azuredevops/` as a reference.
 make test
 
 # Specific package
-go test -v ./pkg/analysis/graph/...
+go test -v ./internal/dsl/...
 
 # With coverage
 make test-coverage
@@ -248,33 +206,24 @@ make test-coverage
 - For detection tests: build a `graph.Graph` from YAML fixtures, run `Detect()`, and assert on the returned findings.
 - For parser tests: provide raw YAML and assert on the `NormalizedWorkflow` output.
 
-### Integration tests
-
-Jenkins integration tests need a running Jenkins instance:
-
-```bash
-make jenkins-test-up        # Start Jenkins in Docker
-make jenkins-integration    # Run integration tests
-make jenkins-test-down      # Tear down
-```
-
 ## Code style
 
 ### Formatting and linting
 
-All code must pass `golangci-lint`. The project uses these linters (configured in `.golangci.yml`):
+All code must pass `golangci-lint`. The linters enabled in `.golangci.yml` are:
 
-- `errcheck`: unchecked errors (including type assertions and blank identifiers)
+- `errcheck`: unchecked errors, including type assertions
 - `govet`: standard Go vet checks
 - `staticcheck`: advanced static analysis
 - `unused`: dead code
-- `gosimple`: simplification suggestions
 - `ineffassign`: ineffectual assignments
-- `gocyclo`: cyclomatic complexity (max 15)
-- `gofmt` / `goimports`: formatting and import ordering
 - `misspell`: spelling mistakes in comments
+- `unconvert`: redundant type conversions
+- `gocritic`: style and performance diagnostics
 
-Run `make fmt` and `make lint` before submitting.
+`gofmt` and `goimports` run as formatters rather than linters.
+
+Run `make fmt` and `make lint` before submitting. `make lint` passes `--max-same-issues 0 --max-issues-per-linter 0`, which is deliberate: golangci-lint's defaults cap how many findings of each kind it reports, so a run without them can look clean while issues remain.
 
 ### Guidelines
 

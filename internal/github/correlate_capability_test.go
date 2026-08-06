@@ -203,10 +203,9 @@ func TestBranchCoverageIgnoresTagRulesets(t *testing.T) {
 	}
 }
 
-// conf-shared-actions/main and fr-03-08/main are both protected only by classic
-// protection requiring one and two reviews. fr-03-08 ticks "Do not allow
-// bypassing the above settings"; conf-shared-actions leaves it at GitHub's
-// unchecked default, where a repo admin still pushes straight to the branch.
+// fr-03-08/main ticks "Do not allow bypassing the above settings";
+// conf-shared-actions/main leaves it at GitHub's unchecked default, where a repo
+// admin still pushes straight to the branch.
 func TestEffectiveGapsFromLegacyProtection(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
@@ -243,10 +242,9 @@ func TestEffectiveGapsFromLegacyProtection(t *testing.T) {
 	}
 }
 
-// GitHub's own verdict for the collecting org owner (current_user_can_bypass in
-// 00-collect/rulesets) is "always" on fr-11-01, whose only role actor is id 5,
-// and "always" on fr-11-05, whose only actor is id 2 — so a role actor is
-// bypassed by every principal ranked at or above it.
+// current_user_can_bypass in 00-collect/rulesets is "always" for the collecting
+// org owner on fr-11-01 (only role actor id 5) and fr-11-05 (only actor id 2), so
+// a role actor is bypassed by every principal ranked at or above it.
 func TestCapabilityRepositoryRoleBypass(t *testing.T) {
 	both := []string{"direct_push", "pull_request"}
 	for _, tc := range []struct {
@@ -333,8 +331,7 @@ func TestNoControlNeedsTheBranchToHaveBeenLookedAt(t *testing.T) {
 
 // fr-11-17 carries an org ruleset scoped to repository_property
 // trajan_fixture_tier=gated. Repo properties are not collected, so applying it
-// would report protection on every branch in the org; the branch names the
-// ruleset it could not evaluate instead.
+// would report protection on every branch in the org.
 func TestBranchCoverageNamesUnevaluableOrgRuleset(t *testing.T) {
 	rs := branchRuleset(20204716, []string{"pull_request"}, nil, nil)
 	rs["scope"] = "org"
@@ -353,12 +350,9 @@ func TestBranchCoverageNamesUnevaluableOrgRuleset(t *testing.T) {
 	}
 }
 
-// fr-11-08 puts a GitHub App in a ruleset's always-mode bypass actors; an
-// Integration actor names an app id, so that app circumvents the gate and the
-// other one does not. A RepositoryRole actor names a role no app installation
-// holds, so it must neither match an app nor leave one unproven. fr-app-narrow
-// (contents: read) and conf-gh-bot (repository_selection "selected", whose repo
-// set was never collected) are not write principals on this repo at all.
+// fr-11-08's ruleset has an always-mode Integration bypass actor naming an app
+// id, so only that app circumvents the gate; its RepositoryRole actor names a role
+// no app installation holds, so it must neither match an app nor leave one unproven.
 func TestCapabilityAppInstallationBypassMatchesOnAppID(t *testing.T) {
 	app := func(slug string, id int, selection, contents, administration string) map[string]any {
 		return map[string]any{
@@ -410,7 +404,7 @@ func TestCapabilityAppInstallationBypassMatchesOnAppID(t *testing.T) {
 			t.Errorf("broad-admin circumvents %v; %q must not come from an actor naming another app or a repository role", got, unwanted)
 		}
 	}
-	// administration: write is the app analogue of repo admin — the permission
+	// administration: write is the app analog of repo admin — the permission
 	// that removes the repo-scope ruleset rather than passing it.
 	if got := edgeStrings(t, admin, "circumvents"); !slices.Contains(got, "admin_can_remove_control") {
 		t.Errorf("broad-admin circumvents %v, want admin_can_remove_control", got)
@@ -420,11 +414,9 @@ func TestCapabilityAppInstallationBypassMatchesOnAppID(t *testing.T) {
 	}
 }
 
-// Oracle is the portus-labs configuration read from the GitHub API out of band:
-// shared-workflows/main runs ruleset protect-main with one approving review, no
-// bypass actors, and the org-wide "Actions can approve pull requests" toggle on,
-// so portus-bot — write, not admin, not a code owner — merges without a human.
-// payments-api/main has no ruleset at all, so there is no gate to satisfy.
+// Oracle is the portus-labs configuration read out of band: shared-workflows/main
+// requires one approving review with no bypass actors and the org-wide "Actions can
+// approve pull requests" toggle on, so portus-bot merges without a human.
 func TestCapabilityApprovalCountSelfSatisfiable(t *testing.T) {
 	prRuleset := func(approvals float64) []map[string]any {
 		rs := branchRuleset(1, []string{"pull_request"}, nil, nil)

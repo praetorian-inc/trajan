@@ -6,8 +6,6 @@ import (
 	"net/url"
 )
 
-// ListReleaseDefinitions lists release definitions in a project
-// API: GET https://vsrm.dev.azure.com/{org}/{project}/_apis/release/definitions?api-version=7.1-preview.1
 func (c *Client) ListReleaseDefinitions(ctx context.Context, projectNameOrID string) ([]ReleaseDefinition, error) {
 	vsrm := c.VSRMClient()
 	encodedProject := url.PathEscape(projectNameOrID)
@@ -20,8 +18,6 @@ func (c *Client) ListReleaseDefinitions(ctx context.Context, projectNameOrID str
 	return result.Value, nil
 }
 
-// GetReleaseDefinition gets a specific release definition by ID
-// API: GET https://vsrm.dev.azure.com/{org}/{project}/_apis/release/definitions/{id}?api-version=7.1-preview.1
 func (c *Client) GetReleaseDefinition(ctx context.Context, projectNameOrID string, definitionID int) (*ReleaseDefinition, error) {
 	vsrm := c.VSRMClient()
 	encodedProject := url.PathEscape(projectNameOrID)
@@ -34,8 +30,6 @@ func (c *Client) GetReleaseDefinition(ctx context.Context, projectNameOrID strin
 	return &result, nil
 }
 
-// ListDeployments lists deployments in a project
-// API: GET https://vsrm.dev.azure.com/{org}/{project}/_apis/release/deployments?api-version=7.1-preview.1
 func (c *Client) ListDeployments(ctx context.Context, projectNameOrID string) ([]Deployment, error) {
 	vsrm := c.VSRMClient()
 	encodedProject := url.PathEscape(projectNameOrID)

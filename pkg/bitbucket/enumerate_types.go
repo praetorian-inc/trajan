@@ -1,6 +1,5 @@
 package bitbucket
 
-// TokenEnumerateResult holds the full result of a token enumeration.
 type TokenEnumerateResult struct {
 	TokenInfo *TokenInfo     `json:"token_info"`
 	User      *User          `json:"user,omitempty"`
@@ -8,7 +7,6 @@ type TokenEnumerateResult struct {
 	Errors    []string       `json:"errors,omitempty"`
 }
 
-// User represents a Bitbucket Cloud user account.
 type User struct {
 	DisplayName   string `json:"display_name"`
 	Username      string `json:"username"`
@@ -18,7 +16,6 @@ type User struct {
 	IsStaff       bool   `json:"is_staff"`
 }
 
-// RateLimitInfo holds rate-limiting metadata from the API response.
 type RateLimitInfo struct {
 	Limit     int  `json:"limit"`
 	NearLimit bool `json:"near_limit"`

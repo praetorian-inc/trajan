@@ -15,10 +15,8 @@ import (
 
 const maxTemplateDepth = 5
 
-// collectPipelineYAML fetches the entry YAML for a build definition and then
-// recursively fetches its extends/template closure (cat-08). Template bodies are
-// recoverable from neither the build definition nor preview, so collect must
-// resolve and fetch them here.
+// Template bodies are recoverable from neither the build definition nor preview, so
+// the extends/template closure has to be resolved and fetched here.
 func collectPipelineYAML(ctx context.Context, cl ADO, cp engine.CurrentPhase, project string, repos []repoRef, id int64, full json.RawMessage) error {
 	repoObj := objField(full, "repository")
 	repoID := strField(repoObj, "id")
@@ -66,18 +64,16 @@ func fetchYAMLClosure(ctx context.Context, cl ADO, cp engine.CurrentPhase, proje
 	refs, aliases := parseTemplateRefs(content)
 	for _, r := range refs {
 		targetRepo, targetVer, targetVerType := repoID, version, versionType
-		// Same-repo template paths resolve relative to the including file's directory;
-		// a leading "/" is repo-root absolute (ADO template resolution semantics).
 		childPath := resolveTemplatePath(filePath, r.path)
 		if r.alias != "" {
 			res, ok := aliases[strings.ToLower(r.alias)]
 			if !ok {
-				continue // unknown alias
+				continue
 			}
 			localName, external := resolveRepoName(res.name, project)
 			rid, ok := reposByName[strings.ToLower(localName)]
 			if external || !ok {
-				// cross-project or external template repo: record the reference, don't fetch
+				// Out of scope to fetch, so record the reference and move on.
 				_ = envelope(cp, engine.CollectADOPipelineYAML(project, pipelineID,
 					fmt.Sprintf("unresolved__%s__%s", r.alias, adoName(r.path))), "pipeline-yaml", "",
 					map[string]any{"_unresolved_external": true, "alias": r.alias, "repository": res.name, "ref": res.ref, "path": r.path})
@@ -209,8 +205,7 @@ func normalizePath(p string) string {
 	return p
 }
 
-// refVersion resolves a resources.repositories ref to (version, versionType). A
-// tag ref must be fetched with versionType "tag" — sending it as a branch 404s.
+// A tag ref must be fetched with versionType "tag"; sending it as a branch 404s.
 func refVersion(ref string) (version, versionType string) {
 	if strings.HasPrefix(ref, "refs/tags/") {
 		return strings.TrimPrefix(ref, "refs/tags/"), "tag"
@@ -218,10 +213,9 @@ func refVersion(ref string) (version, versionType string) {
 	return stripRef(ref), "branch"
 }
 
-// resolveRepoName returns the local repo name to look up and whether the reference
-// is cross-project/external. A bare "Repo" is same-project; "Project/Repo" is
-// external unless Project is the current one — so a cross-project repo that merely
-// shares a name with a local repo is NOT matched to the local one.
+// A bare "Repo" is same-project; "Project/Repo" is external unless Project is the
+// current one, so a cross-project repo that merely shares a name with a local repo
+// is never matched to it.
 func resolveRepoName(name, project string) (local string, external bool) {
 	if i := strings.Index(name, "/"); i >= 0 {
 		if !strings.EqualFold(name[:i], project) {
@@ -232,8 +226,8 @@ func resolveRepoName(name, project string) (local string, external bool) {
 	return name, false
 }
 
-// resolveTemplatePath resolves a same-repo template reference relative to the
-// including file's directory (ADO semantics); a leading "/" is repo-root absolute.
+// ADO resolves a same-repo template reference relative to the including file's
+// directory; a leading "/" is repo-root absolute.
 func resolveTemplatePath(includingFile, ref string) string {
 	if strings.HasPrefix(ref, "/") {
 		return ref

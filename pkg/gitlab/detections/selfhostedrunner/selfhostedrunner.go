@@ -17,13 +17,11 @@ func init() {
 	})
 }
 
-// Detection detects self-hosted or group runner usage on untrusted merge request triggers
 type Detection struct {
 	base.BaseDetection
 	gitlabSaaSRunners map[string]bool
 }
 
-// New creates a new self-hosted-runner-exposure detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection(
@@ -31,7 +29,7 @@ func New() *Detection {
 			"gitlab",
 			detections.SeverityHigh,
 		),
-		// GitLab SaaS runner tags are safe (GitLab-hosted)
+		// GitLab-hosted runner tags.
 		gitlabSaaSRunners: map[string]bool{
 			"saas-linux-small-amd64":    true,
 			"saas-linux-medium-amd64":   true,
@@ -43,11 +41,9 @@ func New() *Detection {
 	}
 }
 
-// Detect analyzes the graph for self-hosted runners on untrusted triggers
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
-	// Get all workflow nodes
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
@@ -61,25 +57,20 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			continue
 		}
 
-		// DFS to find jobs that use self-hosted runners
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			job, ok := node.(*graph.JobNode)
 			if !ok {
 				return true
 			}
 
-			// Skip if job is restricted to protected branches only
 			if common.IsProtectedBranchOnly(job) {
 				return true
 			}
 
-			// Check if job runs on merge request trigger
-			// This checks both workflow-level and job-level triggers
 			if !common.JobRunsOnMR(job, wf, g) {
 				return true
 			}
 
-			// Check if job uses a self-hosted or non-GitLab runner
 			if d.usesSelfHostedRunner(job.RunnerTags) {
 				finding := d.createFinding(g, job)
 				findings = append(findings, finding)
@@ -92,41 +83,33 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// usesSelfHostedRunner checks if a job uses self-hosted or non-GitLab runners
 func (d *Detection) usesSelfHostedRunner(runnerTags []string) bool {
 	// Empty tags mean default shared runners (safe on GitLab.com)
 	if len(runnerTags) == 0 {
 		return false
 	}
 
-	// Check each tag
 	for _, tag := range runnerTags {
 		tagLower := strings.ToLower(tag)
 
-		// Check if explicitly self-hosted
 		if tagLower == "self-hosted" {
 			return true
 		}
 
-		// Check against known GitLab SaaS runners
 		if !d.gitlabSaaSRunners[tagLower] {
-			// This tag is not a known GitLab SaaS runner, so it's custom/self-hosted
+			// Any tag outside that set is custom infrastructure.
 			return true
 		}
 	}
 
-	// All tags are GitLab SaaS runners (safe)
 	return false
 }
 
-// createFinding creates a finding for self-hosted runner exposure
 func (d *Detection) createFinding(g *graph.Graph, job *graph.JobNode) detections.Finding {
 	wf := common.GetJobParentWorkflow(g, job)
 	if wf == nil {
-		// Fallback to empty workflow info if parent not found
 		wf = &graph.WorkflowNode{}
 	}
-	// Determine trigger type for evidence
 	triggerType := "merge request"
 	for _, tag := range wf.Tags() {
 		if tag == graph.TagExternalPullRequest {
@@ -135,12 +118,10 @@ func (d *Detection) createFinding(g *graph.Graph, job *graph.JobNode) detections
 		}
 	}
 
-	// Build evidence
 	runnerTagsStr := strings.Join(job.RunnerTags, ", ")
 	evidence := "Job runs on self-hosted or group runner (" + runnerTagsStr + ") and is triggered by " + triggerType + " events. "
 	evidence += "Attackers can compromise runner infrastructure, access secrets from other projects sharing the runner, or persist code between runs."
 
-	// Create line range for the job
 	var lineRanges []detections.LineRange
 	if job.Line > 0 {
 		lineRanges = []detections.LineRange{

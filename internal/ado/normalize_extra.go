@@ -6,12 +6,12 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// pipelineDecoratorContribution is the contribution type an extension declares to
-// inject steps into every pipeline run — the org-wide code-injection surface.
+// The contribution type an extension declares to inject steps into every pipeline
+// run, making it the org-wide code-injection surface.
 const pipelineDecoratorContribution = "ms.azure-pipelines.pipeline-decorator"
 
-// A pipeline-decorator contribution additionally emits a :PipelineDecorator node
-// and an INSTALLS edge (cat-07/03, cat-12/04).
+// The extra :PipelineDecorator node and INSTALLS edge exist for cat-07/03 and
+// cat-12/04, which key on the decorator rather than the extension.
 func normalizeExtensions(prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) error {
 	// The installedextensions surface stores the raw {count,value} envelope.
 	data := entLoadData(prior, engine.CollectADOExtensions(org))

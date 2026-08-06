@@ -25,11 +25,9 @@ deploy:
 	wf, err := parser.Parse([]byte(yaml))
 	require.NoError(t, err)
 
-	// Jobs should have line numbers
 	assert.Greater(t, wf.Jobs["test"].Line, 0, "test job should have line number")
 	assert.Greater(t, wf.Jobs["deploy"].Line, 0, "deploy job should have line number")
 
-	// Steps should have line numbers
 	assert.Greater(t, wf.Jobs["test"].Steps[0].Line, 0, "test step should have line number")
 	assert.Greater(t, wf.Jobs["deploy"].Steps[0].Line, 0, "deploy step should have line number")
 }

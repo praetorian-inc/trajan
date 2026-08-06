@@ -6,8 +6,6 @@ import (
 	"net/url"
 )
 
-// ListSecurityNamespaces lists all security namespaces in the org
-// API: GET https://dev.azure.com/{org}/_apis/securitynamespaces?api-version=7.1-preview.1
 func (c *Client) ListSecurityNamespaces(ctx context.Context) ([]SecurityNamespace, error) {
 	path := fmt.Sprintf("/_apis/securitynamespaces?api-version=%s", APIVersion)
 
@@ -18,8 +16,6 @@ func (c *Client) ListSecurityNamespaces(ctx context.Context) ([]SecurityNamespac
 	return result.Value, nil
 }
 
-// GetSecurityNamespace retrieves a specific security namespace by ID
-// API: GET https://dev.azure.com/{org}/_apis/securitynamespaces/{id}?api-version=7.1-preview.1
 func (c *Client) GetSecurityNamespace(ctx context.Context, namespaceID string) (*SecurityNamespace, error) {
 	encodedID := url.PathEscape(namespaceID)
 	path := fmt.Sprintf("/_apis/securitynamespaces/%s?api-version=%s", encodedID, APIVersion)
@@ -34,8 +30,6 @@ func (c *Client) GetSecurityNamespace(ctx context.Context, namespaceID string) (
 	return &result.Value[0], nil
 }
 
-// QueryAccessControlLists queries ACLs for a given security namespace and token
-// API: GET https://dev.azure.com/{org}/_apis/accesscontrollists/{namespace}?token={token}&includeExtendedInfo=true&api-version=7.1-preview.1
 func (c *Client) QueryAccessControlLists(ctx context.Context, namespaceID, token string) ([]AccessControlList, error) {
 	encodedNS := url.PathEscape(namespaceID)
 	encodedToken := url.QueryEscape(token)
@@ -49,8 +43,6 @@ func (c *Client) QueryAccessControlLists(ctx context.Context, namespaceID, token
 	return result.Value, nil
 }
 
-// ResolveIdentity resolves an identity descriptor to full identity details
-// API: GET https://vssps.dev.azure.com/{org}/_apis/identities?descriptors={descriptor}&queryMembership=direct&api-version=7.1-preview.1
 func (c *Client) ResolveIdentity(ctx context.Context, descriptor string) (*Identity, error) {
 	vssps := c.VSSPSClient()
 	encodedDesc := url.QueryEscape(descriptor)
@@ -66,7 +58,6 @@ func (c *Client) ResolveIdentity(ctx context.Context, descriptor string) (*Ident
 	return &result.Value[0], nil
 }
 
-// HasPermission checks if a descriptor has a specific permission bit in a namespace
 func (c *Client) HasPermission(ctx context.Context, namespaceID, token, descriptor string, permissionBit int) (bool, error) {
 	acls, err := c.QueryAccessControlLists(ctx, namespaceID, token)
 	if err != nil {
@@ -88,9 +79,7 @@ func (c *Client) HasPermission(ctx context.Context, namespaceID, token, descript
 	return false, nil
 }
 
-// CheckPermission checks if the current authenticated user has a specific permission.
-// Uses the dedicated permissions API which auto-identifies the caller from the PAT.
-// API: GET {org}/_apis/permissions/{namespaceID}/{permissionBit}?tokens={token}&alwaysAllowAdministrators=false&api-version=7.1
+// The permissions API identifies the caller from the credential, so no descriptor is needed.
 func (c *Client) CheckPermission(ctx context.Context, namespaceID string, permissionBit int, securityToken string) (bool, error) {
 	path := fmt.Sprintf("/_apis/permissions/%s/%d?alwaysAllowAdministrators=false&api-version=7.1",
 		namespaceID, permissionBit)

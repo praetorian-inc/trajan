@@ -166,11 +166,11 @@ func urlPath(u string) string {
 	if !found {
 		return ""
 	}
-	_, path, found := strings.Cut(afterScheme, "/")
+	_, p, found := strings.Cut(afterScheme, "/")
 	if !found {
 		return ""
 	}
-	return path
+	return p
 }
 
 // actionOf falls back to the primitive name so an unregistered uses: still names

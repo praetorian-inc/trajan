@@ -10,9 +10,11 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-func WhoAmI(ctx context.Context, org, token string) error {
+func WhoAmI(ctx context.Context, org, explicitPAT, explicitBearer string) error {
 	org = cmp.Or(strings.TrimSpace(org), strings.TrimSpace(os.Getenv("ORG_NAME")))
 	if org == "" {
 		return errors.New("no Azure DevOps organization: pass --org or set ORG_NAME")
@@ -21,11 +23,16 @@ func WhoAmI(ctx context.Context, org, token string) error {
 	if err != nil {
 		return err
 	}
-	pat, err := ResolveToken(token)
+	cred, err := ResolveCredential(explicitPAT, explicitBearer)
 	if err != nil {
 		return err
 	}
-	cl := NewClient(scope.Org, pat)
+	var cl *Client
+	if cred.Kind == engine.CredBearer {
+		cl = NewClientBearer(scope.Org, cred.Value)
+	} else {
+		cl = NewClient(scope.Org, cred.Value)
+	}
 
 	raw, _, err := cl.Get(ctx, "core", APIVersionPreview, "/_apis/connectionData", nil, false)
 	if err != nil {
@@ -50,10 +57,9 @@ func WhoAmI(ctx context.Context, org, token string) error {
 	}
 
 	reachable := map[string]bool{}
-	// Reachability is the HTTP status, never list emptiness: an org with zero
-	// variable groups is reachable, a PAT denied them is not. A hard failure
-	// (transport, exhausted 5xx/429 retries) proves nothing either way, so it warns
-	// rather than silently reading as a missing scope.
+	// Reachability is the HTTP status, never list emptiness: an org with zero variable
+	// groups is reachable, a PAT denied them is not. A hard failure proves nothing
+	// either way, so it warns rather than reading as a missing scope.
 	mark := func(name string, status int, err error) {
 		switch {
 		case err != nil:
@@ -62,7 +68,7 @@ func WhoAmI(ctx context.Context, org, token string) error {
 			reachable[name] = true
 		}
 	}
-	// Only the status is wanted, so ask for one item and don't page the list.
+	// Only the status matters, so ask for one item and don't page.
 	probe := func(name, host, api, p string) {
 		_, status, err := softGet(ctx, cl, host, api, p, url.Values{"$top": {"1"}})
 		mark(name, status, err)

@@ -16,23 +16,19 @@ func init() {
 	})
 }
 
-// Detection detects unpinned GitLab CI includes
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new unpinned include detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("unpinned-include", "gitlab", detections.SeverityLow),
 	}
 }
 
-// Detect finds unpinned includes in the workflow graph
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
-	// Get all workflows
 	workflows := g.GetNodesByType(graph.NodeTypeWorkflow)
 
 	for _, wfNode := range workflows {
@@ -46,7 +42,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			continue
 		}
 
-		// Analyze each include
 		for _, inc := range wf.Includes {
 			if finding := d.checkInclude(wf, inc); finding != nil {
 				findings = append(findings, *finding)
@@ -57,11 +52,9 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// checkInclude checks if an include is properly pinned
 func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *detections.Finding {
 	switch inc.Type {
 	case "project":
-		// Project includes must be pinned to a commit SHA
 		if !isCommitSHA(inc.Ref) {
 			var evidence string
 			if inc.Ref == "" {
@@ -76,11 +69,11 @@ func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *det
 			metadata["file"] = inc.Path
 			metadata["ref"] = inc.Ref
 
-			// Synthesize line range for include block (typically at top of file)
+			// The graph carries no line for an include, so point at the top of the file.
 			lineRanges := []detections.LineRange{
 				{
 					Start: 1,
-					End:   5, // Include blocks typically at lines 1-5
+					End:   5,
 					Label: "unpinned include",
 				},
 			}
@@ -95,7 +88,7 @@ func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *det
 				Repository:   wf.RepoSlug,
 				Workflow:     wf.Name,
 				WorkflowFile: wf.Path,
-				Line:         1, // Includes typically at line 1
+				Line:         1,
 				Evidence:     evidence,
 				Remediation:  "Pin project includes to a full commit SHA to prevent supply chain attacks. Visit " + inc.Project + " to find the commit SHA for the current version.",
 				Details: &detections.FindingDetails{
@@ -106,7 +99,7 @@ func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *det
 		}
 
 	case "remote":
-		// Remote includes are always risky (no pinning mechanism in GitLab for remote)
+		// GitLab has no pinning mechanism for remote includes.
 		metadata := make(map[string]interface{})
 		metadata["includeType"] = "remote"
 		metadata["remoteURL"] = inc.Remote
@@ -139,18 +132,17 @@ func (d *Detection) checkInclude(wf *graph.WorkflowNode, inc graph.Include) *det
 		}
 
 	case "local":
-		// Local includes are version-controlled with the repository - no finding
+		// Local includes are version-controlled with the repository.
 		return nil
 
 	case "template":
-		// GitLab-managed templates are trusted - no finding
+		// GitLab-managed templates are trusted.
 		return nil
 	}
 
 	return nil
 }
 
-// isCommitSHA checks if a ref is a valid 40-character hex commit SHA
 func isCommitSHA(ref string) bool {
 	if len(ref) != 40 {
 		return false

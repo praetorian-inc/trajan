@@ -1,4 +1,3 @@
-// pkg/gitlab/ratelimit.go
 package gitlab
 
 import (
@@ -7,15 +6,11 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms/shared/ratelimit"
 )
 
-// RateLimiter tracks GitLab API rate limits
-// GitLab rate limit: 300-2000 requests/minute depending on tier
-// Free tier: ~300 req/min, Premium/Ultimate: 2000 req/min
-// Thin wrapper around shared ratelimit implementation with GitLab-specific configuration
+// GitLab allows ~300 req/min on the free tier and 2000 on Premium/Ultimate.
 type RateLimiter struct {
 	*ratelimit.Limiter
 }
 
-// NewRateLimiter creates a new rate limiter with GitLab-specific configuration
 func NewRateLimiter() *RateLimiter {
 	return &RateLimiter{
 		Limiter: ratelimit.New(ratelimit.Config{

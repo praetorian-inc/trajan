@@ -7,9 +7,8 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// collectInstanceSurfaces attempts admin/instance-scope surfaces. On gitlab.com or
-// with a non-admin token these 403 — soft-fail and mark _unobserved rather than
-// abort.
+// Every surface here is admin-scoped, so on gitlab.com or with a non-admin token they
+// all 403 and mark _unobserved rather than aborting.
 func collectInstanceSurfaces(ctx context.Context, cl GitLab, cp engine.CurrentPhase, timer *engine.PhaseTimer) {
 	softSurface(timer, "instance/variables", func() error {
 		items, status, err := softList(ctx, cl, "/admin/ci/variables", nil)
@@ -40,9 +39,9 @@ func collectInstanceSurfaces(ctx context.Context, cl GitLab, cp engine.CurrentPh
 		}
 		return writeOrMark(cp, engine.CollectGLInstanceSettings(), "instance-settings", "/application/settings", raw, status)
 	})
-	// backing_identity_breadth (cat-11): the projects/groups the token's own backing
-	// identity belongs to. /users/:id/memberships is admin-only, so on a non-admin
-	// tenant token it 403s and marks _unobserved. The id comes from /user.
+	// The projects and groups the token's own backing identity belongs to.
+	// /users/:id/memberships is admin-only, so a tenant token 403s here; the id it needs
+	// comes from /user.
 	softSurface(timer, "self/memberships", func() error {
 		userRaw, ustatus, err := softGet(ctx, cl, "/user", nil)
 		if err != nil {

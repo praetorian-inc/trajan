@@ -12,8 +12,8 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// scInputNames is the registry of task-input keys whose value is a service
-// connection reference (a structural USES_CONNECTION signal).
+// Task-input keys whose value is a service-connection reference, which is what makes
+// a step a structural USES_CONNECTION signal.
 var scInputNames = []string{
 	"azureSubscription", "connectedServiceName", "connectedServiceNameARM", "ConnectedServiceName",
 	"connectedServiceNameAzureRM", "azureSubscriptionEndpoint", "azureResourceManagerConnection",
@@ -30,11 +30,6 @@ func sortedKeys(m map[string]any) []string {
 	return keys
 }
 
-// normalizePipelines builds a Pipeline node per build definition and, for YAML
-// pipelines, parses the entry YAML into Stage/Job records carrying the
-// structural facts (service-connection usages, checkout, task refs, variable
-// groups, environment targets, pool). Taint facts (macro/echo/script/ai sinks)
-// are a later pass.
 func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer) error {
 	files, err := prior.IterJSON("00-collect/build-definition")
 	if err != nil {
@@ -66,8 +61,8 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 		}
 		requested := entStr(def["jobAuthorizationScope"])
 		effective, identityScope, provenance := clampScope(requested, mBool(gs, "limit_job_auth_scope_to_current_project"), mBool(gs, "settings_observed"))
-		// Project the project-effective posture flags a pipeline-subject rule needs
-		// directly onto the node so it is reachable without a project join (cat-02).
+		// The project-effective posture flags are copied onto the pipeline node so a
+		// pipeline-subject rule reaches them without a project join.
 		enableShellSanitize := mBool(gs, "enable_shell_tasks_args_sanitizing")
 		enforceSettableVar := mBool(gs, "enforce_settable_var")
 
@@ -81,10 +76,9 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 			"settings_source_type":    sourceType(processType),
 			"queue_status":            entStr(def["queueStatus"]),
 			"job_authorization_scope": requested,
-			// schema §: the resolved Build Service identity scope lives on the node
-			"effective_scope":    effective,
-			"identity_scope":     identityScope,
-			"enforce_provenance": provenance,
+			"effective_scope":         effective,
+			"identity_scope":          identityScope,
+			"enforce_provenance":      provenance,
 			"repository": map[string]any{
 				"id":             entStr(repo["id"]),
 				"name":           entStr(repo["name"]),
@@ -117,9 +111,9 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 		pipe["enable_shell_tasks_args_sanitizing"] = enableShellSanitize
 		pipe["enforce_settable_var"] = enforceSettableVar
 		pipe["settings_observed"] = mBool(gs, "settings_observed")
-		// settable_variables: the YAML `settableVariables:` restriction (nil = all
-		// vars overridable; [] = none). The per-definition allowOverride names are
-		// the settable surface when the org/project limit is enforced (cat-02 gate).
+		// The YAML restriction (nil = all overridable, [] = none) and the per-definition
+		// allowOverride names are separate gates: the latter is the settable surface once
+		// the org/project limit is enforced.
 		pipe["settable_variables"] = facts.settableVariables
 		pipe["definition_settable_variables"] = sortedSet(settable)
 
@@ -144,8 +138,7 @@ func strOrNull(s string) any {
 	return s
 }
 
-// normalizePipelineVars projects definition variables; allowOverride absent =>
-// false (ADO omits it when false).
+// ADO omits allowOverride when it is false, so an absent key means not overridable.
 func normalizePipelineVars(vars map[string]any) []any {
 	out := []any{}
 	for _, name := range sortedKeys(vars) {
@@ -159,8 +152,8 @@ func normalizePipelineVars(vars map[string]any) []any {
 	return out
 }
 
-// entryYAML reconstructs the entry-YAML filename the collector wrote (repoID@
-// branch__yamlFilename) and returns its content, or "" if absent.
+// Rebuilds the repoID@branch__yamlFilename stem the collector wrote, returning ""
+// when that file is absent.
 func entryYAML(prior engine.PriorPhase, project string, id int64, repo map[string]any, yamlFilename string) string {
 	repoID := entStr(repo["id"])
 	branch := stripRef(entStr(repo["defaultBranch"]))
@@ -172,9 +165,8 @@ func entryYAML(prior engine.PriorPhase, project string, id int64, repo map[strin
 	return entStr(d["content"])
 }
 
-// pipelineYAMLFacts are the root-level facts a caller stamps onto the :Pipeline
-// node: the extends-template reference, the pipeline-level variable groups, and
-// the CI/PR trigger declarations (nil = absent/implicit; "none" = explicitly off).
+// The root-level facts a caller stamps onto the :Pipeline node. A nil trigger is
+// absent or implicit; "none" is explicitly off.
 type pipelineYAMLFacts struct {
 	extendsTemplate   string
 	extendsSource     map[string]any // resolved source repo/ref of the extends template
@@ -186,9 +178,8 @@ type pipelineYAMLFacts struct {
 	settableVariables any // YAML root `settableVariables:` (nil = all overridable, [] = none)
 }
 
-// normalizeParameters projects the YAML root `parameters:` declarations. A
-// string/number/object parameter with no `values:` allowlist is freeform — the
-// queue-time-settable injection surface (cat-02).
+// A string, number or object parameter with no `values:` allowlist is freeform, which
+// makes it the queue-time-settable injection surface.
 func normalizeParameters(v any) []any {
 	out := []any{}
 	list, ok := v.([]any)
@@ -223,10 +214,8 @@ func normalizeParameters(v any) []any {
 	return out
 }
 
-// resolveTemplateSources parses resources.repositories into resolved external
-// template-source refs, flagging cross-project and default-branch (unpinned)
-// sources — the writable/poisoned-template surface (cat-08). An empty ref means
-// the source floats on its default branch (mutable).
+// Cross-project and unpinned sources are the writable-template surface, so both are
+// flagged. An empty ref means the source floats on its default branch and is mutable.
 func resolveTemplateSources(root map[string]any, pipelineProject string) (list []any, byAlias map[string]map[string]any) {
 	list, byAlias = []any{}, map[string]map[string]any{}
 	repos, ok := entGetIn(root, "resources", "repositories").([]any)
@@ -258,8 +247,7 @@ func resolveTemplateSources(root map[string]any, pipelineProject string) (list [
 	return list, byAlias
 }
 
-// splitRepoName splits an Azure Repos "Project/Repo" name into its parts; a bare
-// "Repo" is same-project (the pipeline's project).
+// A bare "Repo" names a repo in the pipeline's own project; "Project/Repo" does not.
 func splitRepoName(name, dfltProject string) (project, repo string) {
 	if i := strings.IndexByte(name, '/'); i >= 0 {
 		return name[:i], name[i+1:]
@@ -267,10 +255,9 @@ func splitRepoName(name, dfltProject string) (project, repo string) {
 	return dfltProject, name
 }
 
-// parsePipelineYAML walks the entry pipeline, emits Stage/Job nodes + the
-// TRIGGERS_ON_COMPLETION edges, and returns the root-level facts. Variable groups
-// are NOT merged down levels — each of Pipeline/Stage/Job carries only what it
-// declares, so the CONSUMES_GROUP level (schema) is recoverable.
+// Variable groups are deliberately not merged down levels: each of Pipeline, Stage
+// and Job carries only what it declares, which is what makes the CONSUMES_GROUP level
+// recoverable later.
 func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, content string, settable map[string]bool) (pipelineYAMLFacts, error) {
 	var root map[string]any
 	if err := yaml.Unmarshal([]byte(content), &root); err != nil {
@@ -293,7 +280,7 @@ func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project
 	facts.templateSources = tsList
 	switch ext := root["extends"].(type) {
 	case map[string]any:
-		facts.extendsTemplate = yamlStr(ext["template"]) // jobs live in the template (deferred pass)
+		facts.extendsTemplate = yamlStr(ext["template"])
 	case string:
 		facts.extendsTemplate = ext
 	}
@@ -303,7 +290,7 @@ func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project
 		}
 	}
 	if root["extends"] != nil {
-		return facts, nil // jobs live in the template (deferred pass)
+		return facts, nil // the jobs live in the template, expanded in a deferred pass
 	}
 
 	if stages, ok := root["stages"].([]any); ok {
@@ -313,7 +300,7 @@ func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project
 				continue
 			}
 			if sm["template"] != nil && sm["stage"] == nil {
-				continue // stage-template reference — expanded in the deferred template pass
+				continue // a stage-template reference is expanded in the deferred pass
 			}
 			stageName := firstStr(sm, "stage", fmt.Sprintf("stage_%d", i))
 			if err := emitStageJobs(cp, timer, project, pipelineID, stageName, sm, pipelinePool, settable); err != nil {
@@ -322,16 +309,16 @@ func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project
 		}
 		return facts, nil
 	}
-	// implicit single stage: root plays pipeline+stage+job. The pipeline-level
-	// variable groups are already stamped on the Pipeline node by the caller, so
-	// strip them from the map before it stands in for the Stage/Job — otherwise the
-	// same declaration is counted at every level (duplicate CONSUMES_GROUP edges).
+	// With no stages the root plays pipeline, stage and job at once. Its variable groups
+	// are already stamped on the Pipeline node, so they are stripped before the same map
+	// stands in for the Stage/Job — otherwise one declaration is counted at every level
+	// and CONSUMES_GROUP is emitted three times.
 	delete(root, "variables")
 	return facts, emitStageJobs(cp, timer, project, pipelineID, "__default", root, pipelinePool, settable)
 }
 
-// emitPipelineResources emits a TRIGGERS_ON_COMPLETION edge per resources.pipelines
-// entry (a pipeline-completion trigger — the trigger-laundering surface, cat-11).
+// A resources.pipelines entry is a pipeline-completion trigger, which is the
+// trigger-laundering surface.
 func emitPipelineResources(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, root map[string]any) error {
 	pipes, ok := entGetIn(root, "resources", "pipelines").([]any)
 	if !ok {
@@ -403,15 +390,15 @@ func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, p
 	if jobPool == nil {
 		jobPool = inheritedPool
 	}
-	// a per-job YAML settableVariables list adds to the queue-time-settable surface
-	// used for is_declared_settable annotation on macro sinks.
+	// A per-job settableVariables list widens the queue-time-settable surface that
+	// annotates is_declared_settable on this job's macro sinks.
 	if extra := settableVariablesOf(m["variables"]); extra != nil {
 		settable = mergeSettable(settable, extra)
 	}
 
 	f := walkSteps(collectSteps(m), settable)
-	// compile-time keyword sinks: a runtime parameter / runtime-expression selecting
-	// pool or container steers the execution target/identity (cat-02 redirect).
+	// A parameter or runtime expression selecting pool or container steers the execution
+	// target and identity, so both are compile-keyword sinks.
 	scanCompileKeyword(&f, "pool", poolExpr(jobPool), -1, "", settable)
 	scanCompileKeyword(&f, "container", yamlStr(m["container"]), -1, "", settable)
 
@@ -447,10 +434,9 @@ func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, p
 	return emit(cp, timer, engine.NormalizeADOJob(project, pipelineID, stage, job), rec)
 }
 
-// collectSteps returns the step list from a job/deployment strategy. Deployment
-// jobs nest steps under every lifecycle hook (not just deploy) — preDeploy/
-// routeTraffic/postRouteTraffic and on.failure/on.success can each consume a
-// service connection or run a task, so all hooks are gathered in execution order.
+// A deployment job nests steps under every lifecycle hook, not just deploy, and
+// preDeploy/routeTraffic/postRouteTraffic and on.failure/on.success can each consume a
+// connection or run a task, so all hooks are gathered in execution order.
 func collectSteps(m map[string]any) []any {
 	if s, ok := m["steps"].([]any); ok {
 		return s
@@ -474,9 +460,9 @@ func collectSteps(m map[string]any) []any {
 	return out
 }
 
-// jobFacts collects the security-relevant step facts collapsed onto a :Job — the
-// structural usages plus the taint-pass sinks/sources the derived attack edges
-// (correlate) key on. All slices stay non-nil so empties serialize as [].
+// The step facts collapsed onto a :Job: structural usages plus the sinks and sources
+// the derived attack edges key on. Every slice stays non-nil so an empty one
+// serializes as [] and a rule can still match it.
 type jobFacts struct {
 	scUsages               []any
 	checkouts              []any
@@ -657,9 +643,7 @@ func (f *jobFacts) scanEnv(env map[string]any) {
 	}
 }
 
-// scanCompileKeyword records parameter/runtime-expression expansion into a
-// compile-time keyword (pool/container/checkout) — the target-redirect surface.
-// `$(macro)` does not expand in compile keywords, so only ${{ }}/$[ ] and
+// `$(macro)` does not expand in a compile keyword, so only ${{ }} / $[ ] and
 // predefined-untrusted references count. A ${{ parameters }} selector is always
 // queue-settable; a $[ variables ] runtime expression is gated on settability.
 func scanCompileKeyword(f *jobFacts, keyword, val string, stepIdx int, task string, settable map[string]bool) {

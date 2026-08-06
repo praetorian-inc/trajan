@@ -1,17 +1,19 @@
 package ado
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 
 	adopkg "github.com/praetorian-inc/trajan/internal/ado"
-	"github.com/praetorian-inc/trajan/internal/cmdutil"
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/report"
 )
 
 var AdoCmd = newAdoCmd()
+
+const (
+	tokenHelp  = "PAT (prefer TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT env; this flag is an escape hatch)"
+	bearerHelp = "bearer token (prefer AZURE_BEARER_TOKEN/SYSTEM_ACCESSTOKEN env; this flag is an escape hatch)"
+)
 
 func newAdoCmd() *cobra.Command {
 	cfg := &engine.Config{}
@@ -31,8 +33,6 @@ func newAdoCmd() *cobra.Command {
 	var reportFormat, reportMinSev, reportMinConf, reportOut string
 
 	collectRun := func(cmd *cobra.Command, args []string) (string, error) {
-		cfg.Token, _ = cmd.Flags().GetString("token") // honor the global --token (persistent flag)
-		cfg.BearerToken = getBearerToken(cmd)
 		locator := ""
 		if len(args) > 0 {
 			locator = args[0]
@@ -46,8 +46,7 @@ func newAdoCmd() *cobra.Command {
 		Short: "Resolve the token and print the authenticated identity and reachable surfaces",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			token, _ := cmd.Flags().GetString("token")
-			return adopkg.WhoAmI(cmd.Context(), whoamiOrg, token)
+			return adopkg.WhoAmI(cmd.Context(), whoamiOrg, cfg.Token, cfg.BearerToken)
 		},
 	}
 	whoami.Flags().StringVar(&whoamiOrg, "org", "", "Azure DevOps organization (default: ORG_NAME)")
@@ -137,24 +136,11 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
 	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: the run dir)")
 
-	for _, c := range []*cobra.Command{scanCmd, collect, run} {
-		c.Flags().String("azure-bearer-token", "", "Azure Entra ID bearer token (or set AZURE_BEARER_TOKEN)")
+	for _, c := range []*cobra.Command{whoami, collect, run} {
+		c.Flags().StringVar(&cfg.Token, "token", "", tokenHelp)
+		c.Flags().StringVar(&cfg.BearerToken, "azure-bearer-token", "", bearerHelp)
 	}
 
-	// The phased scan takes over "ado scan"; the legacy scanner stays reachable here.
-	scanCmd.Use = "scan-legacy"
-
-	ado.AddCommand(whoami, enumerateCmd, collect, normalize, scan, reportCmd, run, scanCmd)
+	ado.AddCommand(whoami, collect, normalize, scan, reportCmd, run)
 	return ado
-}
-
-func getToken(cmd *cobra.Command) string {
-	return cmdutil.GetTokenForPlatform(cmd, "azuredevops")
-}
-
-func getBearerToken(cmd *cobra.Command) string {
-	if t, err := cmd.Flags().GetString("azure-bearer-token"); err == nil && t != "" {
-		return t
-	}
-	return os.Getenv("AZURE_BEARER_TOKEN")
 }

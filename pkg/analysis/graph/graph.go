@@ -1,4 +1,3 @@
-// pkg/analysis/graph/graph.go
 package graph
 
 import (
@@ -8,7 +7,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// EdgeType represents the relationship between nodes
 type EdgeType string
 
 const (
@@ -19,14 +17,12 @@ const (
 	EdgeIncludes EdgeType = "includes" // Workflow includes another workflow
 )
 
-// Edge represents a directed edge in the graph
 type Edge struct {
 	From string
 	To   string
 	Type EdgeType
 }
 
-// Graph represents a workflow graph with nodes and edges
 type Graph struct {
 	nodes    map[string]Node
 	edges    map[string][]Edge      // from -> edges
@@ -35,7 +31,6 @@ type Graph struct {
 	mu       sync.RWMutex
 }
 
-// NewGraph creates a new empty graph
 func NewGraph() *Graph {
 	return &Graph{
 		nodes:    make(map[string]Node),
@@ -45,20 +40,17 @@ func NewGraph() *Graph {
 	}
 }
 
-// AddNode adds a node to the graph
 func (g *Graph) AddNode(node Node) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	g.nodes[node.ID()] = node
 
-	// Index by tags
 	for _, tag := range node.Tags() {
 		g.tags[tag] = append(g.tags[tag], node.ID())
 	}
 }
 
-// GetNode returns a node by ID
 func (g *Graph) GetNode(id string) (Node, bool) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -67,7 +59,6 @@ func (g *Graph) GetNode(id string) (Node, bool) {
 	return node, ok
 }
 
-// AddEdge adds a directed edge between two nodes
 func (g *Graph) AddEdge(from, to string, edgeType EdgeType) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -75,13 +66,11 @@ func (g *Graph) AddEdge(from, to string, edgeType EdgeType) {
 	edge := Edge{From: from, To: to, Type: edgeType}
 	g.edges[from] = append(g.edges[from], edge)
 
-	// Set parent reference
 	if node, ok := g.nodes[to]; ok {
 		node.SetParent(from)
 	}
 }
 
-// Children returns the IDs of nodes connected from the given node
 func (g *Graph) Children(id string) []string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -94,7 +83,6 @@ func (g *Graph) Children(id string) []string {
 	return children
 }
 
-// GetIncomingEdges returns all edges pointing to the given node ID
 func (g *Graph) GetIncomingEdges(id string) []Edge {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -110,7 +98,6 @@ func (g *Graph) GetIncomingEdges(id string) []Edge {
 	return incoming
 }
 
-// GetNodesByTag returns all nodes with the given tag
 func (g *Graph) GetNodesByTag(tag Tag) []Node {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -125,7 +112,6 @@ func (g *Graph) GetNodesByTag(tag Tag) []Node {
 	return nodes
 }
 
-// GetNodesByType returns all nodes of the given type
 func (g *Graph) GetNodesByType(nodeType NodeType) []Node {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -139,7 +125,6 @@ func (g *Graph) GetNodesByType(nodeType NodeType) []Node {
 	return nodes
 }
 
-// Nodes returns all nodes in the graph
 func (g *Graph) Nodes() []Node {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -151,34 +136,18 @@ func (g *Graph) Nodes() []Node {
 	return nodes
 }
 
-// NodeCount returns the number of nodes
 func (g *Graph) NodeCount() int {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return len(g.nodes)
 }
 
-// UpdateNodeTag adds a tag to a node and updates the index
-func (g *Graph) UpdateNodeTag(id string, tag Tag) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	if node, ok := g.nodes[id]; ok {
-		if !node.HasTag(tag) {
-			node.AddTag(tag)
-			g.tags[tag] = append(g.tags[tag], id)
-		}
-	}
-}
-
-// SetMetadata stores platform-level context in the graph
 func (g *Graph) SetMetadata(key string, value interface{}) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.metadata[key] = value
 }
 
-// GetMetadata retrieves platform-level context from the graph
 func (g *Graph) GetMetadata(key string) (interface{}, bool) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -186,9 +155,6 @@ func (g *Graph) GetMetadata(key string) (interface{}, bool) {
 	return val, ok
 }
 
-// GetIncludedWorkflows retrieves all included workflows from graph metadata
-// Returns workflows from external repositories that were included during graph building
-// Used by executor to populate workflows map for code context rendering
 func (g *Graph) GetIncludedWorkflows(repoSlug string) []platforms.Workflow {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -201,8 +167,7 @@ func (g *Graph) GetIncludedWorkflows(repoSlug string) []platforms.Workflow {
 		}
 
 		if wf, ok := value.(platforms.Workflow); ok {
-			// Return all included workflows regardless of their repo
-			// These are by definition from external sources (includes)
+			// Includes are external by definition, so repoSlug does not narrow the result.
 			workflows = append(workflows, wf)
 		}
 	}

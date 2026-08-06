@@ -1,4 +1,3 @@
-// pkg/search/github.go
 package search
 
 import (
@@ -18,14 +17,12 @@ const (
 	DefaultGitHubBaseURL = "https://api.github.com"
 )
 
-// GitHubSearchProvider implements SearchProvider using GitHub Code Search API
 type GitHubSearchProvider struct {
 	httpClient *http.Client
 	token      string
 	baseURL    string
 }
 
-// NewGitHubSearchProvider creates a new GitHub search provider
 func NewGitHubSearchProvider(client *http.Client, token string) *GitHubSearchProvider {
 	return &GitHubSearchProvider{
 		httpClient: client,
@@ -34,12 +31,10 @@ func NewGitHubSearchProvider(client *http.Client, token string) *GitHubSearchPro
 	}
 }
 
-// Name returns "github"
 func (p *GitHubSearchProvider) Name() string {
 	return "github"
 }
 
-// Search implements SearchProvider.Search using GitHub Code Search API
 func (p *GitHubSearchProvider) Search(ctx context.Context, query string) (*SearchResult, error) {
 	result := &SearchResult{
 		Repositories: make([]string, 0),
@@ -67,7 +62,7 @@ func (p *GitHubSearchProvider) Search(ctx context.Context, query string) (*Searc
 		}
 		defer resp.Body.Close()
 
-		// Handle rate limiting
+		// GitHub reports search rate limits as 403, not 429.
 		if resp.StatusCode == http.StatusForbidden {
 			retryAfter := resp.Header.Get("Retry-After")
 			reset := resp.Header.Get("X-RateLimit-Reset")
@@ -88,7 +83,7 @@ func (p *GitHubSearchProvider) Search(ctx context.Context, query string) (*Searc
 			select {
 			case <-time.After(sleepDuration):
 				slog.Debug("resuming after rate limit wait")
-				continue // Retry
+				continue
 			case <-ctx.Done():
 				return result, ctx.Err()
 			}
@@ -116,7 +111,6 @@ func (p *GitHubSearchProvider) Search(ctx context.Context, query string) (*Searc
 		result.TotalCount = searchResp.TotalCount
 		result.Incomplete = searchResp.IncompleteResults
 
-		// Deduplicate repositories
 		for _, item := range searchResp.Items {
 			if !seen[item.Repository.FullName] {
 				seen[item.Repository.FullName] = true
@@ -124,7 +118,6 @@ func (p *GitHubSearchProvider) Search(ctx context.Context, query string) (*Searc
 			}
 		}
 
-		// Check for next page via Link header
 		linkHeader := resp.Header.Get("Link")
 		if !strings.Contains(linkHeader, `rel="next"`) {
 			break
@@ -132,7 +125,7 @@ func (p *GitHubSearchProvider) Search(ctx context.Context, query string) (*Searc
 
 		page++
 
-		// Rate limit between pages (prevent hammering API)
+		// Pace the pages: code search rate-limits well below the core quota.
 		select {
 		case <-time.After(5 * time.Second):
 		case <-ctx.Done():

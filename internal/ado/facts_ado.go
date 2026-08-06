@@ -26,8 +26,8 @@ func entLoadList(prior engine.PriorPhase, rel string) []any {
 	return entList(env["data"])
 }
 
-// Returns nil for a non-object body such as a bare list surface; those callers
-// use entLoadList instead.
+// Nil for a non-object body such as a bare list surface; those callers use
+// entLoadList instead.
 func entDataOf(b []byte) map[string]any {
 	var env map[string]any
 	if err := json.Unmarshal(b, &env); err != nil {
@@ -46,7 +46,7 @@ func entList(v any) []any {
 	return l
 }
 
-// entListOrEmpty never returns nil so a list field serializes as [] not null.
+// Never nil, so a list field serializes as [] rather than null.
 func entListOrEmpty(v any) []any {
 	if l, ok := v.([]any); ok {
 		return l
@@ -54,7 +54,7 @@ func entListOrEmpty(v any) []any {
 	return []any{}
 }
 
-// entObj never returns nil so chained indexing is safe.
+// Never nil, so chained indexing is safe.
 func entObj(m map[string]any, key string) map[string]any {
 	if o := entMap(m[key]); o != nil {
 		return o

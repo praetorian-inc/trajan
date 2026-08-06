@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// RunnerLogInfo holds runner details extracted from job logs
 type RunnerLogInfo struct {
 	RunnerName   string
 	MachineName  string
@@ -18,13 +17,11 @@ type RunnerLogInfo struct {
 }
 
 var (
-	// Regex patterns for extracting runner information from GitLab job traces
 	runnerNamePattern1 = regexp.MustCompile(`Running with gitlab-runner ([\d\.]+) \([a-f0-9]+\) on (.+?) \(`)
 	runnerNamePattern2 = regexp.MustCompile(`Running on (.+?) via`)
 	machineNamePattern = regexp.MustCompile(`Running on (.+?) via GitLab Runner`)
 	executorPattern    = regexp.MustCompile(`Executor: (.+)`)
 
-	// GitLab SaaS shared runner patterns
 	saasRunnerPatterns = []string{
 		"saas-linux",
 		"saas-macos",
@@ -34,21 +31,19 @@ var (
 	}
 )
 
-// ParseJobTrace extracts runner information from job log content
 func ParseJobTrace(traceContent string) (*RunnerLogInfo, error) {
 	if traceContent == "" {
 		return nil, fmt.Errorf("empty trace content")
 	}
 
 	info := &RunnerLogInfo{
-		IsSelfHosted: true, // Default to self-hosted, mark false if SaaS patterns found
+		IsSelfHosted: true, // assume self-hosted until a SaaS pattern proves otherwise
 	}
 
 	lines := strings.Split(traceContent, "\n")
 
-	// Extract runner name and version
 	for _, line := range lines {
-		// Pattern 1: "Running with gitlab-runner X.Y.Z (hash) on RUNNER-NAME (hash)"
+		// Matches: "Running with gitlab-runner X.Y.Z (hash) on RUNNER-NAME (hash)"
 		if matches := runnerNamePattern1.FindStringSubmatch(line); len(matches) >= 3 {
 			info.Version = matches[1]
 			info.RunnerName = matches[2]
@@ -56,7 +51,6 @@ func ParseJobTrace(traceContent string) (*RunnerLogInfo, error) {
 		}
 	}
 
-	// Extract machine name
 	for _, line := range lines {
 		if matches := machineNamePattern.FindStringSubmatch(line); len(matches) >= 2 {
 			info.MachineName = matches[1]
@@ -64,12 +58,11 @@ func ParseJobTrace(traceContent string) (*RunnerLogInfo, error) {
 		}
 	}
 
-	// If no machine name found, try alternative pattern
 	if info.MachineName == "" {
 		for _, line := range lines {
 			if matches := runnerNamePattern2.FindStringSubmatch(line); len(matches) >= 2 {
 				candidate := matches[1]
-				// Avoid matching runner pod names (Kubernetes pattern)
+				// A "runner-pod-*" name is a Kubernetes pod, not a machine.
 				if !strings.Contains(candidate, "runner-pod-") {
 					info.MachineName = candidate
 					break
@@ -78,7 +71,6 @@ func ParseJobTrace(traceContent string) (*RunnerLogInfo, error) {
 		}
 	}
 
-	// Extract executor
 	for _, line := range lines {
 		if matches := executorPattern.FindStringSubmatch(line); len(matches) >= 2 {
 			info.Executor = strings.TrimSpace(matches[1])
@@ -86,7 +78,6 @@ func ParseJobTrace(traceContent string) (*RunnerLogInfo, error) {
 		}
 	}
 
-	// Determine if self-hosted by checking for SaaS patterns
 	runnerDesc := strings.ToLower(info.RunnerName)
 	for _, pattern := range saasRunnerPatterns {
 		if strings.Contains(runnerDesc, pattern) {
@@ -95,7 +86,6 @@ func ParseJobTrace(traceContent string) (*RunnerLogInfo, error) {
 		}
 	}
 
-	// Validate we extracted at least runner name
 	if info.RunnerName == "" {
 		return nil, fmt.Errorf("could not extract runner name from trace")
 	}

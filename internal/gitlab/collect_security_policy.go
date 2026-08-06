@@ -6,11 +6,9 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// The security policy project holds scan-execution and approval policies (cat-06
-// approval_policy, cat-02 pipeline_execution_policy). It is a linked project whose
-// .gitlab/security-policies/policy.yml drives enforcement; the GraphQL
-// scanExecutionPolicies/approvalPolicies edges surface the parsed policies plus the
-// source-project link, which is what the rules key on.
+// Policies live in a separate linked project's .gitlab/security-policies/policy.yml.
+// These GraphQL edges surface them already parsed, plus the source-project link, which
+// is what tells a rule whether a policy is inherited or local.
 const securityPolicyQuery = `query($fullPath: ID!) {
   project(fullPath: $fullPath) {
     securityPolicyProject { id fullPath }

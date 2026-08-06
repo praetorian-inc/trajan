@@ -10,9 +10,9 @@ import (
 	"strings"
 )
 
-// HTML escaping is disabled so '&', '<', '>' are emitted literally (Python's
-// json.dumps does), matching byte-for-byte; these chars are pervasive in
-// workflow data. No trailing newline and non-atomic overwrite also match Python.
+// HTML escaping is off so '&', '<', '>' — pervasive in workflow data — are emitted
+// literally, matching Python's json.dumps byte for byte; the trimmed trailing
+// newline and non-atomic overwrite match it too.
 func WriteJSON(absPath string, v any) error {
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return err

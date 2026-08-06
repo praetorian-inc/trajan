@@ -3,7 +3,6 @@ package azuredevops
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"testing"
 	"time"
 
@@ -11,22 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRateLimiter_NewRateLimiter tests default initialization with TSTU values
 func TestRateLimiter_NewRateLimiter(t *testing.T) {
 	rl := NewRateLimiter()
 
-	// Azure DevOps default: 200 TSTUs per 5-minute window
+	// ADO default: 200 TSTUs per 5-minute window.
 	assert.Equal(t, 200, rl.Limit())
 	assert.Equal(t, 200, rl.Remaining())
 	assert.False(t, rl.ResetTime().IsZero())
 }
 
-// TestRateLimiter_Update tests updating from Azure DevOps HTTP headers
 func TestRateLimiter_Update(t *testing.T) {
 	rl := NewRateLimiter()
 
 	header := http.Header{}
-	// Azure DevOps uses X-RateLimit-* headers (similar to BitBucket, not GitLab)
 	header.Set("X-RateLimit-Limit", "200")
 	header.Set("X-RateLimit-Remaining", "150")
 	header.Set("X-RateLimit-Reset", "1735776000") // 2025-01-02 00:00:00 UTC
@@ -38,28 +34,23 @@ func TestRateLimiter_Update(t *testing.T) {
 	assert.Equal(t, time.Unix(1735776000, 0), rl.ResetTime())
 }
 
-// TestRateLimiter_UpdateWithMissingHeaders tests graceful handling of missing headers
 func TestRateLimiter_UpdateWithMissingHeaders(t *testing.T) {
 	rl := NewRateLimiter()
 
-	// Set initial values
 	rl.mu.Lock()
 	rl.limit = 200
 	rl.remaining = 150
 	rl.reset = time.Unix(1735776000, 0)
 	rl.mu.Unlock()
 
-	// Update with empty headers - should not panic or change values
 	emptyHeader := http.Header{}
 	rl.Update(emptyHeader)
 
-	// Values should remain unchanged
 	assert.Equal(t, 200, rl.Limit())
 	assert.Equal(t, 150, rl.Remaining())
 	assert.Equal(t, time.Unix(1735776000, 0), rl.ResetTime())
 }
 
-// TestRateLimiter_ShouldThrottle tests TSTU-based throttling threshold
 func TestRateLimiter_ShouldThrottle(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -109,7 +100,6 @@ func TestRateLimiter_ShouldThrottle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rl := NewRateLimiter()
 
-			// Manually set values for test
 			rl.mu.Lock()
 			rl.limit = tt.limit
 			rl.remaining = tt.remaining
@@ -120,13 +110,12 @@ func TestRateLimiter_ShouldThrottle(t *testing.T) {
 	}
 }
 
-// TestRateLimiter_Wait tests wait behavior with TSTU threshold
 func TestRateLimiter_Wait(t *testing.T) {
 	t.Run("No throttle needed", func(t *testing.T) {
 		rl := NewRateLimiter()
 		ctx := context.Background()
 
-		// Set remaining above threshold (>10% of 200 TSTUs)
+		// Above the 10% threshold.
 		rl.mu.Lock()
 		rl.limit = 200
 		rl.remaining = 100
@@ -144,14 +133,13 @@ func TestRateLimiter_Wait(t *testing.T) {
 		rl := NewRateLimiter()
 		ctx, cancel := context.WithCancel(context.Background())
 
-		// Set to throttle (below 10% of 200 TSTUs)
+		// Below the 10% threshold.
 		rl.mu.Lock()
 		rl.limit = 200
 		rl.remaining = 5
 		rl.reset = time.Now().Add(10 * time.Second)
 		rl.mu.Unlock()
 
-		// Cancel immediately
 		cancel()
 
 		err := rl.Wait(ctx)
@@ -163,11 +151,10 @@ func TestRateLimiter_Wait(t *testing.T) {
 		rl := NewRateLimiter()
 		ctx := context.Background()
 
-		// Set to throttle but with reset time in past
 		rl.mu.Lock()
 		rl.limit = 200
 		rl.remaining = 5
-		rl.reset = time.Now().Add(-1 * time.Second) // Past
+		rl.reset = time.Now().Add(-1 * time.Second)
 		rl.mu.Unlock()
 
 		start := time.Now()
@@ -179,17 +166,14 @@ func TestRateLimiter_Wait(t *testing.T) {
 	})
 }
 
-// TestRateLimiter_Concurrent tests thread safety under concurrent access
 func TestRateLimiter_Concurrent(t *testing.T) {
 	rl := NewRateLimiter()
 
 	header := http.Header{}
-	// Azure DevOps headers (X- prefix, not RateLimit- prefix)
 	header.Set("X-RateLimit-Limit", "200")
 	header.Set("X-RateLimit-Remaining", "100")
 	header.Set("X-RateLimit-Reset", "1735776000")
 
-	// Run concurrent updates and reads
 	done := make(chan bool)
 	for i := 0; i < 10; i++ {
 		go func() {
@@ -202,43 +186,11 @@ func TestRateLimiter_Concurrent(t *testing.T) {
 		}()
 	}
 
-	// Wait for all goroutines
 	for i := 0; i < 10; i++ {
 		<-done
 	}
 
-	// Verify state is consistent
 	assert.Equal(t, 200, rl.Limit())
 	assert.Equal(t, 100, rl.Remaining())
 	assert.Equal(t, time.Unix(1735776000, 0), rl.ResetTime())
-}
-
-// TestRateLimiter_TSTUModel tests 5-minute window understanding
-func TestRateLimiter_TSTUModel(t *testing.T) {
-	rl := NewRateLimiter()
-
-	// Simulate API response with TSTU information
-	header := http.Header{}
-	header.Set("X-RateLimit-Limit", "200")     // 200 TSTUs total
-	header.Set("X-RateLimit-Remaining", "180") // 180 TSTUs remaining
-
-	// 5-minute window reset (current time + 5 minutes)
-	resetTime := time.Now().Add(5 * time.Minute)
-	header.Set("X-RateLimit-Reset", strconv.FormatInt(resetTime.Unix(), 10))
-
-	rl.Update(header)
-
-	// Verify TSTU values
-	assert.Equal(t, 200, rl.Limit(), "Should track 200 TSTU limit")
-	assert.Equal(t, 180, rl.Remaining(), "Should track remaining TSTUs")
-	assert.WithinDuration(t, resetTime, rl.ResetTime(), time.Second, "Reset should be ~5 minutes from now")
-
-	// Verify throttling doesn't trigger until low TSTUs
-	assert.False(t, rl.ShouldThrottle(), "Should not throttle at 90% TSTUs remaining")
-
-	// Simulate low TSTUs
-	header.Set("X-RateLimit-Remaining", "15") // Below 10% threshold
-	rl.Update(header)
-
-	assert.True(t, rl.ShouldThrottle(), "Should throttle when TSTUs drop below 10%")
 }

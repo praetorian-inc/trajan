@@ -1,4 +1,3 @@
-// Package output provides output formatting for scan results
 package output
 
 import (
@@ -13,13 +12,11 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/platforms"
 )
 
-// HTMLReportData contains all data needed for the HTML template
 type HTMLReportData struct {
 	Title       string
 	GeneratedAt string
 	Version     string
 
-	// Summary statistics
 	TotalFindings   int
 	CriticalCount   int
 	HighCount       int
@@ -29,15 +26,12 @@ type HTMLReportData struct {
 	RepositoryCount int
 	WorkflowCount   int
 
-	// Findings grouped by repository
 	FindingsByRepo  map[string][]detections.Finding
-	RepositoryNames []string // Sorted list of repo names
+	RepositoryNames []string // Sorted.
 
-	// All findings for detailed view
 	Findings []detections.Finding
 }
 
-// GenerateHTML creates a self-contained HTML report
 func GenerateHTML(result *platforms.ScanResult, findings []detections.Finding) ([]byte, error) {
 	data := buildHTMLReportData(result, findings)
 
@@ -66,7 +60,6 @@ func GenerateHTML(result *platforms.ScanResult, findings []detections.Finding) (
 	return buf.Bytes(), nil
 }
 
-// buildHTMLReportData aggregates all data for the HTML template
 func buildHTMLReportData(result *platforms.ScanResult, findings []detections.Finding) *HTMLReportData {
 	data := &HTMLReportData{
 		Title:       "Trajan Security Report",
@@ -75,15 +68,12 @@ func buildHTMLReportData(result *platforms.ScanResult, findings []detections.Fin
 		Findings:    findings,
 	}
 
-	// Count repositories
 	data.RepositoryCount = len(result.Repositories)
 
-	// Count workflows
 	for _, workflows := range result.Workflows {
 		data.WorkflowCount += len(workflows)
 	}
 
-	// Count findings by severity
 	data.TotalFindings = len(findings)
 	for _, f := range findings {
 		switch f.Severity {
@@ -100,13 +90,11 @@ func buildHTMLReportData(result *platforms.ScanResult, findings []detections.Fin
 		}
 	}
 
-	// Group findings by repository
 	data.FindingsByRepo = make(map[string][]detections.Finding)
 	for _, f := range findings {
 		data.FindingsByRepo[f.Repository] = append(data.FindingsByRepo[f.Repository], f)
 	}
 
-	// Sort repository names for consistent output
 	data.RepositoryNames = make([]string, 0, len(data.FindingsByRepo))
 	for repo := range data.FindingsByRepo {
 		data.RepositoryNames = append(data.RepositoryNames, repo)
@@ -116,12 +104,10 @@ func buildHTMLReportData(result *platforms.ScanResult, findings []detections.Fin
 	return data
 }
 
-// severityClass returns the CSS class for a severity level
 func severityClass(severity detections.Severity) string {
 	return fmt.Sprintf("severity-%s", strings.ToLower(string(severity)))
 }
 
-// severityColorHex returns the color hex code for severity badges
 func severityColorHex(severity detections.Severity) string {
 	switch severity {
 	case detections.SeverityCritical:

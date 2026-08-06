@@ -12,8 +12,7 @@ import (
 )
 
 // LoadRules skips an unusable rule instead of failing, so nothing at run time
-// notices a rule that stopped loading. This is where a bad id or an unparseable
-// where/chain_of has to be caught.
+// notices a rule that stopped loading.
 func TestEveryEmbeddedRuleLoads(t *testing.T) {
 	var skipped []string
 	rules, err := detect.LoadRules("github", func(e error) { skipped = append(skipped, e.Error()) })
@@ -28,9 +27,8 @@ func TestEveryEmbeddedRuleLoads(t *testing.T) {
 	}
 }
 
-// detect carries rule.Graph unparsed, so a typo'd target now survives loading
-// and only surfaces when the graph phase builds its rule -> target index —
-// where a rule that fails to parse silently attaches nothing.
+// detect carries rule.Graph unparsed, so a typo'd target survives loading and
+// then silently attaches nothing when the graph phase indexes rule -> target.
 func TestEveryEmbeddedRuleHasAParsableGraphTarget(t *testing.T) {
 	rules, err := detect.LoadRules("github", nil)
 	if err != nil {
@@ -142,7 +140,6 @@ func TestReadSnippet(t *testing.T) {
 		t.Errorf("want lines 2-4 inclusive, got %q", got)
 	}
 
-	// end past EOF clamps rather than erroring
 	if got, err := readSnippet(path, 4, 99); err != nil || got != "l4\nl5" {
 		t.Errorf("clamp to EOF: got %q err %v", got, err)
 	}
@@ -173,7 +170,7 @@ func TestBuildCodeEmbedsWindow(t *testing.T) {
 		t.Errorf("unexpected code block: %+v", code)
 	}
 
-	// no run dir, or a subject without a code location → nil (no scan failure)
+	// A missing run dir or code location yields nil rather than failing the scan.
 	if buildCode("", subj) != nil {
 		t.Error("empty runDir should skip the snippet")
 	}

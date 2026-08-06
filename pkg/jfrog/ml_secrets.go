@@ -16,44 +16,36 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/jfrog/proto"
 )
 
-// ErrMLSecretsAuthFailed indicates ML secrets access requires a Federation token
+// ML secrets require a Federation-issued token.
 var ErrMLSecretsAuthFailed = errors.New("ML secrets require a Federation token (created via JFrog UI). Username/password authentication cannot access ML secrets. Generate an Admin Token at: Identity & Access → Access Tokens → Generate Admin Token")
 
-// tenantInfo represents the JFrog tenant information
 type tenantInfo struct {
 	ServerID string `json:"serverId"`
 }
 
-// GetMLSecrets retrieves secrets from JFrog ML Secret Management using gRPC
-// Returns an empty slice if JFrog ML is not enabled or configured
+// Returns an empty slice when JFrog ML is not enabled or not configured.
 func (p *Platform) GetMLSecrets(ctx context.Context) ([]JFrogMLSecret, error) {
-	// Step 1: Get tenant ID from REST API
 	tenantID, err := p.getTenantID(ctx)
 	if err != nil {
-		// Check if this is an authentication error
 		if errors.Is(err, ErrMLSecretsAuthFailed) {
 			return []JFrogMLSecret{}, err
 		}
-		// Log other errors for debugging (ML not enabled, network issues, etc.)
+		// ML not being enabled is the common case, so degrade to empty instead of erroring.
 		log.Printf("[ML Secrets] getTenantID failed: %v", err)
 		return []JFrogMLSecret{}, nil
 	}
 	log.Printf("[ML Secrets] Got tenant ID: %s", tenantID)
 
-	// Step 2: List secrets from Admiral (control plane)
 	secretMetadata, err := p.listSecretsFromAdmiral(ctx, tenantID)
 	if err != nil {
-		// Check if this is an authentication error
 		if errors.Is(err, ErrMLSecretsAuthFailed) {
 			return []JFrogMLSecret{}, err
 		}
-		// Log other errors for debugging (ML not enabled, network issues, etc.)
 		log.Printf("[ML Secrets] listSecretsFromAdmiral failed: %v", err)
 		return []JFrogMLSecret{}, nil
 	}
 	log.Printf("[ML Secrets] Got %d secrets from Admiral", len(secretMetadata))
 
-	// Step 3: Get secret values from Edge service (per-environment)
 	secrets := make([]JFrogMLSecret, 0, len(secretMetadata))
 	for _, meta := range secretMetadata {
 		secret := JFrogMLSecret{
@@ -63,7 +55,6 @@ func (p *Platform) GetMLSecrets(ctx context.Context) ([]JFrogMLSecret, error) {
 			LastUpdatedAt: meta.LastUpdatedAt,
 		}
 
-		// Get value from Edge service
 		value, err := p.getSecretValueFromEdge(ctx, tenantID, meta.Name)
 		if err != nil {
 			secret.Error = err.Error()
@@ -77,7 +68,6 @@ func (p *Platform) GetMLSecrets(ctx context.Context) ([]JFrogMLSecret, error) {
 	return secrets, nil
 }
 
-// getTenantID retrieves the tenant ID (serverId) from the JFrog REST API
 func (p *Platform) getTenantID(ctx context.Context) (string, error) {
 	resp, err := p.client.Get(ctx, "/ui/api/v1/system/auth/screen/footer")
 	if err != nil {
@@ -87,7 +77,6 @@ func (p *Platform) getTenantID(ctx context.Context) (string, error) {
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		// Check for authentication errors
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			return "", ErrMLSecretsAuthFailed
 		}
@@ -106,7 +95,6 @@ func (p *Platform) getTenantID(ctx context.Context) (string, error) {
 	return info.ServerID, nil
 }
 
-// secretMetadata represents metadata about a secret from Admiral
 type secretMetadata struct {
 	Name          string
 	EnvironmentID string
@@ -114,23 +102,18 @@ type secretMetadata struct {
 	LastUpdatedAt int64
 }
 
-// listSecretsFromAdmiral lists all secrets from the Admiral control plane
 func (p *Platform) listSecretsFromAdmiral(ctx context.Context, tenantID string) ([]secretMetadata, error) {
-	// Create gRPC connection to Admiral at grpc.qwak.ai
 	conn, authCtx, err := p.createGRPCConnection(ctx, "grpc.qwak.ai:443", tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Admiral: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
-	// Create Admiral SecretService client
 	client := proto.NewSecretServiceClient(conn)
 
-	// Call ListAccountSecrets with the authenticated context
 	req := &proto.ListAccountSecretsRequest{}
 	resp, err := client.ListAccountSecrets(authCtx, req)
 	if err != nil {
-		// Check if this is an authentication error
 		errStr := err.Error()
 		if strings.Contains(errStr, "Unauthenticated") ||
 			strings.Contains(errStr, "Token validation failed") ||
@@ -140,7 +123,6 @@ func (p *Platform) listSecretsFromAdmiral(ctx context.Context, tenantID string) 
 		return nil, fmt.Errorf("failed to list secrets: %w", err)
 	}
 
-	// Convert response to metadata slice
 	if resp.AccountSecrets == nil || len(resp.AccountSecrets.Secrets) == 0 {
 		return []secretMetadata{}, nil
 	}
@@ -170,9 +152,7 @@ func (p *Platform) listSecretsFromAdmiral(ctx context.Context, tenantID string) 
 	return metas, nil
 }
 
-// getSecretValueFromEdge retrieves a secret value from the Edge service
 func (p *Platform) getSecretValueFromEdge(ctx context.Context, tenantID, secretName string) (string, error) {
-	// Create gRPC connection to Edge at grpc.{tenant}.qwak.ai
 	edgeAddr := fmt.Sprintf("grpc.%s.qwak.ai:443", tenantID)
 
 	conn, authCtx, err := p.createGRPCConnection(ctx, edgeAddr, tenantID)
@@ -181,7 +161,7 @@ func (p *Platform) getSecretValueFromEdge(ctx context.Context, tenantID, secretN
 	}
 	defer func() { _ = conn.Close() }()
 
-	// Call GetSecret with correct method path (Edge uses qwak.secret.service.SecretService)
+	// Edge serves this under qwak.secret.service.SecretService, unlike Admiral.
 	req := &proto.GetSecretRequest{Name: secretName}
 	resp := &proto.GetSecretResponse{}
 	err = conn.Invoke(authCtx, "/qwak.secret.service.SecretService/GetSecret", req, resp)
@@ -192,15 +172,12 @@ func (p *Platform) getSecretValueFromEdge(ctx context.Context, tenantID, secretN
 	return resp.Value, nil
 }
 
-// createGRPCConnection creates a gRPC connection with authentication
 func (p *Platform) createGRPCConnection(ctx context.Context, addr, tenantID string) (*grpc.ClientConn, context.Context, error) {
-	// Create context with auth metadata
 	authCtx, err := p.addAuthMetadata(ctx, tenantID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("adding auth metadata: %w", err)
 	}
 
-	// Create connection with TLS
 	conn, err := grpc.NewClient(
 		addr,
 		grpc.WithTransportCredentials(credentials.NewTLS(nil)),
@@ -212,7 +189,6 @@ func (p *Platform) createGRPCConnection(ctx context.Context, addr, tenantID stri
 	return conn, authCtx, nil
 }
 
-// addAuthMetadata adds authentication headers to the context
 func (p *Platform) addAuthMetadata(ctx context.Context, tenantID string) (context.Context, error) {
 	token, err := p.client.GetAccessToken(ctx)
 	if err != nil {

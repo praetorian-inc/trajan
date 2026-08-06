@@ -8,38 +8,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/praetorian-inc/trajan/pkg/analysis/graph"
-	"github.com/praetorian-inc/trajan/pkg/detections"
 )
-
-func TestDetection_ImplementsInterface(t *testing.T) {
-	var _ detections.Detection = (*Detection)(nil)
-}
-
-func TestDetection_Name(t *testing.T) {
-	d := New()
-	assert.Equal(t, "token-exposure", d.Name())
-}
-
-func TestDetection_Platform(t *testing.T) {
-	d := New()
-	assert.Equal(t, "gitlab", d.Platform())
-}
 
 func TestDetect_JobTokenInMergeRequest(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow triggered by merge request (zero-click)
+	// A merge_request trigger is zero-click.
 	wf := graph.NewWorkflowNode("wf1", "test-workflow", ".gitlab-ci.yml", "test/repo", []string{"merge_request"})
 	wf.AddTag(graph.TagMergeRequest)
 	g.AddNode(wf)
 
-	// Create job
 	job := graph.NewJobNode("job1", "test-job", "")
 	job.SetParent(wf.ID())
 	g.AddNode(job)
 	g.AddEdge(wf.ID(), job.ID(), graph.EdgeContains)
 
-	// Create step that uses CI_JOB_TOKEN
 	step := graph.NewStepNode("step1", "deploy", 10)
 	step.Run = "curl -H \"Authorization: Bearer $CI_JOB_TOKEN\" https://api.example.com"
 	step.SetParent(job.ID())
@@ -59,12 +42,11 @@ func TestDetect_JobTokenInMergeRequest(t *testing.T) {
 func TestDetect_JobTokenInPush(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow triggered by push (not zero-click)
+	// A push trigger is not zero-click.
 	wf := graph.NewWorkflowNode("wf1", "test-workflow", ".gitlab-ci.yml", "test/repo", []string{"push"})
 	wf.AddTag(graph.TagPush)
 	g.AddNode(wf)
 
-	// Create job with CI_JOB_TOKEN
 	job := graph.NewJobNode("job1", "test-job", "")
 	job.SetParent(wf.ID())
 	g.AddNode(job)
@@ -86,12 +68,10 @@ func TestDetect_JobTokenInPush(t *testing.T) {
 func TestDetect_SafeVariableUsage(t *testing.T) {
 	g := graph.NewGraph()
 
-	// Create workflow
 	wf := graph.NewWorkflowNode("wf1", "test-workflow", ".gitlab-ci.yml", "test/repo", []string{"merge_request"})
 	wf.AddTag(graph.TagMergeRequest)
 	g.AddNode(wf)
 
-	// Create job that doesn't expose dangerous tokens
 	job := graph.NewJobNode("job1", "test-job", "")
 	job.SetParent(wf.ID())
 	g.AddNode(job)

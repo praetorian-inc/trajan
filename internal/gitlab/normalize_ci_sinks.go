@@ -5,14 +5,8 @@ import (
 	"strings"
 )
 
-// Sink and dependency-edge extraction over a parsed job: needs:/dotenv/cache/
-// artifacts/image/id_tokens/job-token usage. Feeds both the job record fields and
-// the dotenv-flow / cache-keyspace / cross-project-artifact correlate joins.
-
-// ---- needs / cross-project ----
-
-// crossProjectNeeds returns {project, artifacts} tuples for needs:project: (and
-// needs:pipeline: with a project) entries. Bare same-project needs are excluded.
+// A bare needs: entry is same-project and excluded; only an explicit project: (or a
+// pipeline: carrying one) crosses a trust boundary.
 func crossProjectNeeds(job map[string]any) []any {
 	out := []any{}
 	for _, raw := range needsEntries(job["needs"]) {
@@ -41,8 +35,8 @@ func needsEntries(needs any) []any {
 	return nil
 }
 
-// consumesCrossPipelineArtifact reports needs:pipeline:job: (or needs:pipeline
-// artifacts:true) fetching from a different pipeline in the same project.
+// Same project, different pipeline: the artifact still comes from a run this job's
+// own review gate never covered.
 func consumesCrossPipelineArtifact(job map[string]any) bool {
 	for _, raw := range needsEntries(job["needs"]) {
 		m, ok := raw.(map[string]any)
@@ -66,15 +60,12 @@ func artifactSourceRefMutable(job map[string]any) bool {
 	return false
 }
 
-// ---- dotenv ----
-
 func producesDotenv(job map[string]any) bool {
 	return entGetIn(job, "artifacts", "reports", "dotenv") != nil
 }
 
-// dotenvContentAttackerInfluenced reports whether the dotenv producer's script
-// writes non-constant content (command substitution, a variable, fetched value)
-// rather than a fixed literal set.
+// Non-constant dotenv content — command substitution, a variable, a fetched value —
+// is what makes the inherited variables steerable rather than fixed.
 var reCmdSubst = regexp.MustCompile(`\$\(|` + "`" + `|\$\{?[A-Za-z_]`)
 
 func dotenvContentAttackerInfluenced(job map[string]any) bool {
@@ -86,8 +77,7 @@ func dotenvContentAttackerInfluenced(job map[string]any) bool {
 	return false
 }
 
-// consumesDotenv reports whether the job inherits dotenv variables from a needs:
-// producer (a plain job dependency that isn't dependencies:[] narrowed).
+// A plain job dependency inherits the producer's dotenv variables unless narrowed.
 func consumesDotenv(job map[string]any, producers map[string]bool) bool {
 	for _, raw := range needsEntries(job["needs"]) {
 		var name string
@@ -104,8 +94,8 @@ func consumesDotenv(job map[string]any, producers map[string]bool) bool {
 	return false
 }
 
-// dotenvInheritanceUnnarrowed reports the consumer does NOT narrow dotenv
-// inheritance: no dependencies:[] and no inherit:{variables:false}/list.
+// Either dependencies:[] or inherit:{variables:...} narrows the inheritance; neither
+// present means the consumer takes everything the producer wrote.
 func dotenvInheritanceUnnarrowed(job map[string]any) bool {
 	if deps, ok := job["dependencies"]; ok {
 		if l, ok := deps.([]any); ok && len(l) == 0 {
@@ -125,10 +115,7 @@ func dotenvInheritanceUnnarrowed(job map[string]any) bool {
 	return true
 }
 
-// ---- cache ----
-
-// cacheEntries returns {key, key_files, policy} tuples. cache: may be a single
-// map or a list of maps.
+// cache: is accepted by GitLab as one map or a list of maps.
 func cacheEntries(job map[string]any) []any {
 	out := []any{}
 	for _, c := range cacheList(job["cache"]) {
@@ -156,7 +143,7 @@ func cacheList(c any) []any {
 	return nil
 }
 
-// cacheKey returns (literal key, files list). key may be a string or {files, prefix}.
+// cache:key is either a literal string or a {files, prefix} object.
 func cacheKey(k any) (string, []any) {
 	switch x := k.(type) {
 	case string:
@@ -181,8 +168,8 @@ func cachePolicyWrites(job map[string]any) bool {
 	return false
 }
 
-// cacheKeyStaticCrossBoundary reports the cache:key is static/global (no
-// $CI_COMMIT_REF_SLUG / protection component), so it collides across the boundary.
+// A key with no ref or protection component is global, so a cache written on an
+// unprotected branch is the same entry a protected job later reads.
 func cacheKeyStaticCrossBoundary(job map[string]any) bool {
 	entries := cacheEntries(job)
 	if len(entries) == 0 {
@@ -193,7 +180,7 @@ func cacheKeyStaticCrossBoundary(job map[string]any) bool {
 		key := entStr(m["key"])
 		files := entList(m["key_files"])
 		if len(files) > 0 {
-			continue // content-addressed, handled by key_files_attacker_writable
+			continue // content-addressed; cacheKeyFilesAttackerWritable covers these
 		}
 		if !strings.Contains(key, "CI_COMMIT_REF") && !strings.Contains(key, "PROTECTED") {
 			return true
@@ -201,8 +188,6 @@ func cacheKeyStaticCrossBoundary(job map[string]any) bool {
 	}
 	return false
 }
-
-// ---- artifacts / image / pages ----
 
 func artifactPaths(job map[string]any) []any {
 	out := []any{}
@@ -275,8 +260,6 @@ func isPagesJob(name string, job map[string]any) bool {
 	return false
 }
 
-// ---- id_tokens (cat-10) ----
-
 func mintsIDToken(job map[string]any) bool { return entMap(job["id_tokens"]) != nil }
 
 func idTokenAuds(job map[string]any) []any {
@@ -293,8 +276,6 @@ func idTokenAuds(job map[string]any) []any {
 	return out
 }
 
-// ---- job-token cross-project use (cat-04) ----
-
 var (
 	reJobTokenGitPush  = regexp.MustCompile(`gitlab-ci-token|CI_JOB_TOKEN.*(git push|/repository/)|git push.*CI_JOB_TOKEN`)
 	reJobTokenTFState  = regexp.MustCompile(`CI_JOB_TOKEN.*terraform/state|terraform/state.*CI_JOB_TOKEN`)
@@ -302,7 +283,6 @@ var (
 	reJobArtifactFetch = regexp.MustCompile(`JOB-TOKEN:\s*\$?CI_JOB_TOKEN.*/jobs/artifacts|/jobs/artifacts.*JOB-TOKEN`)
 )
 
-// jobTokenCrossProjectUse classifies how the job wields CI_JOB_TOKEN off-project.
 func jobTokenCrossProjectUse(scriptText string) string {
 	switch {
 	case reJobTokenGitPush.MatchString(scriptText):
@@ -327,7 +307,6 @@ func fetchesCrossProjectArtifact(job map[string]any, scriptText string) bool {
 	return false
 }
 
-// executesFetchedArtifact / artifactIntegrityChecked (cat-09 consumer signals).
 var (
 	reExtractExec = regexp.MustCompile(`\btar\s+x|\bunzip\b|source\s+|\./|\binstall\b|cp\s+.*(/usr|/opt|/bin)`)
 	reIntegrity   = regexp.MustCompile(`sha256sum\s+-c|cosign\s+verify|gpg\s+--verify|@sha256:`)
@@ -336,7 +315,6 @@ var (
 func executesFetchedArtifact(scriptText string) bool  { return reExtractExec.MatchString(scriptText) }
 func artifactIntegrityChecked(scriptText string) bool { return reIntegrity.MatchString(scriptText) }
 
-// reusesOnDiskCheckout (cat-08).
 func reusesOnDiskCheckout(job, vars map[string]any) bool {
 	strategy := entStr(mergeVarLookup(job, vars, "GIT_STRATEGY"))
 	if strategy == "fetch" || strategy == "none" {
@@ -346,8 +324,7 @@ func reusesOnDiskCheckout(job, vars map[string]any) bool {
 	return sub == "recursive" || sub == "normal"
 }
 
-// mergeVarLookup reads a variable from the job's variables: then the global
-// variables: block (job scope wins).
+// Job scope wins over the global variables: block, matching GitLab's own precedence.
 func mergeVarLookup(job, globalVars map[string]any, key string) any {
 	if jv := entMap(job["variables"]); jv != nil {
 		if v, ok := jv[key]; ok {
@@ -391,8 +368,8 @@ func installsRegistryPackage(scriptText string) bool {
 		strings.Contains(scriptText, "/packages/") && strings.Contains(scriptText, "install")
 }
 
-// childPipelineFromCrossProjectArtifact: trigger:include:artifact sourced from a
-// generator job that pulls a cross-project artifact (cat-02).
+// A child pipeline whose config comes from an artifact a cross-project need supplied:
+// the generated YAML is as trusted as the foreign project.
 func childPipelineFromCrossProjectArtifact(job map[string]any, crossNeedJobs map[string]bool) bool {
 	trig := entMap(job["trigger"])
 	if trig == nil {
@@ -409,8 +386,7 @@ func childPipelineFromCrossProjectArtifact(job map[string]any, crossNeedJobs map
 	return false
 }
 
-// remoteStepUntrustedRef: a run: step/func from a remote git ref that is mutable
-// or third-party (cat-02, the new run: steps syntax).
+// A run: step sourced from a remote git ref that is either mutable or third-party.
 func remoteStepUntrustedRef(job map[string]any) bool {
 	run, ok := job["run"].([]any)
 	if !ok {
@@ -436,8 +412,8 @@ func remoteStepUntrustedRef(job map[string]any) bool {
 	return false
 }
 
-// cacheKeyFilesAttackerWritable: cache:key:files over source-tree files (any
-// non-lockfile path is writable by a lower-trust actor on an unprotected branch).
+// cache:key:files over a source-tree path lets a lower-trust actor on an unprotected
+// branch choose which cache entry a later job hits; a lockfile is the exception.
 func cacheKeyFilesAttackerWritable(job map[string]any) bool {
 	for _, c := range cacheList(job["cache"]) {
 		_, files := cacheKey(entMap(c)["key"])
@@ -450,7 +426,7 @@ func cacheKeyFilesAttackerWritable(job map[string]any) bool {
 
 var reExecutablePath = regexp.MustCompile(`node_modules/|vendor/|\.venv/|\.m2/|\.gradle/|\.cargo/|\.bundle/`)
 
-// cachePathsExecutable: cached paths are dependency/executable dirs, not inert data.
+// A cached dependency or bin directory is executed on restore; inert data is not.
 func cachePathsExecutable(job map[string]any) bool {
 	for _, c := range cacheList(job["cache"]) {
 		for _, p := range asStrList(entMap(c)["paths"]) {
@@ -462,8 +438,8 @@ func cachePathsExecutable(job map[string]any) bool {
 	return false
 }
 
-// dotenvContentFromUntrustedSource: producer builds dotenv from runtime-fetched
-// untrusted input (curl/wget/fetch of a lower-trust artifact) with no review gate.
+// The producer builds its dotenv from something fetched at runtime, so no review gate
+// ever saw the values that end up as the consumer's variables.
 var reFetch = regexp.MustCompile(`\bcurl\b|\bwget\b|\bgit clone\b|artifacts/`)
 
 func dotenvContentFromUntrustedSource(job map[string]any) bool {
@@ -474,7 +450,6 @@ func dotenvContentFromUntrustedSource(job map[string]any) bool {
 	return reFetch.MatchString(txt) && reCmdSubst.MatchString(txt)
 }
 
-// package version pinning (cat-09).
 var (
 	reMutableVersion = regexp.MustCompile(`@(latest|\*|\^|~)|:latest|==\s*\*`)
 	reChecksum       = regexp.MustCompile(`--require-hashes|integrity|sha256|--frozen-lockfile|npm ci\b`)

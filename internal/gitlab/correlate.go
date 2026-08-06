@@ -9,16 +9,13 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// correlate loads the normalized corpus back as generic maps and writes the nine
-// chains/<join>.json files the chain rules read. Each file is one JSON object
-// carrying its tuples under the exact for_each key the rules iterate (an unset or
-// mismatched key silently iterates nothing), with each tuple nesting the
-// participant records under their role prefix (producer./consumer./source./…) so
-// a rule's chain_of.where resolves role.field by nested map access.
+// Each chains/<join>.json is one object whose tuples sit under the exact for_each key
+// the rules iterate: a mismatched key silently iterates nothing rather than failing.
+// Within a tuple, participants nest under their role prefix (producer., consumer.,
+// source., …) so a chain_of.where resolves role.field by nested map access.
 //
-// A join that fails to load its inputs is a phase-fatal error; per-tuple issues
-// (a job whose project record is missing, a malformed member map) are skipped so
-// one bad subject never sinks the run.
+// Failing to load a join's inputs is phase-fatal. A per-tuple problem — a job whose
+// project record is missing, a malformed member map — is skipped.
 func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) error {
 	jobs, err := loadRecords(prior, "10-normalize/jobs")
 	if err != nil {
@@ -114,7 +111,7 @@ func firstOrEmpty(recs []map[string]any) map[string]any {
 	return map[string]any{}
 }
 
-// jobProject splits a job _id ("project/path:jobname") into its project path.
+// A job _id is "project/path:jobname", and a project path may itself contain slashes.
 func jobProject(job map[string]any) string {
 	id := mStr(job, "_id")
 	i := strings.LastIndex(id, ":")
@@ -124,12 +121,11 @@ func jobProject(job map[string]any) string {
 	return id[:i]
 }
 
-// ---- JOIN 1: job-token-allowlist (for_each: edges) — heaviest, x6 rules ----
+// for_each: edges.
 //
-// A source project whose CI uses another project's job token (needs:project: or
-// a CI_JOB_TOKEN script use) is the token-bearing side; the target project's
-// inbound allowlist is what admits it. The edge carries the source posture, the
-// target allowlist, and the triggerer role so cat-01/04/09 rules read literals.
+// A source project whose CI wields another project's job token is the token-bearing
+// side; the target's inbound allowlist is what admits it. The edge carries the source
+// posture, the target allowlist and the triggerer role so a rule reads only literals.
 func (c *correlator) jobTokenAllowlist() map[string]any {
 	edges := []map[string]any{}
 	for _, job := range c.jobs {
@@ -164,9 +160,8 @@ func (c *correlator) jobTokenAllowlist() map[string]any {
 				tgtVisibility = mGet(tgt, "visibility")
 			}
 			admits := allowlistAdmits(allowlist, srcPath)
-			// trusts_source is the admit flag the rules read at
-			// target.job_token_allowlist.trusts_source; kept also at
-			// target.source_in_allowlist for older references.
+			// The rules read the admit flag at target.job_token_allowlist.trusts_source; the
+			// flat target.source_in_allowlist below carries the same value.
 			allowlist = withTrustsSource(allowlist, admits)
 			edges = append(edges, map[string]any{
 				"_id":    fmt.Sprintf("jtoken__%s__%s", srcPath, tgtPath),
@@ -191,10 +186,9 @@ func (c *correlator) jobTokenAllowlist() map[string]any {
 	return map[string]any{"chain": "job-token-allowlist", "edges": edges, "edge_count": len(edges)}
 }
 
-// jobTokenTargets is the set of other projects a job reaches with its job token:
-// explicit needs:project: targets, plus (when the script drives CI_JOB_TOKEN at
-// another project we cannot name statically) the source project itself as a
-// self-referential marker so the token-posture rules still see an edge.
+// A script driving CI_JOB_TOKEN names its target at runtime, so the source project is
+// added as a self-referential marker. Without it the token posture produces no edge at
+// all and the rules see nothing.
 func jobTokenTargets(job map[string]any) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -214,8 +208,8 @@ func jobTokenTargets(job map[string]any) []string {
 	return out
 }
 
-// withTrustsSource returns a shallow copy of the allowlist carrying trusts_source
-// so the shared target-project record map is never mutated in place.
+// A copy: the allowlist map belongs to the shared target-project record and must not
+// be mutated in place.
 func withTrustsSource(allowlist map[string]any, admits bool) map[string]any {
 	out := make(map[string]any, len(allowlist)+1)
 	for k, v := range allowlist {
@@ -238,9 +232,8 @@ func allowlistAdmits(allowlist map[string]any, srcPath string) bool {
 	return false
 }
 
-// triggererRole summarizes the identity that can start the source pipeline. The
-// access_level is the highest role held by any member; is_bot / is_schedule_owner
-// reflect whether a bot member or a schedule owner is present.
+// The identity that can start the source pipeline, taken at its most capable: the
+// highest role any member holds.
 func (c *correlator) triggererRole(src map[string]any) map[string]any {
 	var maxLevel int64
 	bot := false
@@ -260,19 +253,17 @@ func (c *correlator) triggererRole(src map[string]any) map[string]any {
 	}
 }
 
-// ---- JOIN 2: protected-var-reachability (for_each: reachable_vars) ----
+// for_each: reachable_vars.
 //
-// Self-resolving join (x4 rules): its output tuple pairs a protected variable
-// with a ref (protected branch / tag) and a member that can push to it, BUT the
-// normalizer resolves the two correlations the DSL cannot express — (a) the ref's
-// owning project lies in the variable's inheritance scope, and (b) the member
-// belongs to the same project as the ref. Only tuples where both hold are
-// emitted, so the rules carry only literal-valued predicates.
+// A tuple pairs a protected variable with a ref and a member who can push to it. Two
+// correlations the DSL cannot express are resolved here: (a) the ref's project lies in
+// the variable's inheritance scope, and (b) the member belongs to that same project.
+// Only tuples satisfying both are emitted, leaving the rules purely literal.
 func (c *correlator) protectedVarReachability() map[string]any {
 	tuples := []map[string]any{}
 
-	// A project-scoped variable is reachable only from that project's own
-	// protected refs and members (both correlations trivially satisfied).
+	// A project-scoped variable reaches only its own project's refs and members, so both
+	// correlations hold trivially.
 	for _, p := range c.projList {
 		for _, raw := range mList(p, "cicd_variables") {
 			v := entMap(raw)
@@ -282,8 +273,8 @@ func (c *correlator) protectedVarReachability() map[string]any {
 			c.emitVarTuples(&tuples, p, v, "project", c.varScopeGroup(mStr(p, "_id")))
 		}
 	}
-	// A group-scoped variable inherits to every descendant project (correlation
-	// (a) = descendant membership); each descendant's own refs+members satisfy (b).
+	// A group-scoped variable inherits to every descendant project, so (a) is descendant
+	// membership and each descendant's own refs and members give (b).
 	for _, g := range c.groupList {
 		gpath := mStr(g, "_id")
 		for _, raw := range mList(g, "cicd_variables") {
@@ -298,9 +289,8 @@ func (c *correlator) protectedVarReachability() map[string]any {
 			}
 		}
 	}
-	// An instance-scoped CI/CD variable (self-managed /admin/ci/variables) inherits
-	// to every project on the instance (correlation (a) = any project); each
-	// project's own refs+members satisfy (b).
+	// An instance variable inherits to every project on the instance, so (a) holds for
+	// all of them and each project's own refs and members give (b).
 	for _, raw := range mList(c.instance, "cicd_variables") {
 		v := entMap(raw)
 		if !entBool(v["protected"]) {
@@ -313,9 +303,8 @@ func (c *correlator) protectedVarReachability() map[string]any {
 	return map[string]any{"chain": "protected-var-reachability", "reachable_vars": tuples, "var_count": len(tuples)}
 }
 
-// emitVarTuples pairs a reachable protected variable with each (protected ref ×
-// member) of the project it reaches. scopeTag disambiguates project vs group
-// origin in the tuple _id; group is the owning group participant (or empty).
+// One tuple per (protected ref × member) of the project the variable reaches. scopeTag
+// keeps the tuple _id distinct when the same variable name exists at two scopes.
 func (c *correlator) emitVarTuples(tuples *[]map[string]any, p, v map[string]any, scopeTag string, group map[string]any) {
 	proj := mStr(p, "_id")
 	members := mList(p, "members")
@@ -352,9 +341,8 @@ func (c *correlator) emitVarTuples(tuples *[]map[string]any, p, v map[string]any
 	}
 }
 
-// withProvenance returns a shallow copy of a participant carrying _provenance so
-// evidence templates that read {project_path} resolve; the source record map is
-// never mutated in place.
+// A copy carrying _provenance, so an evidence template reading {project_path} resolves
+// without mutating the shared source record.
 func withProvenance(m map[string]any, prov []provenance) map[string]any {
 	out := make(map[string]any, len(m)+1)
 	for k, v := range m {
@@ -382,8 +370,8 @@ func memberParticipant(m map[string]any) map[string]any {
 	}
 }
 
-// varScopeGroup surfaces the owning group participant for a project-scoped
-// variable (empty when the project has no parent group in the corpus).
+// Empty when the project's parent group is not itself in the corpus, which a
+// project-scoped run is.
 func (c *correlator) varScopeGroup(proj string) map[string]any {
 	if g := c.groups[parentGroup(proj)]; g != nil {
 		return g
@@ -403,10 +391,10 @@ func (c *correlator) descendantProjects(g map[string]any) []string {
 	return out
 }
 
-// ---- JOIN 3: dotenv-flow (for_each: edges) — x3 rules ----
+// for_each: edges.
 //
-// A dotenv artifact produced by one job flows into every consuming job in the
-// same project (dotenv is inherited via the pipeline's needs/dependencies graph).
+// A dotenv artifact flows from its producing job into every consumer in the same
+// project, inherited along the pipeline's needs/dependencies graph.
 func (c *correlator) dotenvFlow() map[string]any {
 	byProject := map[string][]map[string]any{}
 	for _, job := range c.jobs {
@@ -468,11 +456,10 @@ func dotenvConsumer(j map[string]any) map[string]any {
 	}
 }
 
-// ---- JOIN 4: cache-keyspace (for_each: prefix_overlaps) — x2 rules ----
+// for_each: prefix_overlaps.
 //
-// Jobs sharing a static cache-key prefix can poison each other's cache across a
-// trust boundary. Group cache entries by literal key prefix; emit an overlap
-// where ≥2 distinct jobs share it.
+// Jobs sharing a static cache-key prefix write to the same keyspace, so one can poison
+// what another restores. An overlap needs two distinct jobs on one prefix.
 func (c *correlator) cacheKeyspace() map[string]any {
 	byPrefix := map[string][]map[string]any{}
 	for _, job := range c.jobs {
@@ -570,9 +557,8 @@ func firstParticipant(list []map[string]any) map[string]any {
 	return map[string]any{}
 }
 
-// cacheKeyPrefix extracts the literal (non-interpolated) prefix of a cache key.
-// A per-ref key ($CI_COMMIT_REF_SLUG) or a files:-derived key has no shared
-// static prefix and cannot collide across a boundary — return "".
+// A per-ref key or a files:-derived one has no static prefix and so cannot collide
+// across a boundary; both return "".
 func cacheKeyPrefix(key string) string {
 	if key == "" {
 		return ""
@@ -587,11 +573,11 @@ func cachePolicyWritesGL(cache map[string]any) bool {
 	return mStr(cache, "policy") != "pull"
 }
 
-// ---- JOIN 5: cross-project-artifact (for_each: edges) — x1 ----
+// for_each: edges.
 //
-// A consumer job with needs:project: reaches into a producer project; the edge
-// carries the producer's trust posture so cat-02/09 rules see whether the
-// fetched artifact comes from a lower-trust, developer-reachable source.
+// A needs:project: consumer reaches into a producer project, so the edge carries the
+// producer's trust posture: whether the artifact it fetches came from somewhere a
+// lower-trust actor could write.
 func (c *correlator) crossProjectArtifact() map[string]any {
 	edges := []map[string]any{}
 	for _, job := range c.jobs {
@@ -640,10 +626,10 @@ func crossArtifactConsumer(job map[string]any) map[string]any {
 	}
 }
 
-// ---- JOIN 6: deploy-key-reuse (for_each: reused_keys) — x1 ----
+// for_each: reused_keys.
 //
-// The same deploy-key fingerprint added to ≥2 projects spans a trust boundary:
-// a push using the key on the low-trust project inherits access to the others.
+// One deploy-key fingerprint on two projects is one credential spanning a trust
+// boundary: whoever can use it on the weaker project holds write on the other.
 func (c *correlator) deployKeyReuse() map[string]any {
 	type inst struct {
 		project string
@@ -728,8 +714,8 @@ func (c *correlator) deployKeyReuse() map[string]any {
 	return map[string]any{"chain": "deploy-key-reuse", "reused_keys": reused, "reuse_count": len(reused)}
 }
 
-// credProject reads the project path off the credential's _provenance scope
-// ("project:<path>").
+// A credential's owning project is only recoverable from its _provenance scope, which
+// is formatted "project:<path>".
 func credProject(cred map[string]any) string {
 	for _, raw := range mList(cred, "_provenance") {
 		if s := entStr(entMap(raw)["scope"]); strings.HasPrefix(s, "project:") {
@@ -739,19 +725,18 @@ func credProject(cred map[string]any) string {
 	return ""
 }
 
-// ---- JOIN 7: agent-ci-access (for_each: grants) — x1 ----
+// for_each: grants.
 //
-// A GitLab agent's ci_access grant lets pipelines in the target project(s)
-// impersonate the agent against the cluster; the grant tuple carries the agent's
-// guard (protected_branches_only, environments_filter) and each target project's
-// protected-branch posture so cat-12/15 rules resolve reachability.
+// A ci_access grant lets pipelines in the target project impersonate the agent against
+// the cluster, so the tuple pairs the agent's own guards with the target's
+// protected-branch posture — reachability needs both sides.
 func (c *correlator) agentCIAccess() map[string]any {
 	grants := []map[string]any{}
 	for _, agent := range c.agents {
 		agentPart := agentParticipant(agent)
 		targets := mList(agent, "ci_access_targets")
 		if len(targets) == 0 {
-			// implicit_config_project: the agent's own project is the only target.
+			// An implicit grant targets only the agent's own project.
 			targets = []any{agentProject(agent)}
 		}
 		for _, raw := range targets {
@@ -804,11 +789,10 @@ func agentProject(agent map[string]any) string {
 	return id
 }
 
-// ---- JOIN 8: runner-reachability (for_each: reachable_runners) — x1 ----
+// for_each: reachable_runners.
 //
-// An instance/shared runner is reachable by any account when the instance permits
-// open project creation; the tuple pairs the runner posture with the instance
-// governance so a cat-12 rule reads both as literals.
+// A shared runner is reachable by any account once the instance permits open project
+// creation, so the tuple pairs the runner's posture with that governance.
 func (c *correlator) runnerReachability() map[string]any {
 	instancePart := map[string]any{
 		"_id":                    "instance",
@@ -830,11 +814,10 @@ func (c *correlator) runnerReachability() map[string]any {
 	return map[string]any{"chain": "runner-reachability", "reachable_runners": tuples, "runner_count": len(tuples)}
 }
 
-// ---- JOIN 9: group-runner-reachability (for_each: reachable_runners) — x1 ----
+// for_each: reachable_runners.
 //
-// A group-scoped runner is reachable by any account that can create a project in
-// the owning group (governance inherited to all descendants); the tuple pairs the
-// runner with the group's group_open_project_creation posture.
+// A group runner is reachable by anyone who can create a project in the owning group,
+// and that governance is inherited by every descendant.
 func (c *correlator) groupRunnerReachability() map[string]any {
 	tuples := []map[string]any{}
 	for _, r := range c.runners {
@@ -874,8 +857,8 @@ func runnerParticipant(r map[string]any) map[string]any {
 	}
 }
 
-// runnerScopeGroup reads the owning group path off the runner's _provenance
-// scope ("group:<path>").
+// A runner's owning group is only recoverable from its _provenance scope, which is
+// formatted "group:<path>".
 func runnerScopeGroup(r map[string]any) string {
 	for _, raw := range mList(r, "_provenance") {
 		if s := entStr(entMap(raw)["scope"]); strings.HasPrefix(s, "group:") {
@@ -884,8 +867,6 @@ func runnerScopeGroup(r map[string]any) string {
 	}
 	return ""
 }
-
-// ---- shared helpers ----
 
 func listOrEmptyGL(m map[string]any, key string) []any {
 	if v, ok := mGet(m, key).([]any); ok {

@@ -161,10 +161,9 @@ type location struct {
 	Label string
 }
 
-// A finding's headline is where it lives: org / repo / file. With no file there
-// is no path to give, so the scope carries the subject's kind instead and the
-// reader still knows what is being flagged. A GitHub repo already contains its
-// org, so the org is not prepended twice.
+// The headline is where a finding lives: org / repo / file. A GitHub repo slug
+// already contains its org, so it is not prepended twice; with no file there is
+// no path, so the label carries the subject kind instead.
 func locationOf(f finding.Finding) location {
 	var seg []string
 	if f.Org != "" && !strings.HasPrefix(f.Repo, f.Org+"/") {

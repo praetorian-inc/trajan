@@ -17,19 +17,16 @@ func init() {
 	})
 }
 
-// Detection detects token and credential exposure in GitLab CI
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new token exposure detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("token-exposure", "gitlab", detections.SeverityHigh),
 	}
 }
 
-// Detect finds token exposure vulnerabilities in the workflow graph
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
@@ -46,15 +43,12 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			continue
 		}
 
-		// Check if workflow has zero-click trigger
 		hasDangerousTrigger := d.hasDangerousTrigger(wf)
 
-		// Only check workflows with dangerous triggers
 		if !hasDangerousTrigger {
 			continue
 		}
 
-		// DFS through all steps
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeStep {
 				step, ok := node.(*graph.StepNode)
@@ -62,7 +56,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 					return true
 				}
 
-				// Check for token exposure in scripts
 				for _, token := range common.DangerousTokenVariables {
 					if strings.Contains(step.Run, "$"+token) || strings.Contains(step.Run, "${"+token+"}") {
 						findings = append(findings, d.createFinding(g, step, token))
@@ -76,16 +69,14 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 	return findings, nil
 }
 
-// hasDangerousTrigger checks if workflow is triggered by zero-click events
 func (d *Detection) hasDangerousTrigger(wf *graph.WorkflowNode) bool {
-	// Check tags first (for GitHub compatibility)
 	for _, tag := range wf.Tags() {
 		if common.ZeroClickTriggers[tag] {
 			return true
 		}
 	}
 
-	// For GitLab, check Triggers strings (tags not set by builder)
+	// The GitLab builder does not set tags, so fall back to the trigger strings.
 	for _, trigger := range wf.Triggers {
 		triggerLower := strings.ToLower(trigger)
 		if strings.Contains(triggerLower, "merge_request") ||
@@ -97,15 +88,12 @@ func (d *Detection) hasDangerousTrigger(wf *graph.WorkflowNode) bool {
 	return false
 }
 
-// createFinding creates a finding for token exposure
 func (d *Detection) createFinding(g *graph.Graph, step *graph.StepNode, token string) detections.Finding {
 	wf := common.GetStepParentWorkflow(g, step)
 	if wf == nil {
-		// Fallback to empty workflow info if parent not found
 		wf = &graph.WorkflowNode{}
 	}
 
-	// Get parent job name (simplified for now)
 	jobName := ""
 
 	evidence := "Sensitive token $" + token + " exposed in script running on merge request trigger. External attackers can capture this token."

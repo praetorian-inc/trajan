@@ -237,7 +237,7 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 	}
 	if state.StartedAt == "" {
 		state.StartedAt = engine.IsoformatUTC(time.Now())
-		state.Invocation = os.Args[1:]
+		state.SetInvocation(os.Args[1:])
 	}
 
 	ledger, err := OpenLedger(filepath.Join(runDir, engine.AttackLedger(p.ID)))
@@ -248,7 +248,7 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 	// undo record left to lose and its error is not one a run can act on.
 	defer func() { _ = ledger.Close() }()
 
-	sess, err := NewSession(ctx, p, planDir, ledger, opts.Execute)
+	sess, err := NewSession(ctx, p, planDir, ledger, opts.Execute, cfg.Token)
 	if err != nil {
 		return nil, err
 	}

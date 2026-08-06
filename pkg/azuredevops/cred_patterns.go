@@ -1,6 +1,6 @@
 package azuredevops
 
-// CredentialPatterns are search terms for finding credentials in code
+// Code-search terms, not regexes.
 var CredentialPatterns = []string{
 	"password",
 	"passwd",

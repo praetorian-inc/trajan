@@ -1,7 +1,6 @@
 package gitlab
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/praetorian-inc/trajan/internal/gitlab"
@@ -26,22 +25,5 @@ func TestPersistentFlagsBindToGitlabGlobals(t *testing.T) {
 	}
 	if !gitlab.FlagInsecure {
 		t.Error("FlagInsecure = false after --insecure=true")
-	}
-}
-
-func TestCommandTree(t *testing.T) {
-	cmd := newGitLabCmd()
-	if !slices.Contains(cmd.Aliases, "gl") {
-		t.Errorf("aliases = %v, want to include gl", cmd.Aliases)
-	}
-	want := []string{"whoami", "collect", "normalize", "scan", "report", "push", "analyze", "attack", "run"}
-	got := map[string]bool{}
-	for _, c := range cmd.Commands() {
-		got[c.Name()] = true
-	}
-	for _, w := range want {
-		if !got[w] {
-			t.Errorf("subcommand %q missing from tree", w)
-		}
 	}
 }

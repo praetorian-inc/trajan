@@ -206,15 +206,13 @@ var identityKeys = map[NodeLabel][]string{
 	// path query reports two unrelated jobs reading the same credential.
 	Secret:   {"scope", "scope_key", "name"},
 	Artifact: {"repo", "name"},
-	// Keyed on the prefix, not the full key: every cache rule correlates on the
-	// restore-keys prefix. Repo-qualified for the same reason as Secret — GitHub
-	// caches are repo-scoped, and a bare prefix makes every repo writing "npm-"
-	// a poisoning path into every repo reading it.
+	// Keyed on the restore-keys prefix, not the full key, because that is what every
+	// cache rule correlates on. Repo-qualified because GitHub caches are repo-scoped:
+	// a bare prefix makes every repo writing "npm-" a poisoning path into every reader.
 	Cache: {"repo", "key_prefix"},
-	// Same defect as Secret: scope is the kind ("repo"/"org"). Repo runner ids are
-	// a per-repository sequence, so without scope_key every repo's first runner is
-	// one node and every RUNS_ON edge converges on it. A writer must qualify
-	// scope_key to owner/repo the way corpus.secretScopeKey does.
+	// scope is the kind ("repo"/"org") and repo runner ids are a per-repository
+	// sequence, so without scope_key qualified to owner/repo every repo's first
+	// runner is one node that every RUNS_ON edge converges on.
 	Runner:      {"scope", "scope_key", "id"},
 	RunnerGroup: {"org", "id"},
 	Environment: {"repo", "name"},
@@ -226,7 +224,7 @@ var identityKeys = map[NodeLabel][]string{
 	// INSTALLED_ON edge per repo.
 	DeployKey: {"fingerprint"},
 	CloudRole: {"identifier"},
-	// A closed modelling vocabulary no API will ever return; "external" is its
+	// A closed modeling vocabulary no API will ever return; "external" is its
 	// only value, minted by the attach pass when an attack edge needs a source.
 	ExternalActor: {"kind"},
 }

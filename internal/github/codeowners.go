@@ -16,11 +16,9 @@ type CodeownersFact struct {
 	Path    any              `json:"path"`
 	Rules   []CodeownersRule `json:"rules"`
 
-	// covers_ci_execution is true only when every probe in ciExecutionProbes
-	// resolves to an owner. The probes are representative locations whose
-	// content a workflow executes, not an inventory of the repository, so a
-	// false here means "CODEOWNERS leaves these locations unowned", never
-	// "an executed file is provably unowned".
+	// True only when every ciExecutionProbes path resolves to an owner. The probes
+	// are representative locations, not an inventory, so false means "CODEOWNERS
+	// leaves these locations unowned", never "an executed file is provably unowned".
 	CoversWorkflows   bool     `json:"covers_workflows"`
 	CoversCIExecution bool     `json:"covers_ci_execution"`
 	UncoveredCIPaths  []string `json:"uncovered_ci_paths"`

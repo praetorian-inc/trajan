@@ -20,13 +20,10 @@ func init() {
 	})
 }
 
-// varRefPattern matches Azure DevOps variable references like $(VarName)
 var varRefPattern = regexp.MustCompile(`\$\(([^)]+)\)`)
 
-// secretKeywordPattern matches variable names containing secret-related keywords
 var secretKeywordPattern = regexp.MustCompile(`(?i)(secret|password|token|key|credential|pat|apikey)`)
 
-// extractVariableRefs extracts all $(...) variable references from a string.
 func extractVariableRefs(s string) []string {
 	matches := varRefPattern.FindAllStringSubmatch(s, -1)
 	refs := make([]string, 0, len(matches))
@@ -36,7 +33,6 @@ func extractVariableRefs(s string) []string {
 	return refs
 }
 
-// allRefsSafe returns true if every variable reference is in the safe system variables list.
 func allRefsSafe(refs []string) bool {
 	if len(refs) == 0 {
 		return false
@@ -49,19 +45,16 @@ func allRefsSafe(refs []string) bool {
 	return true
 }
 
-// Detection detects secrets exposure vulnerabilities in pipeline steps
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new secrets-exposure detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("secrets-exposure", platforms.PlatformAzureDevOps, detections.SeverityHigh),
 	}
 }
 
-// Detect analyzes the graph for secrets exposure vulnerabilities
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	var findings []detections.Finding
 
@@ -71,7 +64,6 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			continue
 		}
 
-		// insecure-secrets checks
 		graph.DFS(g, wf.ID(), func(node graph.Node) bool {
 			if node.Type() == graph.NodeTypeStep {
 				step, ok := node.(*graph.StepNode)
@@ -95,17 +87,14 @@ func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Fi
 			return true
 		})
 
-		// fork-security check
 		findings = append(findings, checkForkBuildSettings(wf, g)...)
 	}
 
 	return findings, nil
 }
 
-// contentLineForPattern returns the absolute line number where keyword first appears in script.
-// baseLine is the YAML key line (e.g. the "script:" input key line).
-// For multi-line block scalars, content starts at baseLine+1.
-// For single-line scripts, content is on baseLine.
+// baseLine is the YAML key line, e.g. the "script:" input line. A block scalar's
+// content starts at baseLine+1; a single-line script sits on baseLine.
 func contentLineForPattern(baseLine int, script, keyword string) int {
 	if script == "" {
 		return baseLine
@@ -123,13 +112,10 @@ func contentLineForPattern(baseLine int, script, keyword string) int {
 	return baseLine
 }
 
-// checkInsecureSecrets checks for insecure secret handling patterns.
-// It checks all patterns independently so that e.g. a safe echo doesn't
-// prevent printenv from being detected in the same script block.
+// Patterns are checked independently so a safe echo does not mask a printenv in the same block.
 func checkInsecureSecrets(wf *graph.WorkflowNode, step *graph.StepNode) *detections.Finding {
 	runLower := strings.ToLower(step.Run)
 
-	// Check for echo with variable expansion: echo $(...) or echo ${...}
 	if strings.Contains(runLower, "echo") && (strings.Contains(step.Run, "$(") || strings.Contains(step.Run, "${")) {
 		refs := extractVariableRefs(step.Run)
 		if !allRefsSafe(refs) {
@@ -156,10 +142,8 @@ func checkInsecureSecrets(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 				},
 			}
 		}
-		// Safe refs — fall through to check other patterns
 	}
 
-	// Check for curl/wget with variable expansion (sending secrets via HTTP)
 	if (strings.Contains(runLower, "curl") || strings.Contains(runLower, "wget")) && (strings.Contains(step.Run, "$(") || strings.Contains(step.Run, "${")) {
 		refs := extractVariableRefs(step.Run)
 		if !allRefsSafe(refs) {
@@ -190,10 +174,9 @@ func checkInsecureSecrets(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 				},
 			}
 		}
-		// Safe refs — fall through to check other patterns
 	}
 
-	// Check for printenv (dumps all environment variables) — always flagged
+	// printenv dumps everything, so the safe-variable exemption cannot apply.
 	if strings.Contains(runLower, "printenv") {
 		peLine := common.ScriptLineForPattern(step, "printenv", true)
 		return &detections.Finding{
@@ -219,7 +202,6 @@ func checkInsecureSecrets(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 		}
 	}
 
-	// Check for env | or set | (dumps all environment variables)
 	if strings.Contains(runLower, "env |") || strings.Contains(runLower, "set |") {
 		envKeyword := "env |"
 		if !strings.Contains(runLower, "env |") {
@@ -252,13 +234,9 @@ func checkInsecureSecrets(wf *graph.WorkflowNode, step *graph.StepNode) *detecti
 	return nil
 }
 
-// checkTaskInputSecrets checks task inputs (step.With) for insecure secret handling.
-// Azure Pipelines primarily use tasks with inputs rather than inline scripts,
-// so we need to scan task input values for secret variable references and
-// check "script"/"inline" inputs for the same patterns as Run commands.
+// ADO pipelines mostly use tasks with inputs rather than inline scripts.
 func checkTaskInputSecrets(wf *graph.WorkflowNode, step *graph.StepNode) *detections.Finding {
 	for inputKey, inputVal := range step.With {
-		// Check "script" and "inline" inputs for Run-like patterns (echo, curl, printenv)
 		keyLower := strings.ToLower(inputKey)
 		if keyLower == "script" || keyLower == "inline" {
 			finding := checkScriptContent(wf, step, inputKey, inputVal)
@@ -268,7 +246,6 @@ func checkTaskInputSecrets(wf *graph.WorkflowNode, step *graph.StepNode) *detect
 			continue
 		}
 
-		// For other inputs, check if they reference non-safe variables with secret-like names
 		refs := extractVariableRefs(inputVal)
 		for _, ref := range refs {
 			if common.SafeSystemVariablesMacro[ref] {
@@ -304,14 +281,10 @@ func checkTaskInputSecrets(wf *graph.WorkflowNode, step *graph.StepNode) *detect
 	return nil
 }
 
-// checkScriptContent checks inline script content (from task inputs like "script" or "inline")
-// for the same insecure patterns as Run commands. Checks all patterns independently so that
-// e.g. a safe echo doesn't prevent printenv from being detected.
 func checkScriptContent(wf *graph.WorkflowNode, step *graph.StepNode, inputKey, script string) *detections.Finding {
 	scriptLower := strings.ToLower(script)
 	baseLine := common.LineForKey(step.WithLines, inputKey, step.Line)
 
-	// Check for echo with variable expansion
 	if strings.Contains(scriptLower, "echo") && (strings.Contains(script, "$(") || strings.Contains(script, "${")) {
 		refs := extractVariableRefs(script)
 		if !allRefsSafe(refs) {
@@ -338,10 +311,8 @@ func checkScriptContent(wf *graph.WorkflowNode, step *graph.StepNode, inputKey, 
 				},
 			}
 		}
-		// Safe refs — fall through to check other patterns
 	}
 
-	// Check for curl/wget with variable expansion
 	if (strings.Contains(scriptLower, "curl") || strings.Contains(scriptLower, "wget")) && (strings.Contains(script, "$(") || strings.Contains(script, "${")) {
 		refs := extractVariableRefs(script)
 		if !allRefsSafe(refs) {
@@ -372,10 +343,8 @@ func checkScriptContent(wf *graph.WorkflowNode, step *graph.StepNode, inputKey, 
 				},
 			}
 		}
-		// Safe refs — fall through to check other patterns
 	}
 
-	// Check for printenv
 	if strings.Contains(scriptLower, "printenv") {
 		peLine := contentLineForPattern(baseLine, script, "printenv")
 		return &detections.Finding{
@@ -404,11 +373,9 @@ func checkScriptContent(wf *graph.WorkflowNode, step *graph.StepNode, inputKey, 
 	return nil
 }
 
-// checkForkBuildSettings checks for insecure fork build configurations
 func checkForkBuildSettings(wf *graph.WorkflowNode, g *graph.Graph) []detections.Finding {
 	var findings []detections.Finding
 
-	// Check if workflow is triggered by pull_request
 	hasPRTrigger := false
 	for _, trigger := range wf.Triggers {
 		triggerLower := strings.ToLower(trigger)
@@ -422,7 +389,6 @@ func checkForkBuildSettings(wf *graph.WorkflowNode, g *graph.Graph) []detections
 		return findings
 	}
 
-	// Walk steps to check for secrets being passed to fork builds
 	hasSecretsExposure := false
 	var evidenceStep string
 	var evidenceLine int
@@ -434,7 +400,6 @@ func checkForkBuildSettings(wf *graph.WorkflowNode, g *graph.Graph) []detections
 				return true
 			}
 
-			// Check environment variables for secrets
 			for envKey, envValue := range step.Env {
 				envKeyLower := strings.ToLower(envKey)
 				envValueLower := strings.ToLower(envValue)
@@ -458,7 +423,6 @@ func checkForkBuildSettings(wf *graph.WorkflowNode, g *graph.Graph) []detections
 				}
 			}
 
-			// Check task inputs for secret references
 			for paramKey, paramValue := range step.With {
 				paramValueLower := strings.ToLower(paramValue)
 				if strings.Contains(paramValueLower, "secret") ||

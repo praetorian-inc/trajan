@@ -78,7 +78,6 @@ func TestParseScopeSlug(t *testing.T) {
 		{"enterprise prefixed", "enterprises/acme", "ent-acme"},
 		{"enterprise lowercased", "enterprises/AcmeCorp", "ent-acmecorp"},
 		{"enterprise with dot", "enterprises/acme.inc", "ent-acme-inc"},
-		// URL forms must slug identically to their bare equivalents
 		{"repo url same slug as bare", "https://github.com/octocat/hello-world", "octocat__hello-world"},
 		{"ghes url same slug as bare", "https://ghe.corp.example.com/octocat/hello-world", "octocat__hello-world"},
 	}
@@ -121,7 +120,6 @@ func TestParseScopeSlugCharset(t *testing.T) {
 	}
 }
 
-// a GHES locator must resolve to the same scope as the equivalent github.com locator
 func TestParseScopeGHESHostEquivalence(t *testing.T) {
 	pairs := []struct{ ghes, dotcom string }{
 		{"https://ghe.corp.example.com/octocat", "https://github.com/octocat"},

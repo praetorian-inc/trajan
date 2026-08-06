@@ -16,23 +16,19 @@ func init() {
 	})
 }
 
-// Detection detects whether CSRF protection is disabled on the Jenkins instance.
 type Detection struct {
 	base.BaseDetection
 }
 
-// New creates a new Jenkins CSRF disabled detection
 func New() *Detection {
 	return &Detection{
 		BaseDetection: base.NewBaseDetection("csrf-disabled", "jenkins", detections.SeverityMedium),
 	}
 }
 
-// RequiresAPI reports that this detection cannot run in --local mode; it
-// requires a live Jenkins client to query the running instance.
+// Needs a live Jenkins client, so it cannot run in --local mode.
 func (d *Detection) RequiresAPI() bool { return true }
 
-// Detect checks if Jenkins CSRF protection (crumb issuer) is disabled
 func (d *Detection) Detect(ctx context.Context, g *graph.Graph) ([]detections.Finding, error) {
 	clientData, ok := g.GetMetadata("jenkins_client")
 	if !ok {

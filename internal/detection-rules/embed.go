@@ -1,8 +1,6 @@
-// Package detectionrules is the single embedding point for trajan's detection
-// rule corpus. Each supported platform's rules live in a subdirectory named for
-// the platform (github, gitlab, ado, jenkins); a platform package loads its own
-// rules by walking the matching subtree of FS. The all: prefix keeps the empty
-// platform stubs (.keep) embeddable so the patterns stay valid before rules land.
+// Package detectionrules embeds the detection rule corpus, one subdirectory per
+// platform; a platform package loads its own rules by walking that subtree of FS.
+// The all: prefix keeps a platform whose only file is a .keep stub embeddable.
 package detectionrules
 
 import "embed"

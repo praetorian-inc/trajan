@@ -7,7 +7,6 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// loadRecords reads every JSON record in a normalized directory as a generic map.
 // A malformed record is a normalize-contract violation and aborts the phase.
 func loadRecords(prior engine.PriorPhase, dir string) ([]map[string]any, error) {
 	files, err := prior.IterJSON(dir)

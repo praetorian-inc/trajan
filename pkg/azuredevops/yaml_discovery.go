@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// commonYAMLPaths are the typical locations for Azure DevOps pipeline YAML files
 var commonYAMLPaths = []string{
 	"/azure-pipelines.yml",
 	"/azure-pipelines.yaml",
@@ -16,12 +15,10 @@ var commonYAMLPaths = []string{
 	"/build/azure-pipelines.yml",
 }
 
-// extractServiceConnectionsFromYAML parses YAML content and extracts service connection references with metadata
 func extractServiceConnectionsFromYAML(content, repoName, filePath string) []DiscoveredServiceConnection {
 	var connections []DiscoveredServiceConnection
-	seen := make(map[string]bool) // Track name+type to avoid duplicates
+	seen := make(map[string]bool)
 
-	// Direct field patterns (case-insensitive)
 	// Order matters: more specific patterns should come before generic ones
 	patterns := []struct {
 		regex     *regexp.Regexp
@@ -35,7 +32,6 @@ func extractServiceConnectionsFromYAML(content, repoName, filePath string) []Dis
 		{regexp.MustCompile(`(?i)containerRegistry:\s*['"]([^'"$]+)['"]`), "containerRegistry"},
 		{regexp.MustCompile(`(?i)awsCredentials:\s*['"]([^'"$]+)['"]`), "awsCredentials"},
 		{regexp.MustCompile(`(?i)sshEndpoint:\s*['"]([^'"$]+)['"]`), "sshEndpoint"},
-		// Generic serviceConnection pattern last (after more specific ones)
 		{regexp.MustCompile(`(?i)(?:^|[^a-zA-Z])serviceConnection:\s*['"]([^'"$]+)['"]`), "serviceConnection"},
 	}
 
@@ -57,7 +53,6 @@ func extractServiceConnectionsFromYAML(content, repoName, filePath string) []Dis
 		}
 	}
 
-	// Parameter default patterns for SERVICE_CONNECTION variables
 	paramPattern := regexp.MustCompile(`(?i)-\s*name:\s*\w*SERVICE_CONNECTION\w*\s*\n\s*(?:type:\s*\w+\s*\n\s*)?default:\s*['"]([^'"]+)['"]`)
 	for _, match := range paramPattern.FindAllStringSubmatch(content, -1) {
 		if len(match) > 1 && match[1] != "" {
@@ -70,7 +65,6 @@ func extractServiceConnectionsFromYAML(content, repoName, filePath string) []Dis
 		}
 	}
 
-	// Azure subscription parameter defaults
 	azureParamPattern := regexp.MustCompile(`(?i)-\s*name:\s*\w*(?:azure|subscription)\w*\s*\n\s*(?:type:\s*\w+\s*\n\s*)?default:\s*['"]([^'"]+)['"]`)
 	for _, match := range azureParamPattern.FindAllStringSubmatch(content, -1) {
 		if len(match) > 1 && match[1] != "" && !strings.Contains(strings.ToLower(match[1]), "pool") {
@@ -86,8 +80,7 @@ func extractServiceConnectionsFromYAML(content, repoName, filePath string) []Dis
 	return connections
 }
 
-// DiscoverServiceConnectionsFromYAML scans pipeline YAML files across repos to discover service connections.
-// This is useful when the service connections API returns empty due to permission restrictions.
+// Fallback for when the service connections API returns empty due to permission restrictions.
 func (c *Client) DiscoverServiceConnectionsFromYAML(ctx context.Context, project string) ([]DiscoveredServiceConnection, error) {
 	repos, err := c.ListRepositories(ctx, project)
 	if err != nil {

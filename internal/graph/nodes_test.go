@@ -99,10 +99,9 @@ func TestUpsertDropsIncompleteIdentity(t *testing.T) {
 	}
 }
 
-// A Neo4j property is a scalar or a homogeneous null-free array of scalars.
-// Legality is decided per value, so an array of objects passes whenever it
-// happens to be empty; the key has to be registered rather than merely skipped,
-// or the property would survive exactly on the records with nothing to say.
+// A Neo4j property is a scalar or a homogeneous null-free array of scalars. Legality is
+// per value, so an array of objects passes whenever it is empty; the key must be
+// registered, not merely skipped, or the property survives only where it says nothing.
 func TestRecordPropsRegistersIllegalKeys(t *testing.T) {
 	var fields map[string]any
 	if err := json.Unmarshal([]byte(`{
@@ -144,11 +143,9 @@ func TestRecordPropsRegistersIllegalKeys(t *testing.T) {
 	}
 }
 
-// fr-11-02's ruleset gates its default branch on the "ci/build" status check;
-// fr-11-03's carries none. required_status_checks is an array of objects, so it
-// is storable exactly when it is empty and the ruleset that requires nothing is
-// the only one that would keep it. The contexts have to be projected: the check
-// name is the fact the rule asks about, and rule_types only says a rule exists.
+// fr-11-02's ruleset gates its default branch on "ci/build"; fr-11-03's carries none.
+// required_status_checks is an array of objects, storable exactly when empty, so only the
+// ruleset requiring nothing keeps it — the check name has to be projected out instead.
 func TestRulesetStatusChecksAreProjectedNotInverted(t *testing.T) {
 	_, n := fixture(t, map[string]any{
 		"org/ghektestorg.json": map[string]any{"_id": "ghektestorg", "org": "ghektestorg"},
@@ -192,10 +189,9 @@ func TestRulesetStatusChecksAreProjectedNotInverted(t *testing.T) {
 	}
 }
 
-// fr-11-02 fires one deploy job from 7 branches and declares
-// permissions: {contents: read, id-token: write} on the job. The 7 records merge,
-// so a per-branch scalar on the node would be whichever record sorted first;
-// the branch set and the token the job actually holds are what survive.
+// fr-11-02 fires one deploy job from 7 branches and declares permissions: {contents:
+// read, id-token: write}. The 7 records merge, so a per-branch scalar would be whichever
+// record sorted first; the branch set and the token the job holds are what survive.
 func TestEmitJobsResolvesBranchesAndProjectsTheToken(t *testing.T) {
 	const repo = "fr-11-02-protection-targets-default-branch-only-but-deploy-fires-from"
 	branches := []string{"main", "deploy", "hotfix/a", "hotfix/b/c", "release/1.0", "release/2.0/hotfix", "releases/1.0"}
@@ -251,10 +247,9 @@ func TestEmitJobsResolvesBranchesAndProjectsTheToken(t *testing.T) {
 	}
 }
 
-// BranchSlug maps "feat/a" and "feat__a" onto one key, so a job recorded against
-// that slug cannot be attributed to either: naming one ships the other branch's
-// name as fact. fr-11-05's near miss ("sandbox-x" against "sandbox/x") slugs
-// distinctly and must still resolve.
+// BranchSlug maps "feat/a" and "feat__a" onto one key, so a job recorded against that
+// slug belongs to neither: naming one ships the other branch's name as fact. fr-11-05's
+// near miss ("sandbox-x" against "sandbox/x") slugs distinctly and must still resolve.
 func TestJobBranchDegradesOnSlugCollision(t *testing.T) {
 	const repo = "fr-11-05-include-all-branches-with-exclusion-list-creates-trust-islan"
 	for _, order := range [][]string{{"feat/a", "feat__a"}, {"feat__a", "feat/a"}} {
@@ -300,12 +295,9 @@ func TestJobBranchDegradesOnSlugCollision(t *testing.T) {
 	}
 }
 
-// fr-05-09: upstream.yml's fork-PR job writes "build-out", downstream.yml
-// forwards it as the reusable callee's artifact-name, and the callee downloads
-// "${{ inputs.artifact-name }}" under secrets: inherit. The scenario exists to
-// show the fork-controlled artifact reaching that callee, so both jobs must land
-// on one Artifact node — an unresolved expression splits it in two and the
-// writer -> artifact <- reader path the scenario proves disappears.
+// fr-05-09: upstream.yml's fork-PR job writes "build-out" and the callee downloads the
+// "${{ inputs.artifact-name }}" downstream.yml forwards. Both jobs must land on one
+// Artifact node — an unresolved expression splits it and the writer -> reader path is gone.
 func TestCalleeArtifactResolvesToTheCallSiteInput(t *testing.T) {
 	const repo = "fr-05-09-reusable-workflow-laundering"
 	job := func(workflow, id string, fields map[string]any) map[string]any {
@@ -351,10 +343,9 @@ func TestCalleeArtifactResolvesToTheCallSiteInput(t *testing.T) {
 	}
 }
 
-// fr-01-03 templates a uses: ref from the PR branch name, so the action resolved
-// at run time is whatever the attacker names. There is no identity to point at:
-// the node must not be minted, and both halves must be counted rather than
-// silently dropped.
+// fr-01-03 templates a uses: ref from the PR branch name, so the action resolved at run
+// time is whatever the attacker names. There is no identity to point at: no node may be
+// minted, and both halves have to be counted rather than silently dropped.
 func TestUnresolvableExpressionIdentityIsCountedNotMinted(t *testing.T) {
 	const repo = "fr-01-03-action-ref-templated-from-pr"
 	const ref = "my-org/build-tools@${{ github.event.pull_request.head.ref }}"

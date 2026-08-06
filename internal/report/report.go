@@ -1,7 +1,5 @@
-// Package report is the single consumer-facing renderer. It loads canonical
-// findings off a run's 20-scan/ output, assigns run-local ids, filters by
-// threshold, and serializes to json/jsonl/md/html. It operates only on the
-// canonical record and never branches on provider.
+// Package report renders canonical findings to json/jsonl/md/html. It reads only
+// the canonical record and never branches on provider.
 package report
 
 import (
@@ -45,7 +43,10 @@ func Run(ctx context.Context, runDir string, opts Options) error {
 	}
 	findings = filterAndOrder(findings, opts)
 
-	state, _ := engine.LoadState(runDir) // best-effort header data; a missing _meta.json is not fatal
+	state, err := engine.LoadState(runDir) // best-effort header data; a missing _meta.json is not fatal
+	if err != nil {
+		state = &engine.State{}
+	}
 	meta := reportMeta{
 		RunID:        filepath.Base(runDir),
 		Platform:     state.Platform,
@@ -109,10 +110,9 @@ func load(runDir string) ([]finding.Finding, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load findings: %w", err)
 	}
-	// Verification findings live one directory deeper, under <plan>/findings, alongside
-	// step records and loot that are not findings. The phase directory comes from the
-	// constant: spelled out here, renumbering the phase would leave this reading zero
-	// findings and reporting no error.
+	// Verification findings sit one level deeper, under <plan>/findings, beside step
+	// records and loot that are not findings. The phase directory comes from the
+	// constant: a literal would silently read zero findings after a renumbering.
 	attackFiles, err := prior.IterJSON(engine.AttackRoot())
 	if err != nil {
 		return nil, fmt.Errorf("load attack findings: %w", err)
@@ -135,9 +135,8 @@ func load(runDir string) ([]finding.Finding, error) {
 }
 
 // filterAndOrder drops findings below either threshold, sorts the survivors
-// (severity desc, then rule id, then subject id) and assigns contiguous F-NNN
-// ids over what will actually be reported, so the report reads F-001..F-NNN and
-// a re-render of the same run + thresholds is byte-stable.
+// (severity desc, then rule id, then subject id) and numbers them F-001..F-NNN,
+// so a re-render of the same run and thresholds is byte-stable.
 func filterAndOrder(findings []finding.Finding, opts Options) []finding.Finding {
 	minSev := finding.SeverityRank(opts.MinSeverity)
 	minConf := finding.ConfidenceRank(opts.MinConfidence)
@@ -205,8 +204,6 @@ func renderJSON(findings []finding.Finding) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Out=="-" forces stdout for piping; anything else is a destination directory,
-// defaulting to the run dir where the rest of the run already lives.
 func emit(runDir string, opts Options, filename string, data []byte) error {
 	if opts.Out == "-" {
 		_, err := os.Stdout.Write(data)
