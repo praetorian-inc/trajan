@@ -186,8 +186,7 @@ flowchart LR
 
   Normalize --> Graph[graph]
   Scan --> Graph
-  Scan --> Attack[attack]
-  Attack --> Report
+  Attack[attack] --> Report
   Graph --> Push[push] --> Neo4j[(Neo4j)]
 ```
 
