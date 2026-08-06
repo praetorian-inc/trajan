@@ -28,7 +28,18 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "trajan",
 	Short: "Trajan - CI/CD Security Scanner",
-	Long:  `Trajan - CI/CD Security Scanner`,
+	Long: `
+           scan     graph     attack
+           ────     ─────     ──────
+
+████████ ██████   █████       ██  █████  ███    ██
+   ██    ██   ██ ██   ██      ██ ██   ██ ████   ██
+   ██    ██████  ███████      ██ ███████ ██ ██  ██
+   ██    ██   ██ ██   ██ ██   ██ ██   ██ ██  ██ ██
+   ██    ██   ██ ██   ██  █████  ██   ██ ██   ████
+
+            Praetorian Security Inc.
+`,
 }
 
 func Execute(ctx context.Context) {
