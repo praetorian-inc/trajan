@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Scan CI/CD configuration
-        uses: praetorian-inc/trajan@feat/github-action
+        uses: praetorian-inc/trajan@main
         with:
           fail-on-severity: none
 ```
@@ -34,9 +34,8 @@ jobs:
 No checkout step is required in the consumer repository. Trajan reads the
 target through GitHub's APIs.
 
-During development, the value after `@` can be a branch. For a released Action,
-use a full commit SHA for the strongest immutable pin, a fixed version such as
-`v1.1.0`, or the moving compatible `v1` tag.
+Pin the Action ref. Prefer a full commit SHA. A release tag such as `v1.1.0`
+or the moving `v1` tag also works. A branch name is fine only while testing.
 
 ## Expanded coverage
 
@@ -48,7 +47,7 @@ For expanded coverage, store a fine-grained PAT as an Actions secret and pass it
 explicitly:
 
 ```yaml
-      - uses: praetorian-inc/trajan@feat/github-action
+      - uses: praetorian-inc/trajan@main
         with:
           token: ${{ secrets.TRAJAN_TOKEN }}
           fail-on-severity: high
@@ -78,12 +77,12 @@ You do not need to merge the Action to `main` before testing it.
 From another repository, reference the branch directly:
 
 ```yaml
-uses: praetorian-inc/trajan@feat/github-action
+uses: praetorian-inc/trajan@<branch>
 ```
 
 To test inside this repository, the `Test GitHub Action` workflow checks out the
 selected branch and invokes `uses: ./`. Open the Actions tab, select that
-workflow, choose **Run workflow**, and select the feature branch.
+workflow, choose **Run workflow**, and select the branch under test.
 
 A successful test has all of the following:
 
