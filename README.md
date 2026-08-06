@@ -2,7 +2,7 @@
 
 # Trajan: CI/CD Security Scanner
 
-Trajan scans CI/CD pipelines for security vulnerabilities that attackers use to compromise software supply chains. It supports GitHub Actions, GitLab CI, Azure DevOps, Jenkins, and JFrog.
+Trajan scans CI/CD pipelines for security vulnerabilities that attackers use to compromise software supply chains. It supports GitHub Actions, GitLab CI, and Azure DevOps.
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -12,7 +12,7 @@ Trajan scans CI/CD pipelines for security vulnerabilities that attackers use to 
 
 ## Quick start
 
-Prebuilt binaries are on the [releases page](https://github.com/praetorian-inc/trajan/releases); building from source is below. Credentials come from the environment — for GitHub, a PAT with `repo` scope, or `public_repo` for public repositories only.
+Once installed ([Installation](#installation)), credentials come from the environment — for GitHub, a PAT with `repo` scope, or `public_repo` for public repositories only.
 
 ```sh
 export TRAJAN_GH_TOKEN=ghp_...
@@ -28,15 +28,16 @@ trajan ado run your-org/your-project  # <org>, <org>/<project>, or <org>/<projec
 
 A GitHub locator is `owner/repo` or `org`, bare or as a github.com / GitHub Enterprise Server URL. Each run gets its own directory under `./trajan-out/` (`--output-dir` moves it, `--concurrency` bounds the API workers), and every phase reads only what an earlier one wrote, so any phase can be re-run against saved state without a second trip to the API.
 
-Each platform's conventional variables are honored too (`GH_TOKEN`, `GITHUB_TOKEN`, `GITLAB_TOKEN`, `ADO_PAT`, `AZURE_DEVOPS_PAT`, and the rest), and `--token` on a subcommand takes a credential where an exported secret is unwanted. Root flags apply everywhere: `--debug` for raw structured logs, `--no-color`, and `--proxy` / `--socks-proxy` to route traffic through an intercepting proxy. Trajan also runs as a composite [GitHub Action](.github/GITHUB_ACTION.md).
+Each platform's conventional variables are honored too (`GH_TOKEN`, `GITHUB_TOKEN`, `GITLAB_TOKEN`, `ADO_PAT`, `AZURE_DEVOPS_PAT`, and the rest), and `--token` on a subcommand takes a credential where an exported secret is unwanted. Root flags apply everywhere: `--debug` for raw structured logs, `--no-color`, and `--proxy` / `--socks-proxy` to route traffic through an intercepting proxy.
 
-<details><summary>Build from source</summary>
+## Installation
+
+Prebuilt binaries are on the [releases page](https://github.com/praetorian-inc/trajan/releases). From source, Go 1.25 or later:
 
 ```sh
 git clone https://github.com/praetorian-inc/trajan.git
-cd trajan && make build   # Go 1.25 or later; writes ./bin/trajan
+cd trajan && make build   # writes ./bin/trajan
 ```
-</details>
 
 ## What Trajan does
 
