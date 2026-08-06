@@ -21,6 +21,14 @@ git clone https://github.com/praetorian-inc/trajan.git
 cd trajan && make build   # writes ./bin/trajan
 ```
 
+### Browser (WASM)
+
+```sh
+make wasm-serve   # http://localhost:8080
+```
+
+Runs collect → normalize → scan in the browser and renders the same HTML report as the CLI. Attack and graph are not included. See [browser/README.md](browser/README.md).
+
 ## Usage
 
 ### Credentials

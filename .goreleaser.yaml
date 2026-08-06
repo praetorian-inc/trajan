@@ -7,6 +7,7 @@ project_name: trajan
 before:
   hooks:
     - go mod tidy
+    - make wasm-dist
 
 builds:
   - id: trajan
@@ -68,3 +69,5 @@ release:
   draft: false
   prerelease: auto
   name_template: "Trajan v{{.Version}}"
+  extra_files:
+    - glob: browser/trajan-standalone.html
