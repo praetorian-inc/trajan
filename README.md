@@ -29,6 +29,18 @@ make wasm-serve   # http://localhost:8080
 
 Runs collect → normalize → scan in the browser and renders the same HTML report as the CLI. Attack and graph are not included. See [browser/README.md](browser/README.md).
 
+### GitHub Action
+
+Scan a GitHub repository from a workflow. Trajan builds from the Action ref, writes HTML / Markdown / JSONL reports, uploads them as an artifact, and prints severity counts in the job summary.
+
+```yaml
+- uses: praetorian-inc/trajan@main
+  with:
+    fail-on-severity: none
+```
+
+No checkout step is required. Defaults to `${{ github.token }}` and the current repository. For inputs, token coverage, severity gating, and branch testing, see [GitHub Action](.github/GITHUB_ACTION.md).
+
 ## Usage
 
 ### Credentials
