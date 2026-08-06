@@ -17,6 +17,7 @@ import (
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/finding"
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 const (
@@ -34,12 +35,26 @@ func Build(ctx context.Context, cfg *engine.Config, runDir string, targets map[s
 	if err := state.CheckPhase(engine.PhaseGraph); err != nil {
 		return err
 	}
+	ui.PhaseHeader("Graph")
 	timer := engine.StartPhaseTimer(engine.PhaseGraph, "graph")
-	buildErr := runBuild(ctx, cfg, runDir, targets, timer)
+	stats, buildErr := runBuild(ctx, cfg, runDir, targets, timer)
 
-	state.RecordPhase(timer.Stop(buildErr))
-	return errors.Join(buildErr, state.Save(runDir))
+	rec := timer.Stop(buildErr)
+	state.RecordPhase(rec)
+	saveErr := state.Save(runDir)
+	if buildErr == nil {
+		ui.Outcome("Graph complete", []ui.Count{
+			{Label: "nodes", N: stats.nodes},
+			{Label: "edges", N: stats.edges},
+		}, engine.Elapsed(rec.DurationS))
+		if stats.attached > 0 || stats.unattached > 0 {
+			ui.Note(fmt.Sprintf("%d findings attached, %d unattached", stats.attached, stats.unattached))
+		}
+	}
+	return errors.Join(buildErr, saveErr)
 }
+
+type buildStats struct{ nodes, edges, attached, unattached int }
 
 type nodesFile struct {
 	Nodes []node `json:"nodes"`
@@ -49,7 +64,7 @@ type edgesFile struct {
 	Edges []edge `json:"edges"`
 }
 
-func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets map[string]Target, timer *engine.PhaseTimer) error {
+func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets map[string]Target, timer *engine.PhaseTimer) (buildStats, error) {
 	// RunPartial calls onError from its workers.
 	var errMu sync.Mutex
 	onError := func(e error) {
@@ -60,11 +75,11 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets ma
 
 	c, err := loadCorpus(ctx, cfg, runDir, onError)
 	if err != nil {
-		return err
+		return buildStats{}, err
 	}
 	findings, findingsSeen, err := loadFindings(ctx, cfg, runDir, onError)
 	if err != nil {
-		return err
+		return buildStats{}, err
 	}
 	in := inputsSummary{
 		NormalizeSeen:    c.seen,
@@ -79,23 +94,23 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets ma
 	}
 
 	if err := os.RemoveAll(filepath.Join(runDir, graphDir)); err != nil {
-		return fmt.Errorf("clear %s: %w", graphDir, err)
+		return buildStats{}, fmt.Errorf("clear %s: %w", graphDir, err)
 	}
 
 	nodes, err := buildNodes(ctx, c)
 	if err != nil {
-		return err
+		return buildStats{}, err
 	}
 	edges, err := buildEdges(ctx, c, nodes)
 	if err != nil {
-		return err
+		return buildStats{}, err
 	}
 	observed := backfillObserved(nodes, edges)
 	dropped := dropDangling(nodes, edges)
 
 	att := newAttacher(c, nodes, edges, targets)
 	if err := att.run(ctx, findings); err != nil {
-		return err
+		return buildStats{}, err
 	}
 
 	all := nodes.all()
@@ -118,13 +133,16 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets ma
 		{engine.GraphSummary(), sum},
 	} {
 		if err := cp.Write(w.rel, w.v); err != nil {
-			return fmt.Errorf("write %s: %w", w.rel, err)
+			return buildStats{}, fmt.Errorf("write %s: %w", w.rel, err)
 		}
 	}
 	timer.OutputFiles = 3
-	slog.Info("graph built", "nodes", len(all), "edges", len(edgeList),
-		"findings_attached", att.res.attached, "findings_unattached", len(att.res.unattached))
-	return nil
+	return buildStats{
+		nodes:      len(all),
+		edges:      len(edgeList),
+		attached:   att.res.attached,
+		unattached: len(att.res.unattached),
+	}, nil
 }
 
 // An absent 20-scan is a missing input, not an empty one: IterJSON would report

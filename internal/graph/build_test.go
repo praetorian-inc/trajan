@@ -248,7 +248,8 @@ func readSummary(t *testing.T, runDir string) summary {
 func buildInto(t *testing.T, runDir string) error {
 	t.Helper()
 	timer := engine.StartPhaseTimer(engine.PhaseGraph, "graph")
-	return runBuild(t.Context(), &engine.Config{Concurrency: 2}, runDir, nil, timer)
+	_, err := runBuild(t.Context(), &engine.Config{Concurrency: 2}, runDir, nil, timer)
+	return err
 }
 
 // A record that fails to parse is dropped and the phase continues, so the count of what

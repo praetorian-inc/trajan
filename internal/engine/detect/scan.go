@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 
@@ -32,6 +33,7 @@ func Scan(ctx context.Context, runDir string, p Provider, opts ScanOptions) erro
 	if err := state.CheckPhase(engine.PhaseScan); err != nil {
 		return err
 	}
+	ui.PhaseHeader("Scan")
 
 	timer := engine.StartPhaseTimer(engine.PhaseScan, "scan")
 	bySeverity, scanErr := runScan(ctx, runDir, state, p, opts, timer)
@@ -44,8 +46,12 @@ func Scan(ctx context.Context, runDir string, p Provider, opts ScanOptions) erro
 	if scanErr != nil {
 		return scanErr
 	}
-	engine.PhaseDone(rec, "findings", rec.OutputFiles)
+	ui.Outcome("Scan complete", []ui.Count{
+		{Label: "findings", N: rec.OutputFiles},
+		{Label: "degraded", N: len(rec.Errors)},
+	}, engine.Elapsed(rec.DurationS))
 	ui.Severities(bySeverity)
+	ui.Note(runDir)
 	return nil
 }
 
@@ -93,6 +99,17 @@ func runScan(ctx context.Context, runDir string, state *engine.State, p Provider
 			return nil, fmt.Errorf("clear %s: %w", d, err)
 		}
 	}
+
+	// One line naming the breadth of detection applied: a scan that shows nothing
+	// between "Scan" and its findings reads as if it did nothing.
+	cats := map[string]bool{}
+	for i := range rules {
+		cats[path.Base(path.Dir(rules[i].RuleFile))] = true
+	}
+	ui.Row(ui.RowLine{
+		Label:  fmt.Sprintf("%d detection rules across %d categories", len(rules), len(cats)),
+		Status: "ok",
+	})
 
 	ruleFires := make(map[string]int, len(rules))
 	bySeverity := map[string]int{}

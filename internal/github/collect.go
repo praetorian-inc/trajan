@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 // Backstops pathological non-catch-all globs in non-default branch selection.
@@ -61,6 +62,8 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 		state.StartedAt = engine.IsoformatUTC(timeNow())
 	}
 
+	ui.PhaseHeader("Collect")
+
 	timer := engine.StartPhaseTimer(engine.PhaseCollect, "collect")
 	cp := engine.CurrentPhase{RunDir: runDir}
 
@@ -74,7 +77,11 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if collectErr != nil {
 		return runDir, collectErr
 	}
-	engine.PhaseDone(rec)
+	ui.Outcome("Collect complete", []ui.Count{
+		{Label: "repos", N: rec.InputFiles},
+		{Label: "degraded", N: len(rec.Errors)},
+	}, engine.Elapsed(rec.DurationS))
+	ui.Note(runDir)
 	return runDir, nil
 }
 
@@ -85,12 +92,35 @@ func runCollect(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.Cu
 	scope Scope, timer *engine.PhaseTimer) error {
 	org := scope.Org
 
-	softSurface(timer, "org", func() error { return collectOrg(ctx, gh, cp, org) })
-	softSurface(timer, "rulesets-org", func() error { return collectRulesets(ctx, gh, cp, org, "") })
-	softSurface(timer, "secrets-org", func() error { return collectSecrets(ctx, gh, cp, org, "") })
-	softSurface(timer, "variables-org", func() error { return collectVariables(ctx, gh, cp, org, "") })
-	softSurface(timer, "runners-org", func() error { return collectRunners(ctx, gh, cp, org, "") })
-	softSurface(timer, "apps", func() error { return collectApps(ctx, gh, cp, org) })
+	orgSurfaces := []struct {
+		label string
+		fn    func() error
+	}{
+		{"org", func() error { return collectOrg(ctx, gh, cp, org) }},
+		{"rulesets", func() error { return collectRulesets(ctx, gh, cp, org, "") }},
+		{"secrets", func() error { return collectSecrets(ctx, gh, cp, org, "") }},
+		{"variables", func() error { return collectVariables(ctx, gh, cp, org, "") }},
+		{"runners", func() error { return collectRunners(ctx, gh, cp, org, "") }},
+		{"apps", func() error { return collectApps(ctx, gh, cp, org) }},
+	}
+
+	// org surfaces, then the repository fan-out, then members: the row count is fixed
+	// so the seq climbs to a total the operator can see coming.
+	const total = 8
+	seq := 0
+	surface := func(label string, err error) {
+		seq++
+		l := ui.RowLine{Seq: seq, Total: total, Label: label, Status: "ok"}
+		if err != nil {
+			l.Status, l.Note = "degraded", err.Error()
+			appendErr(timer, fmt.Sprintf("%s: %v", label, err))
+		}
+		ui.Row(l)
+	}
+
+	for _, s := range orgSurfaces {
+		surface(s.label, s.fn())
+	}
 
 	repos, err := enumerateRepos(ctx, gh, scope)
 	if err != nil {
@@ -114,7 +144,17 @@ func runCollect(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.Cu
 	}
 	timer.OutputFiles = written
 
-	softSurface(timer, "members", func() error { return collectMembers(ctx, gh, cp, org) })
+	// One row for the whole fan-out: a per-repo soft failure is already an entry in the
+	// degraded count, and a repo that dropped out entirely is the row's own news. The
+	// repo tally is the Outcome's job, not this row's.
+	seq++
+	repoRow := ui.RowLine{Seq: seq, Total: total, Label: "repositories", Status: "ok"}
+	if failed := len(repos) - len(results); failed > 0 {
+		repoRow.Status, repoRow.Note = "failed", fmt.Sprintf("%d unreadable", failed)
+	}
+	ui.Row(repoRow)
+
+	surface("members", collectMembers(ctx, gh, cp, org))
 	return nil
 }
 
@@ -255,7 +295,8 @@ func appendErr(timer *engine.PhaseTimer, msg string) {
 	errMu.Lock()
 	timer.Errors = append(timer.Errors, msg)
 	errMu.Unlock()
-	// Debug, not Warn: PhaseDone reports these as one aggregate at the end.
+	// Debug, not Warn: the phase closes with a degraded count and the full list lands
+	// in _meta.json, so a per-repo soft failure need not shout mid-run.
 	slog.Debug("collect surface degraded", "detail", msg)
 }
 

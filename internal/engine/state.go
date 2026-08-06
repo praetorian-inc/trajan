@@ -155,6 +155,16 @@ func IsoformatUTC(t time.Time) string {
 	return t.Format("2006-01-02T15:04:05.000000-07:00")
 }
 
+// Elapsed formats a phase duration for an Outcome trailer, dropping anything under a
+// second so a fast local phase closes without a bare "0s".
+func Elapsed(seconds float64) string {
+	d := time.Duration(seconds * float64(time.Second)).Round(time.Second)
+	if d <= 0 {
+		return ""
+	}
+	return d.String()
+}
+
 type PhaseTimer struct {
 	Phase  Phase
 	Script string
