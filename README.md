@@ -27,32 +27,13 @@ cd trajan && make build   # writes ./bin/trajan
 
 Credentials resolve in order. The first non-empty value wins.
 
-**GitHub**
+| Platform | Order |
+|---|---|
+| GitHub | `TRAJAN_GH_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`, `--token` |
+| GitLab | `TRAJAN_GL_TOKEN`, `GITLAB_TOKEN`, `GL_TOKEN`, `CI_JOB_TOKEN`, `--token` |
+| Azure DevOps | `TRAJAN_ADO_TOKEN`, `ADO_PAT`, `AZURE_DEVOPS_PAT`, `AZDO_PAT`, `AZURE_DEVOPS_EXT_PAT`, `AZURE_BEARER_TOKEN`, `SYSTEM_ACCESSTOKEN`, `--token`, `--azure-bearer-token` |
 
-1. `TRAJAN_GH_TOKEN`
-2. `GH_TOKEN`
-3. `GITHUB_TOKEN`
-4. `--token`
-
-**GitLab**
-
-1. `TRAJAN_GL_TOKEN`
-2. `GITLAB_TOKEN`
-3. `GL_TOKEN`
-4. `CI_JOB_TOKEN`
-5. `--token`
-
-**Azure DevOps**
-
-1. `TRAJAN_ADO_TOKEN`
-2. `ADO_PAT`
-3. `AZURE_DEVOPS_PAT`
-4. `AZDO_PAT`
-5. `AZURE_DEVOPS_EXT_PAT`
-6. `AZURE_BEARER_TOKEN` (Entra ID bearer)
-7. `SYSTEM_ACCESSTOKEN` (pipeline bearer)
-8. `--token`
-9. `--azure-bearer-token`
+`AZURE_BEARER_TOKEN` / `SYSTEM_ACCESSTOKEN` / `--azure-bearer-token` are Entra ID or pipeline bearers. The rest are PATs.
 
 ### Run a scan
 
@@ -194,23 +175,19 @@ See the embedded plans in `internal/attack-plans/github/` for full examples (`pw
 ## Architecture
 
 ```mermaid
-flowchart TB
-  API([Platform API]) --> Collect
+flowchart LR
+  API([Platform API]) --> Collect[collect]
+  Collect --> Normalize[normalize]
+  Normalize --> Scan[scan]
+  Scan --> Report[report]
 
-  subgraph pipeline["Run directory"]
-    direction TB
-    Collect["1. collect<br/><i>00-collect</i>"] --> Normalize["2. normalize<br/><i>10-normalize</i>"]
-    Normalize --> Scan["3. scan<br/><i>20-scan</i>"]
-    Scan --> Report["4. report<br/>json · jsonl · md · html"]
+  Rules[(Detection rules)] -.-> Scan
+  Plans[(Attack plans)] -.-> Attack
 
-    Normalize --> Graph["graph<br/><i>30-graph</i>"]
-    Scan --> Graph
-    Scan --> Attack["attack<br/><i>40-attack</i>"]
-    Attack --> Report
-  end
-
-  Rules[(Detection rules<br/>YAML + DSL)] -.-> Scan
-  Plans[(Attack plans + templates<br/>YAML)] -.-> Attack
+  Normalize --> Graph[graph]
+  Scan --> Graph
+  Scan --> Attack[attack]
+  Attack --> Report
   Graph --> Push[push] --> Neo4j[(Neo4j)]
 ```
 
