@@ -27,10 +27,13 @@ func TestWhoAmIPATSelf404NonFatal(t *testing.T) {
 
 	origURL := FlagURL
 	FlagURL = srv.URL
+	for _, k := range []string{"TRAJAN_GL_TOKEN", "GITLAB_TOKEN", "GL_TOKEN", "CI_JOB_TOKEN"} {
+		t.Setenv(k, "")
+	}
 	t.Setenv("GITLAB_TOKEN", "tok")
 	defer func() { FlagURL = origURL }()
 
-	if err := WhoAmI(context.Background()); err != nil {
+	if err := WhoAmI(context.Background(), ""); err != nil {
 		t.Fatalf("WhoAmI with a 404 on PAT-self must be non-fatal: %v", err)
 	}
 }
@@ -44,10 +47,13 @@ func TestWhoAmIUserErrorFatal(t *testing.T) {
 
 	origURL := FlagURL
 	FlagURL = srv.URL
+	for _, k := range []string{"TRAJAN_GL_TOKEN", "GITLAB_TOKEN", "GL_TOKEN", "CI_JOB_TOKEN"} {
+		t.Setenv(k, "")
+	}
 	t.Setenv("GITLAB_TOKEN", "bad")
 	defer func() { FlagURL = origURL }()
 
-	if err := WhoAmI(context.Background()); err == nil {
+	if err := WhoAmI(context.Background(), ""); err == nil {
 		t.Fatal("WhoAmI with a 401 on /user = nil error, want fatal")
 	}
 }

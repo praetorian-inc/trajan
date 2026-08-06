@@ -122,6 +122,7 @@ func newAttackCmd(cfg *engine.Config) *cobra.Command {
 	run.Flags().StringVar(&until, "until", "", "run up to and including this step id, then stop; cleanup is left for the resume")
 	run.Flags().DurationVar(&stepDelay, "step-delay", 0, "sleep between steps to absorb read-after-write propagation lag")
 	run.Flags().BoolVar(&keepCipher, "keep-cipher", false, "keep the harvest's persisted ciphertext after a successful decrypt instead of discarding it")
+	run.Flags().StringVar(&cfg.Token, "token", "", "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)")
 
 	var resumePath, resumeUntil string
 	var resumeKeepCipher bool
@@ -147,6 +148,7 @@ func newAttackCmd(cfg *engine.Config) *cobra.Command {
 	resume.Flags().StringVar(&resumeUntil, "until", "", "resume up to and including this step id, then stop again")
 	resume.Flags().DurationVar(&resumeDelay, "step-delay", 0, "sleep between steps to absorb read-after-write propagation lag")
 	resume.Flags().BoolVar(&resumeKeepCipher, "keep-cipher", false, "keep the harvest's persisted ciphertext after a successful decrypt instead of discarding it")
+	resume.Flags().StringVar(&cfg.Token, "token", "", "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)")
 
 	var cleanupPath string
 	var cleanupDryRun bool
@@ -164,7 +166,7 @@ func newAttackCmd(cfg *engine.Config) *cobra.Command {
 				planID = args[0]
 			}
 			report, err := attack.Cleanup(cmd.Context(), attack.CleanupOptions{
-				RunDir: runDir, PlanID: planID, DryRun: cleanupDryRun,
+				RunDir: runDir, PlanID: planID, DryRun: cleanupDryRun, Token: cfg.Token,
 			})
 			if report != nil {
 				printCleanup(cmd, report)
@@ -174,6 +176,7 @@ func newAttackCmd(cfg *engine.Config) *cobra.Command {
 	}
 	cleanup.Flags().StringVarP(&cleanupPath, "path", "p", "", "run directory to clean up (default: latest)")
 	cleanup.Flags().BoolVar(&cleanupDryRun, "dry-run", false, "list the inverses without issuing them")
+	cleanup.Flags().StringVar(&cfg.Token, "token", "", "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)")
 
 	planCmd.AddCommand(planValidate, planList)
 	attackCmd.AddCommand(catalog, planCmd, run, resume, cleanup, newIdentityCmd())

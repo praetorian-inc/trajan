@@ -10,9 +10,11 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-func WhoAmI(ctx context.Context, org, token string) error {
+func WhoAmI(ctx context.Context, org, explicitPAT, explicitBearer string) error {
 	org = cmp.Or(strings.TrimSpace(org), strings.TrimSpace(os.Getenv("ORG_NAME")))
 	if org == "" {
 		return errors.New("no Azure DevOps organization: pass --org or set ORG_NAME")
@@ -21,11 +23,16 @@ func WhoAmI(ctx context.Context, org, token string) error {
 	if err != nil {
 		return err
 	}
-	pat, err := ResolveToken(token)
+	cred, err := ResolveCredential(explicitPAT, explicitBearer)
 	if err != nil {
 		return err
 	}
-	cl := NewClient(scope.Org, pat)
+	var cl *Client
+	if cred.Kind == engine.CredBearer {
+		cl = NewClientBearer(scope.Org, cred.Value)
+	} else {
+		cl = NewClient(scope.Org, cred.Value)
+	}
 
 	raw, _, err := cl.Get(ctx, "core", APIVersionPreview, "/_apis/connectionData", nil, false)
 	if err != nil {

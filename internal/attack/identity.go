@@ -123,10 +123,10 @@ func (s *IdentityStore) Save() error {
 // resolveCredential turns a plan's from: spec into token material. It and
 // identity.adopt, which takes a credential out of harvested evidence, are the only
 // two places a secret enters the process.
-func resolveCredential(ctx context.Context, from string) (token, kind string, err error) {
+func resolveCredential(ctx context.Context, from, explicit string) (token, kind string, err error) {
 	switch {
 	case from == "" || from == kindEnv:
-		tok, err := github.ResolveToken(ctx)
+		tok, err := github.ResolveToken(ctx, explicit)
 		if err != nil {
 			return "", "", err
 		}

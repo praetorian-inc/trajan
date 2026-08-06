@@ -2,8 +2,8 @@ package github
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -11,14 +11,13 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-func ResolveToken(ctx context.Context) (string, error) {
-	for _, k := range []string{"GH_TOKEN", "GITHUB_TOKEN"} {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-			return v, nil
-		}
+func ResolveToken(ctx context.Context, explicit string) (string, error) {
+	if c, ok := engine.ResolveGitHub(explicit); ok {
+		return c.Value, nil
 	}
 	if out, err := exec.CommandContext(ctx, "gh", "auth", "token").Output(); err == nil {
 		if tok := strings.TrimSpace(string(out)); tok != "" {
+			slog.Info("using credential", "source", "gh auth token")
 			return tok, nil
 		}
 	}

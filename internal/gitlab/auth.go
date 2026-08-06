@@ -2,29 +2,26 @@ package gitlab
 
 import (
 	"errors"
-	"os"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// Collect and WhoAmI have signatures frozen to (ctx,cfg,locator) and (ctx), so --url
+// Collect and WhoAmI have signatures frozen to (ctx,cfg,locator) and (ctx,token), so --url
 // and --insecure reach them as package vars the CLI sets before dispatching.
 var (
 	FlagURL      = "https://gitlab.com"
 	FlagInsecure = false
 )
 
-var ErrNoToken = errors.New("no GitLab token: pass --token or set GITLAB_TOKEN or GL_TOKEN")
+var ErrNoToken = errors.New("no GitLab token: pass --token or set TRAJAN_GL_TOKEN/GITLAB_TOKEN/GL_TOKEN/CI_JOB_TOKEN")
 
 func ResolveToken(explicit string) (string, error) {
-	if v := strings.TrimSpace(explicit); v != "" {
-		return v, nil
+	c, ok := engine.ResolveGitLab(explicit)
+	if !ok {
+		return "", ErrNoToken
 	}
-	for _, k := range []string{"GITLAB_TOKEN", "GL_TOKEN"} {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-			return v, nil
-		}
-	}
-	return "", ErrNoToken
+	return c.Value, nil
 }
 
 // Returns the instance root only; the client appends /api/v4.

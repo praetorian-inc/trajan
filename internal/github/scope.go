@@ -90,8 +90,8 @@ func slugComponent(s string) string {
 	return b.String()
 }
 
-func WhoAmI(ctx context.Context) error {
-	token, err := ResolveToken(ctx)
+func WhoAmI(ctx context.Context, explicit string) error {
+	token, err := ResolveToken(ctx, explicit)
 	if err != nil {
 		return err
 	}

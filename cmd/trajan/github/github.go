@@ -43,7 +43,7 @@ func newGitHubCmd() *cobra.Command {
 		Short: "Resolve the token and print the authenticated identity and scopes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return github.WhoAmI(cmd.Context())
+			return github.WhoAmI(cmd.Context(), cfg.Token)
 		},
 	}
 	collect := &cobra.Command{
@@ -186,6 +186,10 @@ func newGitHubCmd() *cobra.Command {
 	analyze.Flags().BoolVarP(&writeBack, "write-back", "w", false, "persist analysis results")
 	analyze.Flags().BoolVarP(&noGraph, "no-graph", "G", false, "analyze in-memory (no Neo4j)")
 	analyze.Flags().BoolVarP(&detailed, "detailed", "d", false, "expand output")
+
+	for _, c := range []*cobra.Command{whoami, collect, run} {
+		c.Flags().StringVar(&cfg.Token, "token", "", "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)")
+	}
 
 	gh.AddCommand(whoami, collect, normalize, scan, reportCmd, graphCmd, push, analyze, attack, run)
 	return gh
