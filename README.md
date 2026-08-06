@@ -7,218 +7,159 @@ Trajan scans CI/CD pipelines for security vulnerabilities that attackers use to 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-## What it does
-
-Trajan parses workflow YAML files, builds dependency graphs, and runs detection plugins.
-
-- 32 detection plugins across multiple CI/CD platforms
-- Graph-based analysis with taint tracking and gate detection
-- Browser-based scanner via WebAssembly (no backend needed)
-
 > [!NOTE]
 > Trajan is under active development. Some features may be incomplete and rough edges are expected. If you run into issues, please [open one](https://github.com/praetorian-inc/trajan/issues).
 
-## Installation
+## Quick start
 
-Prebuilt binaries are available on the [releases page](https://github.com/praetorian-inc/trajan/releases).
+Prebuilt binaries are on the [releases page](https://github.com/praetorian-inc/trajan/releases); building from source is below. Credentials come from the environment — for GitHub, a PAT with `repo` scope, or `public_repo` for public repositories only.
 
 ```sh
-go install github.com/praetorian-inc/trajan/cmd/trajan@latest
+export TRAJAN_GH_TOKEN=ghp_...
+trajan github whoami                  # the identity and scopes behind the token
+trajan github run your-org/your-repo  # collect, normalize, scan
+trajan github report --format html    # writes findings.html into the run directory
+
+export TRAJAN_GL_TOKEN=glpat-...
+trajan gitlab run your-group          # group, subgroup, or project path
+export TRAJAN_ADO_TOKEN=...
+trajan ado run your-org/your-project  # <org>, <org>/<project>, or <org>/<project>/<repo>
 ```
 
-Or build from source:
+A GitHub locator is `owner/repo` or `org`, bare or as a github.com / GitHub Enterprise Server URL. Each run gets its own directory under `./trajan-out/` (`--output-dir` moves it, `--concurrency` bounds the API workers), and every phase reads only what an earlier one wrote, so any phase can be re-run against saved state without a second trip to the API.
+
+Each platform's conventional variables are honored too (`GH_TOKEN`, `GITHUB_TOKEN`, `GITLAB_TOKEN`, `ADO_PAT`, `AZURE_DEVOPS_PAT`, and the rest), and `--token` on a subcommand takes a credential where an exported secret is unwanted. Root flags apply everywhere: `--debug` for raw structured logs, `--no-color`, and `--proxy` / `--socks-proxy` to route traffic through an intercepting proxy. Trajan also runs as a composite [GitHub Action](.github/GITHUB_ACTION.md).
+
+<details><summary>Build from source</summary>
 
 ```sh
 git clone https://github.com/praetorian-inc/trajan.git
-cd trajan && make build
+cd trajan && make build   # Go 1.25 or later; writes ./bin/trajan
+```
+</details>
+
+## What Trajan does
+
+Trajan collects a CI/CD estate read-only, evaluates a rule corpus over it, and reports the weaknesses it finds. On GitHub it will then verify a finding against the system it came from, so the report says "this was measured" rather than "this configuration looks wrong". Both halves are YAML: adding either takes no Go.
+
+### Detections
+
+Three phases per run — `collect` writes raw API responses, `normalize` turns them into explicit typed facts, `scan` evaluates the rule corpus over those facts and writes findings, so a rule change costs no API calls. A detection is a YAML file and nothing else: 301 of them today, 94 for GitHub Actions, 141 for GitLab CI, 66 for Azure DevOps, over one evaluation engine. A rule names its subject, a `where` block in a small predicate DSL, the evidence sentences that reach the report, and the fix (`description:` elided here):
+
+```yaml
+id: cat-01/issue-comment-checkout
+scenario_id: cat-01/10
+title: "issue_comment chatops checks out PR ref and executes it"
+subject: job
+graph: attack(PWN_REQUEST)
+severity: critical
+confidence: high
+
+where:
+  all_of:
+    - triggers ∋ {issue_comment}
+    - has_checkout_of_pr_ref == true
+    - executes_checked_out_code == true
+  none_of:
+    - if_conditions_summary.gate_strength == "strong"
+
+evidence:
+  - "issue_comment job checks out PR head and runs code from it."
+  - "Gate strength: {{ if_conditions_summary.gate_strength }}"
+
+remediation_hint: >
+  Require author-association == OWNER or compare against an explicit maintainer
+  list; do not gate on a substring match of the comment body alone.
 ```
 
-### Requirements
+`where` is a predicate string or a nestable `all_of` / `any_of` / `none_of` combinator; `chain_of` correlates across subjects for the 46 rules that follow taint between jobs. Predicates read normalized fields by path and compare with `==`, `!=`, `>`, `>=`, `<`, `<=`, set containment `∋`, subset `⊆`, `matches` for a regex, and `in`. `{{ ... }}` interpolates the fields that matched, so the report explains itself, and every finding carries the rule id, the DSL that fired as authored, a stable fingerprint, and the remediation hint. Rules live in `internal/detection-rules/<platform>/`; new facts belong in `normalize`, and rules only read them.
 
-- Go 1.24 or later
-- GitHub Personal Access Token with `repo` scope (for private repositories) or `public_repo` scope (for public repositories only)
+### Graph
 
-## Library SDK (`pkg/lib`)
+A rule's `graph:` line names the node or edge its findings attach to. `graph` turns normalized facts and findings into nodes and edges — `Repository`, `Workflow`, `Job`, `Secret`, `Runner`, `Environment`, `Ruleset`, `App`, `CloudRole`, `ExternalActor` and more, joined by `READS`, `WRITES`, `CAN_LAND_CODE`, `CAN_APPROVE`, `CAN_ASSUME`, `MINTS_TOKEN_AS`, `PWN_REQUEST` and the rest of the vocabulary in `internal/graph/schema.go`.
 
-Trajan can be embedded as a Go library for programmatic CI/CD security scanning. The `pkg/lib` package provides a public SDK that wraps Trajan's internal platform registry, detection engine, and scanner into a single high-level API.
+`trajan github graph` writes `30-graph/{nodes,edges}.json` and `trajan github push --neo4j-pass <pass> --reset` loads them into Neo4j at `bolt://localhost:7687`. From there the questions Trajan ships no rule for are Cypher you write yourself: which external actor reaches a production secret, which job on a shared runner is reachable from a fork. GitHub only today.
 
-### Quick Start (Library)
+### Attack
 
-```go
-import "github.com/praetorian-inc/trajan/pkg/lib"
+Verification runs a bounded, authorized check against the customer's own system to establish whether a finding is actually exploitable. It composes 40 primitives — one irreducible step each: `repo.fork`, `ref.create`, `commit.code`, `pr.open`, `run.observe`, `run.harvest` — into flat YAML plans. Handles pass between steps by name, and the registry knows from Go types which bindings are legal, so `attack plan validate` reports every error in a plan at once, offline, having issued zero requests. What a step commits into the target comes from a corpus of 15 job templates with declared parameter schemas, shared across plans. Below, the comment block is elided and the target and identity names are placeholders:
 
-result, err := lib.Scan(ctx, lib.ScanConfig{
-    Platform:    "github",
-    Token:       os.Getenv("GH_TOKEN"),
-    Org:         "myorg",
-    Repo:        "myrepo",
-    Concurrency: 10,
-    Timeout:     5 * time.Minute,
-})
-if err != nil {
-    log.Fatal(err)
-}
+```yaml
+apiVersion: trajan.attack/v1
+title: Issue-comment injection into a default-branch workflow
+rule: cat-01/issue-comment-checkout
+scope: [your-org/your-repo]
+identity: store:assessor
 
-for _, f := range result.Findings {
-    fmt.Printf("[%s] %s in %s: %s\n", f.Severity, f.Type, f.WorkflowFile, f.Evidence)
-}
+steps:
+  - id: target
+    uses: repo.resolve
+    owner: your-org
+    repo: your-repo
+  - id: issue
+    uses: issue.open
+    repo: target
+    title: "docs: clarify build step"
+    body: "Tracking a docs tweak."
+  - id: comment
+    uses: comment.create
+    on: issue
+    template: t-08/expression-injection
+    params: { marker: comment-inject }
+  - id: run
+    uses: run.observe
+    on: target
+    workflow: .github/workflows/triage.yml
+    match: comment-inject
+  - id: loot
+    uses: run.harvest
+    on: run
+
+cleanup:
+  - { uses: comment.delete, id: cleanup-comment, comment: comment }
 ```
 
-### SDK API
-
-| Function | Description |
-|----------|-------------|
-| `lib.Scan(ctx, cfg)` | Full scan: platform init → workflow discovery → detection execution |
-| `lib.GetPlatform(name)` | Get a platform adapter by name (`github`, `gitlab`, `azuredevops`, `bitbucket`, `jenkins`, `jfrog`) |
-| `lib.ListPlatforms()` | List all registered platform names |
-| `lib.GetDetections(platform)` | Get detection plugins for a specific platform |
-| `lib.GetDetectionsForPlatform(platform)` | Get platform-specific + cross-platform detections |
-| `lib.ListDetectionPlatforms()` | List platforms with registered detections |
-
-### ScanConfig
-
-```go
-type ScanConfig struct {
-    Platform    string        // CI/CD platform (required)
-    Token       string        // API authentication token
-    BaseURL     string        // Custom base URL for self-hosted instances
-    Org         string        // Organization/owner name
-    Repo        string        // Repository name (empty = scan all org repos)
-    Concurrency int           // Parallel detection workers (default: 10)
-    Timeout     time.Duration // Max scan duration (default: 5m)
-    LocalPath   string        // Local filesystem path (file or dir) for offline scan
-}
-```
-
-### ScanResult
-
-```go
-type ScanResult struct {
-    Findings          []detections.Finding   // Security vulnerabilities detected
-    Workflows         []platforms.Workflow   // CI/CD workflow files discovered
-    Errors            []error                // Non-fatal errors during scanning
-    SkippedDetections []string               // Detection names skipped in LocalPath mode (API-only); always empty in API-mode scans
-}
-```
-
-### Integration Example (Chariot Platform)
-
-The SDK is used by the [Chariot](https://github.com/praetorian-inc/chariot) attack surface management platform to run CI/CD security scans as a capability:
-
-```go
-import trajanlib "github.com/praetorian-inc/trajan/pkg/lib"
-
-result, err := trajanlib.Scan(ctx, trajanlib.ScanConfig{
-    Platform: platformName,
-    Token:    token,
-    Org:      repo.Org,
-    Repo:     repo.Name,
-})
-// Convert result.Findings → capmodel.Risk emissions
-```
-
-## Quick usage
+The plan's `rule:` field names the detection it verifies, and the finding it produces lands in the same report as that detection. Runs are inert by default: `attack run` renders exactly what would be sent and sends no mutation until `--execute`, and passing `--execute` is the operator's authorization assertion, recorded in the run record. Nothing touches a target outside the plan's `scope` allowlist. The inverse of every change is written to a ledger before the call that needs it, so a process killed mid-run still leaves a replayable undo record, and `attack cleanup` replays it and reports what was reversed, what was partial, and what cannot be undone. Credentials are reference-only: a literal in plan text is a validation error, because plans are committed to this repository. GitHub only today.
 
 ```sh
-# Scan a GitHub repo
-export GH_TOKEN=ghp_your_token
-trajan github scan --repo owner/repo
-
-# Scan a GitHub org
-trajan github scan --org myorg --concurrency 20
-
-# Scan GitLab projects
-export GITLAB_TOKEN=glpat_your_token
-trajan gitlab scan --group mygroup
-
-# Scan Azure DevOps
-export AZURE_DEVOPS_PAT=your_pat
-trajan ado scan --org myorg --repo myproject/myrepo
-
-# Offline scan: scan local workflow files without API access
-trajan github scan --path ./my-repo
-trajan github scan --path ./.github/workflows/ci.yml
-
-# JSON output
-trajan github scan --repo owner/repo -o json > results.json
-```
-
-For detailed usage and detection explanations, see the [Wiki](https://github.com/praetorian-inc/trajan/wiki).
-
-## Platform coverage
-
-| Platform | Detections | Enumerate |
-|----------|-----------|-----------|
-| GitHub Actions | 11 | token, repos, secrets |
-| GitLab CI | 8 | token, projects, groups, secrets, runners, branch-protections |
-| Azure DevOps | 6 | token, projects, repos, pipelines, connections, agent-pools, users, groups, and more |
-| Jenkins | 7 | access, jobs, nodes, plugins |
-| JFrog | scan-only | - |
-
-## Browser extension
-
-Trajan also compiles to a WebAssembly binary that runs entirely in the browser as a single HTML file. It uses the same detection engine and enumeration logic as the CLI, just compiled to WASM. The web version of Trajan enables low-friction delivery into target environments as part of an assessment.
-
-```sh
-make wasm       # build browser/trajan.wasm
-make wasm-dist  # build self-contained trajan-standalone.html
+trajan github attack plan list                          # the embedded plan corpus
+trajan github attack plan validate github/pwn-request   # offline, zero requests
 ```
 
 ## Architecture
 
 ```mermaid
-graph TD
-    subgraph CLI
-        CMD[Cobra Commands]
-    end
-
-    subgraph Platforms
-        GH[GitHub]
-        GL[GitLab]
-        ADO[Azure DevOps]
-        JK[Jenkins]
-        JF[JFrog]
-    end
-
-    CMD --> GH & GL & ADO & JK & JF
-
-    subgraph SF[Scan Flow]
-        API[Platform API] --> |fetch workflows| YAML[Workflow YAML]
-        YAML --> P
-
-        subgraph P[Parser]
-            direction LR
-            GHP[GitHub] ~~~ GLP[GitLab] ~~~ ADP[Azure] ~~~ JKP[Jenkins]
-        end
-
-        P --> NW[Normalized Workflow]
-        NW --> GB[Graph Builder]
-        GB --> Graph[Workflow → Job → Step Graph]
-    end
-
-    subgraph AE[Analysis Engine]
-        direction LR
-        TT[Taint Tracker] --> Tagged[Tagged Graph]
-        Tagged --> DP[Detection Plugins]
-        DP --> GA[Gate Analysis]
-        GA --> Findings
-    end
-
-    Graph --> AE
+flowchart LR
+  subgraph rundir["one run directory"]
+    direction LR
+    C[collect<br/>00-collect] --> N[normalize<br/>10-normalize] --> S[scan<br/>20-scan]
+    N & S --> G[graph<br/>30-graph]
+    S --> A[attack<br/>40-attack]
+  end
+  API([platform API]) --> C
+  R[(detection rules<br/>YAML + DSL)] -.-> S
+  P[(attack plans + job templates<br/>YAML)] -.-> A
+  S & A --> RPT[report<br/>json / jsonl / md / html]
+  G --> PU[push] --> DB[(Neo4j + Cypher)]
 ```
 
-## Roadmap
+Solid arrows are data; dotted arrows are the YAML corpora that drive a phase.
 
-Additional CI/CD platform support is in active development:
+## Platforms
 
-- Bitbucket Pipelines
-- CircleCI
-- AWS CodePipeline
-- Google Cloud Build
+| Platform | Detections | Graph | Verification |
+|---|---|---|---|
+| GitHub Actions | yes | yes | yes |
+| GitLab CI | yes | coming soon | coming soon |
+| Azure DevOps | yes | coming soon | coming soon |
+| Jenkins | coming soon | — | — |
+| JFrog | coming soon | — | — |
+
+Jenkins and JFrog are roadmap entries: there is nothing to run against them today.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines, plugin authoring, and project structure.
+Detections are YAML under `internal/detection-rules/`; conventions are in [AGENTS.md](AGENTS.md).
 
 ## Acknowledgements
 
@@ -227,4 +168,3 @@ Built on research from [Gato](https://github.com/praetorian-inc/gato), [Glato](h
 ## License
 
 Apache 2.0. See [LICENSE](LICENSE).
-
