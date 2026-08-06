@@ -45,7 +45,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	state.Platform = "gl"
 	state.Scope = scopeString(scope)
 	state.Org = scope.Group
-	state.Invocation = os.Args[1:]
+	state.SetInvocation(os.Args[1:])
 	if state.StartedAt == "" {
 		state.StartedAt = engine.IsoformatUTC(timeNow())
 	}

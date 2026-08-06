@@ -67,6 +67,8 @@ type Session struct {
 	// publicKeyPEM is derived once at mint time: PayloadEnv cannot report a
 	// failure, and an empty value there composes a job that skips sealing.
 	publicKeyPEM string
+
+	explicitToken string
 }
 
 type identityClient struct {
@@ -113,16 +115,17 @@ type Provocation struct {
 	At     time.Time `json:"at"`
 }
 
-func NewSession(ctx context.Context, p *Plan, planDir string, ledger *Ledger, execute bool) (*Session, error) {
+func NewSession(ctx context.Context, p *Plan, planDir string, ledger *Ledger, execute bool, explicitToken string) (*Session, error) {
 	s := &Session{
-		Plan:       p,
-		PlanDir:    planDir,
-		Ledger:     ledger,
-		Execute:    execute,
-		StartedAt:  time.Now(),
-		identities: map[string]*identityClient{},
-		aliases:    map[string]string{},
-		extraScope: map[string]string{},
+		Plan:          p,
+		PlanDir:       planDir,
+		Ledger:        ledger,
+		Execute:       execute,
+		StartedAt:     time.Now(),
+		identities:    map[string]*identityClient{},
+		aliases:       map[string]string{},
+		extraScope:    map[string]string{},
+		explicitToken: explicitToken,
 	}
 
 	def, err := s.resolveIdentity(ctx, "", cmp.Or(p.Identity, kindEnv))
@@ -180,7 +183,7 @@ func (s *Session) resolveIdentity(ctx context.Context, name, from string) (*iden
 		s.identities[ic.name] = ic
 	}
 
-	token, kind, err := resolveCredential(ctx, from)
+	token, kind, err := resolveCredential(ctx, from, s.explicitToken)
 	if err != nil {
 		ic.err = err
 		slog.Warn("identity unresolved", "identity", ic.name, "from", from, "err", err)

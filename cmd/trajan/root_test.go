@@ -31,7 +31,6 @@ func TestCommandTreeHasNoShorthandCollisions(t *testing.T) {
 func TestUnknownFlagNamesItself(t *testing.T) {
 	for _, args := range [][]string{
 		{"--bogus", "github", "scan"},
-		{"--token", "x", "--bogus", "github", "scan"},
 		{"github", "--bogus", "scan"},
 		{"github", "scan", "--bogus"},
 		{"--bogus"},

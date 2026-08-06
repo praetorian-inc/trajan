@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-func WhoAmI(ctx context.Context) error {
-	token, err := ResolveToken("")
+func WhoAmI(ctx context.Context, explicit string) error {
+	token, err := ResolveToken(explicit)
 	if err != nil {
 		return err
 	}

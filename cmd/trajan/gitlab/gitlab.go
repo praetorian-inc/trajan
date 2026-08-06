@@ -26,7 +26,6 @@ func newGitLabCmd() *cobra.Command {
 	gl.PersistentFlags().SortFlags = false
 	gl.PersistentFlags().IntVar(&cfg.Concurrency, "concurrency", 8, "max concurrent API workers")
 	gl.PersistentFlags().StringVar(&cfg.OutputDir, "output-dir", "./trajan-out", "run output directory")
-	gl.PersistentFlags().StringVar(&cfg.Token, "token", "", "GitLab token (else GITLAB_TOKEN/GL_TOKEN)")
 	gl.PersistentFlags().StringVar(&gitlab.FlagURL, "url", "https://gitlab.com", "GitLab base URL (self-hosted)")
 	gl.PersistentFlags().BoolVar(&gitlab.FlagInsecure, "insecure", false, "skip TLS verify (self-signed self-hosted)")
 
@@ -41,7 +40,7 @@ func newGitLabCmd() *cobra.Command {
 		Short: "Resolve the token and print the authenticated identity and scopes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return gitlab.WhoAmI(cmd.Context())
+			return gitlab.WhoAmI(cmd.Context(), cfg.Token)
 		},
 	}
 	collect := &cobra.Command{
@@ -159,6 +158,10 @@ func newGitLabCmd() *cobra.Command {
 	analyze.Flags().BoolVarP(&writeBack, "write-back", "w", false, "persist analysis results")
 	analyze.Flags().BoolVarP(&noGraph, "no-graph", "G", false, "analyze in-memory (no Neo4j)")
 	analyze.Flags().BoolVarP(&detailed, "detailed", "d", false, "expand output")
+
+	for _, c := range []*cobra.Command{whoami, collect, run} {
+		c.Flags().StringVar(&cfg.Token, "token", "", "API token (prefer TRAJAN_GL_TOKEN/GITLAB_TOKEN/GL_TOKEN/CI_JOB_TOKEN env; this flag is an escape hatch)")
+	}
 
 	gl.AddCommand(whoami, collect, normalize, scan, reportCmd, push, analyze, attack, run)
 	return gl

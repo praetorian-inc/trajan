@@ -24,6 +24,28 @@ type State struct {
 	Phases     []PhaseRecord `json:"phases"`
 }
 
+var credentialFlags = map[string]bool{
+	"--token":              true,
+	"--azure-bearer-token": true,
+	"--neo4j-pass":         true,
+}
+
+// SetInvocation is the only path that writes Invocation: argv values for
+// credential-bearing flags are replaced so _meta.json never stores secrets.
+func (s *State) SetInvocation(args []string) {
+	out := make([]string, len(args))
+	copy(out, args)
+	for i := 0; i < len(out); i++ {
+		if eq := strings.IndexByte(out[i], '='); eq > 0 && credentialFlags[out[i][:eq]] {
+			out[i] = out[i][:eq+1] + "REDACTED"
+		} else if credentialFlags[out[i]] && i+1 < len(out) {
+			out[i+1] = "REDACTED"
+			i++
+		}
+	}
+	s.Invocation = out
+}
+
 type PhaseRecord struct {
 	Phase       string   `json:"phase"`
 	Num         int      `json:"num"`

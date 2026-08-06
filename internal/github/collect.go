@@ -30,7 +30,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 		return "", err
 	}
 
-	token, err := ResolveToken(ctx)
+	token, err := ResolveToken(ctx, cfg.Token)
 	if err != nil {
 		return "", err
 	}
@@ -57,7 +57,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	state.Platform = "gh"
 	state.Scope = scopeString(scope)
 	state.Org = scope.Org
-	state.Invocation = os.Args[1:]
+	state.SetInvocation(os.Args[1:])
 	if state.StartedAt == "" {
 		state.StartedAt = engine.IsoformatUTC(timeNow())
 	}
