@@ -21,6 +21,18 @@ git clone https://github.com/praetorian-inc/trajan.git
 cd trajan && make build   # writes ./bin/trajan
 ```
 
+### GitHub Action
+
+Scan a GitHub repository from a workflow. Trajan builds from the Action ref, writes HTML / Markdown / JSONL reports, uploads them as an artifact, and prints severity counts in the job summary.
+
+```yaml
+- uses: praetorian-inc/trajan@main
+  with:
+    fail-on-severity: none
+```
+
+No checkout step is required. Defaults to `${{ github.token }}` and the current repository. For inputs, token coverage, severity gating, and branch testing, see [GitHub Action](.github/GITHUB_ACTION.md).
+
 ## Usage
 
 ### Credentials
