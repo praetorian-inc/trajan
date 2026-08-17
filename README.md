@@ -21,6 +21,14 @@ git clone https://github.com/praetorian-inc/trajan.git
 cd trajan && make build   # writes ./bin/trajan
 ```
 
+### Browser (WASM)
+
+```sh
+make wasm-serve   # http://localhost:8080
+```
+
+Runs collect → normalize → scan in the browser and renders the same HTML report as the CLI. Attack and graph are not included. See [browser/README.md](browser/README.md).
+
 ### GitHub Action
 
 Scan a GitHub repository from a workflow. Trajan builds from the Action ref, writes HTML / Markdown / JSONL reports, uploads them as an artifact, and prints severity counts in the job summary.
