@@ -154,6 +154,15 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 	AgentInjection:          {{User, Job}, {SecurityGroup, Job}, {BuildServiceIdentity, Job}},
 }
 
+var severityBuckets = map[string]string{
+	"critical": "findings_critical",
+	"high":     "findings_high",
+	"medium":   "findings_medium",
+	"low":      "findings_low",
+}
+
+var findingBuckets = []string{"findings_critical", "findings_high", "findings_medium", "findings_low"}
+
 func ValidNodeLabel(l NodeLabel) bool { _, ok := identityKeys[l]; return ok }
 
 func ValidEdgeType(t EdgeType) bool { _, ok := edgeEndpoints[t]; return ok }
