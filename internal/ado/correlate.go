@@ -585,6 +585,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 				"kind":                  "USES_CONNECTION",
 				"project":               project,
 				"pipeline_id":           mInt64(j, "pipeline_id"),
+				"stage":                 mStr(j, "stage"),
 				"job":                   mStr(j, "job"),
 				"connection_name":       name,
 				"service_connection_id": ref.id,
@@ -612,7 +613,8 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 			}
 			rec := map[string]any{
 				"kind": "TARGETS", "project": project, "pipeline_id": mInt64(j, "pipeline_id"),
-				"job": mStr(j, "job"), "environment": envName, "resource": strOrNull(resource),
+				"stage": mStr(j, "stage"),
+				"job":   mStr(j, "job"), "environment": envName, "resource": strOrNull(resource),
 				"environment_ref": env, "environment_id": envID, "resolved": envID != 0,
 			}
 			if err := emit(cp, timer, engine.NormalizeADOEdges("targets", jobKey+"__"+adoSafe(env)), rec); err != nil {
@@ -625,7 +627,8 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 			poolID := poolByProjectName[project][name]
 			rec := map[string]any{
 				"kind": "RUNS_ON", "project": project, "pipeline_id": mInt64(j, "pipeline_id"),
-				"job": mStr(j, "job"), "pool_name": name, "vm_image": vmImage,
+				"stage": mStr(j, "stage"),
+				"job":   mStr(j, "job"), "pool_name": name, "vm_image": vmImage,
 				"demands": listOrEmpty(pool, "demands"),
 				// vmImage with no named pool is a Microsoft-hosted image (no node).
 				"is_hosted":             name == "" && vmImage != "",
