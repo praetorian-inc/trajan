@@ -21,6 +21,8 @@ var scInputNames = []string{
 	"kubernetesServiceConnection", "awsCredentials", "serviceConnection", "externalEndpoint", "externalEndpoints",
 }
 
+const checkoutTaskID = "6d15af64-176c-496d-b583-fd2ae21d4df4"
+
 func sortedKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -526,6 +528,13 @@ func walkSteps(steps []any, settable map[string]bool) jobFacts {
 		sm, ok := s.(map[string]any)
 		if !ok {
 			continue
+		}
+		if strings.HasPrefix(yamlStr(sm["task"]), checkoutTaskID) {
+			in := entMap(sm["inputs"])
+			sm = map[string]any{
+				"checkout": in["repository"], "clean": in["clean"], "fetchDepth": in["fetchDepth"],
+				"persistCredentials": in["persistCredentials"], "submodules": in["submodules"],
+			}
 		}
 		if ck, ok := sm["checkout"]; ok {
 			f.checkouts = append(f.checkouts, map[string]any{
