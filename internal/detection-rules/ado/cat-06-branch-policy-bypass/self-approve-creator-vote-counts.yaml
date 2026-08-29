@@ -2,6 +2,7 @@ id: cat-06/self-approve-creator-vote-counts
 scenario_id: cat-06/03
 title: "Reviewer policy allows self-approval — one person can author and merge"
 subject: branch_policy
+graph: node(BranchPolicy)
 severity: high
 confidence: high
 description: >

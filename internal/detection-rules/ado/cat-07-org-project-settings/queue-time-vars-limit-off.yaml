@@ -2,6 +2,7 @@ id: cat-07/queue-time-vars-limit-off
 scenario_id: cat-07/02
 title: "Limit variables settable at queue time OFF org-wide exposes every pipeline"
 subject: org
+graph: node(Organization)
 severity: high
 confidence: high
 description: >

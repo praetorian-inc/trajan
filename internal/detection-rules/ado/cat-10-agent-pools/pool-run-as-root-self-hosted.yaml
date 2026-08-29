@@ -2,6 +2,7 @@ id: cat-10/pool-run-as-root-self-hosted
 scenario_id: cat-10/05
 title: "Self-hosted agent pool with a run-as-root agent — any job on it inherits host privilege"
 subject: agent_pool
+graph: node(OrgAgentPool)
 severity: high
 confidence: medium
 description: >

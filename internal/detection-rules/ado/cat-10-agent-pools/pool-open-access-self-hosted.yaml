@@ -2,6 +2,7 @@ id: cat-10/pool-open-access-self-hosted
 scenario_id: cat-10/02
 title: "Self-hosted agent pool auto-provisioned into all projects — broad reach onto internal infrastructure"
 subject: agent_pool
+graph: node(OrgAgentPool)
 severity: medium
 confidence: medium
 description: >

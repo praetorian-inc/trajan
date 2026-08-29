@@ -2,6 +2,7 @@ id: cat-05/wif-management-group-scope
 scenario_id: cat-05/04
 title: "WIF service connection scoped to a management group — token spans all child subscriptions"
 subject: service_connection
+graph: node(ServiceConnection)
 severity: high
 confidence: medium
 description: >

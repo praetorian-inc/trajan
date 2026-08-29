@@ -2,6 +2,7 @@ id: cat-09/environment-open-access
 scenario_id: cat-09/02
 title: "Environment grants open access to all pipelines with no approval gate"
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: medium
 description: >

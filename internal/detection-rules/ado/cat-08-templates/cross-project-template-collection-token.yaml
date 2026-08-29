@@ -2,6 +2,7 @@ id: cat-08/cross-project-template-collection-token
 scenario_id: cat-08/06
 title: "Cross-project template extension runs with a collection-scoped token"
 subject: pipeline
+graph: node(Pipeline)
 severity: critical
 confidence: medium
 description: >

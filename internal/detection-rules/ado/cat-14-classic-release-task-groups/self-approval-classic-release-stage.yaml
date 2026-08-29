@@ -2,6 +2,7 @@ id: cat-14/self-approval-classic-release-stage
 scenario_id: cat-14/01
 title: "Classic release creation enabled (self-approvable prod release stages possible)"
 subject: project
+graph: node(Project)
 severity: medium
 confidence: low
 description: >

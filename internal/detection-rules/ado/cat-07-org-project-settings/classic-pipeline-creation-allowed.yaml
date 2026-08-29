@@ -2,6 +2,7 @@ id: cat-07/classic-pipeline-creation-allowed
 scenario_id: cat-07/06
 title: "Classic pipeline creation allowed org-wide bypasses YAML-only guardrails"
 subject: org
+graph: node(Organization)
 severity: medium
 confidence: high
 description: >

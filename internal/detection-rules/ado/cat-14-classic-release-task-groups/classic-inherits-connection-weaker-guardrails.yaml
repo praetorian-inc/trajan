@@ -2,6 +2,7 @@ id: cat-14/classic-inherits-connection-weaker-guardrails
 scenario_id: cat-14/05
 title: "Classic release creation enabled (parallel weaker path to checked resources)"
 subject: project
+graph: node(Project)
 severity: medium
 confidence: low
 description: >

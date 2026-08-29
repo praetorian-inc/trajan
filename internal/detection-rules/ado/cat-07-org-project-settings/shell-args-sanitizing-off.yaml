@@ -1,6 +1,7 @@
 id: cat-07/shell-args-sanitizing-off
 title: "Shell task argument sanitizing disabled at project level"
 subject: project
+graph: node(Project)
 severity: medium
 confidence: medium
 description: >

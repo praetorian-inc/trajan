@@ -2,6 +2,7 @@ id: cat-11/feed-broad-write-permissions
 scenario_id: cat-11/05
 title: "Artifacts feed grants package-write/save (Collaborator/Contributor) to non-admin identities"
 subject: feed
+graph: node(ArtifactsFeed)
 severity: medium
 confidence: medium
 description: >

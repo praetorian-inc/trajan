@@ -2,6 +2,7 @@ id: cat-14/release-gate-fails-open
 scenario_id: cat-14/03
 title: "Classic release creation enabled (fail-open release gates possible)"
 subject: project
+graph: node(Project)
 severity: medium
 confidence: low
 description: >

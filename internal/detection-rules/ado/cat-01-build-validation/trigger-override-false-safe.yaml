@@ -2,6 +2,7 @@ id: cat-01/trigger-override-false-safe
 scenario_id: cat-01/07
 title: "Non-blocking Build validation policy — false-safe PR gate"
 subject: branch_policy
+graph: node(BranchPolicy)
 severity: medium
 confidence: medium
 description: >

@@ -2,6 +2,7 @@ id: cat-04/no-checks-on-service-connection
 scenario_id: cat-04/02
 title: "Per-pipeline service connection with no Branch control / approval check"
 subject: service_connection
+graph: node(ServiceConnection)
 severity: high
 confidence: medium
 description: >

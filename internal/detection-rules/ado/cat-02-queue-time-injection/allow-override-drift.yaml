@@ -2,6 +2,7 @@ id: cat-02/allow-override-drift
 scenario_id: cat-02/04
 title: "Pipeline variable marked settable-at-queue-time while the queue-time limit is enforced"
 subject: pipeline
+graph: node(Pipeline)
 severity: medium
 confidence: medium
 description: >

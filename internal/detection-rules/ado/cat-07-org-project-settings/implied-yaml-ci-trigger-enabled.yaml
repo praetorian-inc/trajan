@@ -1,6 +1,7 @@
 id: cat-07/implied-yaml-ci-trigger-enabled
 title: "Implied YAML CI trigger not disabled at project level"
 subject: project
+graph: node(Project)
 severity: medium
 confidence: medium
 description: >

@@ -2,6 +2,7 @@ id: cat-05/wif-identity-reused-across-tiers
 scenario_id: cat-05/03
 title: "WIF service connection shared across projects — one identity, mixed trust tiers"
 subject: service_connection
+graph: node(ServiceConnection)
 severity: high
 confidence: medium
 description: >

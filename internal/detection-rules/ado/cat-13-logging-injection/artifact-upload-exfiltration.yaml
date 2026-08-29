@@ -2,6 +2,7 @@ id: cat-13/artifact-upload-exfiltration
 scenario_id: cat-13/05
 title: "Untrusted text echoed to stdout injects ##vso[artifact.upload] to exfiltrate local secret files"
 subject: logging_command_injection
+graph: edge(LOGGING_COMMAND_INJECTION)
 severity: high
 confidence: high
 description: >
