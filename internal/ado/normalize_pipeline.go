@@ -365,7 +365,7 @@ func emitPipelineResources(cp engine.CurrentPhase, timer *engine.PhaseTimer, pro
 			"trigger": rm["trigger"], "branches": rm["branches"], "tags": rm["tags"], "stages": rm["stages"],
 		}
 		key := fmt.Sprintf("%s__%d__%s", adoSafe(project), pipelineID, adoSafe(firstStr(rm, "pipeline", fmt.Sprintf("res_%d", i))))
-		if err := emit(cp, timer, engine.NormalizeADOEdges("triggers-on-completion", key), rec); err != nil {
+		if err := emitEdge(cp, timer, "triggers-on-completion", key, rec); err != nil {
 			return err
 		}
 	}

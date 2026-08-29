@@ -368,7 +368,7 @@ func emitWIFCredential(cp engine.CurrentPhase, timer *engine.PhaseTimer, e map[s
 		"wif_credential_id": id + "/" + key, "app_registration_id": spn,
 		"subject": strOrNull(subject),
 		"issuer":  strOrNull(entStr(params["workloadIdentityFederationIssuer"]))}
-	return emit(cp, timer, engine.NormalizeADOEdges("federates-to", adoSafe(id)), fed)
+	return emitEdge(cp, timer, "federates-to", adoSafe(id), fed)
 }
 
 func normalizeVariableGroupsShared(prior engine.PriorPhase, cp engine.CurrentPhase, org string, projs []projectMeta, timer *engine.PhaseTimer) error {
@@ -446,7 +446,7 @@ func emitKeyVaultLink(cp engine.CurrentPhase, timer *engine.PhaseTimer, rec map[
 		"keyvault_name": vault, "keyvault_id": owner + "/" + vault,
 		"service_connection_id": mStr(rec, "keyvault_service_connection_id"),
 	}
-	return emit(cp, timer, engine.NormalizeADOEdges("links-to", fmt.Sprintf("%s__%d", adoSafe(owner), gid)), link)
+	return emitEdge(cp, timer, "links-to", fmt.Sprintf("%s__%d", adoSafe(owner), gid), link)
 }
 
 func variableGroupRec(g map[string]any) map[string]any {
@@ -489,7 +489,7 @@ func emitSecretVariables(cp engine.CurrentPhase, timer *engine.PhaseTimer, g map
 			return err
 		}
 		def := map[string]any{"kind": "DEFINES", "group_id": gid, "secret_name": name, "project": owner}
-		if err := emit(cp, timer, engine.NormalizeADOEdges("defines", fmt.Sprintf("%d__%s", gid, adoSafe(name))), def); err != nil {
+		if err := emitEdge(cp, timer, "defines", fmt.Sprintf("%d__%s", gid, adoSafe(name)), def); err != nil {
 			return err
 		}
 	}
@@ -577,7 +577,7 @@ func normalizeAgentQueues(prior engine.PriorPhase, cp engine.CurrentPhase, org s
 		}
 		if orgPool != 0 {
 			ref := map[string]any{"kind": "REFERENCES_POOL", "project": p.Name, "queue_id": qid, "org_pool_id": orgPool}
-			if err := emit(cp, timer, engine.NormalizeADOEdges("references-pool", fmt.Sprintf("%s__%d", adoSafe(p.Name), qid)), ref); err != nil {
+			if err := emitEdge(cp, timer, "references-pool", fmt.Sprintf("%s__%d", adoSafe(p.Name), qid), ref); err != nil {
 				return err
 			}
 		}

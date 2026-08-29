@@ -168,7 +168,7 @@ func deriveReads(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.
 					"via_level": mStr(e, "level"), "gate_strength": strength, "gate_state": state, "confidence": confidence,
 				}
 				key := fmt.Sprintf("%s__%d__%s__%s__%d__%s", adoSafe(project), pid, adoSafe(stage), adoSafe(job), gid, adoSafe(mStr(s, "name")))
-				if err := emit(cp, timer, engine.NormalizeADOEdges("reads", key), rec); err != nil {
+				if err := emitEdge(cp, timer, "reads", key, rec); err != nil {
 					return nil, err
 				}
 			}
@@ -219,7 +219,7 @@ func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, 
 		// several steps and sink kinds, and they must not overwrite each other.
 		key := fmt.Sprintf("%s__%s__%s__%v__%s", jobKeyOf(j), adoSafe(via), adoSafe(name),
 			ms["step_index"], adoSafe(location))
-		return emit(cp, timer, engine.NormalizeADOEdges("queue-time-injection", key), rec)
+		return emitEdge(cp, timer, "queue-time-injection", key, rec)
 	}
 
 	for _, raw := range mList(j, "macro_sinks") {
@@ -307,7 +307,7 @@ func deriveLoggingInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j 
 		// same kind, and they must not overwrite each other.
 		key := fmt.Sprintf("%s__%s__%d__%v__%s", jobKeyOf(j), adoSafe(via), echoStep,
 			consumer["step_index"], adoSafe(entStr(consumer["resource"])))
-		return emit(cp, timer, engine.NormalizeADOEdges("logging-command-injection", key), rec)
+		return emitEdge(cp, timer, "logging-command-injection", key, rec)
 	}
 
 	scUsages := mList(j, "service_connection_usages")
@@ -398,7 +398,7 @@ func deriveAgentInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j ma
 			"target": jobID(j), "context": "azure_repos",
 		}
 		key := fmt.Sprintf("%s__%d", jobKeyOf(j), i)
-		if err := emit(cp, timer, engine.NormalizeADOEdges("agent-injection", key), rec); err != nil {
+		if err := emitEdge(cp, timer, "agent-injection", key, rec); err != nil {
 			return err
 		}
 	}
@@ -440,7 +440,7 @@ func derivePipelinePoisoning(cp engine.CurrentPhase, timer *engine.PhaseTimer, j
 		"gate_state": "absent", "confidence": confidence,
 		"target": jobID(j), "context": "azure_repos",
 	}
-	return emit(cp, timer, engine.NormalizeADOEdges("pipeline-poisoning", jobKeyOf(j)), rec)
+	return emitEdge(cp, timer, "pipeline-poisoning", jobKeyOf(j), rec)
 }
 
 // Strongest wins: the trigger list is ordered by how little the attacker must do.

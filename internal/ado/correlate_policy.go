@@ -168,7 +168,7 @@ func emitBranchEdge(cp engine.CurrentPhase, timer *engine.PhaseTimer, kind, edge
 		"via": via[0], "all_via": toAnyStrings(via),
 		"has_blocking_policy": gov.anyBlocking, "target": mStr(b, "_id"),
 	}
-	return emit(cp, timer, engine.NormalizeADOEdges(kind, hashKey(edgeKind, desc, mStr(b, "_id"))), rec)
+	return emitEdge(cp, timer, kind, hashKey(edgeKind, desc, mStr(b, "_id")), rec)
 }
 
 // One edge per (bypass-holding principal, governed BranchPolicy): the per-policy
@@ -201,7 +201,7 @@ func deriveCanBypass(cp engine.CurrentPhase, timer *engine.PhaseTimer, hasPolicy
 					"branch_policy_id": polID, "config_id": mInt64(e, "config_id"),
 					"policy_type": mStr(e, "policy_type"), "bypass_mode": mode.name, "target": polID,
 				}
-				if err := emit(cp, timer, engine.NormalizeADOEdges("can-bypass", key), rec); err != nil {
+				if err := emitEdge(cp, timer, "can-bypass", key, rec); err != nil {
 					return err
 				}
 			}

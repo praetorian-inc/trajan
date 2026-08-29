@@ -54,7 +54,7 @@ func normalizeExtensions(prior engine.PriorPhase, cp engine.CurrentPhase, org st
 				"_id": id + "/decorator", "kind": "PipelineDecorator", "org": org,
 				"extension_id": id, "publisher_id": pub, "scopes": entListOrEmpty(e["scopes"]),
 			}
-			if err := emit(cp, timer, engine.NormalizeADOEdges("installs", adoSafe(id)), map[string]any{
+			if err := emitEdge(cp, timer, "installs", adoSafe(id), map[string]any{
 				"kind": "INSTALLS", "org": org, "extension_id": id, "decorator_id": id + "/decorator",
 			}); err != nil {
 				return err
