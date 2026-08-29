@@ -163,7 +163,8 @@ func deriveReads(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.
 			for _, s := range secretsByGroup[gid] {
 				rec := map[string]any{
 					"kind": "READS", "project": project, "pipeline_id": pid, "stage": stage, "job": job,
-					"variable_group_id": gid, "secret_name": mStr(s, "name"), "secret_id": mStr(s, "_id"),
+					"variable_group_id": gid, "owner_project": mStr(s, "project"),
+					"secret_name": mStr(s, "name"), "secret_id": mStr(s, "_id"),
 					"via_level": mStr(e, "level"), "gate_strength": strength, "gate_state": state, "confidence": confidence,
 				}
 				key := fmt.Sprintf("%s__%d__%s__%s__%d__%s", adoSafe(project), pid, adoSafe(stage), adoSafe(job), gid, adoSafe(mStr(s, "name")))

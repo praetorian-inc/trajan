@@ -59,6 +59,14 @@ func policyOf(org string, rec map[string]any) endpoint {
 	}}
 }
 
+func jobOf(org string, rec map[string]any) endpoint {
+	return endpoint{Job, map[string]string{
+		"org": org, "project": mStr(rec, "project"),
+		"pipeline_id": num(rec, "pipeline_id"),
+		"stage":       mStr(rec, "stage"), "job": mStr(rec, "job"),
+	}}
+}
+
 var endpointResolvers = map[EdgeType]endpointResolver{
 	DefinedBy: func(org string, rec map[string]any) (resolved, bool) {
 		return pair(DefinedBy,
@@ -115,6 +123,56 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 		return pair(Installs,
 			endpoint{Extension, map[string]string{"org": org, "extension_id": ext}},
 			endpoint{PipelineDecorator, map[string]string{"org": org, "extension_id": ext}})
+	},
+
+	Reads: func(org string, rec map[string]any) (resolved, bool) {
+		return pair(Reads, jobOf(org, rec),
+			endpoint{SecretVariable, map[string]string{
+				"org": org, "owner_project": mStr(rec, "owner_project"),
+				"group_id": num(rec, "variable_group_id"), "name": mStr(rec, "secret_name"),
+			}})
+	},
+
+	ConsumesGroup: func(org string, rec map[string]any) (resolved, bool) {
+		var from endpoint
+		switch mStr(rec, "level") {
+		case "pipeline":
+			from = pipelineOf(org, mStr(rec, "project"), num(rec, "pipeline_id"))
+		case "stage":
+			from = endpoint{Stage, map[string]string{
+				"org": org, "project": mStr(rec, "project"),
+				"pipeline_id": num(rec, "pipeline_id"), "stage": mStr(rec, "stage"),
+			}}
+		case "job":
+			from = jobOf(org, rec)
+		default:
+			return resolved{}, false
+		}
+		return pair(ConsumesGroup, from,
+			groupOf(org, mStr(rec, "owner_project"), num(rec, "variable_group_id")))
+	},
+
+	UsesConnection: func(org string, rec map[string]any) (resolved, bool) {
+		return pair(UsesConnection, jobOf(org, rec),
+			endpoint{ServiceConnection, map[string]string{
+				"org": org, "owner_project": mStr(rec, "owner_project"),
+				"connection_id": mStr(rec, "service_connection_id"),
+			}})
+	},
+
+	RunsOn: func(org string, rec map[string]any) (resolved, bool) {
+		return pair(RunsOn, jobOf(org, rec),
+			endpoint{ProjectAgentPool, map[string]string{
+				"org": org, "project": mStr(rec, "project"),
+				"queue_id": num(rec, "project_agent_pool_id"),
+			}})
+	},
+
+	Targets: func(org string, rec map[string]any) (resolved, bool) {
+		return pair(Targets, jobOf(org, rec),
+			endpoint{Environment, map[string]string{
+				"org": org, "project": mStr(rec, "project"), "name": mStr(rec, "environment"),
+			}})
 	},
 }
 
