@@ -25,7 +25,7 @@ const (
 	graphDir = "30-graph"
 )
 
-func BuildGraph(ctx context.Context, cfg *engine.Config, runDir string) error {
+func BuildGraph(ctx context.Context, cfg *engine.Config, runDir string, targets map[string]Target) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
 		return err
@@ -35,7 +35,7 @@ func BuildGraph(ctx context.Context, cfg *engine.Config, runDir string) error {
 	}
 	ui.PhaseHeader("Graph")
 	timer := engine.StartPhaseTimer(engine.PhaseGraph, "graph")
-	stats, buildErr := runBuild(ctx, cfg, runDir, timer)
+	stats, buildErr := runBuild(ctx, cfg, runDir, targets, timer)
 
 	rec := timer.Stop(buildErr)
 	state.RecordPhase(rec)
@@ -44,12 +44,13 @@ func BuildGraph(ctx context.Context, cfg *engine.Config, runDir string) error {
 		ui.Outcome("Graph complete", []ui.Count{
 			{Label: "nodes", N: stats.nodes},
 			{Label: "edges", N: stats.edges},
+			{Label: "findings attached", N: stats.attached},
 		}, engine.Elapsed(rec.DurationS))
 	}
 	return errors.Join(buildErr, saveErr)
 }
 
-type buildStats struct{ nodes, edges int }
+type buildStats struct{ nodes, edges, attached int }
 
 type nodesFile struct {
 	Nodes []node `json:"nodes"`
@@ -59,7 +60,7 @@ type edgesFile struct {
 	Edges []edge `json:"edges"`
 }
 
-func runBuild(ctx context.Context, cfg *engine.Config, runDir string, timer *engine.PhaseTimer) (buildStats, error) {
+func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets map[string]Target, timer *engine.PhaseTimer) (buildStats, error) {
 	var errMu sync.Mutex
 	onError := func(e error) {
 		errMu.Lock()
@@ -92,7 +93,7 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, timer *eng
 	}
 
 	nodes := buildNodes(c)
-	edges, err := buildEdges(c, nodes)
+	edges, fromRecord, err := buildEdges(c, nodes)
 	if err != nil {
 		return buildStats{}, err
 	}
@@ -100,9 +101,20 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, timer *eng
 	dropped := dropDangling(nodes, edges)
 	nodes.sweepIllegal()
 
+	att := newAttacher(c, nodes, edges, fromRecord, targets)
+	if err := att.run(ctx, findings); err != nil {
+		return buildStats{}, err
+	}
+
 	all := nodes.all()
+	for i := range all {
+		all[i].Findings = finalizeFindings(all[i].Findings, all[i].Properties)
+	}
 	edgeList := edges.all()
-	sum := summarize(runDir, in, all, edgeList, edges, nodes, observed, dropped, len(findings))
+	for i := range edgeList {
+		edgeList[i].Findings = finalizeFindings(edgeList[i].Findings, edgeList[i].Properties)
+	}
+	sum := summarize(runDir, in, all, edgeList, edges, nodes, observed, dropped, &att.res)
 
 	cp := engine.CurrentPhase{RunDir: runDir}
 	for _, w := range []struct {
@@ -118,7 +130,7 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, timer *eng
 		}
 	}
 	timer.OutputFiles = 3
-	return buildStats{nodes: len(all), edges: len(edgeList)}, nil
+	return buildStats{nodes: len(all), edges: len(edgeList), attached: att.res.attached}, nil
 }
 
 func loadFindings(ctx context.Context, cfg *engine.Config, runDir string, onError func(error)) ([]finding.Finding, int, error) {
@@ -200,10 +212,13 @@ var containment = []struct {
 	{HasJob, Stage, Job},
 }
 
-func buildEdges(c *corpus, n *nodeSet) (*edgeSet, error) {
+type recordRef struct{ dir, id string }
+
+func buildEdges(c *corpus, n *nodeSet) (*edgeSet, map[recordRef][]string, error) {
 	s := newEdgeSet()
 	emitContainment(n, s)
 
+	fromRecord := map[recordRef][]string{}
 	gc := graphCtx{Org: c.org, Principal: principalLabels(c)}
 	for _, t := range EdgeTypes() {
 		for _, r := range c.byKind[string(t)] {
@@ -214,11 +229,16 @@ func buildEdges(c *corpus, n *nodeSet) (*edgeSet, error) {
 			}
 			props := edgeProps(r.fields)
 			for _, e := range rs {
-				s.add(e.Type, e.From, e.To, props)
+				id := s.add(e.Type, e.From, e.To, props)
+				if id == "" || r.id == "" {
+					continue
+				}
+				ref := recordRef{r.dir, r.id}
+				fromRecord[ref] = append(fromRecord[ref], id)
 			}
 		}
 	}
-	return s, s.err()
+	return s, fromRecord, s.err()
 }
 
 func emitContainment(n *nodeSet, s *edgeSet) {
@@ -375,20 +395,30 @@ type gapsSummary struct {
 	Register         []gapEntry  `json:"register"`
 }
 
+type findingsSummary struct {
+	Total              int                 `json:"total"`
+	Attached           int                 `json:"attached"`
+	Unattached         int                 `json:"unattached"`
+	AttachedTo         map[string]int      `json:"attached_to"`
+	UnattachedByReason map[string]int      `json:"unattached_by_reason"`
+	UnattachedByRule   map[string]int      `json:"unattached_by_rule"`
+	UnattachedDetail   []unattachedFinding `json:"unattached_detail"`
+}
+
 type summary struct {
-	RunID       string        `json:"run_id"`
-	GeneratedAt string        `json:"generated_at"`
-	Inputs      inputsSummary `json:"inputs"`
-	Nodes       nodesSummary  `json:"nodes"`
-	Edges       edgesSummary  `json:"edges"`
-	Findings    int           `json:"findings"`
-	Gaps        gapsSummary   `json:"gaps"`
+	RunID       string          `json:"run_id"`
+	GeneratedAt string          `json:"generated_at"`
+	Inputs      inputsSummary   `json:"inputs"`
+	Nodes       nodesSummary    `json:"nodes"`
+	Edges       edgesSummary    `json:"edges"`
+	Findings    findingsSummary `json:"findings"`
+	Gaps        gapsSummary     `json:"gaps"`
 }
 
 const conflictsReported = 20
 
 func summarize(runDir string, in inputsSummary, all []node, edgeList []edge, edges *edgeSet, nodes *nodeSet,
-	observed int, dropped map[EdgeType]int, findings int) summary {
+	observed int, dropped map[EdgeType]int, res *attachResult) summary {
 
 	byLabel := nodes.byLabel()
 	byType := edges.byType()
@@ -428,22 +458,45 @@ func summarize(runDir string, in inputsSummary, all []node, edgeList []edge, edg
 			DroppedDangling:   counted(dropped),
 			PropertyConflicts: edgeConflicts[:min(conflictsReported, len(edgeConflicts))],
 		},
-		Findings: findings,
+		Findings: findingsSummary{
+			Total:              res.total,
+			Attached:           res.attached,
+			Unattached:         len(res.unattached),
+			AttachedTo:         map[string]int{"nodes": res.toNodes, "edges": res.toEdges},
+			UnattachedByReason: res.byReason,
+			UnattachedByRule:   res.byRule,
+			UnattachedDetail:   res.unattached,
+		},
 		Gaps: gapsSummary{
 			EmptyLabels:      empties,
 			EmptyEdgeTypes:   emptyEdges,
 			EmptyEdgeTriples: emptyEdgeTriples(edgeList),
-			Register:         gapRegister,
+			Register:         registerWithCounts(res.byTarget),
 		},
 	}
 }
 
+// Targets names the rule targets whose unattached findings the gap explains, so
+// findings_blocked is computed from the run rather than written down. A target belongs
+// to exactly one row, or the column stops summing to findings.unattached.
 type gapEntry struct {
-	Subject     string `json:"subject"`
-	Kind        string `json:"kind"`
-	Status      string `json:"status"`
-	Reason      string `json:"reason"`
-	UpstreamFix string `json:"upstream_fix"`
+	Subject         string   `json:"subject"`
+	Kind            string   `json:"kind"`
+	Status          string   `json:"status"`
+	Reason          string   `json:"reason"`
+	UpstreamFix     string   `json:"upstream_fix"`
+	FindingsBlocked int      `json:"findings_blocked"`
+	Targets         []string `json:"targets"`
+}
+
+func registerWithCounts(byTarget map[string]int) []gapEntry {
+	out := slices.Clone(gapRegister)
+	for i := range out {
+		for _, t := range out[i].Targets {
+			out[i].FindingsBlocked += byTarget[t]
+		}
+	}
+	return out
 }
 
 var gapRegister = []gapEntry{{
@@ -464,6 +517,7 @@ var gapRegister = []gapEntry{{
 	Status:      "empty",
 	Reason:      "declared with normalizers in place and no instance in any corpus: the APIs return empty arrays because no test org provisions them. Fixture gaps, not code gaps, and distinct from a label whose writer is missing.",
 	UpstreamFix: "provision a secure file, a key-vault-linked variable group, a WIF service connection, a decorator extension and a service hook in the firing range.",
+	Targets:     []string{"node(SecureFile)"},
 }, {
 	Subject:     "extends: template stages",
 	Kind:        "node",
@@ -482,6 +536,7 @@ var gapRegister = []gapEntry{{
 	Status:      "partial",
 	Reason:      "a job whose pool is a vmImage names no project queue, so project_agent_pool_id is 0 and no ProjectAgentPool exists to point at. Every unbuilt RUNS_ON in every corpus is this case; the self-hosted jobs all resolve.",
 	UpstreamFix: "none wanted. Pointing hosted jobs at a stand-in pool would assert a shared machine, which is the claim the agent rules exist to test.",
+	Targets:     []string{"edge(RUNS_ON)"},
 }, {
 	Subject:     "attack edge step_index",
 	Kind:        "edge",
@@ -506,12 +561,6 @@ var gapRegister = []gapEntry{{
 	Status:      "not_collected",
 	Reason:      "no NormalizeADO path helper exists for any of them. Task groups are the ADO composite-action analogue and the reusable-code supply chain; cat-14's five rules are self-described posture proxies standing in for classic releases.",
 	UpstreamFix: "normalize the already-collected release-definition and build-definition surfaces, then add node writers.",
-}, {
-	Subject:     "graph: targets on ADO rules",
-	Kind:        "node",
-	Status:      "blocked",
-	Reason:      "0 of 66 ADO rules carry a graph: line, against 94 of 94 for GitHub, so no finding attaches to a node or edge and the graph carries structure without verdicts.",
-	UpstreamFix: "annotate the ruleset, then port the attacher. Five edge-subject kinds also leave subject.id empty, recoverable from provenance {project, pipeline_id, job}.",
 }, {
 	Subject:     "synthetic positional names",
 	Kind:        "node",

@@ -1,14 +1,36 @@
 package ado
 
 import (
+	"fmt"
+	"log/slog"
+
 	"github.com/spf13/cobra"
 
 	adopkg "github.com/praetorian-inc/trajan/internal/ado"
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/engine/detect"
 	"github.com/praetorian-inc/trajan/internal/report"
 )
 
 var AdoCmd = newAdoCmd()
+
+func ruleTargets() (map[string]adopkg.Target, error) {
+	onError := func(e error) { slog.Warn("rule skipped", "err", e) }
+	rules, err := detect.LoadRules("ado", onError)
+	if err != nil {
+		return nil, err
+	}
+	targets := make(map[string]adopkg.Target, len(rules))
+	for _, r := range rules {
+		t, err := adopkg.ParseTarget(r.Graph)
+		if err != nil {
+			onError(fmt.Errorf("%s: %w", r.ID, err))
+			continue
+		}
+		targets[r.ID] = t
+	}
+	return targets, nil
+}
 
 const (
 	tokenHelp  = "PAT (prefer TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT env; this flag is an escape hatch)"
@@ -125,7 +147,11 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 			if err != nil {
 				return err
 			}
-			return adopkg.BuildGraph(cmd.Context(), cfg, runDir)
+			targets, err := ruleTargets()
+			if err != nil {
+				return err
+			}
+			return adopkg.BuildGraph(cmd.Context(), cfg, runDir, targets)
 		},
 	}
 	push := &cobra.Command{
@@ -155,7 +181,11 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 			if err := adopkg.Scan(cmd.Context(), runDir, adopkg.ScanOptions{}); err != nil {
 				return err
 			}
-			return adopkg.BuildGraph(cmd.Context(), cfg, runDir)
+			targets, err := ruleTargets()
+			if err != nil {
+				return err
+			}
+			return adopkg.BuildGraph(cmd.Context(), cfg, runDir, targets)
 		},
 	}
 

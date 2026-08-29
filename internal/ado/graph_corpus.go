@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -25,6 +26,7 @@ type record struct {
 type corpus struct {
 	org    string
 	byKind map[string][]record
+	byDir  map[string]map[string]bool
 
 	seen  int
 	files int
@@ -48,7 +50,7 @@ func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError 
 				return record{}, fmt.Errorf("%s/%s: %w", normalizeDir, f.Rel, err)
 			}
 			rel := filepath.ToSlash(f.Rel)
-			dir, _, _ := strings.Cut(rel, "/")
+			dir := path.Dir(rel)
 			id, _ := m["_id"].(string)
 			kind, _ := m["kind"].(string)
 			return record{rel: rel, dir: dir, kind: kind, id: id, fields: m}, nil
@@ -59,8 +61,15 @@ func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError 
 	}
 	slices.SortFunc(recs, func(a, b record) int { return strings.Compare(a.rel, b.rel) })
 
-	c := &corpus{byKind: map[string][]record{}, seen: len(files), files: len(recs)}
+	c := &corpus{byKind: map[string][]record{}, byDir: map[string]map[string]bool{},
+		seen: len(files), files: len(recs)}
 	for _, r := range recs {
+		if r.id != "" {
+			if c.byDir[r.dir] == nil {
+				c.byDir[r.dir] = map[string]bool{}
+			}
+			c.byDir[r.dir][r.id] = true
+		}
 		if r.kind == "" {
 			continue
 		}

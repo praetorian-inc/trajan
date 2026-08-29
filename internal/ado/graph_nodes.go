@@ -184,6 +184,8 @@ func (s *nodeSet) subject(kind, recordID string) (string, bool) {
 
 func (s *nodeSet) has(id string) bool { _, ok := s.byID[id]; return ok }
 
+func (s *nodeSet) get(id string) *node { return s.byID[id] }
+
 func (s *nodeSet) all() []node {
 	out := make([]node, 0, len(s.byID))
 	for _, n := range s.byID {
@@ -277,14 +279,14 @@ func newEdgeSet() *edgeSet {
 		conflicts: map[edgeConflictKey]int{}, illegal: map[string]int{}}
 }
 
-func (s *edgeSet) add(t EdgeType, from, to endpoint, props map[string]any) {
+func (s *edgeSet) add(t EdgeType, from, to endpoint, props map[string]any) string {
 	if !complete(from) || !complete(to) {
 		s.unbuilt[edgeKey(t, from.Label, to.Label)]++
-		return
+		return ""
 	}
 	if !ValidEdge(t, from.Label, to.Label) {
 		s.illegal[edgeKey(t, from.Label, to.Label)]++
-		return
+		return ""
 	}
 	id := edgeID(t, from.id(), to.id())
 	e := s.byID[id]
@@ -314,6 +316,7 @@ func (s *edgeSet) add(t EdgeType, from, to endpoint, props map[string]any) {
 		}
 	}
 	e.Properties["graph_id"] = id
+	return id
 }
 
 func (s *edgeSet) miss(t EdgeType, from, to NodeLabel, n int) { s.unbuilt[edgeKey(t, from, to)] += n }
