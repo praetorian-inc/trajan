@@ -205,7 +205,8 @@ func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, 
 	emitEdge := func(sinkType, name, via, location, confidence string, ms map[string]any) error {
 		rec := map[string]any{
 			"kind": "QUEUE_TIME_INJECTION", "technique": "queue_time_injection",
-			"project": project, "pipeline_id": mInt64(j, "pipeline_id"), "job": mStr(j, "job"),
+			"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+			"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 			"source": "queue_build_principal", "source_permission": "QueueBuilds", "source_principals": sources,
 			"sink_type": sinkType, "macro_name": name, "sink_location": location, "via": via,
 			"step_index":           ms["step_index"],
@@ -294,7 +295,8 @@ func deriveLoggingInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j 
 	emitEdge := func(cmdType, via, effect, source string, echoStep int, consumer map[string]any, confidence string) error {
 		rec := map[string]any{
 			"kind": "LOGGING_COMMAND_INJECTION", "technique": "logging_command_injection",
-			"project": project, "pipeline_id": mInt64(j, "pipeline_id"), "job": mStr(j, "job"),
+			"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+			"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 			"command_type": cmdType, "untrusted_source": source, "echo_step": echoStep,
 			"via": via, "effect": effect, "consumer_step": consumer["step_index"],
 			"target_resource": consumer["resource"], "source_principals": sources,
@@ -388,7 +390,8 @@ func deriveAgentInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j ma
 		}
 		rec := map[string]any{
 			"kind": "AGENT_INJECTION", "technique": "prompt_injection",
-			"project": project, "pipeline_id": mInt64(j, "pipeline_id"), "job": mStr(j, "job"),
+			"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+			"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 			"via": via, "source_kind": "pr_description", "vendor": entStr(sink["vendor"]),
 			"capabilities": caps, "gate_state": "absent", "source_principals": sources,
 			"identity_scope": meta.identityScope, "confidence": conf,
@@ -429,7 +432,8 @@ func derivePipelinePoisoning(cp engine.CurrentPhase, timer *engine.PhaseTimer, j
 	}
 	rec := map[string]any{
 		"kind": "PIPELINE_POISONING", "technique": "pipeline_poisoning",
-		"project": project, "pipeline_id": mInt64(j, "pipeline_id"), "job": mStr(j, "job"),
+		"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+		"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 		"trigger": trigger, "via": via, "sink_kind": sinkKind, "sink_form": "script",
 		"exposes_system_access_token": mBool(j, "exposes_system_access_token"),
 		"identity_scope":              meta.identityScope, "source_principals": sources,
