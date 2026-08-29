@@ -69,7 +69,7 @@ func TestHasRoleTargetFollowsResourceKind(t *testing.T) {
 	}{
 		{"Project", "org/proj", true, Project, "org/proj"},
 		{"Repository", "org/proj/r", true, Repository, "org/proj/r"},
-		{"ServiceConnection", "org/owner/c1", true, ServiceConnection, "org/owner/c1"},
+		{"ServiceConnection", "owner/c1", true, ServiceConnection, "org/owner/c1"},
 		{"Project", "org", true, "", ""},
 		{"Project", "org/proj", false, "", ""},
 		{"DeploymentGroup", "org/proj", true, "", ""},

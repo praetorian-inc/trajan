@@ -290,11 +290,11 @@ func roleResourceEndpoint(org string, label NodeLabel, resourceID string) (endpo
 		}
 		return endpoint{Pipeline, map[string]string{"org": org, "project": parts[1], "pipeline_id": parts[2]}}, true
 	case ServiceConnection:
-		if len(parts) != 3 {
+		if len(parts) != 2 {
 			return endpoint{}, false
 		}
 		return endpoint{ServiceConnection, map[string]string{
-			"org": org, "owner_project": parts[1], "connection_id": parts[2],
+			"org": org, "owner_project": parts[0], "connection_id": parts[1],
 		}}, true
 	}
 	return endpoint{}, false
