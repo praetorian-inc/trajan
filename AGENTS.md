@@ -4,7 +4,7 @@ This is the canonical agent instruction file for this repository, loaded by ever
 
 Trajan is a CI/CD security scanner written in Go. **When in doubt, favor less code.**
 
-All live code is the phased, on-disk pipeline under `internal/` — one package per platform (`internal/github`, `internal/gitlab`, `internal/ado`) sharing `internal/engine`, with the rule corpus in `internal/detection-rules/` and graph, report, and attack alongside. `pkg/` is the retired engine: no CLI command reaches it, so do not add code there. Layout and phase contract: `CONTRIBUTING.md` (Project layout, Architecture overview). The conventions below are binding for all new code.
+All live code is the phased, on-disk pipeline under `internal/` — one package per platform (`internal/github`, `internal/gitlab`, `internal/ado`) sharing `internal/engine`, with the rule corpus in `internal/detection-rules/` and graph, report, and attack alongside. `pkg/` is the retired engine except `pkg/search`, which the hidden `trajan search` command in `cmd/trajan/search.go` still imports; do not add new code under `pkg/` other than that command. Layout and phase contract: `CONTRIBUTING.md` (Project layout, Architecture overview). The conventions below are binding for all new code.
 
 ## Rules
 
