@@ -19,7 +19,7 @@ CMD_DIR := cmd/trajan
 # Safety: delete partial outputs on error
 .DELETE_ON_ERROR:
 
-.PHONY: all build test test-short test-coverage clean fmt vet lint deps help
+.PHONY: all build test test-short test-coverage clean fmt vet lint cli-docs deps help
 
 all: build
 
@@ -57,6 +57,20 @@ vet:
 ## lint: Run linters
 lint:
 	golangci-lint run --max-same-issues 0 --max-issues-per-linter 0 ./...
+
+## cli-docs: Regenerate the documented CLI surface from the live cobra tree
+#
+# This is the single command to run after a deliberate rename or a new flag: it
+# rewrites docs/cli-surface.json, docs/CLI.md and the generated regions of
+# README.md from whatever cobra actually registers. CI runs the same walk in
+# check mode and fails when the committed copies disagree, and the failure
+# message names this target verbatim -- cmd/trajan/cli_surface_test.go hardcodes
+# RegenerateCommand as "make cli-docs", so this target may not be renamed
+# without changing that string too.
+cli-docs:
+	@GOWORK=off $(GO) test ./$(CMD_DIR) -list 'TestCLISurface' | grep -qE '^TestCLISurface$$' \
+	  || { echo "cli-docs: no TestCLISurface in ./$(CMD_DIR) -- the -update writer was renamed. 'go test -run' exits 0 when its pattern matches nothing, so this target would report success having regenerated nothing at all; fix the name in $(CMD_DIR)/cli_surface_test.go."; exit 1; }
+	GOWORK=off $(GOTEST) ./$(CMD_DIR) -run 'TestCLISurface' -count=1 -update
 
 ## deps: Download dependencies
 deps:

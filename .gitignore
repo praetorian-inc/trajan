@@ -11,7 +11,17 @@ coverage*.out
 coverage.html
 
 # Docs
-docs/
+#
+# docs/ is a scratch directory for research and planning notes, which stay
+# local. The CLI-surface gate's artifacts are the exception: they are checked in
+# and compared byte-for-byte in CI, so they are excluded at the content level
+# (docs/*) rather than by directory -- git cannot re-include a file whose parent
+# directory is itself excluded, so a blanket "docs/" would make the negations
+# below dead lines and the gate would fail forever on missing artifacts.
+docs/*
+!docs/CLI.md
+!docs/cli-surface.json
+!docs/cli-surface-allow.txt
 
 # IDE
 .vscode/
@@ -24,9 +34,6 @@ docs/
 
 # Claude outputs
 .claude/
-
-# Research and planning docs
-docs/
 
 # WASM browser build artifacts
 browser/trajan.wasm

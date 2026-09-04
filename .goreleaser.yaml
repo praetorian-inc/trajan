@@ -68,3 +68,15 @@ release:
   draft: false
   prerelease: auto
   name_template: "Trajan v{{.Version}}"
+  # Ship the machine-readable CLI surface as its own release asset, alongside the
+  # archives, so a downstream consumer can pin against a published surface rather
+  # than re-deriving it from a checkout. It is the same file the CLI Surface Drift
+  # workflow proves is in sync with the live cobra tree on every pull request.
+  #
+  # `glob` is the only key `release.extra_files` entries accept besides
+  # `name_template` (goreleaser v2 schema, $defs.ExtraFile). A glob that matches
+  # nothing is a hard release failure, which is the behaviour wanted here: the
+  # artifact is committed and un-ignored in .gitignore, so a missing file means
+  # the gate's goldens were deleted rather than that the asset is optional.
+  extra_files:
+    - glob: ./docs/cli-surface.json

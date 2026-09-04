@@ -1,0 +1,2968 @@
+{
+  "schemaVersion": 1,
+  "surfaceHash": "sha256:fcf86499bcbef7d9f84fef59a9f57d6423f70d77f29a96ff657ad1c97c30c991",
+  "commands": [
+    {
+      "path": "trajan",
+      "use": "trajan",
+      "short": "Trajan - CI/CD Security Scanner",
+      "runnable": false,
+      "flags": [
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)"
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan ado",
+      "use": "ado",
+      "short": "Trajan - Azure DevOps",
+      "runnable": false,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers"
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan ado collect",
+      "use": "collect [locator]",
+      "short": "Collect raw Azure DevOps configuration for an org/project",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "azure-bearer-token",
+          "type": "string",
+          "usage": "bearer token (prefer AZURE_BEARER_TOKEN/SYSTEM_ACCESSTOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "PAT (prefer TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT env; this flag is an escape hatch)"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan ado normalize",
+      "use": "normalize",
+      "short": "Normalize collected Azure DevOps data into structural node/edge records",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan ado report",
+      "use": "report",
+      "short": "Render findings (json|jsonl|md|html|all) from a scanned run",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "default": "jsonl",
+          "usage": "output format: json|jsonl|md|html|all"
+        },
+        {
+          "name": "min-confidence",
+          "type": "string",
+          "default": "low",
+          "usage": "drop findings below this confidence"
+        },
+        {
+          "name": "min-severity",
+          "type": "string",
+          "default": "info",
+          "usage": "drop findings below this severity"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "usage": "destination dir, or '-' for stdout (default: the run dir)"
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan ado run",
+      "use": "run [locator]",
+      "short": "Wrapper: collect, normalize, scan in one process",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "azure-bearer-token",
+          "type": "string",
+          "usage": "bearer token (prefer AZURE_BEARER_TOKEN/SYSTEM_ACCESSTOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "PAT (prefer TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT env; this flag is an escape hatch)"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan ado scan",
+      "use": "scan",
+      "short": "Evaluate ADO detection rules over a normalized run",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "org-detections-only",
+          "type": "bool",
+          "default": "false",
+          "usage": "evaluate only org-subject (org-level) rules"
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan ado whoami",
+      "use": "whoami",
+      "short": "Resolve the token and print the authenticated identity and reachable surfaces",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "azure-bearer-token",
+          "type": "string",
+          "usage": "bearer token (prefer AZURE_BEARER_TOKEN/SYSTEM_ACCESSTOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "org",
+          "type": "string",
+          "usage": "Azure DevOps organization (default: ORG_NAME)"
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "PAT (prefer TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT env; this flag is an escape hatch)"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github",
+      "use": "github",
+      "short": "GitHub platform",
+      "aliases": [
+        "gh"
+      ],
+      "runnable": false,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers"
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github analyze",
+      "use": "analyze",
+      "short": "Run deeper analysis over the graph",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "detailed",
+          "shorthand": "d",
+          "type": "bool",
+          "default": "false",
+          "usage": "expand output"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "no-graph",
+          "shorthand": "G",
+          "type": "bool",
+          "default": "false",
+          "usage": "analyze in-memory (no Neo4j)"
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        },
+        {
+          "name": "write-back",
+          "shorthand": "w",
+          "type": "bool",
+          "default": "false",
+          "usage": "persist analysis results"
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack",
+      "use": "attack",
+      "short": "Author, validate and run authorized verification chains",
+      "runnable": false,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack catalog",
+      "use": "catalog",
+      "short": "List the primitive registry (the prompt source for plan authoring)",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "default": "false",
+          "usage": "emit the full registry as JSON"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack cleanup",
+      "use": "cleanup [<plan-id>]",
+      "short": "Replay a run's recorded inverses and report what was and was not undone",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "list the inverses without issuing them"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory to clean up (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack identity",
+      "use": "identity",
+      "short": "Manage the credential store (~/.trajan/identities.json)",
+      "runnable": false,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack identity add",
+      "use": "add <name>",
+      "short": "Add or replace an identity; the secret is read from stdin or --token-env, never argv",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "default": "pat",
+          "usage": "pat|fine_grained|app_installation|oidc|gh_cli"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "usage": "free-text note"
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token-env",
+          "type": "string",
+          "usage": "read the secret from this environment variable instead of stdin"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack identity list",
+      "use": "list",
+      "short": "List stored identities (never their secrets)",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack identity rm",
+      "use": "rm <name>",
+      "short": "Remove an identity",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack plan",
+      "use": "plan",
+      "short": "Work with attack plans",
+      "runnable": false,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack plan list",
+      "use": "list",
+      "short": "List the embedded plan templates",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack plan validate",
+      "use": "validate <plan|template-id>",
+      "short": "Validate a plan file or embedded template offline, reporting every error at once",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "set",
+          "type": "stringArray",
+          "default": "[]",
+          "usage": "set an input: --set key=value (repeatable)"
+        },
+        {
+          "name": "set-file",
+          "type": "string",
+          "usage": "YAML file of input values"
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack resume",
+      "use": "resume [<plan-id>]",
+      "short": "Resume a run: completed steps are skipped and a killed watch resumes the watch",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "keep-cipher",
+          "type": "bool",
+          "default": "false",
+          "usage": "keep the harvest's persisted ciphertext after a successful decrypt instead of discarding it"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory to resume (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "step-delay",
+          "type": "duration",
+          "default": "0s",
+          "usage": "sleep between steps to absorb read-after-write propagation lag"
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "usage": "resume up to and including this step id, then stop again"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github attack run",
+      "use": "run <plan|template-id>",
+      "short": "Run a plan. Dry run unless --execute is passed",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "render every mutation without sending one (the default)"
+        },
+        {
+          "name": "execute",
+          "type": "bool",
+          "default": "false",
+          "usage": "issue mutations against the target; passing it is the authorization assertion"
+        },
+        {
+          "name": "keep-cipher",
+          "type": "bool",
+          "default": "false",
+          "usage": "keep the harvest's persisted ciphertext after a successful decrypt instead of discarding it"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "attach to an existing run directory (default: mint one)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "set",
+          "type": "stringArray",
+          "default": "[]",
+          "usage": "set an input: --set key=value (repeatable)"
+        },
+        {
+          "name": "set-file",
+          "type": "string",
+          "usage": "YAML file of input values"
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "step-delay",
+          "type": "duration",
+          "default": "0s",
+          "usage": "sleep between steps to absorb read-after-write propagation lag"
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "usage": "run up to and including this step id, then stop; cleanup is left for the resume"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github collect",
+      "use": "collect <locator>",
+      "short": "Collect raw GitHub Actions configuration for an org or repo",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github graph",
+      "use": "graph",
+      "short": "Build importable graph nodes/edges from normalized facts and findings",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github normalize",
+      "use": "normalize",
+      "short": "Normalize collected data into fact records",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github push",
+      "use": "push",
+      "short": "Push facts + findings into the graph",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "neo4j-pass",
+          "type": "string",
+          "usage": "Neo4j password"
+        },
+        {
+          "name": "neo4j-url",
+          "type": "string",
+          "default": "bolt://localhost:7687",
+          "usage": "Neo4j Bolt URL"
+        },
+        {
+          "name": "neo4j-user",
+          "type": "string",
+          "default": "neo4j",
+          "usage": "Neo4j user"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "reset",
+          "type": "bool",
+          "default": "false",
+          "usage": "delete every node in the database before pushing"
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github report",
+      "use": "report [locator]",
+      "short": "Render findings (json|jsonl|md|html|all) from a scanned run",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "default": "jsonl",
+          "usage": "output format: json|jsonl|md|html|all"
+        },
+        {
+          "name": "min-confidence",
+          "type": "string",
+          "default": "low",
+          "usage": "drop findings below this confidence"
+        },
+        {
+          "name": "min-severity",
+          "type": "string",
+          "default": "info",
+          "usage": "drop findings below this severity"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "usage": "destination dir, or '-' for stdout (default: stdout for json/jsonl, run dir for md/html)"
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github run",
+      "use": "run <locator>",
+      "short": "Wrapper: collect, normalize, scan in one process",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github scan",
+      "use": "scan [locator]",
+      "short": "Evaluate category rules over normalized facts",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "org-detections-only",
+          "type": "bool",
+          "default": "false",
+          "usage": "evaluate only org-subject (org-level) rules"
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan github whoami",
+      "use": "whoami",
+      "short": "Resolve the token and print the authenticated identity and scopes",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan gitlab",
+      "use": "gitlab",
+      "short": "GitLab platform",
+      "aliases": [
+        "gl"
+      ],
+      "runnable": false,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers"
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip TLS verify (self-signed self-hosted)"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "default": "https://gitlab.com",
+          "usage": "GitLab base URL (self-hosted)"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan gitlab analyze",
+      "use": "analyze",
+      "short": "Run deeper analysis over the graph",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "detailed",
+          "shorthand": "d",
+          "type": "bool",
+          "default": "false",
+          "usage": "expand output"
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip TLS verify (self-signed self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "no-graph",
+          "shorthand": "G",
+          "type": "bool",
+          "default": "false",
+          "usage": "analyze in-memory (no Neo4j)"
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "default": "https://gitlab.com",
+          "usage": "GitLab base URL (self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        },
+        {
+          "name": "write-back",
+          "shorthand": "w",
+          "type": "bool",
+          "default": "false",
+          "usage": "persist analysis results"
+        }
+      ]
+    },
+    {
+      "path": "trajan gitlab attack",
+      "use": "attack",
+      "short": "Active exploitation (reserved)",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip TLS verify (self-signed self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "default": "https://gitlab.com",
+          "usage": "GitLab base URL (self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan gitlab collect",
+      "use": "collect <locator>",
+      "short": "Collect raw GitLab CI configuration for a group, subgroup, or project",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip TLS verify (self-signed self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "API token (prefer TRAJAN_GL_TOKEN/GITLAB_TOKEN/GL_TOKEN/CI_JOB_TOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "default": "https://gitlab.com",
+          "usage": "GitLab base URL (self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan gitlab normalize",
+      "use": "normalize",
+      "short": "Normalize collected data into fact records",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip TLS verify (self-signed self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "default": "https://gitlab.com",
+          "usage": "GitLab base URL (self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan gitlab push",
+      "use": "push",
+      "short": "Push facts + findings into the graph",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip TLS verify (self-signed self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "neo4j-pass",
+          "type": "string",
+          "usage": "Neo4j password"
+        },
+        {
+          "name": "neo4j-url",
+          "type": "string",
+          "default": "bolt://localhost:7687",
+          "usage": "Neo4j Bolt URL"
+        },
+        {
+          "name": "neo4j-user",
+          "type": "string",
+          "default": "neo4j",
+          "usage": "Neo4j user"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "default": "https://gitlab.com",
+          "usage": "GitLab base URL (self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan gitlab report",
+      "use": "report [locator]",
+      "short": "Render findings (json|jsonl|md|html|all) from a scanned run",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "default": "jsonl",
+          "usage": "output format: json|jsonl|md|html|all"
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip TLS verify (self-signed self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "min-confidence",
+          "type": "string",
+          "default": "low",
+          "usage": "drop findings below this confidence"
+        },
+        {
+          "name": "min-severity",
+          "type": "string",
+          "default": "info",
+          "usage": "drop findings below this severity"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "out",
+          "type": "string",
+          "usage": "destination dir, or '-' for stdout (default: the run dir)"
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "default": "https://gitlab.com",
+          "usage": "GitLab base URL (self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan gitlab run",
+      "use": "run <locator>",
+      "short": "Wrapper: collect, normalize, scan in one process",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip TLS verify (self-signed self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "API token (prefer TRAJAN_GL_TOKEN/GITLAB_TOKEN/GL_TOKEN/CI_JOB_TOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "default": "https://gitlab.com",
+          "usage": "GitLab base URL (self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan gitlab scan",
+      "use": "scan [locator]",
+      "short": "Evaluate category rules over normalized facts",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "group-detections-only",
+          "type": "bool",
+          "default": "false",
+          "usage": "evaluate only group-subject rules"
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip TLS verify (self-signed self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "path",
+          "shorthand": "p",
+          "type": "string",
+          "usage": "run directory (default: latest)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "default": "https://gitlab.com",
+          "usage": "GitLab base URL (self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan gitlab whoami",
+      "use": "whoami",
+      "short": "Resolve the token and print the authenticated identity and scopes",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "concurrency",
+          "type": "int",
+          "default": "8",
+          "usage": "max concurrent API workers",
+          "inherited": true
+        },
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "skip TLS verify (self-signed self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "default": "./trajan-out",
+          "usage": "run output directory",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "usage": "API token (prefer TRAJAN_GL_TOKEN/GITLAB_TOKEN/GL_TOKEN/CI_JOB_TOKEN env; this flag is an escape hatch)"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "default": "https://gitlab.com",
+          "usage": "GitLab base URL (self-hosted)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan search",
+      "use": "search",
+      "short": "Search for repositories with self-hosted runners",
+      "hidden": true,
+      "runnable": true,
+      "flags": [
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "org",
+          "type": "string",
+          "usage": "Organization to search within"
+        },
+        {
+          "name": "output-file",
+          "type": "string",
+          "usage": "Output file for results"
+        },
+        {
+          "name": "provider",
+          "shorthand": "p",
+          "type": "string",
+          "default": "sourcegraph",
+          "usage": "Search provider (sourcegraph; for github use: trajan github search)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "query",
+          "shorthand": "q",
+          "type": "string",
+          "usage": "Custom search query"
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "path": "trajan version",
+      "use": "version",
+      "short": "Print version information",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "debug",
+          "type": "bool",
+          "default": "false",
+          "usage": "raw slog records instead of humanized output",
+          "inherited": true
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "default": "false",
+          "usage": "disable color (also honors NO_COLOR)",
+          "inherited": true
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP proxy URL (e.g., http://proxy:8080)",
+          "inherited": true
+        },
+        {
+          "name": "socks-proxy",
+          "type": "string",
+          "usage": "SOCKS5 proxy URL (e.g., socks5://proxy:1080)",
+          "inherited": true
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "verbose output",
+          "inherited": true,
+          "hidden": true
+        }
+      ]
+    }
+  ]
+}
