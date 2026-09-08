@@ -69,7 +69,7 @@ lint:
 # without changing that string too.
 cli-docs:
 	@GOWORK=off $(GO) test ./$(CMD_DIR) -list 'TestCLISurface' | grep -qE '^TestCLISurface$$' \
-	  || { echo "cli-docs: no TestCLISurface in ./$(CMD_DIR) -- the -update writer was renamed. 'go test -run' exits 0 when its pattern matches nothing, so this target would report success having regenerated nothing at all; fix the name in $(CMD_DIR)/cli_surface_test.go."; exit 1; }
+	  || { echo "cli-docs: 'go test -list' did not report TestCLISurface in ./$(CMD_DIR). Either the -update writer was renamed, or the package failed to build -- run 'go build ./$(CMD_DIR)' to tell which. 'go test -run' exits 0 when its pattern matches nothing, so without this check the target would report success having regenerated nothing at all."; exit 1; }
 	GOWORK=off $(GOTEST) ./$(CMD_DIR) -run 'TestCLISurface' -count=1 -update
 
 ## deps: Download dependencies
