@@ -58,15 +58,7 @@ vet:
 lint:
 	golangci-lint run --max-same-issues 0 --max-issues-per-linter 0 ./...
 
-## cli-docs: Regenerate the documented CLI surface from the live cobra tree
-#
-# This is the single command to run after a deliberate rename or a new flag: it
-# rewrites docs/cli-surface.json, docs/CLI.md and the generated regions of
-# README.md from whatever cobra actually registers. CI runs the same walk in
-# check mode and fails when the committed copies disagree, and the failure
-# message names this target verbatim -- cmd/trajan/cli_surface_test.go hardcodes
-# RegenerateCommand as "make cli-docs", so this target may not be renamed
-# without changing that string too.
+## cli-docs: Regenerate CLI surface docs from the live cobra tree
 cli-docs:
 	@GOWORK=off $(GO) test ./$(CMD_DIR) -list 'TestCLISurface' | grep -qE '^TestCLISurface$$' \
 	  || { echo "cli-docs: 'go test -list' did not report TestCLISurface in ./$(CMD_DIR). Either the -update writer was renamed, or the package failed to build -- run 'go build ./$(CMD_DIR)' to tell which. 'go test -run' exits 0 when its pattern matches nothing, so without this check the target would report success having regenerated nothing at all."; exit 1; }
