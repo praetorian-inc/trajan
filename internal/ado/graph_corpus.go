@@ -96,8 +96,3 @@ func str(v any) string {
 	}
 	return ""
 }
-
-func truthy(v any) bool {
-	b, _ := v.(bool)
-	return b
-}

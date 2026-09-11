@@ -559,7 +559,7 @@ var gapRegister = []gapEntry{{
 	Subject:     "task groups, classic releases, deployment groups",
 	Kind:        "node",
 	Status:      "not_collected",
-	Reason:      "no NormalizeADO path helper exists for any of them. Task groups are the ADO composite-action analogue and the reusable-code supply chain; cat-14's five rules are self-described posture proxies standing in for classic releases.",
+	Reason:      "no NormalizeADO path helper exists for any of them. Task groups are the ADO composite-action analog and the reusable-code supply chain; cat-14's five rules are self-described posture proxies standing in for classic releases.",
 	UpstreamFix: "normalize the already-collected release-definition and build-definition surfaces, then add node writers.",
 }, {
 	Subject:     "synthetic positional names",
