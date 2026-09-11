@@ -2,6 +2,7 @@ id: cat-13/setendpoint-connection-redirect
 scenario_id: cat-13/03
 title: "Untrusted text echoed to stdout injects ##vso[task.setendpoint] to redirect a live service connection"
 subject: logging_command_injection
+graph: edge(LOGGING_COMMAND_INJECTION)
 severity: critical
 confidence: high
 description: >

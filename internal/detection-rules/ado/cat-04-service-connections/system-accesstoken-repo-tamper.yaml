@@ -2,6 +2,7 @@ id: cat-04/system-accesstoken-repo-tamper
 scenario_id: cat-04/03
 title: "Pipeline exposes System.AccessToken with no protecting check"
 subject: pipeline_poisoning
+graph: edge(PIPELINE_POISONING)
 severity: high
 confidence: medium
 description: >

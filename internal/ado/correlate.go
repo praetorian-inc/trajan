@@ -104,7 +104,7 @@ func deriveRunsAs(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines, p
 			"org_provenance":      "unknown",
 		}
 		key := fmt.Sprintf("%s__%d", project, mInt64(pl, "id"))
-		if err := emit(cp, timer, engine.NormalizeADOEdges("runs-as", key), rec); err != nil {
+		if err := emitEdge(cp, timer, "runs-as", key, rec); err != nil {
 			return err
 		}
 	}
@@ -156,7 +156,7 @@ func derivePolicyAttribution(cp engine.CurrentPhase, timer *engine.PhaseTimer, p
 					scopeDisc = "all"
 				}
 				key := fmt.Sprintf("%s__%s__%d__%s__%s__%s", adoSafe(project), adoSafe(mStr(r, "name")), mInt64(pol, "config_id"), adoSafe(refName), adoSafe(matchKind), adoSafe(scopeDisc))
-				if err := emit(cp, timer, engine.NormalizeADOEdges("has-policy", key), rec); err != nil {
+				if err := emitEdge(cp, timer, "has-policy", key, rec); err != nil {
 					return err
 				}
 				if bdID := mInt64(mMap(pol, "settings"), "build_definition_id"); bdID != 0 {
@@ -170,7 +170,7 @@ func derivePolicyAttribution(cp engine.CurrentPhase, timer *engine.PhaseTimer, p
 						"build_definition_id": bdID,
 						"is_blocking":         mBool(pol, "is_blocking"),
 					}
-					if err := emit(cp, timer, engine.NormalizeADOEdges("build-validates", key), bv); err != nil {
+					if err := emitEdge(cp, timer, "build-validates", key, bv); err != nil {
 						return err
 					}
 				}
@@ -244,7 +244,7 @@ func deriveEffectiveRoles(ctx context.Context, prior engine.PriorPhase, cp engin
 						"expanded_members":  expandMembers(graphDesc, memberships),
 					}
 					key := hashKey(src.ns, token, desc)
-					if err := emit(cp, timer, engine.NormalizeADOEdges("has-role", key), rec); err != nil {
+					if err := emitEdge(cp, timer, "has-role", key, rec); err != nil {
 						return err
 					}
 				}
@@ -538,7 +538,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 			"variable_group_id": ref.id, "owner_project": ref.owner, "resolved": ref.id != 0,
 		}
 		key := fmt.Sprintf("%s__%d__%s__%s__%s__%s", adoSafe(project), pipelineID, level, adoSafe(stage), adoSafe(job), adoSafe(name))
-		return emit(cp, timer, engine.NormalizeADOEdges("consumes-group", key), rec)
+		return emitEdge(cp, timer, "consumes-group", key, rec)
 	}
 	pipelineRecs, err := loadRecords(prior, "10-normalize/pipelines")
 	if err != nil {
@@ -585,6 +585,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 				"kind":                  "USES_CONNECTION",
 				"project":               project,
 				"pipeline_id":           mInt64(j, "pipeline_id"),
+				"stage":                 mStr(j, "stage"),
 				"job":                   mStr(j, "job"),
 				"connection_name":       name,
 				"service_connection_id": ref.id,
@@ -593,7 +594,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 				"input_name":            entStr(um["input_name"]),
 				"resolved":              ref.id != "",
 			}
-			if err := emit(cp, timer, engine.NormalizeADOEdges("uses-connection", jobKey+"__"+adoSafe(name)), rec); err != nil {
+			if err := emitEdge(cp, timer, "uses-connection", jobKey+"__"+adoSafe(name), rec); err != nil {
 				return err
 			}
 		}
@@ -612,10 +613,11 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 			}
 			rec := map[string]any{
 				"kind": "TARGETS", "project": project, "pipeline_id": mInt64(j, "pipeline_id"),
-				"job": mStr(j, "job"), "environment": envName, "resource": strOrNull(resource),
+				"stage": mStr(j, "stage"),
+				"job":   mStr(j, "job"), "environment": envName, "resource": strOrNull(resource),
 				"environment_ref": env, "environment_id": envID, "resolved": envID != 0,
 			}
-			if err := emit(cp, timer, engine.NormalizeADOEdges("targets", jobKey+"__"+adoSafe(env)), rec); err != nil {
+			if err := emitEdge(cp, timer, "targets", jobKey+"__"+adoSafe(env), rec); err != nil {
 				return err
 			}
 		}
@@ -625,14 +627,15 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 			poolID := poolByProjectName[project][name]
 			rec := map[string]any{
 				"kind": "RUNS_ON", "project": project, "pipeline_id": mInt64(j, "pipeline_id"),
-				"job": mStr(j, "job"), "pool_name": name, "vm_image": vmImage,
+				"stage": mStr(j, "stage"),
+				"job":   mStr(j, "job"), "pool_name": name, "vm_image": vmImage,
 				"demands": listOrEmpty(pool, "demands"),
 				// vmImage with no named pool is a Microsoft-hosted image (no node).
 				"is_hosted":             name == "" && vmImage != "",
 				"project_agent_pool_id": poolID,
 				"resolved":              poolID != 0,
 			}
-			if err := emit(cp, timer, engine.NormalizeADOEdges("runs-on", jobKey), rec); err != nil {
+			if err := emitEdge(cp, timer, "runs-on", jobKey, rec); err != nil {
 				return err
 			}
 		}
@@ -687,7 +690,7 @@ func deriveBranches(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines,
 			"repo": repoName, "branch": branch, "yaml_path": mStr(pl, "yaml_path"),
 			"branch_id": project + "/" + repoName + "@" + branch,
 		}
-		if err := emit(cp, timer, engine.NormalizeADOEdges("defined-by", fmt.Sprintf("%s__%d", adoSafe(project), mInt64(pl, "id"))), edge); err != nil {
+		if err := emitEdge(cp, timer, "defined-by", fmt.Sprintf("%s__%d", adoSafe(project), mInt64(pl, "id")), edge); err != nil {
 			return err
 		}
 	}
@@ -774,7 +777,7 @@ func deriveMemberOf(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engi
 	for group, members := range loadMemberships(prior, org) {
 		for _, member := range members {
 			rec := map[string]any{"kind": "MEMBER_OF", "member": member, "group": group, "is_direct": true}
-			if err := emit(cp, timer, engine.NormalizeADOEdges("member-of", hashKey(member, group)), rec); err != nil {
+			if err := emitEdge(cp, timer, "member-of", hashKey(member, group), rec); err != nil {
 				return err
 			}
 		}

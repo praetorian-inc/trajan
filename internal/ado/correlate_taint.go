@@ -163,11 +163,12 @@ func deriveReads(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.
 			for _, s := range secretsByGroup[gid] {
 				rec := map[string]any{
 					"kind": "READS", "project": project, "pipeline_id": pid, "stage": stage, "job": job,
-					"variable_group_id": gid, "secret_name": mStr(s, "name"), "secret_id": mStr(s, "_id"),
+					"variable_group_id": gid, "owner_project": mStr(s, "project"),
+					"secret_name": mStr(s, "name"), "secret_id": mStr(s, "_id"),
 					"via_level": mStr(e, "level"), "gate_strength": strength, "gate_state": state, "confidence": confidence,
 				}
 				key := fmt.Sprintf("%s__%d__%s__%s__%d__%s", adoSafe(project), pid, adoSafe(stage), adoSafe(job), gid, adoSafe(mStr(s, "name")))
-				if err := emit(cp, timer, engine.NormalizeADOEdges("reads", key), rec); err != nil {
+				if err := emitEdge(cp, timer, "reads", key, rec); err != nil {
 					return nil, err
 				}
 			}
@@ -204,7 +205,8 @@ func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, 
 	emitEdge := func(sinkType, name, via, location, confidence string, ms map[string]any) error {
 		rec := map[string]any{
 			"kind": "QUEUE_TIME_INJECTION", "technique": "queue_time_injection",
-			"project": project, "pipeline_id": mInt64(j, "pipeline_id"), "job": mStr(j, "job"),
+			"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+			"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 			"source": "queue_build_principal", "source_permission": "QueueBuilds", "source_principals": sources,
 			"sink_type": sinkType, "macro_name": name, "sink_location": location, "via": via,
 			"step_index":           ms["step_index"],
@@ -217,7 +219,7 @@ func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, 
 		// several steps and sink kinds, and they must not overwrite each other.
 		key := fmt.Sprintf("%s__%s__%s__%v__%s", jobKeyOf(j), adoSafe(via), adoSafe(name),
 			ms["step_index"], adoSafe(location))
-		return emit(cp, timer, engine.NormalizeADOEdges("queue-time-injection", key), rec)
+		return emitEdge(cp, timer, "queue-time-injection", key, rec)
 	}
 
 	for _, raw := range mList(j, "macro_sinks") {
@@ -293,7 +295,8 @@ func deriveLoggingInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j 
 	emitEdge := func(cmdType, via, effect, source string, echoStep int, consumer map[string]any, confidence string) error {
 		rec := map[string]any{
 			"kind": "LOGGING_COMMAND_INJECTION", "technique": "logging_command_injection",
-			"project": project, "pipeline_id": mInt64(j, "pipeline_id"), "job": mStr(j, "job"),
+			"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+			"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 			"command_type": cmdType, "untrusted_source": source, "echo_step": echoStep,
 			"via": via, "effect": effect, "consumer_step": consumer["step_index"],
 			"target_resource": consumer["resource"], "source_principals": sources,
@@ -304,7 +307,7 @@ func deriveLoggingInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j 
 		// same kind, and they must not overwrite each other.
 		key := fmt.Sprintf("%s__%s__%d__%v__%s", jobKeyOf(j), adoSafe(via), echoStep,
 			consumer["step_index"], adoSafe(entStr(consumer["resource"])))
-		return emit(cp, timer, engine.NormalizeADOEdges("logging-command-injection", key), rec)
+		return emitEdge(cp, timer, "logging-command-injection", key, rec)
 	}
 
 	scUsages := mList(j, "service_connection_usages")
@@ -387,14 +390,15 @@ func deriveAgentInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j ma
 		}
 		rec := map[string]any{
 			"kind": "AGENT_INJECTION", "technique": "prompt_injection",
-			"project": project, "pipeline_id": mInt64(j, "pipeline_id"), "job": mStr(j, "job"),
+			"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+			"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 			"via": via, "source_kind": "pr_description", "vendor": entStr(sink["vendor"]),
 			"capabilities": caps, "gate_state": "absent", "source_principals": sources,
 			"identity_scope": meta.identityScope, "confidence": conf,
 			"target": jobID(j), "context": "azure_repos",
 		}
 		key := fmt.Sprintf("%s__%d", jobKeyOf(j), i)
-		if err := emit(cp, timer, engine.NormalizeADOEdges("agent-injection", key), rec); err != nil {
+		if err := emitEdge(cp, timer, "agent-injection", key, rec); err != nil {
 			return err
 		}
 	}
@@ -428,14 +432,15 @@ func derivePipelinePoisoning(cp engine.CurrentPhase, timer *engine.PhaseTimer, j
 	}
 	rec := map[string]any{
 		"kind": "PIPELINE_POISONING", "technique": "pipeline_poisoning",
-		"project": project, "pipeline_id": mInt64(j, "pipeline_id"), "job": mStr(j, "job"),
+		"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+		"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 		"trigger": trigger, "via": via, "sink_kind": sinkKind, "sink_form": "script",
 		"exposes_system_access_token": mBool(j, "exposes_system_access_token"),
 		"identity_scope":              meta.identityScope, "source_principals": sources,
 		"gate_state": "absent", "confidence": confidence,
 		"target": jobID(j), "context": "azure_repos",
 	}
-	return emit(cp, timer, engine.NormalizeADOEdges("pipeline-poisoning", jobKeyOf(j)), rec)
+	return emitEdge(cp, timer, "pipeline-poisoning", jobKeyOf(j), rec)
 }
 
 // Strongest wins: the trigger list is ordered by how little the attacker must do.

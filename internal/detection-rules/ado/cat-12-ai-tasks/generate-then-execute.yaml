@@ -2,6 +2,7 @@ id: cat-12/generate-then-execute
 scenario_id: cat-12/05
 title: "Agent-generated output executed in the same run without human review"
 subject: agent_injection
+graph: edge(AGENT_INJECTION)
 severity: high
 confidence: high
 description: >

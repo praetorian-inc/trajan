@@ -2,6 +2,7 @@ id: cat-13/setvariable-control-flip
 scenario_id: cat-13/01
 title: "Untrusted text echoed to stdout injects ##vso[task.setvariable] to flip a control variable"
 subject: logging_command_injection
+graph: edge(LOGGING_COMMAND_INJECTION)
 severity: high
 confidence: high
 description: >

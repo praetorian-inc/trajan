@@ -2,6 +2,7 @@ id: cat-07/protect-access-repos-off
 scenario_id: cat-07/01
 title: "Protect access to repositories in YAML pipelines OFF at project level"
 subject: project
+graph: node(Project)
 severity: high
 confidence: medium
 description: >

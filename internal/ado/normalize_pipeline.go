@@ -21,6 +21,8 @@ var scInputNames = []string{
 	"kubernetesServiceConnection", "awsCredentials", "serviceConnection", "externalEndpoint", "externalEndpoints",
 }
 
+const checkoutTaskID = "6d15af64-176c-496d-b583-fd2ae21d4df4"
+
 func sortedKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -91,14 +93,19 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 		}
 
 		settable := settableVarSet(entObj(def, "variables"))
-		facts := pipelineYAMLFacts{}
+		facts, jobs := pipelineYAMLFacts{}, 0
 		if processType == 2 && strings.EqualFold(entStr(repo["type"]), "TfsGit") {
 			content := entryYAML(prior, project, id, repo, entStr(process["yamlFilename"]))
 			if content != "" {
-				facts, err = parsePipelineYAML(cp, timer, project, id, content, settable)
+				facts, jobs, err = parsePipelineYAML(cp, timer, project, id, content, settable)
 				if err != nil {
 					return err
 				}
+			}
+		}
+		if jobs == 0 {
+			if err := expandFromPreview(prior, cp, timer, project, id, settable); err != nil {
+				return err
 			}
 		}
 		pipe["extends_template"] = strOrNull(facts.extendsTemplate)
@@ -258,11 +265,11 @@ func splitRepoName(name, dfltProject string) (project, repo string) {
 // Variable groups are deliberately not merged down levels: each of Pipeline, Stage
 // and Job carries only what it declares, which is what makes the CONSUMES_GROUP level
 // recoverable later.
-func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, content string, settable map[string]bool) (pipelineYAMLFacts, error) {
+func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, content string, settable map[string]bool) (pipelineYAMLFacts, int, error) {
 	var root map[string]any
 	if err := yaml.Unmarshal([]byte(content), &root); err != nil {
 		timer.Errors = append(timer.Errors, fmt.Sprintf("pipeline %s/%d: yaml parse: %v", project, pipelineID, err))
-		return pipelineYAMLFacts{}, nil // a bad YAML doc is per-item non-fatal
+		return pipelineYAMLFacts{}, 0, nil // a bad YAML doc is per-item non-fatal
 	}
 	facts := pipelineYAMLFacts{
 		variableGroups:    variableGroups(root["variables"]),
@@ -272,9 +279,8 @@ func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project
 		settableVariables: settableVariablesOf(root["variables"]),
 	}
 	if err := emitPipelineResources(cp, timer, project, pipelineID, root); err != nil {
-		return facts, err
+		return facts, 0, err
 	}
-	pipelinePool := root["pool"]
 
 	tsList, tsByAlias := resolveTemplateSources(root, project)
 	facts.templateSources = tsList
@@ -290,31 +296,54 @@ func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project
 		}
 	}
 	if root["extends"] != nil {
-		return facts, nil // the jobs live in the template, expanded in a deferred pass
+		return facts, 0, nil // the jobs live in the template, recovered from the preview
 	}
+	n, err := emitStagesAndJobs(cp, timer, project, pipelineID, root, settable, engine.CollectADOBuildDefFull(project, pipelineID))
+	return facts, n, err
+}
 
+func expandFromPreview(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, settable map[string]bool) error {
+	rel := engine.CollectADOPipelinePreview(project, pipelineID)
+	content := entStr(entLoadData(prior, rel)["finalYaml"])
+	if content == "" {
+		return nil
+	}
+	var root map[string]any
+	if err := yaml.Unmarshal([]byte(content), &root); err != nil {
+		timer.Errors = append(timer.Errors, fmt.Sprintf("pipeline %s/%d: preview yaml parse: %v", project, pipelineID, err))
+		return nil
+	}
+	_, err := emitStagesAndJobs(cp, timer, project, pipelineID, root, settable, rel)
+	return err
+}
+
+func emitStagesAndJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, root map[string]any, settable map[string]bool, provFile string) (int, error) {
+	pipelinePool := root["pool"]
 	if stages, ok := root["stages"].([]any); ok {
+		n := 0
 		for i, s := range stages {
 			sm, ok := s.(map[string]any)
 			if !ok {
 				continue
 			}
 			if sm["template"] != nil && sm["stage"] == nil {
-				continue // a stage-template reference is expanded in the deferred pass
+				continue
 			}
 			stageName := firstStr(sm, "stage", fmt.Sprintf("stage_%d", i))
-			if err := emitStageJobs(cp, timer, project, pipelineID, stageName, sm, pipelinePool, settable); err != nil {
-				return facts, err
+			c, err := emitStageJobs(cp, timer, project, pipelineID, stageName, sm, pipelinePool, settable, provFile)
+			if err != nil {
+				return n, err
 			}
+			n += c
 		}
-		return facts, nil
+		return n, nil
 	}
 	// With no stages the root plays pipeline, stage and job at once. Its variable groups
 	// are already stamped on the Pipeline node, so they are stripped before the same map
 	// stands in for the Stage/Job — otherwise one declaration is counted at every level
 	// and CONSUMES_GROUP is emitted three times.
 	delete(root, "variables")
-	return facts, emitStageJobs(cp, timer, project, pipelineID, "__default", root, pipelinePool, settable)
+	return emitStageJobs(cp, timer, project, pipelineID, "__default", root, pipelinePool, settable, provFile)
 }
 
 // A resources.pipelines entry is a pipeline-completion trigger, which is the
@@ -336,14 +365,14 @@ func emitPipelineResources(cp engine.CurrentPhase, timer *engine.PhaseTimer, pro
 			"trigger": rm["trigger"], "branches": rm["branches"], "tags": rm["tags"], "stages": rm["stages"],
 		}
 		key := fmt.Sprintf("%s__%d__%s", adoSafe(project), pipelineID, adoSafe(firstStr(rm, "pipeline", fmt.Sprintf("res_%d", i))))
-		if err := emit(cp, timer, engine.NormalizeADOEdges("triggers-on-completion", key), rec); err != nil {
+		if err := emitEdge(cp, timer, "triggers-on-completion", key, rec); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, stage string, m map[string]any, inheritedPool any, settable map[string]bool) error {
+func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, stage string, m map[string]any, inheritedPool any, settable map[string]bool, provFile string) (int, error) {
 	stagePool := m["pool"]
 	if stagePool == nil {
 		stagePool = inheritedPool
@@ -359,33 +388,38 @@ func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project str
 		"depends_on":      stringsOf(m["dependsOn"]),
 		"variable_groups": toAnyList(variableGroups(m["variables"])), // stage-level declarations only
 		"environment":     strOrNull(yamlStr(m["environment"])),      // stage-level env (deployment stages carry it on jobs)
-		"_provenance":     prov(engine.CollectADOBuildDefFull(project, pipelineID)),
+		"_provenance":     prov(provFile),
 	}
 	if err := emit(cp, timer, engine.NormalizeADOStage(project, pipelineID, stage), stageRec); err != nil {
-		return err
+		return 0, err
 	}
 
 	jobs, ok := m["jobs"].([]any)
 	if !ok {
-		return emitJob(cp, timer, project, pipelineID, stage, "__default", m, stagePool, settable)
+		if err := emitJob(cp, timer, project, pipelineID, stage, "__default", m, stagePool, settable, provFile); err != nil {
+			return 0, err
+		}
+		return 1, nil
 	}
+	n := 0
 	for i, j := range jobs {
 		jm, ok := j.(map[string]any)
 		if !ok {
 			continue
 		}
 		if jm["template"] != nil && jm["job"] == nil && jm["deployment"] == nil {
-			continue // job-template reference — expanded in the deferred template pass
+			continue
 		}
 		jobName := firstStr(jm, "job", firstStr(jm, "deployment", fmt.Sprintf("job_%d", i)))
-		if err := emitJob(cp, timer, project, pipelineID, stage, jobName, jm, stagePool, settable); err != nil {
-			return err
+		if err := emitJob(cp, timer, project, pipelineID, stage, jobName, jm, stagePool, settable, provFile); err != nil {
+			return n, err
 		}
+		n++
 	}
-	return nil
+	return n, nil
 }
 
-func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, stage, job string, m map[string]any, inheritedPool any, settable map[string]bool) error {
+func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, stage, job string, m map[string]any, inheritedPool any, settable map[string]bool, provFile string) error {
 	jobPool := m["pool"]
 	if jobPool == nil {
 		jobPool = inheritedPool
@@ -429,7 +463,7 @@ func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, p
 		"exec_sinks":                  f.execSinks,
 		"executes_checked_out_code":   f.executesCheckedOutCode,
 		"exposes_system_access_token": f.referencesAccessToken,
-		"_provenance":                 prov(engine.CollectADOBuildDefFull(project, pipelineID)),
+		"_provenance":                 prov(provFile),
 	}
 	return emit(cp, timer, engine.NormalizeADOJob(project, pipelineID, stage, job), rec)
 }
@@ -494,6 +528,13 @@ func walkSteps(steps []any, settable map[string]bool) jobFacts {
 		sm, ok := s.(map[string]any)
 		if !ok {
 			continue
+		}
+		if strings.HasPrefix(yamlStr(sm["task"]), checkoutTaskID) {
+			in := entMap(sm["inputs"])
+			sm = map[string]any{
+				"checkout": in["repository"], "clean": in["clean"], "fetchDepth": in["fetchDepth"],
+				"persistCredentials": in["persistCredentials"], "submodules": in["submodules"],
+			}
 		}
 		if ck, ok := sm["checkout"]; ok {
 			f.checkouts = append(f.checkouts, map[string]any{

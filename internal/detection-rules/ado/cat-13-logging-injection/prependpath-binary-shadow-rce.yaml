@@ -2,6 +2,7 @@ id: cat-13/prependpath-binary-shadow-rce
 scenario_id: cat-13/02
 title: "Untrusted text echoed to stdout injects ##vso[task.prependpath] to shadow a later binary (RCE)"
 subject: logging_command_injection
+graph: edge(LOGGING_COMMAND_INJECTION)
 severity: critical
 confidence: high
 description: >

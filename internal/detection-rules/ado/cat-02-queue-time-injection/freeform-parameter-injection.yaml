@@ -2,6 +2,7 @@ id: cat-02/freeform-parameter-injection
 scenario_id: cat-02/03
 title: "Free-form string runtime parameter template-expanded into a script sink"
 subject: queue_time_injection
+graph: edge(QUEUE_TIME_INJECTION)
 severity: high
 confidence: high
 description: >

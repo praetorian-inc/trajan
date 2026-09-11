@@ -2,6 +2,7 @@ id: cat-14/task-group-edit-affects-all
 scenario_id: cat-14/02
 title: "Classic build/release creation enabled (task-group fan-out surface exists)"
 subject: project
+graph: node(Project)
 severity: medium
 confidence: low
 description: >
