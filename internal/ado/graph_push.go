@@ -118,6 +118,9 @@ func firstLine(s string) string {
 
 func ensureConstraints(ctx context.Context, sess neo4j.SessionWithContext, nodes []node) error {
 	for _, l := range slices.Sorted(maps.Keys(labelsPresent(nodes))) {
+		if !ValidNodeLabel(l) {
+			return fmt.Errorf("node label %q is not in the schema", l)
+		}
 		q := fmt.Sprintf("CREATE CONSTRAINT trajan_%s_id IF NOT EXISTS FOR (n:%s) REQUIRE n._id IS UNIQUE",
 			strings.ToLower(string(l)), l)
 		if _, err := runCypher(ctx, sess, q, nil); err != nil {
@@ -152,6 +155,9 @@ func pushNodes(ctx context.Context, sess neo4j.SessionWithContext, nodes []node,
 
 	total := 0
 	for _, l := range slices.Sorted(maps.Keys(labelsPresent(nodes))) {
+		if !ValidNodeLabel(l) {
+			return total, fmt.Errorf("node label %q is not in the schema", l)
+		}
 		q := fmt.Sprintf("UNWIND $rows AS r MERGE (n:%s {_id: r.id}) SET n += r.props", l)
 		for chunk := range slices.Chunk(byLabel[l], pushBatch) {
 			if _, err := runCypher(ctx, sess, q, map[string]any{"rows": chunk}); err != nil {
@@ -187,6 +193,9 @@ func pushEdges(ctx context.Context, sess neo4j.SessionWithContext, edges []edge,
 
 	total := 0
 	for _, k := range keys {
+		if !ValidEdge(k.t, k.from, k.to) {
+			return total, fmt.Errorf("%s does not connect %s -> %s in the schema", k.t, k.from, k.to)
+		}
 		q := fmt.Sprintf(`UNWIND $rows AS r
 MATCH (a:%s {_id: r.from})
 MATCH (b:%s {_id: r.to})
