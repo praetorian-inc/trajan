@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
+	"net"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -60,6 +63,7 @@ func runPush(ctx context.Context, runDir string, state *engine.State, url, user,
 		}
 	}
 
+	warnCleartext(url, pass)
 	drv, err := neo4j.NewDriverWithContext(url, neo4j.BasicAuth(user, pass, ""))
 	if err != nil {
 		return pushStats{}, err
@@ -107,6 +111,27 @@ func runCypher(ctx context.Context, sess neo4j.SessionWithContext, cypher string
 	}
 	c := sum.Counters()
 	return c.NodesCreated() + c.PropertiesSet() + c.RelationshipsCreated(), nil
+}
+
+// bolt:// and neo4j:// are unencrypted, so a non-loopback host puts the password and
+// the whole graph on the wire in the clear. The +s / +ssc schemes do not.
+func warnCleartext(rawURL, pass string) {
+	if pass == "" {
+		return
+	}
+	u, err := neturl.Parse(rawURL)
+	if err != nil || strings.ContainsAny(u.Scheme, "+") {
+		return
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "" {
+		return
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return
+	}
+	slog.Warn("pushing credentials to a remote Neo4j over an unencrypted scheme; prefer bolt+s:// or neo4j+s://",
+		"url", rawURL, "scheme", u.Scheme)
 }
 
 func firstLine(s string) string {

@@ -2,6 +2,8 @@ package ado
 
 import (
 	"encoding/json"
+	"io"
+	"log/slog"
 	"reflect"
 	"testing"
 
@@ -64,5 +66,40 @@ func TestScalarPropsClearsStaleFindingProperties(t *testing.T) {
 	}
 	if withFinding["findings_high"] == nil {
 		t.Error("a bucket the run did populate must not be nulled")
+	}
+}
+
+func TestWarnCleartextOnlyForRemoteUnencrypted(t *testing.T) {
+	var seen []string
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == "url" {
+				seen = append(seen, a.Value.String())
+			}
+			return a
+		},
+	})))
+	defer slog.SetDefault(prev)
+
+	for _, tc := range []struct {
+		url, pass string
+		warn      bool
+	}{
+		{"bolt://localhost:7687", "pw", false},
+		{"bolt://127.0.0.1:7687", "pw", false},
+		{"neo4j://[::1]:7687", "pw", false},
+		{"bolt+s://graph.internal:7687", "pw", false},
+		{"neo4j+ssc://graph.internal:7687", "pw", false},
+		{"bolt://graph.internal:7687", "", false},
+		{"bolt://graph.internal:7687", "pw", true},
+		{"neo4j://10.0.0.5:7687", "pw", true},
+	} {
+		before := len(seen)
+		warnCleartext(tc.url, tc.pass)
+		if got := len(seen) > before; got != tc.warn {
+			t.Errorf("%s (pass=%q): warned=%v, want %v", tc.url, tc.pass, got, tc.warn)
+		}
 	}
 }
