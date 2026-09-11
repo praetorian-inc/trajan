@@ -41,8 +41,8 @@ github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e/go.mod h1:pJLUxLENpZxwdsK
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/praetorian-inc/capability-sdk v0.0.0-20260908174325-de5f920e8132 h1:mtInkXf41r5zs/oGaQwC5lITuhQBGZWS0E0wda8anPI=
-github.com/praetorian-inc/capability-sdk v0.0.0-20260908174325-de5f920e8132/go.mod h1:GIGyQzJdEX1VoKD89/z10nZOrwqSYqyaiktBcwFLXsk=
+github.com/praetorian-inc/capability-sdk v0.0.0-20260911152927-8c267220a40d h1:74+j2086NBpKiR5suMbkMsRwyO7V9mcG5apmQRZAmys=
+github.com/praetorian-inc/capability-sdk v0.0.0-20260911152927-8c267220a40d/go.mod h1:GIGyQzJdEX1VoKD89/z10nZOrwqSYqyaiktBcwFLXsk=
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
