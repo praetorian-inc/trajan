@@ -220,6 +220,14 @@ RETURN count(*) AS n`, k.from, k.to, k.t)
 }
 
 // A null property is dropped because SET n += {k: null} removes the key anyway.
+func findingProps() []string {
+	out := []string{"finding_fingerprints", "finding_rule_ids", "findings_count"}
+	for _, b := range findingBuckets {
+		out = append(out, b, "findings_count_"+strings.TrimPrefix(b, "findings_"))
+	}
+	return out
+}
+
 func scalarProps(props map[string]any, findings []findingRef, id string, state *engine.State) map[string]any {
 	out := make(map[string]any, len(props)+5)
 	for k, v := range props {
@@ -242,6 +250,13 @@ func scalarProps(props map[string]any, findings []findingRef, id string, state *
 		slices.Sort(rules)
 		out["finding_fingerprints"] = fps
 		out["finding_rule_ids"] = slices.Compact(rules)
+	}
+	// A remediated finding leaves no key behind for SET += to overwrite, so every
+	// finding-derived property is written on every push, null when this run has none.
+	for _, k := range findingProps() {
+		if _, ok := out[k]; !ok {
+			out[k] = nil
+		}
 	}
 	out["_id"] = id
 	out["_org"] = state.Org

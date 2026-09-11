@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
 func TestScalarArrayWidensMixedNumbers(t *testing.T) {
@@ -31,5 +33,30 @@ func TestScalarArrayFallsBackForMixedKinds(t *testing.T) {
 	got := scalarArray([]any{json.Number("1"), "a"})
 	if want := []string{"1", "\"a\""}; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %#v, want %#v", got, want)
+	}
+}
+
+// SET n += {k: null} removes the key, so a finding that no longer fires must be written
+// as null or the remediated rule id survives in Neo4j forever.
+func TestScalarPropsClearsStaleFindingProperties(t *testing.T) {
+	props := scalarProps(map[string]any{"name": "x"}, nil, "Job|o|p|1|s|j", &engine.State{})
+	for _, k := range findingProps() {
+		v, present := props[k]
+		if !present {
+			t.Errorf("%s must be written on every push", k)
+			continue
+		}
+		if v != nil {
+			t.Errorf("%s should be null when the run has no findings, got %v", k, v)
+		}
+	}
+
+	withFinding := scalarProps(map[string]any{"findings_high": []any{"cat-01/x"}, "findings_count_high": json.Number("1")},
+		[]findingRef{{RuleID: "cat-01/x", Fingerprint: "abc", Severity: "high"}}, "id", &engine.State{})
+	if got := withFinding["finding_rule_ids"]; !reflect.DeepEqual(got, []string{"cat-01/x"}) {
+		t.Errorf("finding_rule_ids = %#v", got)
+	}
+	if withFinding["findings_high"] == nil {
+		t.Error("a bucket the run did populate must not be nulled")
 	}
 }
