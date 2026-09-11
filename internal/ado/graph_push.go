@@ -315,6 +315,8 @@ func scalarArray(a []any) any {
 	return jsonArray(a)
 }
 
+const maxExactFloat = 1 << 53
+
 // Neo4j takes a mixed int/float collection, but Go does not, so one float in the
 // array widens the whole of it rather than falling back to JSON strings.
 func numericArray(a []any) any {
@@ -333,10 +335,17 @@ func numericArray(a []any) any {
 			return jsonArray(a)
 		}
 	}
-	if widened {
-		return floats
+	if !widened {
+		return ints
 	}
-	return ints
+	// Past 2^53 a float64 no longer holds every integer, so widening would change the
+	// value; the JSON form keeps it exact.
+	for _, n := range ints {
+		if n > maxExactFloat || n < -maxExactFloat {
+			return jsonArray(a)
+		}
+	}
+	return floats
 }
 
 func jsonArray(a []any) []string {

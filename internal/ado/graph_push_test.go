@@ -20,6 +20,12 @@ func TestScalarArrayWidensMixedNumbers(t *testing.T) {
 		{"strings stay strings", []any{"a", "b"}, []string{"a", "b"}},
 		{"bools stay bools", []any{true, false}, []bool{true, false}},
 		{"empty is an empty string array", []any{}, []string{}},
+		{"an int past 2^53 keeps its value rather than widening",
+			[]any{json.Number("9007199254740993"), json.Number("1.5")},
+			[]string{"9007199254740993", "1.5"}},
+		{"an exact-range int still widens",
+			[]any{json.Number("9007199254740992"), json.Number("1.5")},
+			[]float64{9007199254740992, 1.5}},
 	} {
 		if got := scalarArray(tc.in); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: got %#v, want %#v", tc.name, got, tc.want)
