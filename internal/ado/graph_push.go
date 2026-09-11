@@ -277,33 +277,15 @@ func scalarArray(a []any) any {
 	case string:
 		out := make([]string, 0, len(a))
 		for _, v := range a {
-			s, ok := v.(string)
+			s, ok := pushScalar(v).(string)
 			if !ok {
 				return jsonArray(a)
 			}
 			out = append(out, s)
 		}
 		return out
-	case int64:
-		out := make([]int64, 0, len(a))
-		for _, v := range a {
-			n, ok := pushScalar(v).(int64)
-			if !ok {
-				return jsonArray(a)
-			}
-			out = append(out, n)
-		}
-		return out
-	case float64:
-		out := make([]float64, 0, len(a))
-		for _, v := range a {
-			f, ok := pushScalar(v).(float64)
-			if !ok {
-				return jsonArray(a)
-			}
-			out = append(out, f)
-		}
-		return out
+	case int64, float64:
+		return numericArray(a)
 	case bool:
 		out := make([]bool, 0, len(a))
 		for _, v := range a {
@@ -316,6 +298,30 @@ func scalarArray(a []any) any {
 		return out
 	}
 	return jsonArray(a)
+}
+
+// Neo4j takes a mixed int/float collection, but Go does not, so one float in the
+// array widens the whole of it rather than falling back to JSON strings.
+func numericArray(a []any) any {
+	ints := make([]int64, 0, len(a))
+	floats := make([]float64, 0, len(a))
+	widened := false
+	for _, v := range a {
+		switch n := pushScalar(v).(type) {
+		case int64:
+			ints = append(ints, n)
+			floats = append(floats, float64(n))
+		case float64:
+			widened = true
+			floats = append(floats, n)
+		default:
+			return jsonArray(a)
+		}
+	}
+	if widened {
+		return floats
+	}
+	return ints
 }
 
 func jsonArray(a []any) []string {
