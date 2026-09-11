@@ -19,7 +19,7 @@ CMD_DIR := cmd/trajan
 # Safety: delete partial outputs on error
 .DELETE_ON_ERROR:
 
-.PHONY: all build test test-short test-coverage clean fmt vet lint deps help
+.PHONY: all build test test-short test-coverage clean fmt vet lint cli-docs deps help
 
 all: build
 
@@ -57,6 +57,12 @@ vet:
 ## lint: Run linters
 lint:
 	golangci-lint run --max-same-issues 0 --max-issues-per-linter 0 ./...
+
+## cli-docs: Regenerate CLI surface docs from the live cobra tree
+cli-docs:
+	@GOWORK=off $(GO) test ./$(CMD_DIR) -list 'TestCLISurface' | grep -qE '^TestCLISurface$$' \
+	  || { echo "cli-docs: 'go test -list' did not report TestCLISurface in ./$(CMD_DIR). Either the -update writer was renamed, or the package failed to build -- run 'go build ./$(CMD_DIR)' to tell which. 'go test -run' exits 0 when its pattern matches nothing, so without this check the target would report success having regenerated nothing at all."; exit 1; }
+	GOWORK=off $(GOTEST) ./$(CMD_DIR) -run 'TestCLISurface' -count=1 -update
 
 ## deps: Download dependencies
 deps:

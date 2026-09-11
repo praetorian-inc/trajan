@@ -76,6 +76,35 @@ Root flags:
 - `--no-color`
 - `--proxy` / `--socks-proxy` for intercepting proxies
 
+### Subcommands
+
+Each platform is a subcommand with the same phase verbs underneath it, so a
+GitLab run reads like a GitHub run. The two blocks below are generated from the
+live cobra command tree by `make cli-docs` and checked byte-for-byte in CI --
+change a command, not this section.
+
+<!-- BEGIN generated: cli-subcommands -->
+Trajan organizes its functionality into these focused subcommands:
+
+```bash
+trajan ado     # Trajan - Azure DevOps
+trajan github  # GitHub platform
+trajan gitlab  # GitLab platform
+trajan version # Print version information
+```
+<!-- END generated: cli-subcommands -->
+
+<!-- BEGIN generated: cli-aliases -->
+Some subcommands carry aliases for discoverability:
+
+| Subcommand | Aliases |
+| --- | --- |
+| `github` | `gh` |
+| `gitlab` | `gl` |
+
+The full reference — every subcommand, alias and flag, including the ones hidden from `--help` — is generated into [docs/CLI.md](docs/CLI.md).
+<!-- END generated: cli-aliases -->
+
 ## What Trajan does
 
 Trajan collects CI/CD configuration read-only. It evaluates detection rules and reports findings. On GitHub it can also verify findings with authorized attack plans. Detections and attack plans are YAML. No Go required to add either.
