@@ -22,6 +22,8 @@ const (
 	APIVersionPreview = "7.1-preview.1"
 	APIVersionSEP     = "7.1-preview.4" // service endpoints
 	APIVersionGraph   = "7.1-preview.1" // vssps graph
+
+	maxRateLimitSleep = 120.0
 )
 
 // Keyed by the short host name collectors pass. A var, not a const, so tests can
@@ -43,9 +45,10 @@ type ADO interface {
 }
 
 type Client struct {
-	http  *http.Client
-	org   string
-	authz string
+	http    *http.Client
+	org     string
+	authz   string
+	limiter rateLimiter
 }
 
 var _ ADO = (*Client)(nil)
@@ -144,7 +147,7 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response) boo
 			sec = d
 		}
 	}
-	sleepFn(ctx, min(sec, 120))
+	sleepFn(ctx, min(sec, maxRateLimitSleep))
 	return true
 }
 
@@ -156,6 +159,7 @@ func (c *Client) request(ctx context.Context, method, u, accept string, body []b
 	var lastStatus int
 	var lastBody []byte
 	for attempt := 0; attempt < 5; attempt++ {
+		c.limiter.wait(ctx)
 		var rdr io.Reader
 		if body != nil {
 			rdr = bytes.NewReader(body)
@@ -164,6 +168,7 @@ func (c *Client) request(ctx context.Context, method, u, accept string, body []b
 		if err != nil {
 			return nil, nil, err
 		}
+		c.limiter.update(resp.Header)
 		switch {
 		case resp.StatusCode >= 200 && resp.StatusCode < 300:
 			hdr := resp.Header
