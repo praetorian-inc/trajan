@@ -33,8 +33,9 @@ func ruleTargets() (map[string]adopkg.Target, error) {
 }
 
 const (
-	tokenHelp  = "PAT (prefer TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT env; this flag is an escape hatch)"
-	bearerHelp = "bearer token (prefer AZURE_BEARER_TOKEN/SYSTEM_ACCESSTOKEN env; this flag is an escape hatch)"
+	tokenHelp     = "PAT (prefer TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT env; this flag is an escape hatch)"
+	bearerHelp    = "bearer token (prefer AZURE_BEARER_TOKEN/SYSTEM_ACCESSTOKEN env; this flag is an escape hatch)"
+	neo4jPassHelp = "Neo4j password (prefer TRAJAN_NEO4J_PASSWORD/NEO4J_PASSWORD env; this flag is an escape hatch)"
 )
 
 func newAdoCmd() *cobra.Command {
@@ -163,7 +164,8 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 			if err != nil {
 				return err
 			}
-			return adopkg.PushGraph(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser, neo4jPass, neo4jReset)
+			return adopkg.PushGraph(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser,
+				engine.ResolveNeo4j(neo4jPass), neo4jReset)
 		},
 	}
 	run := &cobra.Command{
@@ -192,7 +194,7 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 	scan.Flags().BoolVar(&orgDetectionsOnly, "org-detections-only", false, "evaluate only org-subject (org-level) rules")
 	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j bolt URL")
 	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")
-	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "", "Neo4j password")
+	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "", neo4jPassHelp)
 	push.Flags().BoolVar(&neo4jReset, "reset", false, "delete every node in the database before writing")
 
 	for _, c := range []*cobra.Command{normalize, scan, reportCmd, graph, push} {
