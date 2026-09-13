@@ -457,12 +457,13 @@ func collectPolicies(ctx context.Context, cl ADO, cp engine.CurrentPhase, projec
 
 func collectBuildACL(ctx context.Context, cl ADO, cp engine.CurrentPhase, project, projectID string) error {
 	raw, status, err := softGet(ctx, cl, "core", APIVersion, "/_apis/accesscontrollists/"+buildNS,
-		url.Values{"token": []string{projectID}, "includeExtendedInfo": []string{"true"}})
+		url.Values{"token": []string{projectID}, "includeExtendedInfo": []string{"true"},
+			"recurse": []string{"true"}})
 	if err != nil {
 		return err
 	}
 	return writeOrMark(cp, engine.CollectADOBuildACL(project), "build-acl",
-		"/_apis/accesscontrollists/"+buildNS, raw, status)
+		"/_apis/accesscontrollists/"+buildNS+"?recurse=true", raw, status)
 }
 
 func collectRepoACL(ctx context.Context, cl ADO, cp engine.CurrentPhase, project, projectID string, repo repoRef) error {

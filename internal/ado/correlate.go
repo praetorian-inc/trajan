@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strconv"
@@ -209,7 +210,7 @@ func deriveEffectiveRoles(ctx context.Context, prior engine.PriorPhase, cp engin
 	nsActions := loadNamespaceActions(prior, org)
 	memberships := loadMemberships(prior, org)
 	idIndex := aceIdentityIndex(prior, org)
-	repoIdx, scIdx, projIdx, err := roleTokenIndexes(prior)
+	repoIdx, scIdx, projIdx, pipeIdx, err := roleTokenIndexes(prior, org)
 	if err != nil {
 		return err
 	}
@@ -233,33 +234,45 @@ func deriveEffectiveRoles(ctx context.Context, prior engine.PriorPhase, cp engin
 		actions := nsActions[src.ns]
 		for _, f := range files {
 			data := entDataOf(f.Data)
+			emit := func(token, desc string, eff int64, inherited bool) error {
+				// ACL descriptors are legacy identity descriptors; bridge to the
+				// graph subject descriptor so the principal node + members resolve.
+				graphDesc := aceGraphDescriptor(desc, idIndex)
+				resKind, resID := resolveRoleToken(src.ns, token, repoIdx, scIdx, projIdx, pipeIdx)
+				rec := map[string]any{
+					"kind":              "HAS_ROLE",
+					"descriptor":        desc,
+					"graph_descriptor":  graphDesc,
+					"token":             token,
+					"namespace":         src.ns,
+					"resource_kind":     resKind,
+					"resource_id":       resID,
+					"resource_resolved": resID != "",
+					"allowed_actions":   decodeActions(eff, actions),
+					"effective_allow":   eff,
+					"inherited":         inherited,
+					"expanded_members":  expandMembers(graphDesc, memberships),
+				}
+				return emitEdge(cp, timer, "has-role", hashKey(src.ns, token, desc), rec)
+			}
+			var projectRow map[string]any
+			projectToken, seen := "", map[string]bool{}
 			for _, raw := range entListOrEmpty(data["value"]) {
 				acl := entMap(raw)
 				token := entStr(acl["token"])
+				seen[token] = true
+				if src.ns == buildNS && !strings.Contains(token, "/") {
+					projectRow, projectToken = entObj(acl, "acesDictionary"), token
+				}
 				for desc, aceRaw := range entObj(acl, "acesDictionary") {
-					ace := entMap(aceRaw)
-					eff := effectiveAllowMask(ace)
-					// ACL descriptors are legacy identity descriptors; bridge to the
-					// graph subject descriptor so the principal node + members resolve.
-					graphDesc := aceGraphDescriptor(desc, idIndex)
-					resKind, resID := resolveRoleToken(token, repoIdx, scIdx, projIdx)
-					rec := map[string]any{
-						"kind":              "HAS_ROLE",
-						"descriptor":        desc,
-						"graph_descriptor":  graphDesc,
-						"token":             token,
-						"namespace":         src.ns,
-						"resource_kind":     resKind,
-						"resource_id":       resID,
-						"resource_resolved": resID != "",
-						"allowed_actions":   decodeActions(eff, actions),
-						"effective_allow":   eff,
-						"expanded_members":  expandMembers(graphDesc, memberships),
-					}
-					key := hashKey(src.ns, token, desc)
-					if err := emitEdge(cp, timer, "has-role", key, rec); err != nil {
+					if err := emit(token, desc, effectiveAllowMask(entMap(aceRaw)), false); err != nil {
 						return err
 					}
+				}
+			}
+			if recursed(f.Data) {
+				if err := synthesizeInherited(projectRow, projectToken, seen, pipeIdx, emit); err != nil {
+					return err
 				}
 			}
 		}
@@ -267,38 +280,93 @@ func deriveEffectiveRoles(ctx context.Context, prior engine.PriorPhase, cp engin
 	return nil
 }
 
-func roleTokenIndexes(prior engine.PriorPhase) (repoIdx, scIdx, projIdx map[string]string, err error) {
-	repoIdx, scIdx, projIdx = map[string]string{}, map[string]string{}, map[string]string{}
+// A collect that did not ask for child tokens cannot tell a pipeline with no ACL row
+// from one whose row was never requested.
+func recursed(b []byte) bool {
+	var env map[string]any
+	if err := json.Unmarshal(b, &env); err != nil {
+		return false
+	}
+	return strings.Contains(entStr(entMap(entMap(env["_meta"])["source"])["path"]), "recurse=true")
+}
+
+// ADO answers a definition with no ACL row of its own by synthesizing the project's,
+// so a pipeline nobody re-permissioned still has to carry the grant it inherits.
+func synthesizeInherited(projectRow map[string]any, projectToken string, seen map[string]bool,
+	pipeIdx map[string]string, emit func(token, desc string, eff int64, inherited bool) error) error {
+	if projectToken == "" {
+		return nil
+	}
+	for key := range pipeIdx {
+		guid, id, found := strings.Cut(key, "/")
+		if !found || guid != projectToken {
+			continue
+		}
+		token := projectToken + "/" + id
+		if seen[token] {
+			continue
+		}
+		for desc, aceRaw := range projectRow {
+			if err := emit(token, desc, effectiveAllowMask(entMap(aceRaw)), true); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func roleTokenIndexes(prior engine.PriorPhase, org string) (repoIdx, scIdx, projIdx, pipeIdx map[string]string, err error) {
+	repoIdx, scIdx, projIdx, pipeIdx = map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}
 	repos, err := loadRecords(prior, "10-normalize/repos")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("correlate: load repos: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("correlate: load repos: %w", err)
 	}
 	for _, r := range repos {
 		repoIdx[mStr(r, "id")] = mStr(r, "_id")
 	}
 	scs, err := loadRecords(prior, "10-normalize/service-connections")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("correlate: load service-connections: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("correlate: load service-connections: %w", err)
 	}
 	for _, s := range scs {
 		scIdx[mStr(s, "id")] = mStr(s, "_id")
 	}
 	projs, err := loadRecords(prior, "10-normalize/projects")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("correlate: load projects: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("correlate: load projects: %w", err)
 	}
+	guidByName := map[string]string{}
 	for _, p := range projs {
 		projIdx[mStr(p, "id")] = mStr(p, "_id")
+		guidByName[mStr(p, "project")] = mStr(p, "id")
 	}
-	return repoIdx, scIdx, projIdx, nil
+	pipes, err := loadRecords(prior, "10-normalize/pipelines")
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("correlate: load pipelines: %w", err)
+	}
+	for _, pl := range pipes {
+		project := mStr(pl, "project")
+		guid, id := guidByName[project], recordID(pl)
+		if guid == "" || id == "" {
+			continue
+		}
+		pipeIdx[guid+"/"+id] = org + "/" + project + "/" + id
+	}
+	return repoIdx, scIdx, projIdx, pipeIdx, nil
 }
 
 // "repoV2/<projGuid>/<repoGuid>" scopes a Repository, "endpoints/<projGuid>/<id>" a
 // ServiceConnection, a bare "<projGuid>" a Project. A collection root or a deleted
 // resource is unresolvable and returns "".
-func resolveRoleToken(token string, repoIdx, scIdx, projIdx map[string]string) (kind, nodeID string) {
+func resolveRoleToken(ns, token string, repoIdx, scIdx, projIdx, pipeIdx map[string]string) (kind, nodeID string) {
 	parts := strings.Split(token, "/")
 	switch {
+	case ns == buildNS && len(parts) >= 2:
+		// A folder token ends in a folder name, which indexes no pipeline.
+		if id := pipeIdx[parts[0]+"/"+parts[len(parts)-1]]; id != "" {
+			return "Pipeline", id
+		}
+		return "", ""
 	case len(parts) >= 3 && parts[0] == "repoV2":
 		return "Repository", repoIdx[parts[2]]
 	case len(parts) >= 3 && parts[0] == "endpoints":
@@ -325,9 +393,6 @@ func effectiveAllowMask(ace map[string]any) int64 {
 //   - group SIDs (S-1-…), base64-encoded in the vssgp./aadgp. group descriptor;
 //   - service identities (<org>:Build:<guid>), base64-encoded in the svc. user
 //     descriptor a Microsoft.TeamFoundation.ServiceIdentity ACE references.
-//
-// Built-in server SIDs the Graph API does not enumerate resolve to "" and stay
-// unexpanded; the raw descriptor is still kept on the HAS_ROLE record.
 func aceIdentityIndex(prior engine.PriorPhase, org string) map[string]string {
 	graph := entLoadData(prior, engine.CollectADOGraph(org))
 	idx := map[string]string{}

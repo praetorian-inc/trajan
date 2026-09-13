@@ -33,15 +33,19 @@ func TestResolveRoleToken(t *testing.T) {
 	repoIdx := map[string]string{"repo-guid": "org/P/myrepo"}
 	scIdx := map[string]string{"conn-1": "Owner/conn-1"}
 	projIdx := map[string]string{"proj-guid": "org/P"}
-	cases := []struct{ token, wantKind, wantID string }{
-		{"repoV2/proj-guid/repo-guid", "Repository", "org/P/myrepo"},
-		{"endpoints/proj-guid/conn-1", "ServiceConnection", "Owner/conn-1"},
-		{"proj-guid", "Project", "org/P"},
-		{"repoV2/proj-guid/unknown-repo", "Repository", ""}, // repo not indexed -> unresolved
-		{"$PROJECT:vstfs:///unknown", "", ""},               // not a recognized shape
+	pipeIdx := map[string]string{"proj-guid/7": "org/P/7"}
+	cases := []struct{ ns, token, wantKind, wantID string }{
+		{gitNS, "repoV2/proj-guid/repo-guid", "Repository", "org/P/myrepo"},
+		{endpointNS, "endpoints/proj-guid/conn-1", "ServiceConnection", "Owner/conn-1"},
+		{buildNS, "proj-guid", "Project", "org/P"},
+		{buildNS, "proj-guid/7", "Pipeline", "org/P/7"},
+		{buildNS, "proj-guid/folder/7", "Pipeline", "org/P/7"},     // a folder segment is skipped
+		{buildNS, "proj-guid/folder", "", ""},                      // a folder names no pipeline
+		{gitNS, "repoV2/proj-guid/unknown-repo", "Repository", ""}, // repo not indexed -> unresolved
+		{gitNS, "$PROJECT:vstfs:///unknown", "", ""},               // not a recognized shape
 	}
 	for _, c := range cases {
-		k, id := resolveRoleToken(c.token, repoIdx, scIdx, projIdx)
+		k, id := resolveRoleToken(c.ns, c.token, repoIdx, scIdx, projIdx, pipeIdx)
 		if k != c.wantKind || id != c.wantID {
 			t.Errorf("resolveRoleToken(%q) = %q/%q, want %q/%q", c.token, k, id, c.wantKind, c.wantID)
 		}
