@@ -329,7 +329,10 @@ func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 const identityBatch = 40
 
 func collectIdentities(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {
-	descriptors := aceDescriptors(engine.PriorPhase{RunDir: cp.RunDir})
+	descriptors, err := aceDescriptors(engine.PriorPhase(cp))
+	if err != nil {
+		return err
+	}
 	out := map[string]any{}
 	for chunk := range slices.Chunk(descriptors, identityBatch) {
 		items, status, err := softList(ctx, cl, "vssps", APIVersion, "/_apis/identities",
@@ -354,12 +357,12 @@ func collectIdentities(ctx context.Context, cl ADO, cp engine.CurrentPhase, org 
 		map[string]any{"identities": out})
 }
 
-func aceDescriptors(prior engine.PriorPhase) []string {
+func aceDescriptors(prior engine.PriorPhase) ([]string, error) {
 	seen := map[string]bool{}
 	for _, dir := range []string{"00-collect/acl-repo", "00-collect/acl-build", "00-collect/acl-endpoint"} {
 		files, err := prior.IterJSON(dir)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("identities: load %s: %w", dir, err)
 		}
 		for _, f := range files {
 			for _, raw := range entListOrEmpty(entDataOf(f.Data)["value"]) {
@@ -369,7 +372,7 @@ func aceDescriptors(prior engine.PriorPhase) []string {
 			}
 		}
 	}
-	return slices.Sorted(maps.Keys(seen))
+	return slices.Sorted(maps.Keys(seen)), nil
 }
 
 func collectExtensions(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {
