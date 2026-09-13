@@ -219,7 +219,7 @@ func buildEdges(c *corpus, n *nodeSet) (*edgeSet, map[recordRef][]string, error)
 	emitContainment(n, s)
 
 	fromRecord := map[recordRef][]string{}
-	gc := graphCtx{Org: c.org, Principal: principalLabels(c)}
+	gc := graphCtx{Org: c.org, Principal: principalLabels(c), BuildService: buildServices(c)}
 	for _, t := range EdgeTypes() {
 		for _, r := range c.byKind[string(t)] {
 			rs := resolveEndpoints(gc, r.fields)
@@ -268,6 +268,35 @@ func principalLabels(c *corpus) func(string) (NodeLabel, bool) {
 	return func(d string) (NodeLabel, bool) {
 		l, ok := index[d]
 		return l, ok
+	}
+}
+
+func buildServices(c *corpus) func(project string) (string, bool) {
+	byProject := map[string]string{}
+	collection := ""
+	projectID := map[string]string{}
+	for _, r := range c.byKind[string(Project)] {
+		if id := str(r.fields["id"]); id != "" {
+			projectID[str(r.fields["project"])] = id
+		}
+	}
+	want := "Project Collection Build Service (" + c.org + ")"
+	for _, r := range c.byKind[string(BuildServiceIdentity)] {
+		d := str(r.fields["descriptor"])
+		if d == "" {
+			continue
+		}
+		if str(r.fields["display_name"]) == want {
+			collection = d
+		}
+		byProject[str(r.fields["principal_name"])] = d
+	}
+	return func(project string) (string, bool) {
+		if project == "" {
+			return collection, collection != ""
+		}
+		d, ok := byProject[projectID[project]]
+		return d, ok
 	}
 }
 

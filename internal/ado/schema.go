@@ -54,6 +54,10 @@ const (
 	LinksTo        EdgeType = "LINKS_TO"
 	FederatesTo    EdgeType = "FEDERATES_TO"
 
+	BuildsFrom           EdgeType = "BUILDS_FROM"
+	Extends              EdgeType = "EXTENDS"
+	DependsOn            EdgeType = "DEPENDS_ON"
+	AuthorizedFor        EdgeType = "AUTHORIZED_FOR"
 	Reads                EdgeType = "READS"
 	ConsumesGroup        EdgeType = "CONSUMES_GROUP"
 	UsesConnection       EdgeType = "USES_CONNECTION"
@@ -124,6 +128,9 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 		{BuildServiceIdentity, Repository},
 		{BuildServiceIdentity, Pipeline},
 		{BuildServiceIdentity, ServiceConnection},
+		{User, ArtifactsFeed},
+		{SecurityGroup, ArtifactsFeed},
+		{BuildServiceIdentity, ArtifactsFeed},
 	},
 	MemberOf: {
 		{User, SecurityGroup},
@@ -135,6 +142,16 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 	LinksTo:        {{VariableGroup, KeyVault}},
 	FederatesTo:    {{ServiceConnection, WIFCredential}},
 
+	BuildsFrom: {{Pipeline, Repository}},
+	Extends:    {{Pipeline, Repository}},
+	DependsOn:  {{Stage, Stage}},
+	AuthorizedFor: {
+		{ServiceConnection, Pipeline},
+		{VariableGroup, Pipeline},
+		{Environment, Pipeline},
+		{ProjectAgentPool, Pipeline},
+		{SecureFile, Pipeline},
+	},
 	Reads:                {{Job, SecretVariable}},
 	ConsumesGroup:        {{Pipeline, VariableGroup}, {Stage, VariableGroup}, {Job, VariableGroup}},
 	UsesConnection:       {{Job, ServiceConnection}},

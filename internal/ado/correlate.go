@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
@@ -41,11 +42,23 @@ func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPh
 	if err != nil {
 		return fmt.Errorf("correlate: load jobs: %w", err)
 	}
+	stages, err := loadRecords(prior, "10-normalize/stages")
+	if err != nil {
+		return fmt.Errorf("correlate: load stages: %w", err)
+	}
+	feeds, err := loadRecords(prior, "10-normalize/feeds")
+	if err != nil {
+		return fmt.Errorf("correlate: load feeds: %w", err)
+	}
 
 	for _, step := range []func() error{
 		func() error { return deriveRunsAs(cp, timer, pipelines, projectsRec) },
 		func() error { return derivePolicyAttribution(cp, timer, policies, repos) },
 		func() error { return deriveBranches(cp, timer, pipelines, policies, repos) },
+		func() error { return deriveRepoSources(cp, timer, pipelines) },
+		func() error { return deriveStageOrder(cp, timer, stages) },
+		func() error { return deriveFeedRoles(prior, cp, timer, org, feeds) },
+		func() error { return deriveResourceAuthorization(prior, cp, timer, pipelines) },
 		func() error { return deriveEffectiveRoles(ctx, prior, cp, timer, org) },
 		func() error { return deriveMemberOf(prior, cp, timer, org) },
 		func() error { return deriveJobResourceEdges(prior, cp, timer, jobs) },
@@ -646,6 +659,185 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 // A branch is referenced two ways: as a YAML pipeline's entry point, carrying the
 // yaml_path, and as a branch-policy scope's protected ref. Both passes feed one
 // id-keyed map so the two references collapse to a single node.
+// A "none" role is an inherited revocation, so an edge for it would assert access.
+func deriveFeedRoles(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, org string, feeds []map[string]any) error {
+	idIndex := aceIdentityIndex(prior, org)
+	for _, f := range feeds {
+		scope, id := mStr(f, "scope"), mStr(f, "id")
+		if scope == "" || id == "" {
+			continue
+		}
+		for _, raw := range mList(f, "permissions") {
+			perm := entMap(raw)
+			role := entStr(perm["role"])
+			desc := entStr(perm["identityDescriptor"])
+			if role == "" || role == "none" || desc == "" {
+				continue
+			}
+			gd := aceGraphDescriptor(desc, idIndex)
+			if gd == "" {
+				continue
+			}
+			rec := map[string]any{
+				"kind": "HAS_ROLE", "resource_kind": "ArtifactsFeed",
+				"resource_id": scope + "/" + id, "resource_resolved": true,
+				"descriptor": desc, "graph_descriptor": gd, "role": role,
+				"is_inherited": entBool(perm["isInheritedRole"]), "feed_name": mStr(f, "name"),
+			}
+			if err := emitEdge(cp, timer, "has-role", hashKey("feed", scope+"/"+id, desc), rec); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+var authorizationKinds = map[string]NodeLabel{
+	"service-connections": ServiceConnection,
+	"variable-groups":     VariableGroup,
+	"environments":        Environment,
+	"project-agent-pools": ProjectAgentPool,
+	"secure-files":        SecureFile,
+}
+
+// A shared resource lists pipelines per project, and those ids are that project's.
+func deriveResourceAuthorization(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines []map[string]any) error {
+	byProject := map[string][]int64{}
+	for _, pl := range pipelines {
+		p := mStr(pl, "project")
+		byProject[p] = append(byProject[p], mInt64(pl, "id"))
+	}
+	for dir, label := range authorizationKinds {
+		records, err := loadRecords(prior, "10-normalize/"+dir)
+		if err != nil {
+			return fmt.Errorf("correlate: load %s: %w", dir, err)
+		}
+		for _, r := range records {
+			scopes := map[string]map[string]any{}
+			for project, raw := range mMap(r, "per_project_authorization") {
+				scopes[project] = mMap(entMap(raw), "pipeline_permissions")
+			}
+			if len(scopes) == 0 {
+				scopes[firstStr(r, "project", "owner_project")] = mMap(r, "pipeline_permissions")
+			}
+			for project, auth := range scopes {
+				if project == "" || !mBool(auth, "observed") {
+					continue
+				}
+				resource := resourceKeyOf(label, r)
+				if !strings.Contains(resource, "/") || strings.HasSuffix(resource, "/") {
+					continue
+				}
+				ids := authorizedPipelines(auth, byProject[project])
+				for _, id := range ids {
+					rec := map[string]any{
+						"kind": "AUTHORIZED_FOR", "resource_kind": string(label),
+						"resource_id": resource, "project": project, "pipeline_id": id,
+						"all_pipelines": mBool(auth, "all_pipelines"),
+					}
+					key := fmt.Sprintf("%s__%s__%s__%d", dir, adoSafe(resource), adoSafe(project), id)
+					if err := emitEdge(cp, timer, "authorized-for", key, rec); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func authorizedPipelines(auth map[string]any, inProject []int64) []int64 {
+	if mBool(auth, "all_pipelines") {
+		return inProject
+	}
+	var out []int64
+	for _, raw := range mList(auth, "authorized_pipelines") {
+		if id := entInt64(raw); id != 0 {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func recordID(r map[string]any) string {
+	if s := mStr(r, "id"); s != "" {
+		return s
+	}
+	if n := mInt64(r, "id"); n != 0 {
+		return strconv.FormatInt(n, 10)
+	}
+	return ""
+}
+
+func resourceKeyOf(label NodeLabel, r map[string]any) string {
+	switch label {
+	case ServiceConnection, VariableGroup:
+		return mStr(r, "owner_project") + "/" + recordID(r)
+	case Environment:
+		return mStr(r, "project") + "/" + mStr(r, "name")
+	}
+	return mStr(r, "project") + "/" + recordID(r)
+}
+
+func azureRepoSource(t string) bool { return t == "" || strings.EqualFold(t, "git") }
+
+func deriveRepoSources(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines []map[string]any) error {
+	for _, pl := range pipelines {
+		project, id := mStr(pl, "project"), mInt64(pl, "id")
+		key := fmt.Sprintf("%s__%d", adoSafe(project), id)
+
+		repo := mMap(pl, "repository")
+		if name := mStr(repo, "name"); name != "" && strings.EqualFold(mStr(repo, "type"), "TfsGit") {
+			rec := map[string]any{
+				"kind": "BUILDS_FROM", "project": project, "pipeline_id": id,
+				"repo": name, "repo_id": mStr(repo, "id"), "yaml_path": mStr(pl, "yaml_path"),
+			}
+			if err := emitEdge(cp, timer, "builds-from", key, rec); err != nil {
+				return err
+			}
+		}
+
+		es := mMap(pl, "extends_source")
+		source, name := mStr(es, "source_project"), mStr(es, "repository")
+		if name == "" || source == "" || !azureRepoSource(mStr(es, "type")) {
+			continue
+		}
+		rec := map[string]any{
+			"kind": "EXTENDS", "project": project, "pipeline_id": id,
+			"source_project": source, "repo": name, "alias": mStr(es, "alias"),
+			"ref": mStr(es, "ref"), "ref_pinned": mBool(es, "ref_pinned"),
+			"is_cross_project": mBool(es, "is_cross_project"),
+			"template":         mStr(pl, "extends_template"),
+		}
+		if err := emitEdge(cp, timer, "extends", key, rec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Points as the record reads, so an attack path walks it backwards.
+func deriveStageOrder(cp engine.CurrentPhase, timer *engine.PhaseTimer, stages []map[string]any) error {
+	for _, st := range stages {
+		project, id, stage := mStr(st, "project"), mInt64(st, "pipeline_id"), mStr(st, "stage")
+		for _, raw := range mList(st, "depends_on") {
+			dep := entStr(raw)
+			if dep == "" || dep == stage {
+				continue
+			}
+			rec := map[string]any{
+				"kind": "DEPENDS_ON", "project": project, "pipeline_id": id,
+				"stage": stage, "depends_on_stage": dep,
+			}
+			key := fmt.Sprintf("%s__%d__%s__%s", adoSafe(project), id, adoSafe(stage), adoSafe(dep))
+			if err := emitEdge(cp, timer, "depends-on", key, rec); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func deriveBranches(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines, policies, repos []map[string]any) error {
 	branches := map[string]map[string]any{}
 	add := func(project, repo, repoID, branch string, isDefault, isPrefix bool) {

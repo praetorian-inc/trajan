@@ -17,8 +17,9 @@ type resolved struct {
 }
 
 type graphCtx struct {
-	Org       string
-	Principal func(descriptor string) (NodeLabel, bool)
+	Org          string
+	Principal    func(descriptor string) (NodeLabel, bool)
+	BuildService func(project string) (string, bool)
 }
 
 type endpointResolver func(c graphCtx, rec map[string]any) []resolved
@@ -113,9 +114,92 @@ var roleResourceLabels = map[string]NodeLabel{
 	"Repository":        Repository,
 	"Pipeline":          Pipeline,
 	"ServiceConnection": ServiceConnection,
+	"ArtifactsFeed":     ArtifactsFeed,
+}
+
+var authorizationLabels = map[string]NodeLabel{
+	string(ServiceConnection): ServiceConnection,
+	string(VariableGroup):     VariableGroup,
+	string(Environment):       Environment,
+	string(ProjectAgentPool):  ProjectAgentPool,
+	string(SecureFile):        SecureFile,
+}
+
+func (c graphCtx) authorizationSource(kind, id string) (endpoint, bool) {
+	label, ok := authorizationLabels[kind]
+	if !ok {
+		return endpoint{}, false
+	}
+	scope, name, found := strings.Cut(id, "/")
+	if !found {
+		return endpoint{}, false
+	}
+	key := map[string]string{"org": c.Org}
+	switch label {
+	case ServiceConnection:
+		key["owner_project"], key["connection_id"] = scope, name
+	case VariableGroup:
+		key["owner_project"], key["group_id"] = scope, name
+	case Environment:
+		key["project"], key["name"] = scope, name
+	case ProjectAgentPool:
+		key["project"], key["queue_id"] = scope, name
+	case SecureFile:
+		key["project"], key["file_id"] = scope, name
+	}
+	return endpoint{label, key}, true
 }
 
 var endpointResolvers = map[EdgeType]endpointResolver{
+	RunsAs: func(c graphCtx, rec map[string]any) []resolved {
+		project := mStr(rec, "project")
+		if mStr(rec, "identity_scope") == "collection" {
+			project = ""
+		}
+		descriptor, ok := c.BuildService(project)
+		if !ok {
+			return nil
+		}
+		to, ok := c.principalOf(descriptor)
+		if !ok {
+			return nil
+		}
+		return one(RunsAs, c.pipelineOf(mStr(rec, "project"), num(rec, "pipeline_id")), to)
+	},
+
+	AuthorizedFor: func(c graphCtx, rec map[string]any) []resolved {
+		from, ok := c.authorizationSource(mStr(rec, "resource_kind"), mStr(rec, "resource_id"))
+		if !ok {
+			return nil
+		}
+		return one(AuthorizedFor, from, c.pipelineOf(mStr(rec, "project"), num(rec, "pipeline_id")))
+	},
+
+	BuildsFrom: func(c graphCtx, rec map[string]any) []resolved {
+		project := mStr(rec, "project")
+		return one(BuildsFrom, c.pipelineOf(project, num(rec, "pipeline_id")),
+			endpoint{Repository, map[string]string{
+				"org": c.Org, "project": project, "repo": mStr(rec, "repo"),
+			}})
+	},
+
+	Extends: func(c graphCtx, rec map[string]any) []resolved {
+		return one(Extends, c.pipelineOf(mStr(rec, "project"), num(rec, "pipeline_id")),
+			endpoint{Repository, map[string]string{
+				"org": c.Org, "project": mStr(rec, "source_project"), "repo": mStr(rec, "repo"),
+			}})
+	},
+
+	DependsOn: func(c graphCtx, rec map[string]any) []resolved {
+		project, id := mStr(rec, "project"), num(rec, "pipeline_id")
+		stage := func(name string) endpoint {
+			return endpoint{Stage, map[string]string{
+				"org": c.Org, "project": project, "pipeline_id": id, "stage": name,
+			}}
+		}
+		return one(DependsOn, stage(mStr(rec, "stage")), stage(mStr(rec, "depends_on_stage")))
+	},
+
 	DefinedBy: func(c graphCtx, rec map[string]any) []resolved {
 		return one(DefinedBy,
 			c.pipelineOf(mStr(rec, "project"), num(rec, "pipeline_id")),
@@ -295,6 +379,13 @@ func roleResourceEndpoint(org string, label NodeLabel, resourceID string) (endpo
 		}
 		return endpoint{ServiceConnection, map[string]string{
 			"org": org, "owner_project": parts[0], "connection_id": parts[1],
+		}}, true
+	case ArtifactsFeed:
+		if len(parts) != 2 {
+			return endpoint{}, false
+		}
+		return endpoint{ArtifactsFeed, map[string]string{
+			"org": org, "scope": parts[0], "feed_id": parts[1],
 		}}, true
 	}
 	return endpoint{}, false
