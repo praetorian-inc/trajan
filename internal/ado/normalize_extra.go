@@ -75,11 +75,12 @@ func normalizeSecureFiles(prior engine.PriorPhase, cp engine.CurrentPhase, org s
 		if id == "" {
 			continue
 		}
+		checks := foldChecks(prior, p.Name, "securefile", id)
 		rec := map[string]any{
 			"_id": p.Name + "/" + id, "kind": "SecureFile", "project": p.Name,
 			"id": id, "name": entStr(f["name"]),
-			"checks":               foldChecks(prior, p.Name, "securefile", id),
-			"check_types":          checkTypes(foldChecks(prior, p.Name, "securefile", id)),
+			"checks":               checks,
+			"check_types":          checkTypes(checks),
 			"checks_observed":      checksObserved(prior, p.Name, "securefile", id),
 			"pipeline_permissions": foldAuthorization(prior, p.Name, "securefile", id),
 			"_provenance":          prov(engine.CollectADOSecureFiles(p.Name)),

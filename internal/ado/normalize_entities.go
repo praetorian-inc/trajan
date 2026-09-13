@@ -575,6 +575,7 @@ func normalizeAgentQueues(prior engine.PriorPhase, cp engine.CurrentPhase, org s
 		idStr := fmt.Sprintf("%d", qid)
 		pool := entObj(q, "pool")
 		orgPool := entInt64(pool["id"])
+		checks := foldChecks(prior, p.Name, "queue", idStr)
 		rec := map[string]any{
 			"_id":                  fmt.Sprintf("%s/%d", p.Name, qid),
 			"kind":                 "ProjectAgentPool",
@@ -584,8 +585,8 @@ func normalizeAgentQueues(prior engine.PriorPhase, cp engine.CurrentPhase, org s
 			"pool_id":              orgPool,
 			"is_hosted":            entBool(pool["isHosted"]),
 			"pool_type":            entStr(pool["poolType"]),
-			"checks":               foldChecks(prior, p.Name, "queue", idStr),
-			"check_types":          checkTypes(foldChecks(prior, p.Name, "queue", idStr)),
+			"checks":               checks,
+			"check_types":          checkTypes(checks),
 			"checks_observed":      checksObserved(prior, p.Name, "queue", idStr),
 			"pipeline_permissions": foldAuthorization(prior, p.Name, "queue", idStr),
 			"_provenance":          prov(engine.CollectADOAgentQueues(p.Name)),
@@ -613,6 +614,7 @@ func normalizeEnvironments(prior engine.PriorPhase, cp engine.CurrentPhase, org 
 		}
 		idStr := fmt.Sprintf("%d", envID)
 		detail := entLoadData(prior, engine.CollectADOEnvironmentDetail(p.Name, envID))
+		checks := foldChecks(prior, p.Name, "environment", idStr)
 		rec := map[string]any{
 			"_id":                  p.Name + "/" + name,
 			"kind":                 "Environment",
@@ -624,8 +626,8 @@ func normalizeEnvironments(prior engine.PriorPhase, cp engine.CurrentPhase, org 
 			"created_on":           entStr(detail["createdOn"]),
 			"created_by":           entStr(entGetIn(detail, "createdBy", "displayName")),
 			"last_modified_on":     entStr(detail["lastModifiedOn"]),
-			"checks":               foldChecks(prior, p.Name, "environment", idStr),
-			"check_types":          checkTypes(foldChecks(prior, p.Name, "environment", idStr)),
+			"checks":               checks,
+			"check_types":          checkTypes(checks),
 			"checks_observed":      checksObserved(prior, p.Name, "environment", idStr),
 			"pipeline_permissions": foldAuthorization(prior, p.Name, "environment", idStr),
 			"_provenance":          prov(engine.CollectADOEnvironments(p.Name)),
