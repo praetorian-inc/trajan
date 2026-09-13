@@ -156,6 +156,7 @@ func CollectADOSecurityNS(org string) string {
 	return adoCollect("security-namespaces", adoKey(org)+".json")
 }
 func CollectADOGraph(org string) string      { return adoCollect("graph", adoKey(org)+".json") }
+func CollectADOIdentities(org string) string { return adoCollect("identities", adoKey(org)+".json") }
 func CollectADOExtensions(org string) string { return adoCollect("extensions", adoKey(org)+".json") }
 func CollectADOServiceHooks(org string) string {
 	return adoCollect("service-hooks", adoKey(org)+".json")

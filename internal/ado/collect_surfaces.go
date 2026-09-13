@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
@@ -320,6 +322,54 @@ func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 	}
 	return envelope(cp, engine.CollectADOGraph(org), "graph",
 		"/_apis/graph/{groups,users,serviceprincipals,memberships}", data)
+}
+
+// A legacy ACE descriptor carries a global-scope SID that /graph/groups never emits, so
+// the collection-scoped subject descriptor has to be asked for by name.
+const identityBatch = 40
+
+func collectIdentities(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {
+	descriptors := aceDescriptors(engine.PriorPhase{RunDir: cp.RunDir})
+	out := map[string]any{}
+	for chunk := range slices.Chunk(descriptors, identityBatch) {
+		items, status, err := softList(ctx, cl, "vssps", APIVersion, "/_apis/identities",
+			url.Values{"descriptors": []string{strings.Join(chunk, ",")}})
+		if err != nil {
+			return err
+		}
+		if status != 0 {
+			return envelope(cp, engine.CollectADOIdentities(org), "identities", "/_apis/identities",
+				map[string]any{"_unobserved": status})
+		}
+		if len(items) != len(chunk) {
+			return fmt.Errorf("identities: asked for %d descriptors, got %d", len(chunk), len(items))
+		}
+		for i, raw := range items {
+			if len(raw) > 0 && string(raw) != "null" {
+				out[chunk[i]] = raw
+			}
+		}
+	}
+	return envelope(cp, engine.CollectADOIdentities(org), "identities", "/_apis/identities",
+		map[string]any{"identities": out})
+}
+
+func aceDescriptors(prior engine.PriorPhase) []string {
+	seen := map[string]bool{}
+	for _, dir := range []string{"00-collect/acl-repo", "00-collect/acl-build", "00-collect/acl-endpoint"} {
+		files, err := prior.IterJSON(dir)
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			for _, raw := range entListOrEmpty(entDataOf(f.Data)["value"]) {
+				for desc := range entObj(entMap(raw), "acesDictionary") {
+					seen[desc] = true
+				}
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
 }
 
 func collectExtensions(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {

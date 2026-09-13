@@ -396,6 +396,13 @@ func effectiveAllowMask(ace map[string]any) int64 {
 func aceIdentityIndex(prior engine.PriorPhase, org string) map[string]string {
 	graph := entLoadData(prior, engine.CollectADOGraph(org))
 	idx := map[string]string{}
+	for desc, raw := range entObj(entLoadData(prior, engine.CollectADOIdentities(org)), "identities") {
+		if sd := entStr(entMap(raw)["subjectDescriptor"]); sd != "" {
+			if _, id, found := strings.Cut(desc, ";"); found {
+				idx[id] = sd
+			}
+		}
+	}
 	for _, raw := range entListOrEmpty(graph["groups"]) {
 		desc := entStr(entMap(raw)["descriptor"])
 		if sid := decodeGraphSID(desc); sid != "" {
