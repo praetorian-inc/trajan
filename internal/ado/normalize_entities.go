@@ -782,6 +782,19 @@ func normalizePrincipals(prior engine.PriorPhase, cp engine.CurrentPhase, org st
 			return err
 		}
 	}
+	for _, raw := range entListOrEmpty(graph["service_principals"]) {
+		sp := entMap(raw)
+		desc := entStr(sp["descriptor"])
+		if desc == "" {
+			continue
+		}
+		rec := principalRecord("User", org, sp)
+		rec["application_id"] = entStr(sp["applicationId"])
+		rec["meta_type"] = entStr(sp["metaType"])
+		if err := emit(cp, timer, engine.NormalizeADOPrincipal("users", desc), rec); err != nil {
+			return err
+		}
+	}
 	for _, raw := range entListOrEmpty(graph["groups"]) {
 		g := entMap(raw)
 		desc := entStr(g["descriptor"])

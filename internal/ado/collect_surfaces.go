@@ -284,6 +284,11 @@ func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 	if err != nil {
 		return err
 	}
+	// /graph/users never returns an aadsp subject, so a service principal needs its own list.
+	principals, pstatus, err := softList(ctx, cl, "vssps", APIVersionGraph, "/_apis/graph/serviceprincipals", nil)
+	if err != nil {
+		return err
+	}
 	// direction=down gives the nested-group edges normalize needs to resolve ACL
 	// descriptors to users. Every group is already listed, so one hop each is enough
 	// and the transitive closure is normalize's job.
@@ -302,15 +307,19 @@ func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 			memberships[desc] = rawArray(mem)
 		}
 	}
-	data := map[string]any{"groups": rawArray(groups), "users": rawArray(users), "memberships": memberships}
+	data := map[string]any{"groups": rawArray(groups), "users": rawArray(users),
+		"service_principals": rawArray(principals), "memberships": memberships}
 	// Groups and users need the same graph-read scope, but a partial failure must
 	// still signal, so either one marks the whole bundle.
 	if gstatus != 0 {
 		data["_unobserved"] = gstatus
 	} else if ustatus != 0 {
 		data["_unobserved"] = ustatus
+	} else if pstatus != 0 {
+		data["_unobserved"] = pstatus
 	}
-	return envelope(cp, engine.CollectADOGraph(org), "graph", "/_apis/graph/{groups,users,memberships}", data)
+	return envelope(cp, engine.CollectADOGraph(org), "graph",
+		"/_apis/graph/{groups,users,serviceprincipals,memberships}", data)
 }
 
 func collectExtensions(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {
