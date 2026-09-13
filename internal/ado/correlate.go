@@ -297,15 +297,16 @@ func synthesizeInherited(projectRow map[string]any, projectToken string, seen ma
 	if projectToken == "" {
 		return nil
 	}
+	covered := make(map[string]bool, len(seen))
+	for token := range seen {
+		covered[buildTokenKey(token)] = true
+	}
 	for key := range pipeIdx {
 		guid, id, found := strings.Cut(key, "/")
-		if !found || guid != projectToken {
+		if !found || guid != projectToken || covered[key] {
 			continue
 		}
 		token := projectToken + "/" + id
-		if seen[token] {
-			continue
-		}
 		for desc, aceRaw := range projectRow {
 			if err := emit(token, desc, effectiveAllowMask(entMap(aceRaw)), true); err != nil {
 				return err
@@ -358,12 +359,21 @@ func roleTokenIndexes(prior engine.PriorPhase, org string) (repoIdx, scIdx, proj
 // "repoV2/<projGuid>/<repoGuid>" scopes a Repository, "endpoints/<projGuid>/<id>" a
 // ServiceConnection, a bare "<projGuid>" a Project. A collection root or a deleted
 // resource is unresolvable and returns "".
+// The Build namespace is hierarchical: a foldered definition carries the folder path.
+func buildTokenKey(token string) string {
+	parts := strings.Split(token, "/")
+	if len(parts) < 2 {
+		return token
+	}
+	return parts[0] + "/" + parts[len(parts)-1]
+}
+
 func resolveRoleToken(ns, token string, repoIdx, scIdx, projIdx, pipeIdx map[string]string) (kind, nodeID string) {
 	parts := strings.Split(token, "/")
 	switch {
 	case ns == buildNS && len(parts) >= 2:
 		// A folder token ends in a folder name, which indexes no pipeline.
-		if id := pipeIdx[parts[0]+"/"+parts[len(parts)-1]]; id != "" {
+		if id := pipeIdx[buildTokenKey(token)]; id != "" {
 			return "Pipeline", id
 		}
 		return "", ""

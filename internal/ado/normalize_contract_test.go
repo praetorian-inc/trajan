@@ -52,6 +52,38 @@ func TestResolveRoleToken(t *testing.T) {
 	}
 }
 
+func TestSynthesizeInherited(t *testing.T) {
+	projectRow := map[string]any{"group-a": map[string]any{"allow": float64(1)}}
+	pipeIdx := map[string]string{
+		"proj-guid/1": "org/P/1", "proj-guid/3": "org/P/3",
+		"proj-guid/4": "org/P/4", "proj-guid/5": "org/P/5",
+		"other-guid/9": "org/Q/9",
+	}
+	seen := map[string]bool{"proj-guid": true, "proj-guid/1": true, "proj-guid/folder/4": true}
+
+	got := map[string]bool{}
+	err := synthesizeInherited(projectRow, "proj-guid", seen, pipeIdx,
+		func(token, desc string, eff int64, inherited bool) error {
+			if !inherited {
+				t.Errorf("synthesized %q not marked inherited", token)
+			}
+			got[token] = true
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"proj-guid/3": true, "proj-guid/5": true}
+	if len(got) != len(want) {
+		t.Fatalf("synthesized %v, want %v", got, want)
+	}
+	for token := range want {
+		if !got[token] {
+			t.Errorf("missing synthesized token %q", token)
+		}
+	}
+}
+
 func TestPolicySettings(t *testing.T) {
 	got := policySettings(map[string]any{
 		"creatorVoteCounts": true, "minimumApproverCount": float64(2),
