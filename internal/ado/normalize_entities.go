@@ -194,6 +194,19 @@ func checksObserved(prior engine.PriorPhase, project, rtype, id string) bool {
 	return !unobserved
 }
 
+// A disabled check is not a gate, so listing it would read as protection that a run
+// does not actually meet.
+func checkTypes(checks []any) []any {
+	seen := map[string]bool{}
+	for _, raw := range checks {
+		c := entMap(raw)
+		if name := entStr(c["type_name"]); name != "" && !entBool(c["is_disabled"]) {
+			seen[name] = true
+		}
+	}
+	return sortedStrSet(seen)
+}
+
 func foldChecks(prior engine.PriorPhase, project, rtype, id string) []any {
 	out := []any{}
 	for _, raw := range entLoadList(prior, engine.CollectADOChecks(project, rtype, id)) {
@@ -302,6 +315,8 @@ func normalizeServiceConnectionsShared(prior engine.PriorPhase, cp engine.Curren
 		rec["per_project_authorization"] = a.perProj
 		auth := ownerAuth(a.perProj, a.owner, a.seen)
 		rec["checks"] = auth["checks"]
+		rec["checks_observed"] = auth["checks_observed"]
+		rec["check_types"] = checkTypes(entListOrEmpty(auth["checks"]))
 		rec["pipeline_permissions"] = auth["pipeline_permissions"]
 		rec["_provenance"] = prov(engine.CollectADOServiceConnections(srcProj))
 		if err := emitWIFCredential(cp, timer, src, id, a.owner); err != nil {
@@ -411,6 +426,8 @@ func normalizeVariableGroupsShared(prior engine.PriorPhase, cp engine.CurrentPha
 		rec["per_project_authorization"] = a.perProj
 		auth := ownerAuth(a.perProj, a.owner, a.seen)
 		rec["checks"] = auth["checks"]
+		rec["checks_observed"] = auth["checks_observed"]
+		rec["check_types"] = checkTypes(entListOrEmpty(auth["checks"]))
 		rec["pipeline_permissions"] = auth["pipeline_permissions"]
 		rec["_provenance"] = prov(engine.CollectADOVariableGroups(srcProj))
 		if err := emitSecretVariables(cp, timer, src, gid, a.owner); err != nil {
@@ -545,7 +562,7 @@ func ownerAuth(perProj map[string]any, owner string, seen map[string]bool) map[s
 			return a
 		}
 	}
-	return map[string]any{"checks": []any{}, "pipeline_permissions": map[string]any{}}
+	return map[string]any{"checks": []any{}, "checks_observed": false, "pipeline_permissions": map[string]any{}}
 }
 
 func normalizeAgentQueues(prior engine.PriorPhase, cp engine.CurrentPhase, org string, p projectMeta, timer *engine.PhaseTimer) error {
@@ -568,6 +585,7 @@ func normalizeAgentQueues(prior engine.PriorPhase, cp engine.CurrentPhase, org s
 			"is_hosted":            entBool(pool["isHosted"]),
 			"pool_type":            entStr(pool["poolType"]),
 			"checks":               foldChecks(prior, p.Name, "queue", idStr),
+			"check_types":          checkTypes(foldChecks(prior, p.Name, "queue", idStr)),
 			"checks_observed":      checksObserved(prior, p.Name, "queue", idStr),
 			"pipeline_permissions": foldAuthorization(prior, p.Name, "queue", idStr),
 			"_provenance":          prov(engine.CollectADOAgentQueues(p.Name)),
@@ -607,6 +625,7 @@ func normalizeEnvironments(prior engine.PriorPhase, cp engine.CurrentPhase, org 
 			"created_by":           entStr(entGetIn(detail, "createdBy", "displayName")),
 			"last_modified_on":     entStr(detail["lastModifiedOn"]),
 			"checks":               foldChecks(prior, p.Name, "environment", idStr),
+			"check_types":          checkTypes(foldChecks(prior, p.Name, "environment", idStr)),
 			"checks_observed":      checksObserved(prior, p.Name, "environment", idStr),
 			"pipeline_permissions": foldAuthorization(prior, p.Name, "environment", idStr),
 			"_provenance":          prov(engine.CollectADOEnvironments(p.Name)),
