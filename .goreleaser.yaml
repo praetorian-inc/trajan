@@ -68,3 +68,5 @@ release:
   draft: false
   prerelease: auto
   name_template: "Trajan v{{.Version}}"
+  extra_files:
+    - glob: ./docs/cli-surface.json

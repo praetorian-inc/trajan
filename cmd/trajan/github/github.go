@@ -26,7 +26,8 @@ func newGitHubCmd() *cobra.Command {
 	}
 
 	// --concurrency / --output-dir are local to the GitHub subtree (not root
-	// globals) and feed engine.Config. GitHub ignores trajan's root --output.
+	// globals) and feed engine.Config. The root command carries no output flag
+	// of its own for them to shadow.
 	gh.PersistentFlags().SortFlags = false
 	gh.PersistentFlags().IntVar(&cfg.Concurrency, "concurrency", 8, "max concurrent API workers")
 	gh.PersistentFlags().StringVar(&cfg.OutputDir, "output-dir", "./trajan-out", "run output directory")
@@ -176,8 +177,9 @@ func newGitHubCmd() *cobra.Command {
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
 	reportCmd.Flags().StringVar(&reportMinSev, "min-severity", "info", "drop findings below this severity")
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
-	// No "o" shorthand: the root command already owns -o for --output, and cobra
-	// panics when a subcommand's local flag redefines an inherited shorthand.
+	// No "o" shorthand, here or on the gitlab and ado report commands: -o is
+	// unclaimed across the whole tree, and leaving it so keeps it available to a
+	// future root-level flag without a local shorthand shadowing it.
 	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: stdout for json/jsonl, run dir for md/html)")
 	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j Bolt URL")
 	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")

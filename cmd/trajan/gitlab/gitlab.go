@@ -22,7 +22,8 @@ func newGitLabCmd() *cobra.Command {
 	}
 
 	// --concurrency / --output-dir are local to the GitLab subtree (not root
-	// globals) and feed engine.Config. GitLab ignores trajan's root --output.
+	// globals) and feed engine.Config. The root command carries no output flag
+	// of its own for them to shadow.
 	gl.PersistentFlags().SortFlags = false
 	gl.PersistentFlags().IntVar(&cfg.Concurrency, "concurrency", 8, "max concurrent API workers")
 	gl.PersistentFlags().StringVar(&cfg.OutputDir, "output-dir", "./trajan-out", "run output directory")
