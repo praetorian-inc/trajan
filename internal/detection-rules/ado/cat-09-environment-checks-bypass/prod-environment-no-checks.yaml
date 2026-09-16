@@ -2,6 +2,7 @@ id: cat-09/prod-environment-no-checks
 scenario_id: cat-09/01
 title: "Production environment has no approval gate — deploys run ungated"
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: medium
 description: >

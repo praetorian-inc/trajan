@@ -2,6 +2,7 @@ id: cat-11/feed-view-promotion-bypass
 scenario_id: cat-11/08
 title: "Feed release view is not an approval gate — promotion/publish is a Contributor-level action"
 subject: feed
+graph: node(ArtifactsFeed)
 severity: high
 confidence: medium
 description: >

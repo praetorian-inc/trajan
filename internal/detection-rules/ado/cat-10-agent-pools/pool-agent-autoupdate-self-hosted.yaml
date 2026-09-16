@@ -2,6 +2,7 @@ id: cat-10/pool-agent-autoupdate-self-hosted
 scenario_id: cat-10/09
 title: "Self-hosted agent pool with auto-update enabled — agent-software supply-chain fan-out"
 subject: agent_pool
+graph: node(OrgAgentPool)
 severity: low
 confidence: low
 description: >

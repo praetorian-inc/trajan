@@ -2,6 +2,7 @@ id: cat-04/collection-scoped-pipeline-identity
 scenario_id: cat-04/05
 title: "Pipeline runs with a collection-scoped identity"
 subject: pipeline
+graph: node(Pipeline)
 severity: high
 confidence: medium
 description: >

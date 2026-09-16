@@ -79,3 +79,15 @@ func ResolveADO(explicitPAT, explicitBearer string) (Credential, bool) {
 	}
 	return Credential{}, false
 }
+
+// ResolveNeo4j: TRAJAN_NEO4J_PASSWORD → NEO4J_PASSWORD → --neo4j-pass. A flag value
+// lands in shell history and process args, so it is the escape hatch, not the default.
+func ResolveNeo4j(explicit string) string {
+	for _, k := range []string{"TRAJAN_NEO4J_PASSWORD", "NEO4J_PASSWORD"} {
+		if v := envTrim(k); v != "" {
+			logCred(Credential{Value: v, Kind: CredPAT, Source: k})
+			return v
+		}
+	}
+	return strings.TrimSpace(explicit)
+}

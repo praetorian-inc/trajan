@@ -2,7 +2,6 @@ package ado
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
 )
@@ -39,20 +38,9 @@ var adoScanProvider = detect.Provider{
 		"can_merge_via_pr":          "edges/can-merge-via-pr",
 		"can_bypass":                "edges/can-bypass",
 	},
-	Display:    adoDisplay,
-	Repo:       func(s map[string]any) string { return detect.StringField(s, "project") },
-	File:       func(s map[string]any) string { return detect.StringField(s, "yaml_path") },
-	SubjectKey: adoSubjectKey,
-}
-
-// Derived-edge records carry no _id, so they key on their full serialized form —
-// otherwise distinct edges collide to a single finding.
-func adoSubjectKey(s map[string]any) string {
-	if id := detect.StringField(s, "_id"); id != "" {
-		return id
-	}
-	b, _ := json.Marshal(s) // sorted keys → deterministic across runs
-	return string(b)
+	Display: adoDisplay,
+	Repo:    func(s map[string]any) string { return detect.StringField(s, "project") },
+	File:    func(s map[string]any) string { return detect.StringField(s, "yaml_path") },
 }
 
 type ScanOptions = detect.ScanOptions
@@ -61,7 +49,7 @@ func Scan(ctx context.Context, runDir string, opts ScanOptions) error {
 	return detect.Scan(ctx, runDir, adoScanProvider, opts)
 }
 
-// Edge subjects have no _id, so they fall back to project + target job.
+// An edge subject's _id discriminates rather than names, so it renders from its target.
 func adoDisplay(kind string, s map[string]any) string {
 	proj := detect.StringField(s, "project")
 	switch kind {
@@ -74,14 +62,14 @@ func adoDisplay(kind string, s map[string]any) string {
 			return proj + " › " + id
 		}
 	}
-	if id := detect.StringField(s, "_id"); id != "" {
-		return id
-	}
 	if t := detect.StringField(s, "target"); t != "" {
 		return proj + " › " + t
 	}
 	if j := detect.StringField(s, "job"); j != "" {
 		return proj + " › " + j
+	}
+	if id := detect.StringField(s, "_id"); id != "" {
+		return id
 	}
 	return proj
 }

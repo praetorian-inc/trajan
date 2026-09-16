@@ -2,6 +2,7 @@ id: cat-14/cross-project-artifact-prod-deploy
 scenario_id: cat-14/04
 title: "Classic release creation enabled with release auth scope not project-limited"
 subject: project
+graph: node(Project)
 severity: medium
 confidence: low
 description: >

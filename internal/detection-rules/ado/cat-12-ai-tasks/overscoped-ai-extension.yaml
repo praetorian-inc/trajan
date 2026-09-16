@@ -2,6 +2,7 @@ id: cat-12/overscoped-ai-extension
 scenario_id: cat-12/04
 title: "Org-installed third-party extension holds over-broad write scopes"
 subject: extension
+graph: node(Extension)
 severity: high
 confidence: medium
 description: >

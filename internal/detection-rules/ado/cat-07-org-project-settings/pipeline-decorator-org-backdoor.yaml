@@ -2,6 +2,7 @@ id: cat-07/pipeline-decorator-org-backdoor
 scenario_id: cat-07/03
 title: "Non-builtin pipeline decorator extension injects steps into every job org-wide"
 subject: extension
+graph: node(Extension)
 severity: high
 confidence: high
 description: >

@@ -1,6 +1,7 @@
 id: cat-07/fork-builds-unprotected
 title: "Fork pull-request builds enabled without fork protection org-wide"
 subject: org
+graph: node(Organization)
 severity: high
 confidence: medium
 description: >

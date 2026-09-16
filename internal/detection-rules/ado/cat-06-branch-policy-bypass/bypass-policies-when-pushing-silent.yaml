@@ -2,6 +2,7 @@ id: cat-06/bypass-policies-when-pushing-silent
 scenario_id: cat-06/01
 title: "Principal can land code on a policy-protected branch via a bypass weakness"
 subject: can_push_to
+graph: edge(CAN_PUSH_TO)
 severity: high
 confidence: high
 description: >

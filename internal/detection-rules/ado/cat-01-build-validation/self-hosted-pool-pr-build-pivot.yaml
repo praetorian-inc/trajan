@@ -2,6 +2,7 @@ id: cat-01/self-hosted-pool-pr-build-pivot
 scenario_id: cat-01/06
 title: "Privileged job runs on a self-hosted agent pool that persists state between builds"
 subject: job
+graph: edge(RUNS_ON)
 severity: high
 confidence: medium
 description: >

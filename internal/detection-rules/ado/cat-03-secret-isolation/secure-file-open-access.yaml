@@ -2,6 +2,7 @@ id: cat-03/secure-file-open-access
 scenario_id: cat-03/05
 title: "Secure File Open access lets any pipeline download the signing key"
 subject: secure_file
+graph: node(SecureFile)
 severity: high
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-02/queue-input-selects-target
 scenario_id: cat-02/05
 title: "Queue-time input selects the agent pool, service connection, or task"
 subject: queue_time_injection
+graph: edge(QUEUE_TIME_INJECTION)
 severity: high
 confidence: high
 description: >

@@ -1,18 +1,41 @@
 package ado
 
 import (
+	"fmt"
+	"log/slog"
+
 	"github.com/spf13/cobra"
 
 	adopkg "github.com/praetorian-inc/trajan/internal/ado"
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/engine/detect"
 	"github.com/praetorian-inc/trajan/internal/report"
 )
 
 var AdoCmd = newAdoCmd()
 
+func ruleTargets() (map[string]adopkg.Target, error) {
+	onError := func(e error) { slog.Warn("rule skipped", "err", e) }
+	rules, err := detect.LoadRules("ado", onError)
+	if err != nil {
+		return nil, err
+	}
+	targets := make(map[string]adopkg.Target, len(rules))
+	for _, r := range rules {
+		t, err := adopkg.ParseTarget(r.Graph)
+		if err != nil {
+			onError(fmt.Errorf("%s: %w", r.ID, err))
+			continue
+		}
+		targets[r.ID] = t
+	}
+	return targets, nil
+}
+
 const (
-	tokenHelp  = "PAT (prefer TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT env; this flag is an escape hatch)"
-	bearerHelp = "bearer token (prefer AZURE_BEARER_TOKEN/SYSTEM_ACCESSTOKEN env; this flag is an escape hatch)"
+	tokenHelp     = "PAT (prefer TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT env; this flag is an escape hatch)"
+	bearerHelp    = "bearer token (prefer AZURE_BEARER_TOKEN/SYSTEM_ACCESSTOKEN env; this flag is an escape hatch)"
+	neo4jPassHelp = "Neo4j password (prefer TRAJAN_NEO4J_PASSWORD/NEO4J_PASSWORD env; this flag is an escape hatch)"
 )
 
 func newAdoCmd() *cobra.Command {
@@ -31,6 +54,8 @@ func newAdoCmd() *cobra.Command {
 	var path string
 	var orgDetectionsOnly bool
 	var reportFormat, reportMinSev, reportMinConf, reportOut string
+	var neo4jURL, neo4jUser, neo4jPass string
+	var neo4jReset bool
 
 	collectRun := func(cmd *cobra.Command, args []string) (string, error) {
 		locator := ""
@@ -110,9 +135,42 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 			})
 		},
 	}
+	graph := &cobra.Command{
+		Use:   "graph",
+		Short: "Build the property graph from a normalized, scanned run",
+		Long: `Build nodes and edges from a normalized run directory.
+
+Reads the 10-normalize records and 20-scan findings, resolves every edge record to
+typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			runDir, err := engine.ResolveRunDir(cfg, "ado", path)
+			if err != nil {
+				return err
+			}
+			targets, err := ruleTargets()
+			if err != nil {
+				return err
+			}
+			return adopkg.BuildGraph(cmd.Context(), cfg, runDir, targets)
+		},
+	}
+	push := &cobra.Command{
+		Use:   "push",
+		Short: "Push a built graph into Neo4j",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			runDir, err := engine.ResolveRunDir(cfg, "ado", path)
+			if err != nil {
+				return err
+			}
+			return adopkg.PushGraph(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser,
+				engine.ResolveNeo4j(neo4jPass), neo4jReset)
+		},
+	}
 	run := &cobra.Command{
 		Use:   "run [locator]",
-		Short: "Wrapper: collect, normalize, scan in one process",
+		Short: "Wrapper: collect, normalize, scan, graph in one process",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			runDir, err := collectRun(cmd, args)
@@ -122,13 +180,24 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 			if err := adopkg.Normalize(cmd.Context(), runDir); err != nil {
 				return err
 			}
-			return adopkg.Scan(cmd.Context(), runDir, adopkg.ScanOptions{})
+			if err := adopkg.Scan(cmd.Context(), runDir, adopkg.ScanOptions{}); err != nil {
+				return err
+			}
+			targets, err := ruleTargets()
+			if err != nil {
+				return err
+			}
+			return adopkg.BuildGraph(cmd.Context(), cfg, runDir, targets)
 		},
 	}
 
 	scan.Flags().BoolVar(&orgDetectionsOnly, "org-detections-only", false, "evaluate only org-subject (org-level) rules")
+	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j bolt URL")
+	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")
+	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "", neo4jPassHelp)
+	push.Flags().BoolVar(&neo4jReset, "reset", false, "delete every node in the database before writing")
 
-	for _, c := range []*cobra.Command{normalize, scan, reportCmd} {
+	for _, c := range []*cobra.Command{normalize, scan, reportCmd, graph, push} {
 		c.Flags().StringVarP(&path, "path", "p", "", "run directory (default: latest)")
 	}
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
@@ -141,6 +210,6 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 		c.Flags().StringVar(&cfg.BearerToken, "azure-bearer-token", "", bearerHelp)
 	}
 
-	ado.AddCommand(whoami, collect, normalize, scan, reportCmd, run)
+	ado.AddCommand(whoami, collect, normalize, scan, reportCmd, graph, push, run)
 	return ado
 }

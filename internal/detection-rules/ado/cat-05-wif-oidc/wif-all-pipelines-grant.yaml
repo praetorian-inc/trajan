@@ -2,6 +2,7 @@ id: cat-05/wif-all-pipelines-grant
 scenario_id: cat-05/01
 title: "WIF service connection authorized to all pipelines"
 subject: service_connection
+graph: node(ServiceConnection)
 severity: high
 confidence: medium
 description: >

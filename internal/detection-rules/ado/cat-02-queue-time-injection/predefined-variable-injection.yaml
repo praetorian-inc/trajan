@@ -2,6 +2,7 @@ id: cat-02/predefined-variable-injection
 scenario_id: cat-02/01
 title: "Attacker-controlled predefined variable macro-expanded into a script body"
 subject: queue_time_injection
+graph: edge(QUEUE_TIME_INJECTION)
 severity: high
 confidence: high
 description: >

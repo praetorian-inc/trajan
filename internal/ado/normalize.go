@@ -76,6 +76,13 @@ func emit(cp engine.CurrentPhase, timer *engine.PhaseTimer, rel string, rec any)
 	return nil
 }
 
+// The key already discriminates one edge of a kind from every other, so it is an
+// identity and not just a filename.
+func emitEdge(cp engine.CurrentPhase, timer *engine.PhaseTimer, kind, key string, rec map[string]any) error {
+	rec["_id"] = key
+	return emit(cp, timer, engine.NormalizeADOEdges(kind, key), rec)
+}
+
 // collect writes the whole org roster but fans out only to the scoped project, so a
 // scoped run must re-apply that filter or it emits project subjects whose detail was
 // never collected.

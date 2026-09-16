@@ -2,6 +2,7 @@ id: cat-04/cross-project-shared-connection
 scenario_id: cat-04/06
 title: "Service connection shared into another project without a check"
 subject: service_connection
+graph: node(ServiceConnection)
 severity: high
 confidence: medium
 description: >

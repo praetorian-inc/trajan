@@ -2,6 +2,7 @@ id: cat-03/keyvault-linked-group-broad-access
 scenario_id: cat-03/03
 title: "Key Vault-linked variable group is open to every pipeline"
 subject: variable_group
+graph: node(VariableGroup)
 severity: high
 confidence: medium
 description: >

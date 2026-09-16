@@ -2,6 +2,7 @@ id: cat-11/dependency-confusion-upstream-shadow
 scenario_id: cat-11/06
 title: "Artifacts feed has public upstream sources enabled (dependency-confusion / substitution surface)"
 subject: feed
+graph: node(ArtifactsFeed)
 severity: high
 confidence: medium
 description: >

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
@@ -284,6 +286,11 @@ func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 	if err != nil {
 		return err
 	}
+	// /graph/users never returns an aadsp subject, so a service principal needs its own list.
+	principals, pstatus, err := softList(ctx, cl, "vssps", APIVersionGraph, "/_apis/graph/serviceprincipals", nil)
+	if err != nil {
+		return err
+	}
 	// direction=down gives the nested-group edges normalize needs to resolve ACL
 	// descriptors to users. Every group is already listed, so one hop each is enough
 	// and the transitive closure is normalize's job.
@@ -302,15 +309,70 @@ func collectGraph(ctx context.Context, cl ADO, cp engine.CurrentPhase, org strin
 			memberships[desc] = rawArray(mem)
 		}
 	}
-	data := map[string]any{"groups": rawArray(groups), "users": rawArray(users), "memberships": memberships}
+	data := map[string]any{"groups": rawArray(groups), "users": rawArray(users),
+		"service_principals": rawArray(principals), "memberships": memberships}
 	// Groups and users need the same graph-read scope, but a partial failure must
 	// still signal, so either one marks the whole bundle.
 	if gstatus != 0 {
 		data["_unobserved"] = gstatus
 	} else if ustatus != 0 {
 		data["_unobserved"] = ustatus
+	} else if pstatus != 0 {
+		data["_unobserved"] = pstatus
 	}
-	return envelope(cp, engine.CollectADOGraph(org), "graph", "/_apis/graph/{groups,users,memberships}", data)
+	return envelope(cp, engine.CollectADOGraph(org), "graph",
+		"/_apis/graph/{groups,users,serviceprincipals,memberships}", data)
+}
+
+// A legacy ACE descriptor carries a global-scope SID that /graph/groups never emits, so
+// the collection-scoped subject descriptor has to be asked for by name.
+const identityBatch = 40
+
+func collectIdentities(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {
+	descriptors, err := aceDescriptors(engine.PriorPhase(cp))
+	if err != nil {
+		return err
+	}
+	out := map[string]any{}
+	for chunk := range slices.Chunk(descriptors, identityBatch) {
+		items, status, err := softList(ctx, cl, "vssps", APIVersion, "/_apis/identities",
+			url.Values{"descriptors": []string{strings.Join(chunk, ",")}})
+		if err != nil {
+			return err
+		}
+		if status != 0 {
+			return envelope(cp, engine.CollectADOIdentities(org), "identities", "/_apis/identities",
+				map[string]any{"_unobserved": status})
+		}
+		if len(items) != len(chunk) {
+			return fmt.Errorf("identities: asked for %d descriptors, got %d", len(chunk), len(items))
+		}
+		for i, raw := range items {
+			if len(raw) > 0 && string(raw) != "null" {
+				out[chunk[i]] = raw
+			}
+		}
+	}
+	return envelope(cp, engine.CollectADOIdentities(org), "identities", "/_apis/identities",
+		map[string]any{"identities": out})
+}
+
+func aceDescriptors(prior engine.PriorPhase) ([]string, error) {
+	seen := map[string]bool{}
+	for _, dir := range []string{"00-collect/acl-repo", "00-collect/acl-build", "00-collect/acl-endpoint"} {
+		files, err := prior.IterJSON(dir)
+		if err != nil {
+			return nil, fmt.Errorf("identities: load %s: %w", dir, err)
+		}
+		for _, f := range files {
+			for _, raw := range entListOrEmpty(entDataOf(f.Data)["value"]) {
+				for desc := range entObj(entMap(raw), "acesDictionary") {
+					seen[desc] = true
+				}
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen)), nil
 }
 
 func collectExtensions(ctx context.Context, cl ADO, cp engine.CurrentPhase, org string) error {
@@ -448,12 +510,13 @@ func collectPolicies(ctx context.Context, cl ADO, cp engine.CurrentPhase, projec
 
 func collectBuildACL(ctx context.Context, cl ADO, cp engine.CurrentPhase, project, projectID string) error {
 	raw, status, err := softGet(ctx, cl, "core", APIVersion, "/_apis/accesscontrollists/"+buildNS,
-		url.Values{"token": []string{projectID}, "includeExtendedInfo": []string{"true"}})
+		url.Values{"token": []string{projectID}, "includeExtendedInfo": []string{"true"},
+			"recurse": []string{"true"}})
 	if err != nil {
 		return err
 	}
 	return writeOrMark(cp, engine.CollectADOBuildACL(project), "build-acl",
-		"/_apis/accesscontrollists/"+buildNS, raw, status)
+		"/_apis/accesscontrollists/"+buildNS+"?recurse=true", raw, status)
 }
 
 func collectRepoACL(ctx context.Context, cl ADO, cp engine.CurrentPhase, project, projectID string, repo repoRef) error {

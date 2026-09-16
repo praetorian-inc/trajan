@@ -2,6 +2,7 @@ id: cat-02/settable-var-into-arguments
 scenario_id: cat-02/02
 title: "Queue-time variable flows into a shell task arguments input"
 subject: queue_time_injection
+graph: edge(QUEUE_TIME_INJECTION)
 severity: high
 confidence: low
 description: >

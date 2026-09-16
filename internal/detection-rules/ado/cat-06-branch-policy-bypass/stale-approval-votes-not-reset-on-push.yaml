@@ -2,6 +2,7 @@ id: cat-06/stale-approval-votes-not-reset-on-push
 scenario_id: cat-06/05
 title: "Reviewer policy does not reset votes on a new push — approve-then-swap (TOCTOU)"
 subject: branch_policy
+graph: node(BranchPolicy)
 severity: high
 confidence: high
 description: >

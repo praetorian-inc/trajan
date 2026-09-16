@@ -2,6 +2,7 @@ id: cat-12/pr-text-prompt-injection
 scenario_id: cat-12/01
 title: "Untrusted input reaches an AI agent step holding a privileged capability with no review gate"
 subject: agent_injection
+graph: edge(AGENT_INJECTION)
 severity: high
 confidence: high
 description: >

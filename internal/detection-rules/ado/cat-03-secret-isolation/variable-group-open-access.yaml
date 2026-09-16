@@ -2,6 +2,7 @@ id: cat-03/variable-group-open-access
 scenario_id: cat-03/01
 title: "Variable group Open access exposes secrets to every pipeline"
 subject: variable_group
+graph: node(VariableGroup)
 severity: high
 confidence: high
 description: >

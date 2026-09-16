@@ -2,6 +2,7 @@ id: cat-06/build-validation-optional-non-blocking
 scenario_id: cat-06/04
 title: "Build-validation policy is non-blocking or manual — PR completes without a passing build"
 subject: branch_policy
+graph: node(BranchPolicy)
 severity: medium
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-10/shared-nonephemeral-agent-residue
 scenario_id: cat-10/01
 title: "Non-ephemeral self-hosted agent pool — host state persists between jobs for residue harvest"
 subject: agent_pool
+graph: node(OrgAgentPool)
 severity: low
 confidence: medium
 description: >

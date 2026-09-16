@@ -107,6 +107,9 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl ADO, cp engine.Curre
 			appendErr(timer, fmt.Sprintf("project %s: %v", p.Name, e))
 		},
 	)
+
+	// Runs last: the descriptors to look up are only known once the ACLs are on disk.
+	softSurface(timer, "identities", func() error { return collectIdentities(ctx, cl, cp, org) })
 	return nil
 }
 

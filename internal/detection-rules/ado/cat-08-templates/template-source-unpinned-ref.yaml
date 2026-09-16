@@ -2,6 +2,7 @@ id: cat-08/template-source-unpinned-ref
 scenario_id: cat-08/01
 title: "Pipeline extends a template from an unpinned (mutable) ref"
 subject: pipeline
+graph: node(Pipeline)
 severity: high
 confidence: medium
 description: >

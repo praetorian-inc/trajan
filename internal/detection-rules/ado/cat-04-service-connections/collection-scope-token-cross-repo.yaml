@@ -2,6 +2,7 @@ id: cat-04/collection-scope-token-cross-repo
 scenario_id: cat-04/04
 title: "Collection-scoped job authorization token reaches every repo in the org"
 subject: org
+graph: node(Organization)
 severity: high
 confidence: high
 description: >

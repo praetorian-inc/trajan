@@ -2,6 +2,7 @@ id: cat-09/self-approval-allowed
 scenario_id: cat-09/03
 title: "Approval check permits approvers to approve their own runs"
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: medium
 description: >

@@ -33,17 +33,53 @@ func TestResolveRoleToken(t *testing.T) {
 	repoIdx := map[string]string{"repo-guid": "org/P/myrepo"}
 	scIdx := map[string]string{"conn-1": "Owner/conn-1"}
 	projIdx := map[string]string{"proj-guid": "org/P"}
-	cases := []struct{ token, wantKind, wantID string }{
-		{"repoV2/proj-guid/repo-guid", "Repository", "org/P/myrepo"},
-		{"endpoints/proj-guid/conn-1", "ServiceConnection", "Owner/conn-1"},
-		{"proj-guid", "Project", "org/P"},
-		{"repoV2/proj-guid/unknown-repo", "Repository", ""}, // repo not indexed -> unresolved
-		{"$PROJECT:vstfs:///unknown", "", ""},               // not a recognized shape
+	pipeIdx := map[string]string{"proj-guid/7": "org/P/7"}
+	cases := []struct{ ns, token, wantKind, wantID string }{
+		{gitNS, "repoV2/proj-guid/repo-guid", "Repository", "org/P/myrepo"},
+		{endpointNS, "endpoints/proj-guid/conn-1", "ServiceConnection", "Owner/conn-1"},
+		{buildNS, "proj-guid", "Project", "org/P"},
+		{buildNS, "proj-guid/7", "Pipeline", "org/P/7"},
+		{buildNS, "proj-guid/folder/7", "Pipeline", "org/P/7"},     // a folder segment is skipped
+		{buildNS, "proj-guid/folder", "", ""},                      // a folder names no pipeline
+		{gitNS, "repoV2/proj-guid/unknown-repo", "Repository", ""}, // repo not indexed -> unresolved
+		{gitNS, "$PROJECT:vstfs:///unknown", "", ""},               // not a recognized shape
 	}
 	for _, c := range cases {
-		k, id := resolveRoleToken(c.token, repoIdx, scIdx, projIdx)
+		k, id := resolveRoleToken(c.ns, c.token, repoIdx, scIdx, projIdx, pipeIdx)
 		if k != c.wantKind || id != c.wantID {
 			t.Errorf("resolveRoleToken(%q) = %q/%q, want %q/%q", c.token, k, id, c.wantKind, c.wantID)
+		}
+	}
+}
+
+func TestSynthesizeInherited(t *testing.T) {
+	projectRow := map[string]any{"group-a": map[string]any{"allow": float64(1)}}
+	pipeIdx := map[string]string{
+		"proj-guid/1": "org/P/1", "proj-guid/3": "org/P/3",
+		"proj-guid/4": "org/P/4", "proj-guid/5": "org/P/5",
+		"other-guid/9": "org/Q/9",
+	}
+	seen := map[string]bool{"proj-guid": true, "proj-guid/1": true, "proj-guid/folder/4": true}
+
+	got := map[string]bool{}
+	err := synthesizeInherited(projectRow, "proj-guid", seen, pipeIdx,
+		func(token, desc string, eff int64, inherited bool) error {
+			if !inherited {
+				t.Errorf("synthesized %q not marked inherited", token)
+			}
+			got[token] = true
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"proj-guid/3": true, "proj-guid/5": true}
+	if len(got) != len(want) {
+		t.Fatalf("synthesized %v, want %v", got, want)
+	}
+	for token := range want {
+		if !got[token] {
+			t.Errorf("missing synthesized token %q", token)
 		}
 	}
 }

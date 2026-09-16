@@ -2,6 +2,7 @@ id: cat-09/branch-control-allows-all-refs
 scenario_id: cat-09/04
 title: "Branch control check allows all refs or treats unknown protection as pass"
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: medium
 description: >

@@ -2,6 +2,7 @@ id: cat-04/open-access-arm-connection
 scenario_id: cat-04/01
 title: "Open-access Azure connection with no Approvals & checks"
 subject: service_connection
+graph: node(ServiceConnection)
 severity: high
 confidence: medium
 description: >

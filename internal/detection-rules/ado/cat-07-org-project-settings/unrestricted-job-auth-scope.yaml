@@ -1,6 +1,7 @@
 id: cat-07/unrestricted-job-auth-scope
 title: "Job authorization scope not limited to current project org-wide"
 subject: org
+graph: node(Organization)
 severity: high
 confidence: medium
 description: >

@@ -2,6 +2,7 @@ id: cat-08/cross-project-template-source
 scenario_id: cat-08/06
 title: "Pipeline extends a template from another project's repository"
 subject: pipeline
+graph: node(Pipeline)
 severity: high
 confidence: medium
 description: >

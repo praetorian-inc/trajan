@@ -2,6 +2,7 @@ id: cat-06/edit-policies-self-grant-then-weaken
 scenario_id: cat-06/07
 title: "Principal with Edit-policies can weaken branch protection then land code"
 subject: can_push_to
+graph: edge(CAN_PUSH_TO)
 severity: high
 confidence: high
 description: >

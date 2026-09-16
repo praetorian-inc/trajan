@@ -2,6 +2,7 @@ id: cat-12/indirect-injection-agentic-rce
 scenario_id: cat-12/03
 title: "Injected AI agent holds tool/shell execution — indirect-injection RCE on the build host"
 subject: agent_injection
+graph: edge(AGENT_INJECTION)
 severity: high
 confidence: high
 description: >

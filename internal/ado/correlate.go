@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
@@ -41,11 +43,23 @@ func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPh
 	if err != nil {
 		return fmt.Errorf("correlate: load jobs: %w", err)
 	}
+	stages, err := loadRecords(prior, "10-normalize/stages")
+	if err != nil {
+		return fmt.Errorf("correlate: load stages: %w", err)
+	}
+	feeds, err := loadRecords(prior, "10-normalize/feeds")
+	if err != nil {
+		return fmt.Errorf("correlate: load feeds: %w", err)
+	}
 
 	for _, step := range []func() error{
 		func() error { return deriveRunsAs(cp, timer, pipelines, projectsRec) },
 		func() error { return derivePolicyAttribution(cp, timer, policies, repos) },
 		func() error { return deriveBranches(cp, timer, pipelines, policies, repos) },
+		func() error { return deriveRepoSources(cp, timer, pipelines) },
+		func() error { return deriveStageOrder(cp, timer, stages) },
+		func() error { return deriveFeedRoles(prior, cp, timer, org, feeds) },
+		func() error { return deriveResourceAuthorization(prior, cp, timer, pipelines) },
 		func() error { return deriveEffectiveRoles(ctx, prior, cp, timer, org) },
 		func() error { return deriveMemberOf(prior, cp, timer, org) },
 		func() error { return deriveJobResourceEdges(prior, cp, timer, jobs) },
@@ -104,7 +118,7 @@ func deriveRunsAs(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines, p
 			"org_provenance":      "unknown",
 		}
 		key := fmt.Sprintf("%s__%d", project, mInt64(pl, "id"))
-		if err := emit(cp, timer, engine.NormalizeADOEdges("runs-as", key), rec); err != nil {
+		if err := emitEdge(cp, timer, "runs-as", key, rec); err != nil {
 			return err
 		}
 	}
@@ -156,7 +170,7 @@ func derivePolicyAttribution(cp engine.CurrentPhase, timer *engine.PhaseTimer, p
 					scopeDisc = "all"
 				}
 				key := fmt.Sprintf("%s__%s__%d__%s__%s__%s", adoSafe(project), adoSafe(mStr(r, "name")), mInt64(pol, "config_id"), adoSafe(refName), adoSafe(matchKind), adoSafe(scopeDisc))
-				if err := emit(cp, timer, engine.NormalizeADOEdges("has-policy", key), rec); err != nil {
+				if err := emitEdge(cp, timer, "has-policy", key, rec); err != nil {
 					return err
 				}
 				if bdID := mInt64(mMap(pol, "settings"), "build_definition_id"); bdID != 0 {
@@ -170,7 +184,7 @@ func derivePolicyAttribution(cp engine.CurrentPhase, timer *engine.PhaseTimer, p
 						"build_definition_id": bdID,
 						"is_blocking":         mBool(pol, "is_blocking"),
 					}
-					if err := emit(cp, timer, engine.NormalizeADOEdges("build-validates", key), bv); err != nil {
+					if err := emitEdge(cp, timer, "build-validates", key, bv); err != nil {
 						return err
 					}
 				}
@@ -196,7 +210,7 @@ func deriveEffectiveRoles(ctx context.Context, prior engine.PriorPhase, cp engin
 	nsActions := loadNamespaceActions(prior, org)
 	memberships := loadMemberships(prior, org)
 	idIndex := aceIdentityIndex(prior, org)
-	repoIdx, scIdx, projIdx, err := roleTokenIndexes(prior)
+	repoIdx, scIdx, projIdx, pipeIdx, err := roleTokenIndexes(prior, org)
 	if err != nil {
 		return err
 	}
@@ -220,33 +234,45 @@ func deriveEffectiveRoles(ctx context.Context, prior engine.PriorPhase, cp engin
 		actions := nsActions[src.ns]
 		for _, f := range files {
 			data := entDataOf(f.Data)
+			emit := func(token, desc string, eff int64, inherited bool) error {
+				// ACL descriptors are legacy identity descriptors; bridge to the
+				// graph subject descriptor so the principal node + members resolve.
+				graphDesc := aceGraphDescriptor(desc, idIndex)
+				resKind, resID := resolveRoleToken(src.ns, token, repoIdx, scIdx, projIdx, pipeIdx)
+				rec := map[string]any{
+					"kind":              "HAS_ROLE",
+					"descriptor":        desc,
+					"graph_descriptor":  graphDesc,
+					"token":             token,
+					"namespace":         src.ns,
+					"resource_kind":     resKind,
+					"resource_id":       resID,
+					"resource_resolved": resID != "",
+					"allowed_actions":   decodeActions(eff, actions),
+					"effective_allow":   eff,
+					"inherited":         inherited,
+					"expanded_members":  expandMembers(graphDesc, memberships),
+				}
+				return emitEdge(cp, timer, "has-role", hashKey(src.ns, token, desc), rec)
+			}
+			var projectRow map[string]any
+			projectToken, seen := "", map[string]bool{}
 			for _, raw := range entListOrEmpty(data["value"]) {
 				acl := entMap(raw)
 				token := entStr(acl["token"])
+				seen[token] = true
+				if src.ns == buildNS && !strings.Contains(token, "/") {
+					projectRow, projectToken = entObj(acl, "acesDictionary"), token
+				}
 				for desc, aceRaw := range entObj(acl, "acesDictionary") {
-					ace := entMap(aceRaw)
-					eff := effectiveAllowMask(ace)
-					// ACL descriptors are legacy identity descriptors; bridge to the
-					// graph subject descriptor so the principal node + members resolve.
-					graphDesc := aceGraphDescriptor(desc, idIndex)
-					resKind, resID := resolveRoleToken(token, repoIdx, scIdx, projIdx)
-					rec := map[string]any{
-						"kind":              "HAS_ROLE",
-						"descriptor":        desc,
-						"graph_descriptor":  graphDesc,
-						"token":             token,
-						"namespace":         src.ns,
-						"resource_kind":     resKind,
-						"resource_id":       resID,
-						"resource_resolved": resID != "",
-						"allowed_actions":   decodeActions(eff, actions),
-						"effective_allow":   eff,
-						"expanded_members":  expandMembers(graphDesc, memberships),
-					}
-					key := hashKey(src.ns, token, desc)
-					if err := emit(cp, timer, engine.NormalizeADOEdges("has-role", key), rec); err != nil {
+					if err := emit(token, desc, effectiveAllowMask(entMap(aceRaw)), false); err != nil {
 						return err
 					}
+				}
+			}
+			if recursed(f.Data) {
+				if err := synthesizeInherited(projectRow, projectToken, seen, pipeIdx, emit); err != nil {
+					return err
 				}
 			}
 		}
@@ -254,38 +280,103 @@ func deriveEffectiveRoles(ctx context.Context, prior engine.PriorPhase, cp engin
 	return nil
 }
 
-func roleTokenIndexes(prior engine.PriorPhase) (repoIdx, scIdx, projIdx map[string]string, err error) {
-	repoIdx, scIdx, projIdx = map[string]string{}, map[string]string{}, map[string]string{}
+// A collect that did not ask for child tokens cannot tell a pipeline with no ACL row
+// from one whose row was never requested.
+func recursed(b []byte) bool {
+	var env map[string]any
+	if err := json.Unmarshal(b, &env); err != nil {
+		return false
+	}
+	return strings.Contains(entStr(entMap(entMap(env["_meta"])["source"])["path"]), "recurse=true")
+}
+
+// ADO answers a definition with no ACL row of its own by synthesizing the project's,
+// so a pipeline nobody re-permissioned still has to carry the grant it inherits.
+func synthesizeInherited(projectRow map[string]any, projectToken string, seen map[string]bool,
+	pipeIdx map[string]string, emit func(token, desc string, eff int64, inherited bool) error) error {
+	if projectToken == "" {
+		return nil
+	}
+	covered := make(map[string]bool, len(seen))
+	for token := range seen {
+		covered[buildTokenKey(token)] = true
+	}
+	for key := range pipeIdx {
+		guid, id, found := strings.Cut(key, "/")
+		if !found || guid != projectToken || covered[key] {
+			continue
+		}
+		token := projectToken + "/" + id
+		for desc, aceRaw := range projectRow {
+			if err := emit(token, desc, effectiveAllowMask(entMap(aceRaw)), true); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func roleTokenIndexes(prior engine.PriorPhase, org string) (repoIdx, scIdx, projIdx, pipeIdx map[string]string, err error) {
+	repoIdx, scIdx, projIdx, pipeIdx = map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}
 	repos, err := loadRecords(prior, "10-normalize/repos")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("correlate: load repos: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("correlate: load repos: %w", err)
 	}
 	for _, r := range repos {
 		repoIdx[mStr(r, "id")] = mStr(r, "_id")
 	}
 	scs, err := loadRecords(prior, "10-normalize/service-connections")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("correlate: load service-connections: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("correlate: load service-connections: %w", err)
 	}
 	for _, s := range scs {
 		scIdx[mStr(s, "id")] = mStr(s, "_id")
 	}
 	projs, err := loadRecords(prior, "10-normalize/projects")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("correlate: load projects: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("correlate: load projects: %w", err)
 	}
+	guidByName := map[string]string{}
 	for _, p := range projs {
 		projIdx[mStr(p, "id")] = mStr(p, "_id")
+		guidByName[mStr(p, "project")] = mStr(p, "id")
 	}
-	return repoIdx, scIdx, projIdx, nil
+	pipes, err := loadRecords(prior, "10-normalize/pipelines")
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("correlate: load pipelines: %w", err)
+	}
+	for _, pl := range pipes {
+		project := mStr(pl, "project")
+		guid, id := guidByName[project], recordID(pl)
+		if guid == "" || id == "" {
+			continue
+		}
+		pipeIdx[guid+"/"+id] = org + "/" + project + "/" + id
+	}
+	return repoIdx, scIdx, projIdx, pipeIdx, nil
 }
 
 // "repoV2/<projGuid>/<repoGuid>" scopes a Repository, "endpoints/<projGuid>/<id>" a
 // ServiceConnection, a bare "<projGuid>" a Project. A collection root or a deleted
 // resource is unresolvable and returns "".
-func resolveRoleToken(token string, repoIdx, scIdx, projIdx map[string]string) (kind, nodeID string) {
+// The Build namespace is hierarchical: a foldered definition carries the folder path.
+func buildTokenKey(token string) string {
+	parts := strings.Split(token, "/")
+	if len(parts) < 2 {
+		return token
+	}
+	return parts[0] + "/" + parts[len(parts)-1]
+}
+
+func resolveRoleToken(ns, token string, repoIdx, scIdx, projIdx, pipeIdx map[string]string) (kind, nodeID string) {
 	parts := strings.Split(token, "/")
 	switch {
+	case ns == buildNS && len(parts) >= 2:
+		// A folder token ends in a folder name, which indexes no pipeline.
+		if id := pipeIdx[buildTokenKey(token)]; id != "" {
+			return "Pipeline", id
+		}
+		return "", ""
 	case len(parts) >= 3 && parts[0] == "repoV2":
 		return "Repository", repoIdx[parts[2]]
 	case len(parts) >= 3 && parts[0] == "endpoints":
@@ -312,12 +403,16 @@ func effectiveAllowMask(ace map[string]any) int64 {
 //   - group SIDs (S-1-…), base64-encoded in the vssgp./aadgp. group descriptor;
 //   - service identities (<org>:Build:<guid>), base64-encoded in the svc. user
 //     descriptor a Microsoft.TeamFoundation.ServiceIdentity ACE references.
-//
-// Built-in server SIDs the Graph API does not enumerate resolve to "" and stay
-// unexpanded; the raw descriptor is still kept on the HAS_ROLE record.
 func aceIdentityIndex(prior engine.PriorPhase, org string) map[string]string {
 	graph := entLoadData(prior, engine.CollectADOGraph(org))
 	idx := map[string]string{}
+	for desc, raw := range entObj(entLoadData(prior, engine.CollectADOIdentities(org)), "identities") {
+		if sd := entStr(entMap(raw)["subjectDescriptor"]); sd != "" {
+			if _, id, found := strings.Cut(desc, ";"); found {
+				idx[id] = sd
+			}
+		}
+	}
 	for _, raw := range entListOrEmpty(graph["groups"]) {
 		desc := entStr(entMap(raw)["descriptor"])
 		if sid := decodeGraphSID(desc); sid != "" {
@@ -538,7 +633,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 			"variable_group_id": ref.id, "owner_project": ref.owner, "resolved": ref.id != 0,
 		}
 		key := fmt.Sprintf("%s__%d__%s__%s__%s__%s", adoSafe(project), pipelineID, level, adoSafe(stage), adoSafe(job), adoSafe(name))
-		return emit(cp, timer, engine.NormalizeADOEdges("consumes-group", key), rec)
+		return emitEdge(cp, timer, "consumes-group", key, rec)
 	}
 	pipelineRecs, err := loadRecords(prior, "10-normalize/pipelines")
 	if err != nil {
@@ -585,6 +680,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 				"kind":                  "USES_CONNECTION",
 				"project":               project,
 				"pipeline_id":           mInt64(j, "pipeline_id"),
+				"stage":                 mStr(j, "stage"),
 				"job":                   mStr(j, "job"),
 				"connection_name":       name,
 				"service_connection_id": ref.id,
@@ -593,7 +689,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 				"input_name":            entStr(um["input_name"]),
 				"resolved":              ref.id != "",
 			}
-			if err := emit(cp, timer, engine.NormalizeADOEdges("uses-connection", jobKey+"__"+adoSafe(name)), rec); err != nil {
+			if err := emitEdge(cp, timer, "uses-connection", jobKey+"__"+adoSafe(name), rec); err != nil {
 				return err
 			}
 		}
@@ -612,10 +708,11 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 			}
 			rec := map[string]any{
 				"kind": "TARGETS", "project": project, "pipeline_id": mInt64(j, "pipeline_id"),
-				"job": mStr(j, "job"), "environment": envName, "resource": strOrNull(resource),
+				"stage": mStr(j, "stage"),
+				"job":   mStr(j, "job"), "environment": envName, "resource": strOrNull(resource),
 				"environment_ref": env, "environment_id": envID, "resolved": envID != 0,
 			}
-			if err := emit(cp, timer, engine.NormalizeADOEdges("targets", jobKey+"__"+adoSafe(env)), rec); err != nil {
+			if err := emitEdge(cp, timer, "targets", jobKey+"__"+adoSafe(env), rec); err != nil {
 				return err
 			}
 		}
@@ -625,14 +722,15 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 			poolID := poolByProjectName[project][name]
 			rec := map[string]any{
 				"kind": "RUNS_ON", "project": project, "pipeline_id": mInt64(j, "pipeline_id"),
-				"job": mStr(j, "job"), "pool_name": name, "vm_image": vmImage,
+				"stage": mStr(j, "stage"),
+				"job":   mStr(j, "job"), "pool_name": name, "vm_image": vmImage,
 				"demands": listOrEmpty(pool, "demands"),
 				// vmImage with no named pool is a Microsoft-hosted image (no node).
 				"is_hosted":             name == "" && vmImage != "",
 				"project_agent_pool_id": poolID,
 				"resolved":              poolID != 0,
 			}
-			if err := emit(cp, timer, engine.NormalizeADOEdges("runs-on", jobKey), rec); err != nil {
+			if err := emitEdge(cp, timer, "runs-on", jobKey, rec); err != nil {
 				return err
 			}
 		}
@@ -643,6 +741,185 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 // A branch is referenced two ways: as a YAML pipeline's entry point, carrying the
 // yaml_path, and as a branch-policy scope's protected ref. Both passes feed one
 // id-keyed map so the two references collapse to a single node.
+// A "none" role is an inherited revocation, so an edge for it would assert access.
+func deriveFeedRoles(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, org string, feeds []map[string]any) error {
+	idIndex := aceIdentityIndex(prior, org)
+	for _, f := range feeds {
+		scope, id := mStr(f, "scope"), mStr(f, "id")
+		if scope == "" || id == "" {
+			continue
+		}
+		for _, raw := range mList(f, "permissions") {
+			perm := entMap(raw)
+			role := entStr(perm["role"])
+			desc := entStr(perm["identityDescriptor"])
+			if role == "" || role == "none" || desc == "" {
+				continue
+			}
+			gd := aceGraphDescriptor(desc, idIndex)
+			if gd == "" {
+				continue
+			}
+			rec := map[string]any{
+				"kind": "HAS_ROLE", "resource_kind": "ArtifactsFeed",
+				"resource_id": scope + "/" + id, "resource_resolved": true,
+				"descriptor": desc, "graph_descriptor": gd, "role": role,
+				"is_inherited": entBool(perm["isInheritedRole"]), "feed_name": mStr(f, "name"),
+			}
+			if err := emitEdge(cp, timer, "has-role", hashKey("feed", scope+"/"+id, desc), rec); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+var authorizationKinds = map[string]NodeLabel{
+	"service-connections": ServiceConnection,
+	"variable-groups":     VariableGroup,
+	"environments":        Environment,
+	"project-agent-pools": ProjectAgentPool,
+	"secure-files":        SecureFile,
+}
+
+// A shared resource lists pipelines per project, and those ids are that project's.
+func deriveResourceAuthorization(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines []map[string]any) error {
+	byProject := map[string][]int64{}
+	for _, pl := range pipelines {
+		p := mStr(pl, "project")
+		byProject[p] = append(byProject[p], mInt64(pl, "id"))
+	}
+	for dir, label := range authorizationKinds {
+		records, err := loadRecords(prior, "10-normalize/"+dir)
+		if err != nil {
+			return fmt.Errorf("correlate: load %s: %w", dir, err)
+		}
+		for _, r := range records {
+			scopes := map[string]map[string]any{}
+			for project, raw := range mMap(r, "per_project_authorization") {
+				scopes[project] = mMap(entMap(raw), "pipeline_permissions")
+			}
+			if len(scopes) == 0 {
+				scopes[firstStr(r, "project", "owner_project")] = mMap(r, "pipeline_permissions")
+			}
+			for project, auth := range scopes {
+				if project == "" || !mBool(auth, "observed") {
+					continue
+				}
+				resource := resourceKeyOf(label, r)
+				if !strings.Contains(resource, "/") || strings.HasSuffix(resource, "/") {
+					continue
+				}
+				ids := authorizedPipelines(auth, byProject[project])
+				for _, id := range ids {
+					rec := map[string]any{
+						"kind": "AUTHORIZED_FOR", "resource_kind": string(label),
+						"resource_id": resource, "project": project, "pipeline_id": id,
+						"all_pipelines": mBool(auth, "all_pipelines"),
+					}
+					key := fmt.Sprintf("%s__%s__%s__%d", dir, adoSafe(resource), adoSafe(project), id)
+					if err := emitEdge(cp, timer, "authorized-for", key, rec); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func authorizedPipelines(auth map[string]any, inProject []int64) []int64 {
+	if mBool(auth, "all_pipelines") {
+		return inProject
+	}
+	var out []int64
+	for _, raw := range mList(auth, "authorized_pipelines") {
+		if id := entInt64(raw); id != 0 {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func recordID(r map[string]any) string {
+	if s := mStr(r, "id"); s != "" {
+		return s
+	}
+	if n := mInt64(r, "id"); n != 0 {
+		return strconv.FormatInt(n, 10)
+	}
+	return ""
+}
+
+func resourceKeyOf(label NodeLabel, r map[string]any) string {
+	switch label {
+	case ServiceConnection, VariableGroup:
+		return mStr(r, "owner_project") + "/" + recordID(r)
+	case Environment:
+		return mStr(r, "project") + "/" + mStr(r, "name")
+	}
+	return mStr(r, "project") + "/" + recordID(r)
+}
+
+func azureRepoSource(t string) bool { return t == "" || strings.EqualFold(t, "git") }
+
+func deriveRepoSources(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines []map[string]any) error {
+	for _, pl := range pipelines {
+		project, id := mStr(pl, "project"), mInt64(pl, "id")
+		key := fmt.Sprintf("%s__%d", adoSafe(project), id)
+
+		repo := mMap(pl, "repository")
+		if name := mStr(repo, "name"); name != "" && strings.EqualFold(mStr(repo, "type"), "TfsGit") {
+			rec := map[string]any{
+				"kind": "BUILDS_FROM", "project": project, "pipeline_id": id,
+				"repo": name, "repo_id": mStr(repo, "id"), "yaml_path": mStr(pl, "yaml_path"),
+			}
+			if err := emitEdge(cp, timer, "builds-from", key, rec); err != nil {
+				return err
+			}
+		}
+
+		es := mMap(pl, "extends_source")
+		source, name := mStr(es, "source_project"), mStr(es, "repository")
+		if name == "" || source == "" || !azureRepoSource(mStr(es, "type")) {
+			continue
+		}
+		rec := map[string]any{
+			"kind": "EXTENDS", "project": project, "pipeline_id": id,
+			"source_project": source, "repo": name, "alias": mStr(es, "alias"),
+			"ref": mStr(es, "ref"), "ref_pinned": mBool(es, "ref_pinned"),
+			"is_cross_project": mBool(es, "is_cross_project"),
+			"template":         mStr(pl, "extends_template"),
+		}
+		if err := emitEdge(cp, timer, "extends", key, rec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Points as the record reads, so an attack path walks it backwards.
+func deriveStageOrder(cp engine.CurrentPhase, timer *engine.PhaseTimer, stages []map[string]any) error {
+	for _, st := range stages {
+		project, id, stage := mStr(st, "project"), mInt64(st, "pipeline_id"), mStr(st, "stage")
+		for _, raw := range mList(st, "depends_on") {
+			dep := entStr(raw)
+			if dep == "" || dep == stage {
+				continue
+			}
+			rec := map[string]any{
+				"kind": "DEPENDS_ON", "project": project, "pipeline_id": id,
+				"stage": stage, "depends_on_stage": dep,
+			}
+			key := fmt.Sprintf("%s__%d__%s__%s", adoSafe(project), id, adoSafe(stage), adoSafe(dep))
+			if err := emitEdge(cp, timer, "depends-on", key, rec); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func deriveBranches(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines, policies, repos []map[string]any) error {
 	branches := map[string]map[string]any{}
 	add := func(project, repo, repoID, branch string, isDefault, isPrefix bool) {
@@ -687,7 +964,7 @@ func deriveBranches(cp engine.CurrentPhase, timer *engine.PhaseTimer, pipelines,
 			"repo": repoName, "branch": branch, "yaml_path": mStr(pl, "yaml_path"),
 			"branch_id": project + "/" + repoName + "@" + branch,
 		}
-		if err := emit(cp, timer, engine.NormalizeADOEdges("defined-by", fmt.Sprintf("%s__%d", adoSafe(project), mInt64(pl, "id"))), edge); err != nil {
+		if err := emitEdge(cp, timer, "defined-by", fmt.Sprintf("%s__%d", adoSafe(project), mInt64(pl, "id")), edge); err != nil {
 			return err
 		}
 	}
@@ -774,7 +1051,7 @@ func deriveMemberOf(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engi
 	for group, members := range loadMemberships(prior, org) {
 		for _, member := range members {
 			rec := map[string]any{"kind": "MEMBER_OF", "member": member, "group": group, "is_direct": true}
-			if err := emit(cp, timer, engine.NormalizeADOEdges("member-of", hashKey(member, group)), rec); err != nil {
+			if err := emitEdge(cp, timer, "member-of", hashKey(member, group), rec); err != nil {
 				return err
 			}
 		}
