@@ -1,0 +1,24 @@
+# Flag names documentation may mention even though the CLI does not accept them.
+#
+# The CLI-surface doc lint (see cmd/trajan/cli_surface_test.go) checks every
+# trajan invocation in a fenced code block, every backticked flag name in prose,
+# and every flag name in a Go comment under cmd/, internal/ and pkg/ against the
+# flags cobra actually registers. This file is the escape hatch for deliberate
+# mentions. Every entry MUST carry a '#' reason: the gate rejects an entry
+# without one, because an unexplained exception is how a stale flag reference
+# survives forever.
+#
+# Keep this list as short as possible. If a mention is not deliberate, fix the
+# document instead of allowing it.
+
+# Flags of other tools, named while documenting how trajan is built or what its
+# detections look at. None of these is a trajan flag, and none ever will be.
+--max-same-issues        # golangci-lint flag. CONTRIBUTING.md explains why 'make lint' passes it, because golangci-lint's default caps can make a run look clean while findings remain.
+--max-issues-per-linter  # golangci-lint flag, passed alongside --max-same-issues for the same reason.
+--prune                  # git flag. internal/ado/classify_sink.go quotes 'git gc --prune' as the case its cat/type regexp must NOT match, which is the whole reason the argument has to be filename-shaped.
+--allow-tool             # claude CLI flag. internal/ado/classify_sink_test.go quotes 'claude ... --allow-tool bash' as the agentic-exec case that is NOT generate-then-execute.
+--ephemeral              # GitHub Actions runner registration flag. internal/attack/handle.go names it because the runner's own 'ephemeral' JSON field is the value it was registered with, and a runner reporting none is unmeasured rather than false.
+--git                    # Not a flag: half of the 'diff --git' header line. internal/attack/patch.go skips that line, and the index and mode lines with it, as unified-diff preamble.
+
+# Surface that is built but not yet reachable from the CLI.
+--local                  # The Jenkins local mode. pkg/jenkins carries the detections and the RequiresAPI contract that mode turns on, but nothing under cmd/ registers a jenkins subcommand yet, so the flag is a forward reference rather than a stale one. Delete this entry when that subcommand lands and the flag becomes real -- and note the entry is token-scoped, so until then it also suppresses --local anywhere else in the repository.

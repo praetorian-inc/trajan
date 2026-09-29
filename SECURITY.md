@@ -53,5 +53,5 @@ When using Trajan:
 
 1. **Token Security**: Use fine-grained GitHub tokens with minimal required permissions
 2. **CI/CD Integration**: Run Trajan in isolated environments
-3. **Attack Mode**: Only use `--attack` flag against repositories you own or have explicit authorization to test
+3. **Attack Mode**: Only use the `attack` subcommands against repositories you own or have explicit authorization to test. `attack run` is dry-run until you pass `--execute`
 4. **Output Handling**: Treat scan results as sensitive (may contain workflow paths and configurations)

@@ -10,8 +10,12 @@ coverage.out
 coverage*.out
 coverage.html
 
-# Docs
-docs/
+# Docs. Use docs/* (not docs/): git cannot re-include a file whose parent
+# directory is excluded.
+docs/*
+!docs/CLI.md
+!docs/cli-surface.json
+!docs/cli-surface-allow.txt
 
 # IDE
 .vscode/
@@ -24,9 +28,6 @@ docs/
 
 # Claude outputs
 .claude/
-
-# Research and planning docs
-docs/
 
 # WASM browser build artifacts
 browser/trajan.wasm
