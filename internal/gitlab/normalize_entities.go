@@ -62,6 +62,8 @@ func normalizeProject(prior engine.PriorPhase, cp engine.CurrentPhase, p project
 
 	rec := map[string]any{
 		"_id":                                  fp,
+		"id":                                   entInt64(detail["id"]),
+		"url":                                  entStr(detail["web_url"]),
 		"visibility":                           entStr(detail["visibility"]),
 		"forking_enabled":                      entStr(detail["forking_access_level"]) != "disabled",
 		"fork_pipelines_run_in_parent":         entBool(detail["ci_allow_fork_pipelines_to_run_in_parent_project"]),

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/praetorian-inc/trajan/internal/finding"
+	"github.com/praetorian-inc/trajan/finding"
 )
 
 func renderOne(t *testing.T, meta reportMeta, findings []finding.Finding) string {

@@ -76,6 +76,10 @@ func CollectBranches(repo string) string {
 	return path.Join(dirCollect, "branches", repo+".json")
 }
 
+func CollectTags(repo string) string {
+	return path.Join(dirCollect, "tags", repo+".json")
+}
+
 func CollectWorkflowYAML(repo, filename string) string {
 	return path.Join(dirCollect, "workflows", repo, filename)
 }
@@ -563,6 +567,10 @@ func GraphNodes() string { return path.Join(dirGraph, "nodes.json") }
 func GraphEdges() string { return path.Join(dirGraph, "edges.json") }
 
 func GraphSummary() string { return path.Join(dirGraph, "_summary.json") }
+
+func GraphResources() string { return path.Join(dirGraph, "resources.json") }
+
+func GraphRelationships() string { return path.Join(dirGraph, "relationships.json") }
 
 func RunMeta() string { return "_meta.json" }
 

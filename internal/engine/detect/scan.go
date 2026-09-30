@@ -17,15 +17,16 @@ import (
 // RuleFires includes rules that fired zero times.
 type scanSummary struct {
 	RulesLoaded   int            `json:"rules_loaded"`
+	RulesTotal    int            `json:"rules_total"`
 	TotalFindings int            `json:"total_findings"`
 	RuleFires     map[string]int `json:"rule_fires"`
 }
 
 type ScanOptions struct {
-	OrgOnly bool
+	HierarchyOnly bool
 }
 
-func Scan(ctx context.Context, runDir string, p Provider, opts ScanOptions) error {
+func Scan(ctx context.Context, cfg *engine.Config, runDir string, p Provider, opts ScanOptions) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
 		return err
@@ -33,10 +34,11 @@ func Scan(ctx context.Context, runDir string, p Provider, opts ScanOptions) erro
 	if err := state.CheckPhase(engine.PhaseScan); err != nil {
 		return err
 	}
-	ui.PhaseHeader("Scan")
+	out := cfg.Sink()
+	out.PhaseHeader("Scan")
 
 	timer := engine.StartPhaseTimer(engine.PhaseScan, "scan")
-	bySeverity, scanErr := runScan(ctx, runDir, state, p, opts, timer)
+	bySeverity, scanErr := runScan(ctx, cfg, runDir, state, p, opts, timer)
 
 	rec := timer.Stop(scanErr)
 	state.RecordPhase(rec)
@@ -46,22 +48,22 @@ func Scan(ctx context.Context, runDir string, p Provider, opts ScanOptions) erro
 	if scanErr != nil {
 		return scanErr
 	}
-	ui.Outcome("Scan complete", []ui.Count{
+	out.Outcome("Scan complete", []ui.Count{
 		{Label: "findings", N: rec.OutputFiles},
 		{Label: "degraded", N: len(rec.Errors)},
 	}, engine.Elapsed(rec.DurationS))
-	ui.Severities(bySeverity)
-	ui.Note(runDir)
+	out.Severities(bySeverity)
+	out.Note(runDir)
 	return nil
 }
 
 // Filters on SubjectKind, not folder, so it holds even though cat-13-org rules keep
 // their original cat-NN IDs.
-func OrgOnlyRules(rules []Rule) []Rule {
-	return slices.DeleteFunc(rules, func(r Rule) bool { return r.SubjectKind() != "org" })
+func HierarchyRules(rules []Rule, kinds []string) []Rule {
+	return slices.DeleteFunc(rules, func(r Rule) bool { return !slices.Contains(kinds, r.SubjectKind()) })
 }
 
-func runScan(ctx context.Context, runDir string, state *engine.State, p Provider, opts ScanOptions, timer *engine.PhaseTimer) (map[string]int, error) {
+func runScan(ctx context.Context, cfg *engine.Config, runDir string, state *engine.State, p Provider, opts ScanOptions, timer *engine.PhaseTimer) (map[string]int, error) {
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
 	org := state.Org
@@ -71,8 +73,9 @@ func runScan(ctx context.Context, runDir string, state *engine.State, p Provider
 	if err != nil {
 		return nil, fmt.Errorf("load rules: %w", err)
 	}
-	if opts.OrgOnly {
-		rules = OrgOnlyRules(rules)
+	rulesTotal := len(rules)
+	if opts.HierarchyOnly {
+		rules = HierarchyRules(rules, p.HierarchyKinds)
 	}
 	timer.InputFiles = len(rules)
 
@@ -106,7 +109,7 @@ func runScan(ctx context.Context, runDir string, state *engine.State, p Provider
 	for i := range rules {
 		cats[path.Base(path.Dir(rules[i].RuleFile))] = true
 	}
-	ui.Row(ui.RowLine{
+	cfg.Sink().Row(ui.RowLine{
 		Label:  fmt.Sprintf("%d detection rules across %d categories", len(rules), len(cats)),
 		Status: "ok",
 	})
@@ -147,6 +150,7 @@ func runScan(ctx context.Context, runDir string, state *engine.State, p Provider
 
 	if err := cp.Write(engine.ScanSummary(), scanSummary{
 		RulesLoaded:   len(rules),
+		RulesTotal:    rulesTotal,
 		TotalFindings: total,
 		RuleFires:     ruleFires,
 	}); err != nil {

@@ -35,7 +35,7 @@ func liveAPI(t *testing.T, h http.HandlerFunc) *Session {
 		Plan: &Plan{ID: bucketPlan, Scope: []string{"acme/lab"}}, Ledger: l, PlanDir: dir, Execute: true,
 		identities: map[string]*identityClient{}, aliases: map[string]string{}, extraScope: map[string]string{},
 	}
-	s.begin(actingContext{step: "step", uses: "uses", id: &identityClient{name: "operator", client: github.NewClient("token")}})
+	s.begin(actingContext{step: "step", uses: "uses", id: &identityClient{name: "operator", client: github.NewClient("", "token", false)}})
 	return s
 }
 

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
 // The firing-range corpus (trajan-fr-group/trjfx, scenario projects cat-NN-vMM) is the
@@ -27,7 +29,7 @@ func corpusRun(t *testing.T) string {
 	if err := copyTree(src, dst); err != nil {
 		t.Fatalf("copy corpus: %v", err)
 	}
-	if err := Normalize(t.Context(), dst); err != nil {
+	if err := Normalize(t.Context(), &engine.Config{}, dst); err != nil {
 		t.Fatalf("Normalize: %v", err)
 	}
 	return dst

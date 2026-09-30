@@ -3,7 +3,6 @@ package gitlab
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
 const (
@@ -32,6 +33,7 @@ type Client struct {
 	baseURL string // ".../api/v4"
 	token   string
 	limiter *RateLimiter
+	sleepFn func(ctx context.Context, sec float64)
 }
 
 var _ GitLab = (*Client)(nil)
@@ -43,17 +45,19 @@ func NewClient(baseURL, token string, insecure bool, concurrency int) *Client {
 	baseURL = normalizeBaseURL(baseURL)
 	tr := http.DefaultTransport
 	if insecure {
-		tr = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		tr = engine.InsecureTransport()
 	}
 	return &Client{
 		http:    &http.Client{Timeout: DefaultTimeout, Transport: tr},
 		baseURL: baseURL,
 		token:   token,
 		limiter: NewRateLimiter(),
+		sleepFn: sleep,
 	}
 }
 
 func normalizeBaseURL(baseURL string) string {
+	baseURL = engine.StripUserinfo(baseURL)
 	if baseURL == "" {
 		return DefaultBaseURL
 	}
@@ -84,8 +88,6 @@ func (e *GitLabError) Error() string {
 }
 
 func IsNotFoundError(err error) bool { return softStatus(err) == http.StatusNotFound }
-
-var sleepFn = sleep
 
 func sleep(ctx context.Context, sec float64) {
 	if sec <= 0 {
@@ -138,7 +140,7 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response) boo
 			sec = d
 		}
 	}
-	sleepFn(ctx, min(sec, 120))
+	c.sleepFn(ctx, min(sec, 120))
 	return true
 }
 
@@ -166,7 +168,7 @@ func (c *Client) request(ctx context.Context, method, u, accept string, body []b
 			return nil, hdr, nil
 		case resp.StatusCode >= 500:
 			lastStatus, lastBody = resp.StatusCode, readAllClose(resp)
-			sleepFn(ctx, 1.5*float64(attempt+1))
+			c.sleepFn(ctx, 1.5*float64(attempt+1))
 			continue
 		default:
 			if c.sleepForRateLimit(ctx, resp) {

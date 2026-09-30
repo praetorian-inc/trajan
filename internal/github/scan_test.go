@@ -35,7 +35,7 @@ func TestScanClearsOutputOnlyAfterInputsValidate(t *testing.T) {
 	write("30-graph/nodes.json", `[]`)
 	write("10-normalize/jobs/broken.json", `{`)
 
-	if err := Scan(t.Context(), runDir, ScanOptions{}); err == nil {
+	if err := Scan(t.Context(), &engine.Config{}, runDir, ScanOptions{}); err == nil {
 		t.Fatal("a malformed job record should abort the scan")
 	}
 	if !exists("20-scan/findings/cat-01/prior.json") || !exists("30-graph/nodes.json") {
@@ -45,7 +45,7 @@ func TestScanClearsOutputOnlyAfterInputsValidate(t *testing.T) {
 	if err := os.Remove(filepath.Join(runDir, "10-normalize", "jobs", "broken.json")); err != nil {
 		t.Fatal(err)
 	}
-	if err := Scan(t.Context(), runDir, ScanOptions{}); err != nil {
+	if err := Scan(t.Context(), &engine.Config{}, runDir, ScanOptions{}); err != nil {
 		t.Fatalf("scan: %v", err)
 	}
 	if exists("20-scan/findings/cat-01/prior.json") {

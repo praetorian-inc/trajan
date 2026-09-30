@@ -173,7 +173,7 @@ func TestRulesetStatusChecksAreProjectedNotInverted(t *testing.T) {
 		{"20204729", "ghektestorg/fr-11-02-protection-targets-default-branch-only-but-deploy-fires-from", []any{"ci/build"}},
 		{"20204724", "ghektestorg/fr-11-03-required-status-check-name-is-attacker-creatable", []any{}},
 	} {
-		node := n.get(nodeID(Ruleset, map[string]string{"scope": "repo", "id": tc.id}))
+		node := n.get(nodeID(Ruleset, map[string]string{"scope": "repo", "scope_key": tc.repo, "id": tc.id}))
 		if node == nil {
 			t.Fatalf("ruleset %s was not emitted", tc.id)
 		}

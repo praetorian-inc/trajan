@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/praetorian-inc/trajan/finding"
+	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
-	"github.com/praetorian-inc/trajan/internal/finding"
 )
 
 // Wires GitHub into the shared detection engine: the subject-kind → normalize-dir
@@ -26,10 +27,11 @@ var provider = detect.Provider{
 		"ruleset":     "rulesets",
 		"deploy_key":  "deploy-keys",
 	},
-	Display: subjectDisplay,
-	Code:    buildCode,
-	Repo:    func(s map[string]any) string { return detect.StringField(s, "repo") },
-	File:    workflowFilePath,
+	HierarchyKinds: []string{"org"},
+	Display:        subjectDisplay,
+	Code:           buildCode,
+	Repo:           func(s map[string]any) string { return detect.StringField(s, "repo") },
+	File:           workflowFilePath,
 }
 
 // The repo-relative locator that finding.code's line range indexes into.
@@ -45,8 +47,8 @@ func workflowFilePath(subject map[string]any) string {
 // through the platform package they collected with.
 type ScanOptions = detect.ScanOptions
 
-func Scan(ctx context.Context, runDir string, opts ScanOptions) error {
-	return detect.Scan(ctx, runDir, provider, opts)
+func Scan(ctx context.Context, cfg *engine.Config, runDir string, opts ScanOptions) error {
+	return detect.Scan(ctx, cfg, runDir, provider, opts)
 }
 
 // A pre-rendered label, so the renderer never parses subject.id.

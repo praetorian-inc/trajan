@@ -15,7 +15,7 @@ type projectMeta struct {
 	Name string
 }
 
-func Normalize(ctx context.Context, runDir string) error {
+func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
 		return err
@@ -63,7 +63,7 @@ func Normalize(ctx context.Context, runDir string) error {
 	if normErr != nil {
 		return normErr
 	}
-	engine.PhaseDone(rec)
+	engine.PhaseDone(rec, cfg.Sink())
 	return nil
 }
 

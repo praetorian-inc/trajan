@@ -15,7 +15,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
-func Normalize(ctx context.Context, runDir string) error {
+func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
 		return err
@@ -34,7 +34,8 @@ func Normalize(ctx context.Context, runDir string) error {
 		return fmt.Errorf("org not set in %s; run collect first", engine.RunMeta())
 	}
 
-	ui.PhaseHeader("Normalize")
+	out := cfg.Sink()
+	out.PhaseHeader("Normalize")
 
 	timer := engine.StartPhaseTimer(engine.PhaseNormalize, "normalize")
 	prior := engine.PriorPhase{RunDir: runDir}
@@ -42,17 +43,17 @@ func Normalize(ctx context.Context, runDir string) error {
 
 	jobs, normErr := normalizeJobs(prior, cp, org, timer)
 	if normErr == nil {
-		ui.Row(ui.RowLine{Seq: 1, Total: 3, Label: "jobs", Status: "ok"})
+		out.Row(ui.RowLine{Seq: 1, Total: 3, Label: "jobs", Status: "ok"})
 		normErr = normalizeEntities(runDir, func(err error) {
 			timer.Errors = append(timer.Errors, err.Error())
 		})
 	}
 	if normErr == nil {
-		ui.Row(ui.RowLine{Seq: 2, Total: 3, Label: "entities", Status: "ok"})
+		out.Row(ui.RowLine{Seq: 2, Total: 3, Label: "entities", Status: "ok"})
 		normErr = correlate(prior, cp, jobs)
 	}
 	if normErr == nil {
-		ui.Row(ui.RowLine{Seq: 3, Total: 3, Label: "correlate", Status: "ok"})
+		out.Row(ui.RowLine{Seq: 3, Total: 3, Label: "correlate", Status: "ok"})
 	}
 
 	rec := timer.Stop(normErr)
@@ -63,7 +64,7 @@ func Normalize(ctx context.Context, runDir string) error {
 	if normErr != nil {
 		return normErr
 	}
-	ui.Outcome("Normalize complete", []ui.Count{
+	out.Outcome("Normalize complete", []ui.Count{
 		{Label: "jobs", N: len(jobs)},
 		{Label: "degraded", N: len(rec.Errors)},
 	}, engine.Elapsed(rec.DurationS))

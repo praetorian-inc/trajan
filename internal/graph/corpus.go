@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -14,6 +15,8 @@ import (
 )
 
 const normalizeDir = "10-normalize"
+
+var ErrNoOrgRecord = errors.New("no organization record")
 
 type record struct {
 	rel    string
@@ -91,7 +94,7 @@ func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError 
 	}
 
 	if len(c.dirs["org"]) == 0 {
-		return nil, fmt.Errorf("%s/org: no organization record; every node identity is qualified by it", normalizeDir)
+		return nil, fmt.Errorf("%s/org: %w; every node identity is qualified by it", normalizeDir, ErrNoOrgRecord)
 	}
 	c.org = str(c.dirs["org"][0].fields["org"])
 	if c.org == "" {
@@ -169,6 +172,16 @@ func (c *corpus) runnerScopeKey(f map[string]any) string {
 		return c.org
 	case "repo":
 		return c.full(cmp.Or(str(f["repo"]), str(f["scope_key"])))
+	}
+	return ""
+}
+
+func (c *corpus) rulesetScopeKey(scope, repo string) string {
+	switch scope {
+	case "org":
+		return c.org
+	case "repo":
+		return c.full(repo)
 	}
 	return ""
 }

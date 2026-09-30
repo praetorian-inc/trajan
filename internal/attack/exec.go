@@ -248,7 +248,7 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 	// undo record left to lose and its error is not one a run can act on.
 	defer func() { _ = ledger.Close() }()
 
-	sess, err := NewSession(ctx, p, planDir, ledger, opts.Execute, cfg.Token)
+	sess, err := NewSession(ctx, p, planDir, ledger, opts.Execute, cfg)
 	if err != nil {
 		return nil, err
 	}

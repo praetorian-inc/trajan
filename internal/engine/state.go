@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/praetorian-inc/trajan/internal/ui"
@@ -46,16 +47,23 @@ func (s *State) SetInvocation(args []string) {
 	s.Invocation = out
 }
 
+type SurfaceStatus struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
+}
+
 type PhaseRecord struct {
-	Phase       string   `json:"phase"`
-	Num         int      `json:"num"`
-	Script      string   `json:"script"`
-	StartedAt   string   `json:"started_at"`
-	FinishedAt  string   `json:"finished_at"`
-	DurationS   float64  `json:"duration_s"`
-	InputFiles  int      `json:"input_files"`
-	OutputFiles int      `json:"output_files"`
-	Errors      []string `json:"errors"`
+	Phase       string          `json:"phase"`
+	Num         int             `json:"num"`
+	Script      string          `json:"script"`
+	StartedAt   string          `json:"started_at"`
+	FinishedAt  string          `json:"finished_at"`
+	DurationS   float64         `json:"duration_s"`
+	InputFiles  int             `json:"input_files"`
+	OutputFiles int             `json:"output_files"`
+	Errors      []string        `json:"errors"`
+	Surfaces    []SurfaceStatus `json:"surfaces,omitempty"`
 	// Errors also carries soft-fail messages from a phase that succeeded; only
 	// Failed means the phase aborted.
 	Failed bool `json:"failed"`
@@ -109,20 +117,20 @@ func (s *State) RecordPhase(rec PhaseRecord) {
 
 // Soft failures are announced, not just recorded: a rule that never fires
 // because its input was unreadable makes the finding count look complete.
-func PhaseDone(rec PhaseRecord, attrs ...any) {
+func PhaseDone(rec PhaseRecord, sink ui.Sink, attrs ...any) {
 	slog.Info(phaseLabel(rec.Phase)+" complete", attrs...)
-	PhaseIssues(rec)
+	PhaseIssues(rec, sink)
 }
 
 // For a phase that renders its own completion line and still owes the operator its
 // soft failures.
-func PhaseIssues(rec PhaseRecord) {
+func PhaseIssues(rec PhaseRecord, sink ui.Sink) {
 	if len(rec.Errors) == 0 {
 		return
 	}
 	slog.Warn(phaseLabel(rec.Phase)+" degraded", "skipped", len(rec.Errors))
 	for _, e := range rec.Errors {
-		ui.Item(e)
+		sink.Item(e)
 	}
 }
 
@@ -194,9 +202,36 @@ type PhaseTimer struct {
 	InputFiles  int
 	OutputFiles int
 	Errors      []string
+	Surfaces    []SurfaceStatus
 
+	mu        sync.Mutex
 	startedAt string
 	t0        time.Time
+}
+
+func (t *PhaseTimer) AddError(msg string) {
+	t.mu.Lock()
+	t.Errors = append(t.Errors, msg)
+	t.mu.Unlock()
+}
+
+// One entry per surface kind, however many items report it, and a status escalates away from "ok" but never back.
+func (t *PhaseTimer) AddSurface(name, status, reason string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for i := range t.Surfaces {
+		if t.Surfaces[i].Name != name {
+			continue
+		}
+		if t.Surfaces[i].Status == "ok" && status != "ok" {
+			t.Surfaces[i].Status = status
+		}
+		if t.Surfaces[i].Reason == "" {
+			t.Surfaces[i].Reason = reason
+		}
+		return
+	}
+	t.Surfaces = append(t.Surfaces, SurfaceStatus{Name: name, Status: status, Reason: reason})
 }
 
 func StartPhaseTimer(p Phase, script string) *PhaseTimer {
@@ -225,6 +260,7 @@ func (t *PhaseTimer) Stop(err error) PhaseRecord {
 		InputFiles:  t.InputFiles,
 		OutputFiles: t.OutputFiles,
 		Errors:      errs,
+		Surfaces:    t.Surfaces,
 		Failed:      err != nil,
 	}
 }

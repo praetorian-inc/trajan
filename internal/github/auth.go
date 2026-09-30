@@ -44,9 +44,19 @@ func (t *authTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return base.RoundTrip(r)
 }
 
-func NewClient(token string) *Client {
+func NewClient(root, token string, insecure bool) *Client {
+	apiBase, graphQL, cloneBase := instanceEndpoints(root)
+	auth := &authTransport{token: token}
+	if insecure {
+		auth.base = engine.InsecureTransport()
+	}
 	return &Client{
-		http:  &http.Client{Timeout: 60 * time.Second, Transport: &authTransport{token: token}},
-		token: token,
+		http:      &http.Client{Timeout: 60 * time.Second, Transport: auth},
+		token:     token,
+		apiBase:   apiBase,
+		graphQL:   graphQL,
+		cloneBase: cloneBase,
+		insecure:  insecure,
+		sleepFn:   sleep,
 	}
 }

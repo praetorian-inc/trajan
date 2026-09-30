@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/praetorian-inc/trajan/finding"
 	"github.com/praetorian-inc/trajan/internal/engine"
-	"github.com/praetorian-inc/trajan/internal/finding"
 	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
@@ -33,7 +33,8 @@ func BuildGraph(ctx context.Context, cfg *engine.Config, runDir string, targets 
 	if err := state.CheckPhase(engine.PhaseGraph); err != nil {
 		return err
 	}
-	ui.PhaseHeader("Graph")
+	out := cfg.Sink()
+	out.PhaseHeader("Graph")
 	timer := engine.StartPhaseTimer(engine.PhaseGraph, "graph")
 	stats, buildErr := runBuild(ctx, cfg, runDir, targets, timer)
 
@@ -41,7 +42,7 @@ func BuildGraph(ctx context.Context, cfg *engine.Config, runDir string, targets 
 	state.RecordPhase(rec)
 	saveErr := state.Save(runDir)
 	if buildErr == nil {
-		ui.Outcome("Graph complete", []ui.Count{
+		out.Outcome("Graph complete", []ui.Count{
 			{Label: "nodes", N: stats.nodes},
 			{Label: "edges", N: stats.edges},
 			{Label: "findings attached", N: stats.attached},

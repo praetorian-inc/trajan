@@ -1,6 +1,7 @@
 package github
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -78,11 +79,13 @@ func softGet(ctx context.Context, gh GitHub, p string) (json.RawMessage, int, er
 	raw, _, err := gh.Get(ctx, p, nil, true)
 	if err != nil {
 		if isSoft(err) {
+			engine.RecordSoft(ctx, softStatus(err))
 			return nil, softStatus(err), nil
 		}
 		return nil, 0, err
 	}
 	if raw == nil {
+		engine.RecordSoft(ctx, 404)
 		return nil, 404, nil
 	}
 	return raw, 0, nil
@@ -92,6 +95,7 @@ func softPaginate(ctx context.Context, gh GitHub, p string, params url.Values, p
 	items, err := gh.Paginate(ctx, p, params, perPage)
 	if err != nil {
 		if isSoft(err) {
+			engine.RecordSoft(ctx, softStatus(err))
 			return nil, softStatus(err), nil
 		}
 		return nil, 0, err
@@ -105,6 +109,7 @@ func paginateSwallow(ctx context.Context, gh GitHub, p string, params url.Values
 	if err != nil {
 		var ghErr *GhError
 		if asGhError(err, &ghErr) {
+			engine.RecordSoft(ctx, cmp.Or(ghErr.Status, 500))
 			return []json.RawMessage{}, nil
 		}
 		return nil, err
@@ -202,6 +207,7 @@ func collectRepo(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org, re
 		if !asGhError(err, &ghErr) {
 			return err
 		}
+		engine.RecordSoft(ctx, cmp.Or(ghErr.Status, 500))
 		data = map[string]any{"_error": err.Error()}
 	}
 	// The repo object (primary call) is graphql-offloaded; stamp accordingly.
@@ -600,11 +606,13 @@ func listVariables(ctx context.Context, gh GitHub, p string) ([]json.RawMessage,
 	if err != nil {
 		var ghErr *GhError
 		if asGhError(err, &ghErr) {
+			engine.RecordSoft(ctx, cmp.Or(ghErr.Status, 500))
 			return []json.RawMessage{}, nil
 		}
 		return nil, err
 	}
 	if raw == nil {
+		engine.RecordSoft(ctx, 404)
 		return []json.RawMessage{}, nil
 	}
 	if vars := rawArrayField(raw, "variables"); len(vars) > 0 {
@@ -817,6 +825,23 @@ func collectDeployKeys(ctx context.Context, gh GitHub, cp engine.CurrentPhase, o
 		fmt.Sprintf("/repos/%s/%s/keys", org, repo), data)
 }
 
+func collectTags(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org, repo string) error {
+	tags, status, err := softPaginate(ctx, gh, fmt.Sprintf("/repos/%s/%s/tags", org, repo), nil, 100)
+	if err != nil {
+		return err
+	}
+	data := map[string]any{"repo": repo}
+	if status == 403 || status == 404 {
+		data["tags"] = []json.RawMessage{}
+		data["_unavailable"] = true
+		data["_unavailable_status"] = status
+	} else {
+		data["tags"] = rawArray(tags)
+	}
+	return envelope(cp, engine.CollectTags(repo), "00_collect_tags.py",
+		fmt.Sprintf("/repos/%s/%s/tags", org, repo), data)
+}
+
 func collectMembers(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org string) error {
 	members, err := paginateSwallow(ctx, gh, fmt.Sprintf("/orgs/%s/members", org), nil)
 	if err != nil {
@@ -840,6 +865,7 @@ func collectMembers(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org 
 		if terr != nil {
 			var ghErr *GhError
 			if asGhError(terr, &ghErr) {
+				engine.RecordSoft(ctx, cmp.Or(ghErr.Status, 500))
 				continue
 			}
 			return terr

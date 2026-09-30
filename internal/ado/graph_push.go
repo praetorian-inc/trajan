@@ -30,14 +30,15 @@ func PushGraph(ctx context.Context, cfg *engine.Config, runDir, neo4jURL, neo4jU
 	if err := state.CheckPhase(engine.PhasePush); err != nil {
 		return err
 	}
-	ui.PhaseHeader("Push")
+	out := cfg.Sink()
+	out.PhaseHeader("Push")
 	timer := engine.StartPhaseTimer(engine.PhasePush, "push")
 	stats, pushErr := runPush(ctx, runDir, state, neo4jURL, neo4jUser, neo4jPass, reset)
 	rec := timer.Stop(pushErr)
 	state.RecordPhase(rec)
 	saveErr := state.Save(runDir)
 	if pushErr == nil {
-		ui.Outcome("Push complete", []ui.Count{
+		out.Outcome("Push complete", []ui.Count{
 			{Label: "nodes", N: stats.nodes},
 			{Label: "edges", N: stats.edges},
 		}, engine.Elapsed(rec.DurationS))

@@ -1,17 +1,23 @@
 package github
 
 import (
-	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
-	"github.com/praetorian-inc/trajan/internal/engine/detect"
 	"github.com/praetorian-inc/trajan/internal/github"
 	"github.com/praetorian-inc/trajan/internal/graph"
 	"github.com/praetorian-inc/trajan/internal/report"
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
+
+func envTrue(name string) bool {
+	v := strings.TrimSpace(os.Getenv(name))
+	return v != "" && v != "0" && v != "false"
+}
 
 var GitHubCmd = newGitHubCmd()
 
@@ -30,8 +36,18 @@ func newGitHubCmd() *cobra.Command {
 	gh.PersistentFlags().SortFlags = false
 	gh.PersistentFlags().IntVar(&cfg.Concurrency, "concurrency", 8, "max concurrent API workers")
 	gh.PersistentFlags().StringVar(&cfg.OutputDir, "output-dir", "./trajan-out", "run output directory")
+	gh.PersistentFlags().StringVar(&cfg.BaseURL, "url", "", "GitHub Enterprise Server base URL (default github.com)")
+	gh.PersistentFlags().BoolVar(&cfg.Insecure, "insecure", false, "skip TLS verify (self-signed GitHub Enterprise Server)")
+	gh.PersistentPreRunE = func(*cobra.Command, []string) error {
+		cfg.UI = ui.Std()
+		cfg.Invocation = os.Args[1:]
+		cfg.DefaultBranchOnly = envTrue("TRAJAN_DEFAULT_BRANCH_ONLY")
+		cfg.ForceREST = os.Getenv("TRAJAN_FORCE_REST") != ""
+		return nil
+	}
 
 	var path string
+	var tokenFlag string
 	var neo4jURL, neo4jUser, neo4jPass string
 	var neo4jReset bool
 	var writeBack, noGraph, detailed bool
@@ -43,7 +59,7 @@ func newGitHubCmd() *cobra.Command {
 		Short: "Resolve the token and print the authenticated identity and scopes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return github.WhoAmI(cmd.Context(), cfg.Token)
+			return github.WhoAmI(cmd.Context(), cfg)
 		},
 	}
 	collect := &cobra.Command{
@@ -64,7 +80,7 @@ func newGitHubCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return github.Normalize(cmd.Context(), runDir)
+			return github.Normalize(cmd.Context(), cfg, runDir)
 		},
 	}
 	scan := &cobra.Command{
@@ -76,7 +92,7 @@ func newGitHubCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return github.Scan(cmd.Context(), runDir, github.ScanOptions{OrgOnly: orgDetectionsOnly})
+			return github.Scan(cmd.Context(), cfg, runDir, github.ScanOptions{HierarchyOnly: orgDetectionsOnly})
 		},
 	}
 	reportCmd := &cobra.Command{
@@ -105,22 +121,9 @@ func newGitHubCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// detect carries rule.Graph as an unparsed string so it stays
-			// provider-generic; the target vocabulary is this platform's, so the
-			// rule -> target index is built here rather than inside graph.Build.
-			onError := func(e error) { slog.Warn("rule skipped", "err", e) }
-			rules, err := detect.LoadRules("github", onError)
+			targets, err := graph.RuleTargets(func(e error) { slog.Warn("rule skipped", "err", e) })
 			if err != nil {
 				return err
-			}
-			targets := make(map[string]graph.Target, len(rules))
-			for _, r := range rules {
-				t, err := graph.ParseTarget(r.Graph)
-				if err != nil {
-					onError(fmt.Errorf("%s: %w", r.ID, err))
-					continue
-				}
-				targets[r.ID] = t
 			}
 			return graph.Build(cmd.Context(), cfg, runDir, targets)
 		},
@@ -159,14 +162,14 @@ func newGitHubCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := github.Normalize(cmd.Context(), runDir); err != nil {
+			if err := github.Normalize(cmd.Context(), cfg, runDir); err != nil {
 				return err
 			}
-			return github.Scan(cmd.Context(), runDir, github.ScanOptions{})
+			return github.Scan(cmd.Context(), cfg, runDir, github.ScanOptions{})
 		},
 	}
 
-	scan.Flags().BoolVar(&orgDetectionsOnly, "org-detections-only", false, "evaluate only org-subject (org-level) rules")
+	scan.Flags().BoolVar(&orgDetectionsOnly, "org-detections-only", false, "evaluate only rules above the repository (org subjects)")
 
 	// attack is deliberately absent: its subcommands each bind their own --path, so a
 	// flag on the parent would read a variable none of them consult.
@@ -187,8 +190,17 @@ func newGitHubCmd() *cobra.Command {
 	analyze.Flags().BoolVarP(&noGraph, "no-graph", "G", false, "analyze in-memory (no Neo4j)")
 	analyze.Flags().BoolVarP(&detailed, "detailed", "d", false, "expand output")
 
+	resolveToken := func(cmd *cobra.Command, _ []string) error {
+		tok, err := github.ResolveToken(cmd.Context(), tokenFlag)
+		if err != nil {
+			return err
+		}
+		cfg.Token = tok
+		return nil
+	}
 	for _, c := range []*cobra.Command{whoami, collect, run} {
-		c.Flags().StringVar(&cfg.Token, "token", "", "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)")
+		c.Flags().StringVar(&tokenFlag, "token", "", "API token (prefer TRAJAN_GH_TOKEN/GH_TOKEN/GITHUB_TOKEN env; this flag is an escape hatch)")
+		c.PreRunE = resolveToken
 	}
 
 	gh.AddCommand(whoami, collect, normalize, scan, reportCmd, graphCmd, push, analyze, attack, run)

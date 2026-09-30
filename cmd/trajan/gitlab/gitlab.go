@@ -1,19 +1,20 @@
 package gitlab
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/gitlab"
 	"github.com/praetorian-inc/trajan/internal/graph"
 	"github.com/praetorian-inc/trajan/internal/report"
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
-var GitLabCmd = newGitLabCmd()
+var GitLabCmd = newGitLabCmd(&engine.Config{})
 
-func newGitLabCmd() *cobra.Command {
-	cfg := &engine.Config{}
-
+func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 	gl := &cobra.Command{
 		Use:     "gitlab",
 		Aliases: []string{"gl"},
@@ -26,10 +27,16 @@ func newGitLabCmd() *cobra.Command {
 	gl.PersistentFlags().SortFlags = false
 	gl.PersistentFlags().IntVar(&cfg.Concurrency, "concurrency", 8, "max concurrent API workers")
 	gl.PersistentFlags().StringVar(&cfg.OutputDir, "output-dir", "./trajan-out", "run output directory")
-	gl.PersistentFlags().StringVar(&gitlab.FlagURL, "url", "https://gitlab.com", "GitLab base URL (self-hosted)")
-	gl.PersistentFlags().BoolVar(&gitlab.FlagInsecure, "insecure", false, "skip TLS verify (self-signed self-hosted)")
+	gl.PersistentFlags().StringVar(&cfg.BaseURL, "url", "https://gitlab.com", "GitLab base URL (self-hosted)")
+	gl.PersistentFlags().BoolVar(&cfg.Insecure, "insecure", false, "skip TLS verify (self-signed self-hosted)")
+	gl.PersistentPreRunE = func(*cobra.Command, []string) error {
+		cfg.UI = ui.Std()
+		cfg.Invocation = os.Args[1:]
+		return nil
+	}
 
 	var path string
+	var tokenFlag string
 	var neo4jURL, neo4jUser, neo4jPass string
 	var writeBack, noGraph, detailed bool
 	var groupDetectionsOnly bool
@@ -40,7 +47,7 @@ func newGitLabCmd() *cobra.Command {
 		Short: "Resolve the token and print the authenticated identity and scopes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return gitlab.WhoAmI(cmd.Context(), cfg.Token)
+			return gitlab.WhoAmI(cmd.Context(), cfg)
 		},
 	}
 	collect := &cobra.Command{
@@ -61,7 +68,7 @@ func newGitLabCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return gitlab.Normalize(cmd.Context(), runDir)
+			return gitlab.Normalize(cmd.Context(), cfg, runDir)
 		},
 	}
 	scan := &cobra.Command{
@@ -73,7 +80,7 @@ func newGitLabCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return gitlab.Scan(cmd.Context(), runDir, gitlab.ScanOptions{GroupOnly: groupDetectionsOnly})
+			return gitlab.Scan(cmd.Context(), cfg, runDir, gitlab.ScanOptions{HierarchyOnly: groupDetectionsOnly})
 		},
 	}
 	reportCmd := &cobra.Command{
@@ -136,14 +143,14 @@ func newGitLabCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := gitlab.Normalize(cmd.Context(), runDir); err != nil {
+			if err := gitlab.Normalize(cmd.Context(), cfg, runDir); err != nil {
 				return err
 			}
-			return gitlab.Scan(cmd.Context(), runDir, gitlab.ScanOptions{})
+			return gitlab.Scan(cmd.Context(), cfg, runDir, gitlab.ScanOptions{})
 		},
 	}
 
-	scan.Flags().BoolVar(&groupDetectionsOnly, "group-detections-only", false, "evaluate only group-subject rules")
+	scan.Flags().BoolVar(&groupDetectionsOnly, "group-detections-only", false, "evaluate only rules above the project (group and instance subjects)")
 
 	for _, c := range []*cobra.Command{normalize, scan, reportCmd, push, analyze, attack} {
 		c.Flags().StringVarP(&path, "path", "p", "", "run directory (default: latest)")
@@ -159,8 +166,17 @@ func newGitLabCmd() *cobra.Command {
 	analyze.Flags().BoolVarP(&noGraph, "no-graph", "G", false, "analyze in-memory (no Neo4j)")
 	analyze.Flags().BoolVarP(&detailed, "detailed", "d", false, "expand output")
 
+	resolveToken := func(*cobra.Command, []string) error {
+		tok, err := gitlab.ResolveToken(tokenFlag)
+		if err != nil {
+			return err
+		}
+		cfg.Token = tok
+		return nil
+	}
 	for _, c := range []*cobra.Command{whoami, collect, run} {
-		c.Flags().StringVar(&cfg.Token, "token", "", "API token (prefer TRAJAN_GL_TOKEN/GITLAB_TOKEN/GL_TOKEN/CI_JOB_TOKEN env; this flag is an escape hatch)")
+		c.Flags().StringVar(&tokenFlag, "token", "", "API token (prefer TRAJAN_GL_TOKEN/GITLAB_TOKEN/GL_TOKEN/CI_JOB_TOKEN env; this flag is an escape hatch)")
+		c.PreRunE = resolveToken
 	}
 
 	gl.AddCommand(whoami, collect, normalize, scan, reportCmd, push, analyze, attack, run)

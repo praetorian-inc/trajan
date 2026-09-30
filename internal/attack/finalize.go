@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/praetorian-inc/trajan/finding"
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
-	"github.com/praetorian-inc/trajan/internal/finding"
 )
 
 // finalize assembles the run's finding. There is no reporting step in a plan:

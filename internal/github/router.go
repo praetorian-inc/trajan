@@ -7,13 +7,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 )
 
 // Dispatches each call to the highest-preference transport capable of serving its
 // surface, falling through to the REST floor on failure.
 type router struct {
+	rest       *Client
 	transports map[transportKind]transport
 	forceREST  bool
 	// git, when set, owns a temp clone dir released by closeRouter.
@@ -22,16 +22,17 @@ type router struct {
 
 var _ GitHub = (*router)(nil)
 
-func newRouter(rest *Client) *router {
+func newRouter(rest *Client, forceREST bool, cloneRoot string) *router {
 	r := &router{
+		rest: rest,
 		transports: map[transportKind]transport{
 			transportREST: restTransport{rest},
 		},
-		forceREST: os.Getenv("TRAJAN_FORCE_REST") != "",
+		forceREST: forceREST,
 	}
 	if !r.forceREST {
 		if gitAvailable() {
-			if gt, err := newGitTransport(rest.token); err == nil {
+			if gt, err := newGitTransport(rest.token, rest.cloneBase, cloneRoot, rest.insecure); err == nil {
 				r.transports[transportGit] = gt
 				r.git = gt
 			} else {
@@ -124,12 +125,12 @@ func isTransient(err error) bool {
 	return true
 }
 
-func backoff(ctx context.Context, attempt int) {
+func (r *router) backoff(ctx context.Context, attempt int) {
 	sec := 0.25 * float64(int(1)<<attempt)
 	if sec > 2 {
 		sec = 2
 	}
-	sleepFn(ctx, sec)
+	r.rest.sleepFn(ctx, sec)
 }
 
 // An unservable error falls through to the next transport at once, a transient one
@@ -159,7 +160,7 @@ func dispatch[T any](ctx context.Context, r *router, s surface, zero T, call fun
 				slog.Debug("github router fall-through (throttle)", "from", t.kind(), "surface", s, "err", lastErr)
 				break
 			}
-			backoff(ctx, attempt)
+			r.backoff(ctx, attempt)
 		}
 	}
 	return zero, lastErr

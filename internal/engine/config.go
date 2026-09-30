@@ -1,9 +1,28 @@
 package engine
 
+import "github.com/praetorian-inc/trajan/internal/ui"
+
 type Config struct {
 	Concurrency int
 	OutputDir   string
 	Dev         bool
-	Token       string // explicit --token; env vars outrank this
-	BearerToken string // explicit --azure-bearer-token; env vars outrank this
+
+	Token       string
+	BearerToken string
+
+	BaseURL  string
+	Insecure bool
+
+	UI ui.Sink
+
+	Invocation        []string
+	DefaultBranchOnly bool
+	ForceREST         bool
+}
+
+func (c *Config) Sink() ui.Sink {
+	if c == nil || c.UI == nil {
+		return ui.Discard
+	}
+	return c.UI
 }

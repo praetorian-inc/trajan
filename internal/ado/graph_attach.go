@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/praetorian-inc/trajan/internal/finding"
+	"github.com/praetorian-inc/trajan/finding"
 )
 
 const (

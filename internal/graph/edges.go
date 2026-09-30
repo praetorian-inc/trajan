@@ -212,7 +212,7 @@ func buildEdges(ctx context.Context, c *corpus, n *nodeSet) (*edgeSet, error) {
 		emitProtectedBy, emitCanBypass, emitCanLandCode, emitCanApprove,
 		emitUsesAction, emitSecretReads, emitArtifactIO, emitCacheIO, emitNeeds,
 		emitCalls, emitTriggers, emitTargets, emitTargetsBranch, emitDefines,
-		emitDeployableFrom, emitCanAssume, emitPassesSecret, emitMintsTokenAs,
+		emitDeployableFrom, emitRequiresReviewBy, emitCanAssume, emitPassesSecret, emitMintsTokenAs,
 		emitOrgSecretAccess, emitRunnerGroupAccess, emitRunsOn,
 	} {
 		if err := ctx.Err(); err != nil {
@@ -267,8 +267,14 @@ func cacheEndpoint(c *corpus, repo, prefix string) endpoint {
 	return nd(Cache, "repo", c.full(repo), "key_prefix", prefix)
 }
 
-func rulesetEndpoint(f map[string]any, idField string) endpoint {
-	return nd(Ruleset, "scope", str(f["scope"]), "id", decimal(f[idField]))
+func tagEndpoint(c *corpus, repo, name string) endpoint {
+	return nd(Tag, "repo", c.full(repo), "name", name)
+}
+
+func rulesetEndpoint(c *corpus, f map[string]any, repo string) endpoint {
+	scope := str(f["scope"])
+	return nd(Ruleset, "scope", scope, "scope_key", c.rulesetScopeKey(scope, repo),
+		"id", decimal(f["ruleset_id"]))
 }
 
 func runnerEndpoint(c *corpus, f map[string]any) endpoint {
@@ -373,7 +379,7 @@ func emitContains(c *corpus, _ *nodeSet, s *edgeSet) {
 		if truthy(r.fields["_empty"]) {
 			continue
 		}
-		rs := rulesetEndpoint(r.fields, "ruleset_id")
+		rs := rulesetEndpoint(c, r.fields, str(r.fields["repo"]))
 		if str(r.fields["scope"]) == "org" {
 			s.add(Contains, org, rs, source(r.rel))
 		} else {
@@ -406,6 +412,10 @@ func emitContains(c *corpus, _ *nodeSet, s *edgeSet) {
 	s.miss(Contains, Branch, Workflow, unslugged)
 	for _, r := range c.dirs["environments"] {
 		s.add(Contains, repoEndpoint(c, str(r.fields["repo"])), envEndpoint(c, str(r.fields["repo"]), str(r.fields["name"])), source(r.rel))
+	}
+	for _, r := range c.dirs["tags"] {
+		repo := str(r.fields["repo"])
+		s.add(Contains, repoEndpoint(c, repo), tagEndpoint(c, repo, str(r.fields["name"])), source(r.rel))
 	}
 	for _, r := range c.dirs["secrets"] {
 		sec := nd(Secret, "scope", str(r.fields["scope"]), "scope_key", c.secretScopeKey(r.fields), "name", str(r.fields["name"]))
@@ -489,7 +499,7 @@ func emitGoverns(c *corpus, _ *nodeSet, s *edgeSet) {
 			"target":      str(r.fields["target"]),
 			"_source":     []any{r.rel},
 		}
-		from := rulesetEndpoint(r.fields, "ruleset_id")
+		from := rulesetEndpoint(c, r.fields, str(r.fields["repo"]))
 		if str(r.fields["scope"]) == "org" {
 			s.add(Governs, from, nd(Organization, "login", c.org), props)
 		} else {
@@ -503,16 +513,28 @@ func emitGoverns(c *corpus, _ *nodeSet, s *edgeSet) {
 func emitProtectedBy(c *corpus, _ *nodeSet, s *edgeSet) {
 	src := c.chainSource("branch-coverage", "repo_branch_coverage")
 	for _, b := range c.chainArray("branch-coverage", "repo_branch_coverage") {
-		from := branchEndpoint(c, str(b["repo"]), str(b["branch"]))
+		repo := str(b["repo"])
+		from := branchEndpoint(c, repo, str(b["branch"]))
 		for _, a := range objects(b["applicable_rulesets"]) {
-			s.add(ProtectedBy, from, rulesetEndpoint(a, "ruleset_id"), map[string]any{
-				"enforcement":           str(a["enforcement"]),
-				"ruleset_name":          str(a["name"]),
-				"any_bypass_present":    truthy(a["any_bypass_present"]),
-				"requires_pull_request": truthy(a["requires_pull_request"]),
-				"_source":               []any{src},
-			})
+			s.add(ProtectedBy, from, rulesetEndpoint(c, a, repo), protectedByProps(a, src))
 		}
+	}
+	for _, r := range c.dirs["tags"] {
+		repo := str(r.fields["repo"])
+		from := tagEndpoint(c, repo, str(r.fields["name"]))
+		for _, a := range objects(r.fields["applicable_rulesets"]) {
+			s.add(ProtectedBy, from, rulesetEndpoint(c, a, repo), protectedByProps(a, r.rel+"#applicable_rulesets"))
+		}
+	}
+}
+
+func protectedByProps(a map[string]any, src string) map[string]any {
+	return map[string]any{
+		"enforcement":           str(a["enforcement"]),
+		"ruleset_name":          str(a["name"]),
+		"any_bypass_present":    truthy(a["any_bypass_present"]),
+		"requires_pull_request": truthy(a["requires_pull_request"]),
+		"_source":               []any{src},
 	}
 }
 
@@ -536,7 +558,7 @@ func emitCanBypass(c *corpus, _ *nodeSet, s *edgeSet) {
 		if truthy(r.fields["_empty"]) {
 			continue
 		}
-		to := rulesetEndpoint(r.fields, "ruleset_id")
+		to := rulesetEndpoint(c, r.fields, str(r.fields["repo"]))
 		bypass := obj(r.fields["bypass"])
 		for _, field := range []string{"bypass_always", "bypass_pull_request_only"} {
 			for _, a := range objects(bypass[field]) {
@@ -942,18 +964,39 @@ func splitActionOwner(ref string) (string, string, bool) {
 }
 
 // A glob is not a ref identity, so a pattern only yields an edge when it names a
-// Branch node that already exists; "v*" needs tag refs normalize does not emit.
+// Branch or Tag node that already exists.
 func emitDeployableFrom(c *corpus, n *nodeSet, s *edgeSet) {
 	for _, r := range c.dirs["environments"] {
 		repo := str(r.fields["repo"])
 		for _, p := range list(obj(r.fields["deployment_branch_policy"])["patterns"]) {
 			to := branchEndpoint(c, repo, str(p))
 			if !to.complete() || !n.has(to.id) {
+				to = tagEndpoint(c, repo, str(p))
+			}
+			if !to.complete() || !n.has(to.id) {
 				s.miss(DeployableFrom, Environment, Branch, 1)
 				continue
 			}
 			s.add(DeployableFrom, envEndpoint(c, repo, str(r.fields["name"])), to,
 				source(r.rel+"#deployment_branch_policy"))
+		}
+	}
+}
+
+func emitRequiresReviewBy(c *corpus, _ *nodeSet, s *edgeSet) {
+	for _, r := range c.dirs["environments"] {
+		from := envEndpoint(c, str(r.fields["repo"]), str(r.fields["name"]))
+		src := source(r.rel + "#reviewers_required")
+		for _, rv := range objects(r.fields["reviewers_required"]) {
+			// type is the reviewer's account type for a user and the team's ownership type for a team; "Team" never appears.
+			switch str(rv["type"]) {
+			case "User", "Bot":
+				s.add(RequiresReviewBy, from, nd(User, "login", str(rv["login"])), src)
+			case "organization", "enterprise":
+				s.add(RequiresReviewBy, from, nd(Team, "org", c.org, "slug", str(rv["login"])), src)
+			default:
+				s.miss(RequiresReviewBy, Environment, "", 1)
+			}
 		}
 	}
 }

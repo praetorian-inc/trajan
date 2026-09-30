@@ -22,7 +22,7 @@ type projectMeta struct {
 // correlation joins, because each stage reads back what the previous one wrote.
 // Per-item failures accumulate in timer.Errors; only IO or a contract violation
 // aborts the phase.
-func Normalize(ctx context.Context, runDir string) error {
+func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func Normalize(ctx context.Context, runDir string) error {
 	if normErr != nil {
 		return normErr
 	}
-	engine.PhaseDone(rec)
+	engine.PhaseDone(rec, cfg.Sink())
 	return nil
 }
 

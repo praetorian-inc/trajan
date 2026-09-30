@@ -17,7 +17,7 @@ func actingAs(t *testing.T, login, kind string, h http.HandlerFunc) *Session {
 	t.Helper()
 	s := liveAPI(t, h)
 	s.begin(actingContext{step: "step", uses: "uses",
-		id: &identityClient{name: "operator", login: login, kind: kind, client: github.NewClient("tok")}})
+		id: &identityClient{name: "operator", login: login, kind: kind, client: github.NewClient("", "tok", false)}})
 	return s
 }
 

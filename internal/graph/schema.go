@@ -3,6 +3,7 @@ package graph
 import (
 	"maps"
 	"slices"
+	"strings"
 )
 
 type NodeLabel string
@@ -216,7 +217,7 @@ var identityKeys = map[NodeLabel][]string{
 	Runner:      {"scope", "scope_key", "id"},
 	RunnerGroup: {"org", "id"},
 	Environment: {"repo", "name"},
-	Ruleset:     {"scope", "id"},
+	Ruleset:     {"scope", "scope_key", "id"},
 	App:         {"app_slug"},
 	User:        {"login"},
 	Team:        {"org", "slug"},
@@ -227,6 +228,78 @@ var identityKeys = map[NodeLabel][]string{
 	// A closed modeling vocabulary no API will ever return; "external" is its
 	// only value, minted by the attach pass when an attack edge needs a source.
 	ExternalActor: {"kind"},
+}
+
+// Resource.Type and Relationship.Type are frozen here independently of the Go
+// constant; node ids still carry the label verbatim.
+var nodeSlugs = map[NodeLabel]string{
+	Organization:  "organization",
+	Repository:    "repository",
+	Branch:        "branch",
+	Tag:           "tag",
+	Workflow:      "workflow",
+	Job:           "job",
+	Action:        "action",
+	Secret:        "secret",
+	Artifact:      "artifact",
+	Cache:         "cache",
+	Runner:        "runner",
+	RunnerGroup:   "runner_group",
+	Environment:   "environment",
+	Ruleset:       "ruleset",
+	App:           "app",
+	User:          "user",
+	Team:          "team",
+	DeployKey:     "deploy_key",
+	CloudRole:     "cloud_role",
+	ExternalActor: "external_actor",
+}
+
+var edgeSlugs = map[EdgeType]string{
+	Contains:            "contains",
+	Defines:             "defines",
+	Reads:               "reads",
+	Writes:              "writes",
+	HasAccess:           "has_access",
+	CanAccess:           "can_access",
+	Needs:               "needs",
+	RunsOn:              "runs_on",
+	Targets:             "targets",
+	Governs:             "governs",
+	DeployableFrom:      "deployable_from",
+	RequiresReviewBy:    "requires_review_by",
+	ProtectedBy:         "protected_by",
+	MemberOf:            "member_of",
+	CanBypass:           "can_bypass",
+	InstalledOn:         "installed_on",
+	UsesAction:          "uses_action",
+	Calls:               "calls",
+	PassesSecret:        "passes_secret",
+	CanAssume:           "can_assume",
+	Triggers:            "triggers",
+	MintsTokenAs:        "mints_token_as",
+	CanLandCode:         "can_land_code",
+	CanApprove:          "can_approve",
+	PwnRequest:          "pwn_request",
+	ExpressionInjection: "expression_injection",
+	AgentInjection:      "agent_injection",
+}
+
+func init() {
+	var missing []string
+	for _, l := range NodeLabels() {
+		if nodeSlugs[l] == "" {
+			missing = append(missing, "node "+string(l))
+		}
+	}
+	for _, t := range EdgeTypes() {
+		if edgeSlugs[t] == "" {
+			missing = append(missing, "edge "+string(t))
+		}
+	}
+	if len(missing) > 0 {
+		panic("internal/graph: no resource slug for " + strings.Join(missing, ", "))
+	}
 }
 
 // Findings are never nodes; each rule id lands in the bucket for its severity

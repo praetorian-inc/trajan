@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
 const (
@@ -18,8 +20,19 @@ const (
 	apiVersion = "2022-11-28"
 )
 
-// var not const so client tests can repoint it at an httptest server
-var apiBase = "https://api.github.com"
+const (
+	dotComAPIBase   = "https://api.github.com"
+	dotComGraphQL   = "https://api.github.com/graphql"
+	dotComCloneBase = "https://github.com"
+)
+
+func instanceEndpoints(root string) (apiBase, graphQL, cloneBase string) {
+	root = strings.TrimRight(engine.StripUserinfo(root), "/")
+	if root == "" {
+		return dotComAPIBase, dotComGraphQL, dotComCloneBase
+	}
+	return root + "/api/v3", root + "/api/graphql", root
+}
 
 type GitHub interface {
 	Get(ctx context.Context, p string, params url.Values, allow404 bool) (json.RawMessage, http.Header, error)
@@ -30,8 +43,13 @@ type GitHub interface {
 }
 
 type Client struct {
-	http  *http.Client
-	token string
+	http      *http.Client
+	token     string
+	apiBase   string
+	graphQL   string
+	cloneBase string
+	insecure  bool
+	sleepFn   func(ctx context.Context, sec float64)
 }
 
 var _ GitHub = (*Client)(nil)
@@ -49,9 +67,6 @@ func (e *GhError) Error() string {
 	}
 	return fmt.Sprintf("HTTP %d from %s: %s", e.Status, e.URL, b)
 }
-
-// overridable so tests can record sleeps without waiting
-var sleepFn = sleep
 
 func sleep(ctx context.Context, sec float64) {
 	if sec <= 0 {
@@ -101,7 +116,7 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response, bod
 	}
 	if ra := resp.Header.Get("Retry-After"); ra != "" {
 		if d, err := strconv.ParseFloat(ra, 64); err == nil {
-			sleepFn(ctx, min(d, 120))
+			c.sleepFn(ctx, min(d, 120))
 			return true
 		}
 	}
@@ -109,7 +124,7 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response, bod
 		if rs := resp.Header.Get("X-RateLimit-Reset"); rs != "" {
 			if reset, err := strconv.ParseFloat(rs, 64); err == nil {
 				d := max(0, reset-float64(time.Now().Unix())) + 1
-				sleepFn(ctx, min(d, 120))
+				c.sleepFn(ctx, min(d, 120))
 				return true
 			}
 		}
@@ -118,7 +133,7 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response, bod
 	// permission denial, and sleeping through six of those would turn every
 	// soft-failed optional surface into a ten-minute stall.
 	if resp.StatusCode == 429 || secondaryLimit(body) {
-		sleepFn(ctx, float64(min(60<<min(attempt, 4), 120)))
+		c.sleepFn(ctx, float64(min(60<<min(attempt, 4), 120)))
 		return true
 	}
 	return false
@@ -132,15 +147,15 @@ func secondaryLimit(body []byte) bool {
 	return strings.Contains(msg, "secondary rate") || strings.Contains(msg, "abuse detection")
 }
 
-func resolveURL(pathOrURL string) string {
+func (c *Client) resolveURL(pathOrURL string) string {
 	if strings.HasPrefix(pathOrURL, "http") {
 		return pathOrURL
 	}
-	return apiBase + pathOrURL
+	return c.apiBase + pathOrURL
 }
 
 func (c *Client) Get(ctx context.Context, pathOrURL string, params url.Values, allow404 bool) (json.RawMessage, http.Header, error) {
-	u := resolveURL(pathOrURL)
+	u := c.resolveURL(pathOrURL)
 	var lastStatus int
 	var lastBody []byte
 	for i := 0; i < 6; i++ {
@@ -162,7 +177,7 @@ func (c *Client) Get(ctx context.Context, pathOrURL string, params url.Values, a
 		case resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504:
 			b, _ := readAllClose(resp)
 			lastStatus, lastBody = resp.StatusCode, b
-			sleepFn(ctx, 2)
+			c.sleepFn(ctx, 2)
 			continue
 		default:
 			b, _ := readAllClose(resp)
@@ -178,7 +193,7 @@ func (c *Client) Get(ctx context.Context, pathOrURL string, params url.Values, a
 }
 
 func (c *Client) GetRaw(ctx context.Context, pathOrURL string, params url.Values, acceptOverride string) ([]byte, http.Header, error) {
-	u := resolveURL(pathOrURL)
+	u := c.resolveURL(pathOrURL)
 	var lastStatus int
 	var lastBody []byte
 	for i := 0; i < 6; i++ {
@@ -196,7 +211,7 @@ func (c *Client) GetRaw(ctx context.Context, pathOrURL string, params url.Values
 		case 502, 503, 504:
 			b, _ := readAllClose(resp)
 			lastStatus, lastBody = resp.StatusCode, b
-			sleepFn(ctx, 2)
+			c.sleepFn(ctx, 2)
 			continue
 		default:
 			b, _ := readAllClose(resp)
@@ -214,7 +229,7 @@ func (c *Client) GetRaw(ctx context.Context, pathOrURL string, params url.Values
 // archives) by hand: the storage host rejects a request carrying an Authorization
 // header, and authTransport would re-add ours on every redirect http.Client follows.
 func (c *Client) GetDownload(ctx context.Context, pathOrURL string) ([]byte, error) {
-	u := resolveURL(pathOrURL)
+	u := c.resolveURL(pathOrURL)
 	api := &http.Client{
 		Transport:     c.http.Transport,
 		Timeout:       c.http.Timeout,

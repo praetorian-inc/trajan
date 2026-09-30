@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/praetorian-inc/trajan/internal/finding"
+	"github.com/praetorian-inc/trajan/finding"
 )
 
 const (

@@ -3,7 +3,6 @@ package graph
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,8 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/praetorian-inc/trajan/finding"
 	"github.com/praetorian-inc/trajan/internal/engine"
-	"github.com/praetorian-inc/trajan/internal/finding"
 	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
@@ -35,7 +34,8 @@ func Build(ctx context.Context, cfg *engine.Config, runDir string, targets map[s
 	if err := state.CheckPhase(engine.PhaseGraph); err != nil {
 		return err
 	}
-	ui.PhaseHeader("Graph")
+	out := cfg.Sink()
+	out.PhaseHeader("Graph")
 	timer := engine.StartPhaseTimer(engine.PhaseGraph, "graph")
 	stats, buildErr := runBuild(ctx, cfg, runDir, targets, timer)
 
@@ -43,12 +43,12 @@ func Build(ctx context.Context, cfg *engine.Config, runDir string, targets map[s
 	state.RecordPhase(rec)
 	saveErr := state.Save(runDir)
 	if buildErr == nil {
-		ui.Outcome("Graph complete", []ui.Count{
+		out.Outcome("Graph complete", []ui.Count{
 			{Label: "nodes", N: stats.nodes},
 			{Label: "edges", N: stats.edges},
 		}, engine.Elapsed(rec.DurationS))
 		if stats.attached > 0 || stats.unattached > 0 {
-			ui.Note(fmt.Sprintf("%d findings attached, %d unattached", stats.attached, stats.unattached))
+			out.Note(fmt.Sprintf("%d findings attached, %d unattached", stats.attached, stats.unattached))
 		}
 	}
 	return errors.Join(buildErr, saveErr)
@@ -77,7 +77,7 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets ma
 	if err != nil {
 		return buildStats{}, err
 	}
-	findings, findingsSeen, err := loadFindings(ctx, cfg, runDir, onError)
+	findings, findingsSeen, err := engine.LoadFindings(ctx, cfg, runDir, onError)
 	if err != nil {
 		return buildStats{}, err
 	}
@@ -130,49 +130,21 @@ func runBuild(ctx context.Context, cfg *engine.Config, runDir string, targets ma
 	}{
 		{engine.GraphNodes(), nodesFile{all}},
 		{engine.GraphEdges(), edgesFile{edgeList}},
+		{engine.GraphResources(), resourcesFile{toResources(c.org, all)}},
+		{engine.GraphRelationships(), relationshipsFile{toRelationships(edgeList)}},
 		{engine.GraphSummary(), sum},
 	} {
 		if err := cp.Write(w.rel, w.v); err != nil {
 			return buildStats{}, fmt.Errorf("write %s: %w", w.rel, err)
 		}
 	}
-	timer.OutputFiles = 3
+	timer.OutputFiles = 5
 	return buildStats{
 		nodes:      len(all),
 		edges:      len(edgeList),
 		attached:   att.res.attached,
 		unattached: len(att.res.unattached),
 	}, nil
-}
-
-// An absent 20-scan is a missing input, not an empty one: IterJSON would report
-// it as zero findings, which reads as a scan that raised none. A scan that ran
-// and found nothing leaves the directory behind and is still accepted.
-func loadFindings(ctx context.Context, cfg *engine.Config, runDir string, onError func(error)) ([]finding.Finding, int, error) {
-	pp := engine.PriorPhase{RunDir: runDir}
-	if _, err := os.Stat(pp.Abs(scanDir)); err != nil {
-		return nil, 0, fmt.Errorf("%s unreadable; run `trajan github scan` first: %w", scanDir, err)
-	}
-	files, err := pp.IterJSON(scanDir)
-	if err != nil {
-		return nil, 0, err
-	}
-	out := engine.RunPartial(ctx, cfg.Concurrency, files,
-		func(_ context.Context, f engine.PhaseFile) (finding.Finding, error) {
-			var v finding.Finding
-			if err := json.Unmarshal(f.Data, &v); err != nil {
-				return v, fmt.Errorf("%s/%s: %w", scanDir, f.Rel, err)
-			}
-			return v, nil
-		},
-		func(_ engine.PhaseFile, err error) { onError(err) })
-	if err := ctx.Err(); err != nil {
-		return nil, 0, err
-	}
-	slices.SortFunc(out, func(a, b finding.Finding) int {
-		return cmp.Or(cmp.Compare(ruleID(&a), ruleID(&b)), cmp.Compare(a.Fingerprint, b.Fingerprint))
-	})
-	return out, len(files), nil
 }
 
 // An endpoint with a complete identity tuple and no backing record is a real entity
@@ -444,9 +416,9 @@ func registerWithCounts(byTarget map[string]int) []gapEntry {
 var gapRegister = []gapEntry{{
 	Subject:     "Tag",
 	Kind:        "node",
-	Status:      "not_collected",
-	Reason:      "no tag instances exist anywhere in 10-normalize; collect fetches no /tags or /git/matching-refs/tags surface. Ruleset target:\"tag\" yields refs/tags/v* patterns, and a glob is not an identity. Three declared relationships wait on it: CONTAINS{Repository,Tag}, PROTECTED_BY{Tag,Ruleset} and DEPLOYABLE_FROM{Environment,Tag}.",
-	UpstreamFix: "collect repository tags; then a normalizeTags, which does not exist, to write tag records; then an emitTags node writer, which buildNodes does not have. All three are missing, so collecting alone yields no Tag node.",
+	Status:      "partial",
+	Reason:      "the vertical exists end to end: collectTags reads /repos/{owner}/{repo}/tags as a soft-failing per-repo surface, normalizeTags writes a record per tag and joins it against the target:\"tag\" rulesets with the same ref-glob matcher deriveBranchCoverage uses for branches, and emitTags writes the node. All three declared relationships are now written — CONTAINS{Repository,Tag}, PROTECTED_BY{Tag,Ruleset} and DEPLOYABLE_FROM{Environment,Tag}. What is left is data and reach: a repository with no tags yields no node, and no rule can target a Tag because internal/github/scan.go's SubjectDirs has no \"tag\" entry, so a tag finding has nothing to attach to.",
+	UpstreamFix: "add \"tag\": \"tags\" to the github provider's SubjectDirs and write the cat-* rules that need it; the collect, normalize and emit halves are done.",
 }, {
 	Subject:     "Runner",
 	Kind:        "node",
@@ -517,8 +489,8 @@ var gapRegister = []gapEntry{{
 	Subject:     "REQUIRES_REVIEW_BY{Environment,User|Team}",
 	Kind:        "edge",
 	Status:      "empty",
-	Reason:      "no environment record carries reviewer identities: reviewers_required is [] across all environments and protection_rules_raw holds only branch_policy entries. The fr-12-02 \"bot as required reviewer\" scenario has protection_rules: [] in the raw API response, so the gap starts in the firing range. The builder has neither an add nor a miss for the type — it is absent from buildEdges entirely, so the count is 0 rather than unbuilt.",
-	UpstreamFix: "firing range: configure required reviewers on fr-12-02; then normalize must keep the reviewer identities rather than only reviewers_count; then a graph writer.",
+	Reason:      "the remaining gap is data, not code. emitRequiresReviewBy reads environments[].reviewers_required, which classifyProtectionRules has always populated with the reviewer's id, type and login, and routes a \"User\"/\"Bot\" account type to User and a team's \"organization\"/\"enterprise\" ownership type to Team. No environment record carries a reviewer: reviewers_required is [] across all environments and protection_rules_raw holds only branch_policy entries. The fr-12-02 \"bot as required reviewer\" scenario has protection_rules: [] in the raw API response, so the gap starts in the firing range.",
+	UpstreamFix: "firing range: configure required reviewers on fr-12-02. The normalize and graph halves are done.",
 	Targets:     []string{"edge(REQUIRES_REVIEW_BY, Environment, User)"},
 }, {
 	Subject:     "RUNS_ON{Job,Runner|RunnerGroup}",
@@ -538,8 +510,8 @@ var gapRegister = []gapEntry{{
 	Subject:     "DEPLOYABLE_FROM{Environment,Branch|Tag}",
 	Kind:        "edge",
 	Status:      "blocked",
-	Reason:      "deployment_branch_policy.patterns are globs, and a glob is not a ref identity. Unlike on.<event>.branches these patterns match tags as well as branches — the only glob in the corpus is fr-02-08's \"v*\", a tag policy — so they are deliberately NOT expanded against Branch nodes: doing so would assert a branch deployment route from a rule about tags. A pattern only yields an edge when it names a Branch node literally.",
-	UpstreamFix: "collect tags (see the Tag row), then expand a pattern against branches and tags together so the ref kind is decided by what matched rather than by which writer ran.",
+	Reason:      "deployment_branch_policy.patterns are globs, and a glob is not a ref identity. Unlike on.<event>.branches these patterns match tags as well as branches — the only glob in the corpus is fr-02-08's \"v*\", a tag policy — so they are deliberately NOT expanded: doing so would assert a branch deployment route from a rule about tags. A pattern only yields an edge when it literally names a Branch or, now that tags are collected, a Tag node.",
+	UpstreamFix: "none for a glob. The ref kind is already decided by what the pattern matched rather than by which writer ran, because both node sets are probed from one loop.",
 }, {
 	Subject:     "TARGETS{Workflow,Branch}",
 	Kind:        "edge",

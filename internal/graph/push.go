@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
+	"net"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -27,14 +30,15 @@ func Push(ctx context.Context, cfg *engine.Config, runDir, neo4jURL, neo4jUser, 
 	if err := state.CheckPhase(engine.PhasePush); err != nil {
 		return err
 	}
-	ui.PhaseHeader("Push")
+	out := cfg.Sink()
+	out.PhaseHeader("Push")
 	timer := engine.StartPhaseTimer(engine.PhasePush, "push")
 	stats, pushErr := runPush(ctx, runDir, state, neo4jURL, neo4jUser, neo4jPass, reset)
 	rec := timer.Stop(pushErr)
 	state.RecordPhase(rec)
 	saveErr := state.Save(runDir)
 	if pushErr == nil {
-		ui.Outcome("Push complete", []ui.Count{
+		out.Outcome("Push complete", []ui.Count{
 			{Label: "nodes", N: stats.nodes},
 			{Label: "edges", N: stats.edges},
 		}, engine.Elapsed(rec.DurationS))
@@ -60,6 +64,7 @@ func runPush(ctx context.Context, runDir string, state *engine.State, url, user,
 		}
 	}
 
+	warnCleartext(url, pass)
 	drv, err := neo4j.NewDriverWithContext(url, neo4j.BasicAuth(user, pass, ""))
 	if err != nil {
 		return pushStats{}, err
@@ -111,6 +116,27 @@ func run(ctx context.Context, sess neo4j.SessionWithContext, cypher string, para
 	return c.NodesCreated() + c.PropertiesSet() + c.RelationshipsCreated(), nil
 }
 
+// bolt:// and neo4j:// are unencrypted, so a non-loopback host puts the password and
+// the whole graph on the wire in the clear. The +s / +ssc schemes do not.
+func warnCleartext(rawURL, pass string) {
+	if pass == "" {
+		return
+	}
+	u, err := neturl.Parse(rawURL)
+	if err != nil || strings.ContainsAny(u.Scheme, "+") {
+		return
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "" {
+		return
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return
+	}
+	slog.Warn("pushing credentials to a remote Neo4j over an unencrypted scheme; prefer bolt+s:// or neo4j+s://",
+		"url", rawURL, "scheme", u.Scheme)
+}
+
 func firstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		return s[:i]
@@ -123,6 +149,9 @@ func firstLine(s string) string {
 // enforces that and gives the edge MATCHes an index to seek on.
 func ensureConstraints(ctx context.Context, sess neo4j.SessionWithContext, nodes []node) error {
 	for _, l := range slices.Sorted(maps.Keys(labelsPresent(nodes))) {
+		if !ValidNodeLabel(l) {
+			return fmt.Errorf("node label %q is not in the schema", l)
+		}
 		q := fmt.Sprintf("CREATE CONSTRAINT trajan_%s_id IF NOT EXISTS FOR (n:%s) REQUIRE n._id IS UNIQUE",
 			strings.ToLower(string(l)), l)
 		if _, err := run(ctx, sess, q, nil); err != nil {
@@ -157,6 +186,9 @@ func pushNodes(ctx context.Context, sess neo4j.SessionWithContext, nodes []node,
 
 	total := 0
 	for _, l := range slices.Sorted(maps.Keys(labelsPresent(nodes))) {
+		if !ValidNodeLabel(l) {
+			return total, fmt.Errorf("node label %q is not in the schema", l)
+		}
 		q := fmt.Sprintf("UNWIND $rows AS r MERGE (n:%s {_id: r.id}) SET n += r.props", l)
 		for chunk := range slices.Chunk(byLabel[l], pushBatch) {
 			if _, err := run(ctx, sess, q, map[string]any{"rows": chunk}); err != nil {
@@ -194,6 +226,9 @@ func pushEdges(ctx context.Context, sess neo4j.SessionWithContext, edges []edge,
 
 	total := 0
 	for _, k := range keys {
+		if !ValidEdge(k.t, k.from, k.to) {
+			return total, fmt.Errorf("%s does not connect %s -> %s in the schema", k.t, k.from, k.to)
+		}
 		q := fmt.Sprintf(`UNWIND $rows AS r
 MATCH (a:%s {_id: r.from})
 MATCH (b:%s {_id: r.to})
@@ -215,6 +250,14 @@ RETURN count(*) AS n`, k.from, k.to, k.t)
 		}
 	}
 	return total, nil
+}
+
+func findingProps() []string {
+	out := []string{"finding_fingerprints", "finding_rule_ids", "findings_count"}
+	for _, b := range FindingBuckets() {
+		out = append(out, b, "findings_count_"+strings.TrimPrefix(b, "findings_"))
+	}
+	return out
 }
 
 // Neo4j stores scalars and homogeneous scalar arrays. A null property is dropped
@@ -242,6 +285,13 @@ func scalarProps(props map[string]any, findings []findingRef, id string, state *
 		slices.Sort(rules)
 		out["finding_fingerprints"] = fps
 		out["finding_rule_ids"] = slices.Compact(rules)
+	}
+	// A remediated finding leaves no key behind for SET += to overwrite, so every
+	// finding-derived property is written on every push, null when this run has none.
+	for _, k := range findingProps() {
+		if _, ok := out[k]; !ok {
+			out[k] = nil
+		}
 	}
 	out["_id"] = id
 	out["_org"] = state.Org

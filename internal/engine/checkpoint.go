@@ -2,12 +2,18 @@ package engine
 
 import (
 	"bytes"
+	"cmp"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/finding"
 )
 
 // HTML escaping is off so '&', '<', '>' — pervasive in workflow data — are emitted
@@ -106,4 +112,38 @@ func (c CurrentPhase) Write(rel string, v any) error {
 
 func (c CurrentPhase) WriteRaw(rel string, b []byte) error {
 	return WriteRaw(filepath.Join(c.RunDir, rel), b)
+}
+
+func LoadFindings(ctx context.Context, cfg *Config, runDir string, onError func(error)) ([]finding.Finding, int, error) {
+	pp := PriorPhase{RunDir: runDir}
+	if _, err := os.Stat(pp.Abs(dirScan)); err != nil {
+		return nil, 0, fmt.Errorf("%s unreadable; run the scan phase first: %w", dirScan, err)
+	}
+	files, err := pp.IterJSON(dirScan)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := RunPartial(ctx, cfg.Concurrency, files,
+		func(_ context.Context, f PhaseFile) (finding.Finding, error) {
+			var v finding.Finding
+			if err := json.Unmarshal(f.Data, &v); err != nil {
+				return v, fmt.Errorf("%s/%s: %w", dirScan, f.Rel, err)
+			}
+			return v, nil
+		},
+		func(_ PhaseFile, err error) { onError(err) })
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	slices.SortFunc(out, func(a, b finding.Finding) int {
+		return cmp.Or(cmp.Compare(findingRuleID(&a), findingRuleID(&b)), cmp.Compare(a.Fingerprint, b.Fingerprint))
+	})
+	return out, len(files), nil
+}
+
+func findingRuleID(f *finding.Finding) string {
+	if f.Rule == nil {
+		return ""
+	}
+	return f.Rule.ID
 }

@@ -38,7 +38,7 @@ func unknownOutcomeSession(t *testing.T) (*Session, string) {
 		Plan: &Plan{ID: "p", Scope: []string{"acme/lab"}}, Ledger: l, PlanDir: runDir, Execute: true,
 		identities: map[string]*identityClient{}, aliases: map[string]string{}, extraScope: map[string]string{},
 	}
-	s.begin(actingContext{step: "open", uses: "pr.open", id: &identityClient{name: "operator", client: github.NewClient("tok")}})
+	s.begin(actingContext{step: "open", uses: "pr.open", id: &identityClient{name: "operator", client: github.NewClient("", "tok", false)}})
 	return s, runDir
 }
 

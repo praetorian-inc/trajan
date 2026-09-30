@@ -55,10 +55,6 @@ func TestPrivateTokenHeaderAndPagination(t *testing.T) {
 
 func TestRetryAfterHonored(t *testing.T) {
 	var slept float64
-	orig := sleepFn
-	sleepFn = func(_ context.Context, sec float64) { slept += sec }
-	defer func() { sleepFn = orig }()
-
 	attempt := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempt++
@@ -72,6 +68,7 @@ func TestRetryAfterHonored(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "t", false, 1)
+	c.sleepFn = func(_ context.Context, sec float64) { slept += sec }
 	if _, _, err := c.Get(context.Background(), "/x", nil, false); err != nil {
 		t.Fatalf("Get: %v", err)
 	}

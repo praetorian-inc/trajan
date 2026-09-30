@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/praetorian-inc/trajan/finding"
 	"github.com/praetorian-inc/trajan/internal/engine"
-	"github.com/praetorian-inc/trajan/internal/finding"
 )
 
 func attachFixture(t *testing.T, files map[string]any, findings []finding.Finding,
@@ -39,7 +39,7 @@ func attachFixture(t *testing.T, files map[string]any, findings []finding.Findin
 		t.Fatal(err)
 	}
 	backfillObserved(n, s)
-	loaded, _, err := loadFindings(t.Context(), cfg, dir, fail)
+	loaded, _, err := engine.LoadFindings(t.Context(), cfg, dir, fail)
 	if err != nil {
 		t.Fatal(err)
 	}

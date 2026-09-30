@@ -12,7 +12,7 @@ import (
 )
 
 func (c *Client) Paginate(ctx context.Context, path string, params url.Values, perPage int) ([]json.RawMessage, error) {
-	return c.paginateFrom(ctx, apiBase+path, params, perPage)
+	return c.paginateFrom(ctx, c.apiBase+path, params, perPage)
 }
 
 // firstURL is absolute; subsequent requests follow Link rel="next" verbatim

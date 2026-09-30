@@ -3,6 +3,8 @@ package graph
 import (
 	"fmt"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/engine/detect"
 )
 
 type TargetKind string
@@ -22,6 +24,27 @@ type Target struct {
 	Type  EdgeType
 	From  NodeLabel
 	To    NodeLabel
+}
+
+// detect keeps rule.Graph unparsed to stay provider-generic, so the index is built
+// here rather than inside Build.
+func RuleTargets(onError func(error)) (map[string]Target, error) {
+	rules, err := detect.LoadRules("github", onError)
+	if err != nil {
+		return nil, err
+	}
+	targets := make(map[string]Target, len(rules))
+	for _, r := range rules {
+		t, err := ParseTarget(r.Graph)
+		if err != nil {
+			if onError != nil {
+				onError(fmt.Errorf("%s: %w", r.ID, err))
+			}
+			continue
+		}
+		targets[r.ID] = t
+	}
+	return targets, nil
 }
 
 const targetForms = "node(<Label>), edge(<TYPE>, <From>, <To>) or attack(<TYPE>)"

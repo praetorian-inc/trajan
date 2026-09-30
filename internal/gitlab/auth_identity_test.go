@@ -58,12 +58,3 @@ func TestResolveTokenGLFallbackAndMissing(t *testing.T) {
 		t.Errorf("ResolveToken(none) err = %v, want ErrNoToken", err)
 	}
 }
-
-func TestResolveBaseURL(t *testing.T) {
-	if got := ResolveBaseURL(""); got != "https://gitlab.com" {
-		t.Errorf("ResolveBaseURL(empty) = %q, want gitlab.com default", got)
-	}
-	if got := ResolveBaseURL("  https://3.136.153.111 "); got != "https://3.136.153.111" {
-		t.Errorf("ResolveBaseURL(self-hosted) = %q, want trimmed URL", got)
-	}
-}

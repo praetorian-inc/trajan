@@ -10,28 +10,21 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
 func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, error) {
-	if strings.TrimSpace(locator) == "" {
-		locator = strings.TrimSpace(os.Getenv("ORG_NAME"))
+	if cfg.BaseURL != "" {
+		return "", ErrServerUnsupported
 	}
 	scope, err := ParseScope(locator)
 	if err != nil {
 		return "", err
 	}
-	cred, err := ResolveCredential(cfg.Token, cfg.BearerToken)
+	cl, err := clientFor(cfg, scope.Org)
 	if err != nil {
 		return "", err
-	}
-	var cl *Client
-	if cred.Kind == engine.CredBearer {
-		cl = NewClientBearer(scope.Org, cred.Value)
-	} else {
-		cl = NewClient(scope.Org, cred.Value)
 	}
 
 	runDir, err := engine.MintRunDir(cfg, "ado", scope.Slug)
@@ -53,7 +46,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	state.Platform = "ado"
 	state.Scope = scopeString(scope)
 	state.Org = scope.Org
-	state.SetInvocation(os.Args[1:])
+	state.SetInvocation(cfg.Invocation)
 	if state.StartedAt == "" {
 		state.StartedAt = engine.IsoformatUTC(timeNow())
 	}
@@ -72,20 +65,21 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if collectErr != nil {
 		return runDir, collectErr
 	}
-	engine.PhaseDone(rec)
+	engine.PhaseDone(rec, cfg.Sink())
 	return runDir, nil
 }
 
 func runCollect(ctx context.Context, cfg *engine.Config, cl ADO, cp engine.CurrentPhase, scope Scope, timer *engine.PhaseTimer) error {
 	org := scope.Org
+	sf := func(kind string, fn func(context.Context) error) { softSurface(ctx, timer, "org/"+kind, kind, fn) }
 
-	softSurface(timer, "connection-data", func() error { return collectConnectionData(ctx, cl, cp, org) })
-	softSurface(timer, "security-namespaces", func() error { return collectSecurityNamespaces(ctx, cl, cp, org) })
-	softSurface(timer, "graph", func() error { return collectGraph(ctx, cl, cp, org) })
-	softSurface(timer, "extensions", func() error { return collectExtensions(ctx, cl, cp, org) })
-	softSurface(timer, "service-hooks", func() error { return collectServiceHooks(ctx, cl, cp, org) })
-	softSurface(timer, "feeds", func() error { return collectFeeds(ctx, cl, cp, org) })
-	softSurface(timer, "agent-pools", func() error { return collectAgentPools(ctx, cl, cp) })
+	sf("connection-data", func(ctx context.Context) error { return collectConnectionData(ctx, cl, cp, org) })
+	sf("security-namespaces", func(ctx context.Context) error { return collectSecurityNamespaces(ctx, cl, cp, org) })
+	sf("graph", func(ctx context.Context) error { return collectGraph(ctx, cl, cp, org) })
+	sf("extensions", func(ctx context.Context) error { return collectExtensions(ctx, cl, cp, org) })
+	sf("service-hooks", func(ctx context.Context) error { return collectServiceHooks(ctx, cl, cp, org) })
+	sf("feeds", func(ctx context.Context) error { return collectFeeds(ctx, cl, cp, org) })
+	sf("agent-pools", func(ctx context.Context) error { return collectAgentPools(ctx, cl, cp) })
 
 	projects, err := collectProjects(ctx, cl, cp, org)
 	if err != nil {
@@ -109,24 +103,28 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl ADO, cp engine.Curre
 	)
 
 	// Runs last: the descriptors to look up are only known once the ACLs are on disk.
-	softSurface(timer, "identities", func() error { return collectIdentities(ctx, cl, cp, org) })
+	sf("identities", func(ctx context.Context) error { return collectIdentities(ctx, cl, cp, org) })
 	return nil
 }
 
 func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scope Scope, pt projectRef, timer *engine.PhaseTimer) error {
 	project, pid := pt.Name, pt.ID
 	lbl := func(s string) string { return project + "/" + s }
+	sf := func(kind string, fn func(context.Context) error) {
+		head, _, _ := strings.Cut(kind, "/")
+		softSurface(ctx, timer, "project/"+head, lbl(kind), fn)
+	}
 
-	softSurface(timer, lbl("detail"), func() error { return collectProjectDetail(ctx, cl, cp, project) })
-	softSurface(timer, lbl("general-settings"), func() error { return collectGeneralSettings(ctx, cl, cp, project) })
-	softSurface(timer, lbl("project-properties"), func() error { return collectProjectProperties(ctx, cl, cp, pid, project) })
-	softSurface(timer, lbl("policies"), func() error { return collectPolicies(ctx, cl, cp, project) })
-	softSurface(timer, lbl("build-acl"), func() error { return collectBuildACL(ctx, cl, cp, project, pid) })
+	sf("detail", func(ctx context.Context) error { return collectProjectDetail(ctx, cl, cp, project) })
+	sf("general-settings", func(ctx context.Context) error { return collectGeneralSettings(ctx, cl, cp, project) })
+	sf("project-properties", func(ctx context.Context) error { return collectProjectProperties(ctx, cl, cp, pid, project) })
+	sf("policies", func(ctx context.Context) error { return collectPolicies(ctx, cl, cp, project) })
+	sf("build-acl", func(ctx context.Context) error { return collectBuildACL(ctx, cl, cp, project, pid) })
 
 	pe := url.PathEscape(project)
 
 	var repos []repoRef
-	softSurface(timer, lbl("repos"), func() error {
+	sf("repos", func(ctx context.Context) error {
 		r, e := collectRepos(ctx, cl, cp, project)
 		repos = r
 		return e
@@ -134,7 +132,7 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 
 	var resources []resourceRef
 	collectList := func(label, host, api, apiPath, rel, collector, rtype string) {
-		softSurface(timer, lbl(label), func() error {
+		sf(label, func(ctx context.Context) error {
 			refs, e := listSurface(ctx, cl, cp, project, host, api, apiPath, rel, collector, rtype)
 			resources = append(resources, refs...)
 			return e
@@ -143,7 +141,7 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 	// includeSharedServiceEndpoints also surfaces connections shared INTO this project,
 	// so every consuming project's per-connection authorization and checks are
 	// collected; normalize dedups the shared node.
-	softSurface(timer, lbl("service-connections"), func() error {
+	sf("service-connections", func(ctx context.Context) error {
 		items, status, e := softList(ctx, cl, "core", APIVersionSEP, "/"+pe+"/_apis/serviceendpoint/endpoints",
 			url.Values{"includeSharedServiceEndpoints": []string{"true"}})
 		if e != nil {
@@ -171,7 +169,7 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 
 	// The preview api-version is required here (GA 400s), and $expand=machines is no
 	// longer supported, so per-machine detail would need a query per group.
-	softSurface(timer, lbl("deployment-groups"), func() error {
+	sf("deployment-groups", func(ctx context.Context) error {
 		items, status, e := softList(ctx, cl, "core", APIVersionPreview,
 			"/"+pe+"/_apis/distributedtask/deploymentgroups", nil)
 		if e != nil {
@@ -180,7 +178,7 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 		return writeListOrMark(cp, engine.CollectADODeploymentGroups(project), "deployment-groups",
 			"/"+project+"/_apis/distributedtask/deploymentgroups", items, status)
 	})
-	softSurface(timer, lbl("task-groups"), func() error {
+	sf("task-groups", func(ctx context.Context) error {
 		_, e := listSurface(ctx, cl, cp, project, "core", APIVersionPreview,
 			"/"+pe+"/_apis/distributedtask/taskgroups", engine.CollectADOTaskGroups(project), "task-groups", "")
 		return e
@@ -188,7 +186,7 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 	// The list is summaries only: approvals, gates and artifacts live on the
 	// per-definition GET, so the ids drive a detail fan-out.
 	var releaseIDs []int64
-	softSurface(timer, lbl("releases"), func() error {
+	sf("releases", func(ctx context.Context) error {
 		items, status, e := softList(ctx, cl, "vsrm", APIVersion, "/"+pe+"/_apis/release/definitions", nil)
 		if e != nil {
 			return e
@@ -206,7 +204,7 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 	// The id set unions /build/definitions (both YAML and classic builds) with
 	// /pipelines, so a pipeline surfaced by only one endpoint is still collected.
 	pipelineNames := map[int64]string{}
-	softSurface(timer, lbl("build-definitions"), func() error {
+	sf("build-definitions", func(ctx context.Context) error {
 		items, status, e := softList(ctx, cl, "core", APIVersion, "/"+pe+"/_apis/build/definitions", nil)
 		if e != nil {
 			return e
@@ -218,7 +216,7 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 		addPipelineIDs(pipelineNames, items)
 		return nil
 	})
-	softSurface(timer, lbl("pipelines"), func() error {
+	sf("pipelines", func(ctx context.Context) error {
 		items, status, e := softList(ctx, cl, "core", APIVersion, "/"+pe+"/_apis/pipelines", nil)
 		if e != nil {
 			return e
@@ -234,7 +232,7 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 	// Only YAML pipelines (process.type 2) need preview and the template closure;
 	// a classic pipeline carries its steps in the full definition's process.phases.
 	for _, id := range sortedIDs(pipelineNames) {
-		softSurface(timer, lbl(fmt.Sprintf("pipeline/%d", id)), func() error {
+		sf(fmt.Sprintf("pipeline/%d", id), func(ctx context.Context) error {
 			full, e := collectBuildDefFull(ctx, cl, cp, project, id)
 			if e != nil || full == nil {
 				return e
@@ -249,21 +247,21 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 		})
 	}
 	for _, id := range releaseIDs {
-		softSurface(timer, lbl(fmt.Sprintf("release/%d", id)), func() error {
+		sf(fmt.Sprintf("release/%d", id), func(ctx context.Context) error {
 			return collectReleaseFull(ctx, cl, cp, project, id)
 		})
 	}
 
 	for _, r := range resources {
-		softSurface(timer, lbl("perms/"+r.Type+"/"+r.ID), func() error { return collectPipelinePermissions(ctx, cl, cp, project, r) })
-		softSurface(timer, lbl("checks/"+r.Type+"/"+r.ID), func() error { return collectChecks(ctx, cl, cp, project, r) })
+		sf("perms/"+r.Type+"/"+r.ID, func(ctx context.Context) error { return collectPipelinePermissions(ctx, cl, cp, project, r) })
+		sf("checks/"+r.Type+"/"+r.ID, func(ctx context.Context) error { return collectChecks(ctx, cl, cp, project, r) })
 		switch r.Type {
 		case "environment":
 			if envID, err := strconv.ParseInt(r.ID, 10, 64); err == nil {
-				softSurface(timer, lbl("env-detail/"+r.ID), func() error { return collectEnvironmentDetail(ctx, cl, cp, project, envID) })
+				sf("env-detail/"+r.ID, func(ctx context.Context) error { return collectEnvironmentDetail(ctx, cl, cp, project, envID) })
 			}
 		case "endpoint":
-			softSurface(timer, lbl("endpoint-acl/"+r.ID), func() error { return collectEndpointACL(ctx, cl, cp, project, pid, r.ID) })
+			sf("endpoint-acl/"+r.ID, func(ctx context.Context) error { return collectEndpointACL(ctx, cl, cp, project, pid, r.ID) })
 		}
 	}
 
@@ -271,7 +269,7 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 		if scope.Repo != "" && !strings.EqualFold(repo.Name, scope.Repo) {
 			continue
 		}
-		softSurface(timer, lbl("repo-acl/"+repo.Name), func() error { return collectRepoACL(ctx, cl, cp, project, pid, repo) })
+		sf("repo-acl/"+repo.Name, func(ctx context.Context) error { return collectRepoACL(ctx, cl, cp, project, pid, repo) })
 	}
 	return nil
 }
@@ -285,18 +283,19 @@ func filterProjects(projects []projectRef, name string) []projectRef {
 	return nil
 }
 
-var errMu sync.Mutex
-
-func softSurface(timer *engine.PhaseTimer, label string, fn func() error) {
-	if err := fn(); err != nil {
+func softSurface(ctx context.Context, timer *engine.PhaseTimer, surface, label string, fn func(context.Context) error) {
+	sctx, tally := engine.WithSoftTally(ctx)
+	if err := fn(sctx); err != nil {
 		appendErr(timer, fmt.Sprintf("%s: %v", label, err))
+		timer.AddSurface(surface, "degraded", err.Error())
+		return
 	}
+	status, reason := tally.Surface()
+	timer.AddSurface(surface, status, reason)
 }
 
 func appendErr(timer *engine.PhaseTimer, msg string) {
-	errMu.Lock()
-	timer.Errors = append(timer.Errors, msg)
-	errMu.Unlock()
+	timer.AddError(msg)
 	// Debug, not Warn: PhaseDone reports these as one aggregate at the end.
 	slog.Debug("collect surface degraded", "detail", msg)
 }

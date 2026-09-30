@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
@@ -20,11 +19,10 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if err != nil {
 		return "", err
 	}
-	token, err := ResolveToken(cfg.Token)
-	if err != nil {
-		return "", err
+	if cfg.Token == "" {
+		return "", fmt.Errorf("%w for GitLab", engine.ErrNoCredential)
 	}
-	cl := NewClient(ResolveBaseURL(FlagURL), token, FlagInsecure, cfg.Concurrency)
+	cl := NewClient(cfg.BaseURL, cfg.Token, cfg.Insecure, cfg.Concurrency)
 
 	runDir, err := engine.MintRunDir(cfg, "gl", scope.Slug)
 	if err != nil {
@@ -45,7 +43,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	state.Platform = "gl"
 	state.Scope = scopeString(scope)
 	state.Org = scope.Group
-	state.SetInvocation(os.Args[1:])
+	state.SetInvocation(cfg.Invocation)
 	if state.StartedAt == "" {
 		state.StartedAt = engine.IsoformatUTC(timeNow())
 	}
@@ -64,7 +62,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if collectErr != nil {
 		return runDir, collectErr
 	}
-	engine.PhaseDone(rec)
+	engine.PhaseDone(rec, cfg.Sink())
 	return runDir, nil
 }
 
@@ -77,12 +75,15 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl GitLab, cp engine.Cu
 	// The scope depth is undecided until probed: try the whole path as a group, and on
 	// 404 treat it as a project whose owning group is its namespace full_path.
 	groupPath := scope.Group
+	var projRaw json.RawMessage
 	groupRaw, gstatus, err := softGet(ctx, cl, "/groups/"+url.PathEscape(scope.path), nil)
 	if err != nil {
 		return err
 	}
 	if gstatus != 0 {
-		projRaw, pstatus, perr := softGet(ctx, cl, "/projects/"+url.PathEscape(scope.path), nil)
+		var pstatus int
+		var perr error
+		projRaw, pstatus, perr = softGet(ctx, cl, "/projects/"+url.PathEscape(scope.path), nil)
 		if perr != nil {
 			return perr
 		}
@@ -100,31 +101,44 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl GitLab, cp engine.Cu
 	state.Scope = scopeString(*scope)
 	state.Org = groupPath
 
+	var gid int64
 	if groupPath != "" {
-		gid := numField(groupRaw, "id")
+		gid = numField(groupRaw, "id")
 		collectGroupSurfaces(ctx, cl, cp, groupPath, gid, groupRaw, timer)
-
-		projects, perr := enumerateProjects(ctx, cl, cp, groupPath, gid)
-		if perr != nil {
-			return perr
-		}
-		if scope.Project != "" {
-			projects = filterProjects(projects, scope.Project)
-		}
-		timer.InputFiles = len(projects)
-
-		engine.RunPartial(ctx, cfg.Concurrency, projects,
-			func(ctx context.Context, p projectRef) (int, error) {
-				return 0, collectOneProject(ctx, cl, cp, p, timer)
-			},
-			func(p projectRef, e error) {
-				appendErr(timer, fmt.Sprintf("project %s: %v", p.FullPath, e))
-			},
-		)
 	}
+
+	projects, err := scopedProjects(ctx, cl, timer, scope, projRaw, groupPath, gid)
+	if err != nil {
+		return err
+	}
+	timer.InputFiles = len(projects)
+
+	engine.RunPartial(ctx, cfg.Concurrency, projects,
+		func(ctx context.Context, p projectRef) (int, error) {
+			return 0, collectOneProject(ctx, cl, cp, p, timer)
+		},
+		func(p projectRef, e error) {
+			appendErr(timer, fmt.Sprintf("project %s: %v", p.FullPath, e))
+		},
+	)
 
 	collectInstanceSurfaces(ctx, cl, cp, timer)
 	return nil
+}
+
+func scopedProjects(ctx context.Context, cl GitLab, timer *engine.PhaseTimer, scope *Scope,
+	projRaw json.RawMessage, groupPath string, gid int64) ([]projectRef, error) {
+	if scope.Project != "" {
+		id, fullPath := numField(projRaw, "id"), strField(projRaw, "path_with_namespace")
+		if id == 0 || fullPath == "" {
+			return nil, fmt.Errorf("project %q: response carries no id or path_with_namespace", scope.Project)
+		}
+		return []projectRef{{ID: id, FullPath: fullPath}}, nil
+	}
+	if groupPath == "" {
+		return nil, nil
+	}
+	return enumerateProjects(ctx, cl, timer, groupPath, gid)
 }
 
 func namespaceFullPath(projRaw json.RawMessage) string {
@@ -135,17 +149,20 @@ func namespaceFullPath(projRaw json.RawMessage) string {
 	return strField(ns, "full_path")
 }
 
-// The seed list for the whole fan-out, and the one list whose transport error sinks
-// the run. A soft 403/404 still only yields an empty list and continues.
-func enumerateProjects(ctx context.Context, cl GitLab, cp engine.CurrentPhase, groupPath string, gid int64) ([]projectRef, error) {
+// An unreadable group degrades rather than aborts: the group and instance rules need no project list.
+func enumerateProjects(ctx context.Context, cl GitLab, timer *engine.PhaseTimer, groupPath string, gid int64) ([]projectRef, error) {
 	gref := groupRef(groupPath, gid)
 	items, status, err := softList(ctx, cl, "/groups/"+gref+"/projects", url.Values{"include_subgroups": []string{"true"}})
 	if err != nil {
 		return nil, err
 	}
 	if status != 0 {
+		msg := fmt.Sprintf("list projects for group %s: HTTP %d", groupPath, status)
+		appendErr(timer, msg)
+		timer.AddSurface("group/projects", "degraded", msg)
 		return nil, nil
 	}
+	timer.AddSurface("group/projects", "ok", "")
 	out := make([]projectRef, 0, len(items))
 	for _, raw := range items {
 		id := numField(raw, "id")
@@ -157,15 +174,6 @@ func enumerateProjects(ctx context.Context, cl GitLab, cp engine.CurrentPhase, g
 	return out, nil
 }
 
-func filterProjects(projects []projectRef, fullPath string) []projectRef {
-	for _, p := range projects {
-		if strings.EqualFold(p.FullPath, fullPath) {
-			return []projectRef{p}
-		}
-	}
-	return nil
-}
-
 // The numeric id needs no escaping, so it is preferred over a nested group path.
 func groupRef(groupPath string, gid int64) string {
 	if gid != 0 {
@@ -174,18 +182,19 @@ func groupRef(groupPath string, gid int64) string {
 	return url.PathEscape(groupPath)
 }
 
-var errMu sync.Mutex
-
-func softSurface(timer *engine.PhaseTimer, label string, fn func() error) {
-	if err := fn(); err != nil {
+func softSurface(ctx context.Context, timer *engine.PhaseTimer, surface, label string, fn func(context.Context) error) {
+	sctx, tally := engine.WithSoftTally(ctx)
+	if err := fn(sctx); err != nil {
 		appendErr(timer, fmt.Sprintf("%s: %v", label, err))
+		timer.AddSurface(surface, "degraded", err.Error())
+		return
 	}
+	status, reason := tally.Surface()
+	timer.AddSurface(surface, status, reason)
 }
 
 func appendErr(timer *engine.PhaseTimer, msg string) {
-	errMu.Lock()
-	timer.Errors = append(timer.Errors, msg)
-	errMu.Unlock()
+	timer.AddError(msg)
 	// Debug, not Warn: PhaseDone reports these as one aggregate at the end.
 	slog.Debug("collect surface degraded", "detail", msg)
 }

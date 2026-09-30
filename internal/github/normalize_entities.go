@@ -33,8 +33,12 @@ func normalizeEntities(runDir string, onError func(error)) error {
 	if err := normalizeEnvironments(prior, cp, org); err != nil {
 		return fmt.Errorf("normalize environments: %w", err)
 	}
-	if err := normalizeRulesets(prior, cp, org); err != nil {
+	rulesets, err := normalizeRulesets(prior, cp, org)
+	if err != nil {
 		return fmt.Errorf("normalize rulesets: %w", err)
+	}
+	if err := normalizeTags(prior, cp, rulesets); err != nil {
+		return fmt.Errorf("normalize tags: %w", err)
 	}
 	if err := normalizeApps(prior, cp, org); err != nil {
 		return fmt.Errorf("normalize apps: %w", err)
@@ -59,6 +63,10 @@ func normRepoPath(repo string) string { return path.Join("10-normalize", "repos"
 
 func normEnvPath(repo, env string) string {
 	return path.Join("10-normalize", "environments", repo+"__"+env+".json")
+}
+
+func normTagPath(repo, tag string) string {
+	return path.Join("10-normalize", "tags", repo+"__"+engine.BranchSlug(tag)+".json")
 }
 
 func normRulesetPath(scopeKey string, rulesetID int64) string {
@@ -414,6 +422,8 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 		rec := RepoFact{
 			ID:            repoName,
 			Repo:          repoName,
+			FullName:      repoInfo["full_name"],
+			URL:           repoInfo["html_url"],
 			RepoID:        repoInfo["id"],
 			Owner:         entObj(repoInfo, "owner")["login"],
 			Visibility:    repoInfo["visibility"],
@@ -569,11 +579,12 @@ func entEnvBranchPolicy(base, branchPolicies map[string]any) EnvBranchPolicy {
 	return bp
 }
 
-func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org string) error {
+func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org string) ([]RulesetFact, error) {
 	files, err := prior.IterJSON(path.Join("00-collect", "rulesets"))
 	if err != nil {
-		return err
+		return nil, err
 	}
+	var facts []RulesetFact
 	for _, f := range files {
 		data := entDataOf(f.Data)
 		scope := entStr(data["scope"])
@@ -593,7 +604,7 @@ func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org stri
 				Provenance:  []SourceProvenance{{File: engine.CollectRulesetsRepo(scopeKey)}},
 			}
 			if err := cp.Write(normRulesetSentinelPath(scopeKey, "unavailable"), rec); err != nil {
-				return err
+				return nil, err
 			}
 			continue
 		}
@@ -616,7 +627,7 @@ func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org stri
 				rec.Repo = scopeKey
 			}
 			if err := cp.Write(normRulesetSentinelPath(scopeKey, "none"), rec); err != nil {
-				return err
+				return nil, err
 			}
 			continue
 		}
@@ -625,11 +636,76 @@ func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org stri
 			rsm := entMap(rs)
 			rec := normalizeOneRuleset(scopeKey, scope, owner, rsm, sourceFile)
 			if err := cp.Write(normRulesetPath(scopeKey, entInt64(rsm["id"])), rec); err != nil {
+				return nil, err
+			}
+			facts = append(facts, rec)
+		}
+	}
+	return facts, nil
+}
+
+func normalizeTags(prior engine.PriorPhase, cp engine.CurrentPhase, rulesets []RulesetFact) error {
+	files, err := prior.IterJSON(path.Join("00-collect", "tags"))
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		repo := strings.TrimSuffix(path.Base(filepath.ToSlash(f.Rel)), ".json")
+		data := entDataOf(f.Data)
+		repoID := entInt64(entObj(entLoadData(prior, engine.CollectRepo(repo)), "repo")["id"])
+
+		for _, t := range entList(data["tags"]) {
+			name := entStr(entMap(t)["name"])
+			if name == "" {
+				continue
+			}
+			rec := TagFact{
+				ID:                 repo + "__" + name,
+				Repo:               repo,
+				Name:               name,
+				ApplicableRulesets: tagRulesets(rulesets, repo, repoID, name),
+				Provenance:         []SourceProvenance{{File: engine.CollectTags(repo)}},
+			}
+			if err := cp.Write(normTagPath(repo, name), rec); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func tagRulesets(rulesets []RulesetFact, repo string, repoID int64, tag string) []TagRulesetRef {
+	out := []TagRulesetRef{}
+	for _, rs := range rulesets {
+		if entStr(rs.Target) != "tag" {
+			continue
+		}
+		scope := entStr(rs.Scope)
+		if scope == "repo" && entStr(rs.Repo) != repo {
+			continue
+		}
+		refConds := entObj(rs.Conditions, "ref_name")
+		includes := asStrings(refConds["include"])
+		excludes := asStrings(refConds["exclude"])
+		if !refMatchAnyIn(tag, "", tagsNamespace, includes) {
+			continue
+		}
+		if len(excludes) > 0 && refMatchAnyIn(tag, "", tagsNamespace, excludes) {
+			continue
+		}
+		if scope == "org" && !orgRepoGate(decodeConditions(rs.Conditions), repo, repoID, nil) {
+			continue
+		}
+		out = append(out, TagRulesetRef{
+			RulesetID:           rs.RulesetID,
+			Scope:               rs.Scope,
+			Name:                rs.Name,
+			Enforcement:         rs.Enforcement,
+			RequiresPullRequest: rs.RequiresPullRequest,
+			AnyBypassPresent:    rs.Bypass.AnyBypassPresent,
+		})
+	}
+	return out
 }
 
 func normalizeOneRuleset(scopeKey, scope string, owner any, rs map[string]any, sourceFile string) RulesetFact {

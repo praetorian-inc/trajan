@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
 const stubConnectionData = `{
@@ -100,7 +102,7 @@ func whoamiStub(t *testing.T, status map[string]int, body map[string]string) fun
 	}
 }
 
-func runWhoAmI(t *testing.T) (string, error) {
+func captureWhoAmI(t *testing.T) (string, error) {
 	t.Helper()
 	for _, k := range []string{
 		"TRAJAN_ADO_TOKEN", "AZURE_DEVOPS_PAT", "AZDO_PAT", "AZURE_DEVOPS_EXT_PAT",
@@ -108,6 +110,21 @@ func runWhoAmI(t *testing.T) (string, error) {
 	} {
 		t.Setenv(k, "")
 	}
+	cred, err := ResolveCredential("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &engine.Config{}
+	if cred.Kind == engine.CredBearer {
+		cfg.BearerToken = cred.Value
+	} else {
+		cfg.Token = cred.Value
+	}
+	cl, err := clientFor(cfg, "Contoso")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cl.sleepFn = func(context.Context, float64) {}
 	prev := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -118,7 +135,7 @@ func runWhoAmI(t *testing.T) (string, error) {
 		os.Stdout = prev
 		r.Close()
 	}()
-	callErr := WhoAmI(t.Context(), "Contoso", "", "")
+	callErr := runWhoAmI(t.Context(), cl, "Contoso")
 	w.Close()
 	out, err := io.ReadAll(r)
 	if err != nil {
@@ -131,7 +148,7 @@ func TestWhoAmI_Identity(t *testing.T) {
 	t.Setenv("ADO_PAT", "pat")
 	whoamiStub(t, nil, nil)
 
-	out, err := runWhoAmI(t)
+	out, err := captureWhoAmI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +171,7 @@ func TestWhoAmI_InvalidPATHTML(t *testing.T) {
 	t.Cleanup(srv.Close)
 	repointHosts(t, srv.URL)
 
-	out, err := runWhoAmI(t)
+	out, err := captureWhoAmI(t)
 	if err == nil {
 		t.Fatalf("want error for HTML response, got output %q", out)
 	}
@@ -170,7 +187,7 @@ func TestWhoAmI_ForbiddenSurface(t *testing.T) {
 	t.Setenv("ADO_PAT", "pat")
 	whoamiStub(t, map[string]int{"/_apis/distributedtask/variablegroups": http.StatusForbidden}, nil)
 
-	out, err := runWhoAmI(t)
+	out, err := captureWhoAmI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,12 +199,9 @@ func TestWhoAmI_ForbiddenSurface(t *testing.T) {
 
 func TestWhoAmI_HardFailureDoesNotAbort(t *testing.T) {
 	t.Setenv("ADO_PAT", "pat")
-	prev := sleepFn
-	sleepFn = func(context.Context, float64) {}
-	t.Cleanup(func() { sleepFn = prev })
 	whoamiStub(t, map[string]int{"/_apis/distributedtask/pools": http.StatusInternalServerError}, nil)
 
-	out, err := runWhoAmI(t)
+	out, err := captureWhoAmI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +218,7 @@ func TestWhoAmI_EmptySurfaceStillReachable(t *testing.T) {
 		"/_apis/distributedtask/variablegroups": `{"count":0,"value":[]}`,
 	})
 
-	out, err := runWhoAmI(t)
+	out, err := captureWhoAmI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +231,7 @@ func TestWhoAmI_NoProjectsSkipsPerProjectProbes(t *testing.T) {
 	t.Setenv("ADO_PAT", "pat")
 	paths := whoamiStub(t, nil, map[string]string{"/_apis/projects": `{"count":0,"value":[]}`})
 
-	out, err := runWhoAmI(t)
+	out, err := captureWhoAmI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +274,7 @@ func TestWhoAmI_PagedProjectsCountsEveryPage(t *testing.T) {
 	t.Cleanup(srv.Close)
 	repointHosts(t, srv.URL)
 
-	out, err := runWhoAmI(t)
+	out, err := captureWhoAmI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +299,7 @@ func TestWhoAmI_SkipsNamelessProject(t *testing.T) {
 		"/_apis/projects": `{"count":2,"value":[{"id":"no-name"},{"name":"Named"}]}`,
 	})
 
-	out, err := runWhoAmI(t)
+	out, err := captureWhoAmI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +319,7 @@ func TestWhoAmI_HappyPathRequestCount(t *testing.T) {
 	t.Setenv("ADO_PAT", "pat")
 	paths := whoamiStub(t, nil, nil)
 
-	if _, err := runWhoAmI(t); err != nil {
+	if _, err := captureWhoAmI(t); err != nil {
 		t.Fatal(err)
 	}
 	got := paths()

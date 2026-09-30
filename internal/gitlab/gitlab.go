@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-func WhoAmI(ctx context.Context, explicit string) error {
-	token, err := ResolveToken(explicit)
-	if err != nil {
-		return err
+func WhoAmI(ctx context.Context, cfg *engine.Config) error {
+	if cfg.Token == "" {
+		return fmt.Errorf("%w for GitLab", engine.ErrNoCredential)
 	}
-	cl := NewClient(ResolveBaseURL(FlagURL), token, FlagInsecure, 1)
+	cl := NewClient(cfg.BaseURL, cfg.Token, cfg.Insecure, 1)
 
 	userRaw, _, err := cl.Get(ctx, "/user", nil, false)
 	if err != nil {

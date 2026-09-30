@@ -58,7 +58,7 @@ var mergeNotes = map[NodeLabel]string{
 var recordLabels = map[NodeLabel]bool{
 	Organization: true, Repository: true, User: true, Team: true, App: true,
 	DeployKey: true, Runner: true, RunnerGroup: true, Ruleset: true, Environment: true,
-	Secret: true, Job: true,
+	Secret: true, Job: true, Tag: true,
 }
 
 var orTrueProps = map[string]bool{"is_default_branch_any": true, "branches_slugged": true}
@@ -276,7 +276,7 @@ func buildNodes(ctx context.Context, c *corpus) (*nodeSet, error) {
 	for _, emit := range []func(*corpus, *nodeSet){
 		emitOrganizations, emitRepositories, emitUsers, emitTeams, emitApps,
 		emitDeployKeys, emitRunners, emitRunnerGroups, emitRulesets, emitEnvironments,
-		emitSecrets, emitBranches, emitWorkflows, emitJobs, emitArtifacts,
+		emitSecrets, emitBranches, emitTags, emitWorkflows, emitJobs, emitArtifacts,
 		emitCaches, emitActions, emitCloudRoles,
 	} {
 		if err := ctx.Err(); err != nil {
@@ -377,8 +377,9 @@ func emitRulesets(c *corpus, s *nodeSet) {
 		props := qualifyRepo(c, s.recordProps(Ruleset, r.fields))
 		props["required_status_check_contexts"] = pluck(objects(r.fields["required_status_checks"]), "context")
 		n := s.upsert(Ruleset, map[string]string{
-			"scope": str(r.fields["scope"]),
-			"id":    decimal(r.fields["ruleset_id"]),
+			"scope":     str(r.fields["scope"]),
+			"scope_key": c.rulesetScopeKey(str(r.fields["scope"]), str(r.fields["repo"])),
+			"id":        decimal(r.fields["ruleset_id"]),
 		}, props, r.rel)
 		s.index("ruleset", r.id, n)
 	}
@@ -433,6 +434,15 @@ func emitBranches(c *corpus, s *nodeSet) {
 				"name": str(e["branch"]),
 			}, s.recordProps(Branch, e), c.chainSource(src[0], src[1]))
 		}
+	}
+}
+
+func emitTags(c *corpus, s *nodeSet) {
+	for _, r := range c.dirs["tags"] {
+		s.upsert(Tag, map[string]string{
+			"repo": c.full(str(r.fields["repo"])),
+			"name": str(r.fields["name"]),
+		}, s.recordProps(Tag, r.fields), r.rel)
 	}
 }
 

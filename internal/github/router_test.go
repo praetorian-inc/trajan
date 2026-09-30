@@ -69,7 +69,7 @@ func newFakeRouter(ts ...*fakeTransport) *router {
 	for _, t := range ts {
 		m[t.k] = t
 	}
-	return &router{transports: m}
+	return &router{rest: &Client{sleepFn: func(context.Context, float64) {}}, transports: m}
 }
 
 func servedBy(raw json.RawMessage) string {
@@ -78,12 +78,6 @@ func servedBy(raw json.RawMessage) string {
 	}
 	_ = json.Unmarshal(raw, &v)
 	return v.By
-}
-
-func noSleep(t *testing.T) {
-	old := sleepFn
-	sleepFn = func(context.Context, float64) {}
-	t.Cleanup(func() { sleepFn = old })
 }
 
 func TestRouterPrefersHighestCapableTransport(t *testing.T) {
@@ -130,7 +124,6 @@ func TestRouterRESTFloorNeverOffloaded(t *testing.T) {
 }
 
 func TestRouterLocalRetryThenSuccess(t *testing.T) {
-	noSleep(t)
 	throttle := &GhError{Status: 429, Body: "rate limited"}
 	gql := &fakeTransport{k: transportGraphQL, errs: []error{throttle, throttle, nil}}
 	rest := &fakeTransport{k: transportREST}
@@ -152,7 +145,6 @@ func TestRouterLocalRetryThenSuccess(t *testing.T) {
 }
 
 func TestRouterFallThroughOnExhaustedThrottle(t *testing.T) {
-	noSleep(t)
 	throttle := &GhError{Status: 503, Body: "unavailable"}
 	gql := &fakeTransport{k: transportGraphQL, errs: []error{throttle}}
 	rest := &fakeTransport{k: transportREST}
@@ -239,21 +231,19 @@ func TestRouterNoCapableTransportErrors(t *testing.T) {
 }
 
 func TestNewRouterRegistersRESTAndHonorsForceREST(t *testing.T) {
-	t.Setenv("TRAJAN_FORCE_REST", "")
-	r := newRouter(NewClient("tok"))
+	r := newRouter(NewClient("", "tok", false), false, t.TempDir())
 	t.Cleanup(func() { closeRouter(r) })
 	if _, ok := r.transports[transportREST]; !ok {
 		t.Fatal("newRouter must register a rest transport")
 	}
 	if r.forceREST {
-		t.Fatal("forceREST should be false when TRAJAN_FORCE_REST is empty")
+		t.Fatal("forceREST should be false when it is not requested")
 	}
 
-	t.Setenv("TRAJAN_FORCE_REST", "1")
-	r2 := newRouter(NewClient("tok"))
+	r2 := newRouter(NewClient("", "tok", false), true, t.TempDir())
 	t.Cleanup(func() { closeRouter(r2) })
 	if !r2.forceREST {
-		t.Fatal("forceREST should be true when TRAJAN_FORCE_REST is set")
+		t.Fatal("forceREST should be true when it is requested")
 	}
 	if _, ok := r2.transports[transportGit]; ok {
 		t.Fatal("forceREST must not register the git transport")
