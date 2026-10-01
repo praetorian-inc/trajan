@@ -88,7 +88,7 @@ func TestRunPartial_DropsBadItem(t *testing.T) {
 	var onErrItems []int
 	var onErrCalls int
 
-	out := RunPartial(context.Background(), 2, items,
+	out, _ := RunPartial(context.Background(), 2, items,
 		func(_ context.Context, i int) (int, error) {
 			if i == badItem {
 				return 0, errors.New("bad")
@@ -123,7 +123,7 @@ func TestRunPartial_DropsBadItem(t *testing.T) {
 
 func TestRunPartial_NilOnError(t *testing.T) {
 	items := []int{1, 2, 3}
-	out := RunPartial(context.Background(), 2, items,
+	out, _ := RunPartial(context.Background(), 2, items,
 		func(_ context.Context, i int) (int, error) {
 			if i == 2 {
 				return 0, errors.New("bad")
@@ -143,7 +143,7 @@ func TestRunPartial_RecoversPanic(t *testing.T) {
 	var onErrItems []int
 	var onErrErrs []string
 
-	out := RunPartial(context.Background(), 2, items,
+	out, _ := RunPartial(context.Background(), 2, items,
 		func(_ context.Context, i int) (int, error) {
 			if i == panicItem {
 				panic("boom")
@@ -180,7 +180,7 @@ func TestRunPartial_RecoversPanic(t *testing.T) {
 // returned error, and must never propagate as a panic out of RunPartial itself.
 func TestRunPartial_NilOnErrorPanic(t *testing.T) {
 	items := []int{1, 2, 3}
-	out := RunPartial(context.Background(), 2, items,
+	out, _ := RunPartial(context.Background(), 2, items,
 		func(_ context.Context, i int) (int, error) {
 			if i == 2 {
 				panic("boom")
@@ -189,5 +189,19 @@ func TestRunPartial_NilOnErrorPanic(t *testing.T) {
 		}, nil)
 	if len(out) != 2 {
 		t.Fatalf("len(out) = %d, want 2", len(out))
+	}
+}
+
+func TestRunPartial_ReturnsContextError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	out, err := RunPartial(ctx, 2, []int{1, 2, 3},
+		func(ctx context.Context, i int) (int, error) { return i, ctx.Err() }, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled; a cancelled phase records as complete", err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("out = %v, want nothing collected after cancellation", out)
 	}
 }

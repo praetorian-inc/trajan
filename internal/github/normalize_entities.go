@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -14,7 +15,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-func normalizeEntities(runDir string, onError func(error)) error {
+func normalizeEntities(ctx context.Context, runDir string, onError func(error)) error {
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
 
@@ -24,36 +25,33 @@ func normalizeEntities(runDir string, onError func(error)) error {
 	}
 	org := st.Org
 
-	if err := normalizeOrg(prior, cp, org); err != nil {
-		return fmt.Errorf("normalize org: %w", err)
+	var rulesets []RulesetFact
+	stages := []struct {
+		name string
+		fn   func() error
+	}{
+		{"org", func() error { return normalizeOrg(prior, cp, org) }},
+		{"repos", func() error { return normalizeRepos(prior, cp, org) }},
+		{"environments", func() error { return normalizeEnvironments(prior, cp, org) }},
+		{"rulesets", func() error {
+			var e error
+			rulesets, e = normalizeRulesets(prior, cp, org)
+			return e
+		}},
+		{"tags", func() error { return normalizeTags(prior, cp, rulesets) }},
+		{"apps", func() error { return normalizeApps(prior, cp, org) }},
+		{"principals", func() error { return normalizePrincipals(prior, cp, org, onError) }},
+		{"runners", func() error { return normalizeRunners(prior, cp, org, onError) }},
+		{"secrets", func() error { return normalizeSecrets(prior, cp, org, onError) }},
+		{"deploy keys", func() error { return normalizeDeployKeys(prior, cp, org, onError) }},
 	}
-	if err := normalizeRepos(prior, cp, org); err != nil {
-		return fmt.Errorf("normalize repos: %w", err)
-	}
-	if err := normalizeEnvironments(prior, cp, org); err != nil {
-		return fmt.Errorf("normalize environments: %w", err)
-	}
-	rulesets, err := normalizeRulesets(prior, cp, org)
-	if err != nil {
-		return fmt.Errorf("normalize rulesets: %w", err)
-	}
-	if err := normalizeTags(prior, cp, rulesets); err != nil {
-		return fmt.Errorf("normalize tags: %w", err)
-	}
-	if err := normalizeApps(prior, cp, org); err != nil {
-		return fmt.Errorf("normalize apps: %w", err)
-	}
-	if err := normalizePrincipals(prior, cp, org, onError); err != nil {
-		return fmt.Errorf("normalize principals: %w", err)
-	}
-	if err := normalizeRunners(prior, cp, org, onError); err != nil {
-		return fmt.Errorf("normalize runners: %w", err)
-	}
-	if err := normalizeSecrets(prior, cp, org, onError); err != nil {
-		return fmt.Errorf("normalize secrets: %w", err)
-	}
-	if err := normalizeDeployKeys(prior, cp, org, onError); err != nil {
-		return fmt.Errorf("normalize deploy keys: %w", err)
+	for _, stage := range stages {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := stage.fn(); err != nil {
+			return fmt.Errorf("normalize %s: %w", stage.name, err)
+		}
 	}
 	return nil
 }

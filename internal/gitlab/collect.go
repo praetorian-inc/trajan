@@ -113,14 +113,16 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl GitLab, cp engine.Cu
 	}
 	timer.InputFiles = len(projects)
 
-	engine.RunPartial(ctx, cfg.Concurrency, projects,
+	if _, err := engine.RunPartial(ctx, cfg.Concurrency, projects,
 		func(ctx context.Context, p projectRef) (int, error) {
 			return 0, collectOneProject(ctx, cl, cp, p, timer)
 		},
 		func(p projectRef, e error) {
 			appendErr(timer, fmt.Sprintf("project %s: %v", p.FullPath, e))
 		},
-	)
+	); err != nil {
+		return err
+	}
 
 	collectInstanceSurfaces(ctx, cl, cp, timer)
 	return nil

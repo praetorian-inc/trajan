@@ -137,7 +137,7 @@ func runCollect(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.Cu
 
 	tc := newTransitiveCache()
 
-	results := engine.RunPartial(ctx, cfg.Concurrency, repos,
+	results, err := engine.RunPartial(ctx, cfg.Concurrency, repos,
 		func(ctx context.Context, r repoTarget) (int, error) {
 			return collectOneRepo(ctx, cfg, gh, cp, r, tc, timer)
 		},
@@ -145,6 +145,9 @@ func runCollect(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.Cu
 			appendErr(timer, fmt.Sprintf("%s: %v", r.Repo, e))
 		},
 	)
+	if err != nil {
+		return err
+	}
 	written := 0
 	for _, n := range results {
 		written += n

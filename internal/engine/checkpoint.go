@@ -123,7 +123,7 @@ func LoadFindings(ctx context.Context, cfg *Config, runDir string, onError func(
 	if err != nil {
 		return nil, 0, err
 	}
-	out := RunPartial(ctx, cfg.Concurrency, files,
+	out, err := RunPartial(ctx, cfg.Concurrency, files,
 		func(_ context.Context, f PhaseFile) (finding.Finding, error) {
 			var v finding.Finding
 			if err := json.Unmarshal(f.Data, &v); err != nil {
@@ -132,7 +132,7 @@ func LoadFindings(ctx context.Context, cfg *Config, runDir string, onError func(
 			return v, nil
 		},
 		func(_ PhaseFile, err error) { onError(err) })
-	if err := ctx.Err(); err != nil {
+	if err != nil {
 		return nil, 0, err
 	}
 	slices.SortFunc(out, func(a, b finding.Finding) int {

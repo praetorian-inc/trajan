@@ -2,6 +2,7 @@ package github
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -15,7 +16,7 @@ import (
 
 // Reads the normalized corpus back off disk as generic maps, ignoring the typed
 // jobs slice, so chain records mirror the on-disk shapes field-for-field.
-func correlate(prior engine.PriorPhase, cp engine.CurrentPhase, _ []Job) error {
+func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, _ []Job) error {
 	jobs, err := loadRecords(prior, "10-normalize/jobs")
 	if err != nil {
 		return fmt.Errorf("correlate: load jobs: %w", err)
@@ -73,6 +74,9 @@ func correlate(prior engine.PriorPhase, cp engine.CurrentPhase, _ []Job) error {
 		func() error { return cp.Write(chainPath("job-output-flow"), deriveJobOutputFlow(jobs)) },
 	}
 	for _, w := range writers {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := w(); err != nil {
 			return fmt.Errorf("correlate: write chain: %w", err)
 		}

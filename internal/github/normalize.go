@@ -41,16 +41,16 @@ func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
 
-	jobs, normErr := normalizeJobs(prior, cp, org, timer)
+	jobs, normErr := normalizeJobs(ctx, prior, cp, org, timer)
 	if normErr == nil {
 		out.Row(ui.RowLine{Seq: 1, Total: 3, Label: "jobs", Status: "ok"})
-		normErr = normalizeEntities(runDir, func(err error) {
+		normErr = normalizeEntities(ctx, runDir, func(err error) {
 			timer.Errors = append(timer.Errors, err.Error())
 		})
 	}
 	if normErr == nil {
 		out.Row(ui.RowLine{Seq: 2, Total: 3, Label: "entities", Status: "ok"})
-		normErr = correlate(prior, cp, jobs)
+		normErr = correlate(ctx, prior, cp, jobs)
 	}
 	if normErr == nil {
 		out.Row(ui.RowLine{Seq: 3, Total: 3, Label: "correlate", Status: "ok"})
@@ -71,7 +71,7 @@ func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	return nil
 }
 
-func normalizeJobs(prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) ([]Job, error) {
+func normalizeJobs(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) ([]Job, error) {
 	workflowsRoot := filepath.Join(prior.RunDir, "00-collect", "workflows")
 	repoDirs, err := os.ReadDir(workflowsRoot)
 	if err != nil {
@@ -89,6 +89,9 @@ func normalizeJobs(prior engine.PriorPhase, cp engine.CurrentPhase, org string, 
 
 	var allJobs []Job
 	for _, rd := range repoDirs {
+		if err := ctx.Err(); err != nil {
+			return allJobs, err
+		}
 		if !rd.IsDir() {
 			continue
 		}

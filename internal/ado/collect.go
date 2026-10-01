@@ -93,14 +93,16 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl ADO, cp engine.Curre
 	}
 	timer.InputFiles = len(projects)
 
-	engine.RunPartial(ctx, cfg.Concurrency, projects,
+	if _, err := engine.RunPartial(ctx, cfg.Concurrency, projects,
 		func(ctx context.Context, p projectRef) (int, error) {
 			return 0, collectOneProject(ctx, cl, cp, scope, p, timer)
 		},
 		func(p projectRef, e error) {
 			appendErr(timer, fmt.Sprintf("project %s: %v", p.Name, e))
 		},
-	)
+	); err != nil {
+		return err
+	}
 
 	// Runs last: the descriptors to look up are only known once the ACLs are on disk.
 	sf("identities", func(ctx context.Context) error { return collectIdentities(ctx, cl, cp, org) })

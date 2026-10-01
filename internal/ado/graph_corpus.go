@@ -41,7 +41,7 @@ func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError 
 		return nil, fmt.Errorf("%s: no normalized records", normalizeDir)
 	}
 
-	recs := engine.RunPartial(ctx, cfg.Concurrency, files,
+	recs, err := engine.RunPartial(ctx, cfg.Concurrency, files,
 		func(_ context.Context, f engine.PhaseFile) (record, error) {
 			var m map[string]any
 			dec := json.NewDecoder(bytes.NewReader(f.Data))
@@ -56,7 +56,7 @@ func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError 
 			return record{rel: rel, dir: dir, kind: kind, id: id, fields: m}, nil
 		},
 		func(_ engine.PhaseFile, err error) { onError(err) })
-	if err := ctx.Err(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	slices.SortFunc(recs, func(a, b record) int { return strings.Compare(a.rel, b.rel) })

@@ -152,7 +152,7 @@ func enrichRunners(ctx context.Context, cl GitLab, items []json.RawMessage, time
 		return items
 	}
 	out := make([]json.RawMessage, len(items))
-	engine.RunPartial(ctx, runnerDetailConcurrency, indexed(items),
+	_, _ = engine.RunPartial(ctx, runnerDetailConcurrency, indexed(items),
 		func(ctx context.Context, it idxRaw) (struct{}, error) {
 			out[it.i] = it.raw
 			id := numField(it.raw, "id")

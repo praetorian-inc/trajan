@@ -143,7 +143,7 @@ func loadFindings(ctx context.Context, cfg *engine.Config, runDir string, onErro
 	if err != nil {
 		return nil, 0, err
 	}
-	out := engine.RunPartial(ctx, cfg.Concurrency, files,
+	out, err := engine.RunPartial(ctx, cfg.Concurrency, files,
 		func(_ context.Context, f engine.PhaseFile) (finding.Finding, error) {
 			var v finding.Finding
 			if err := json.Unmarshal(f.Data, &v); err != nil {
@@ -152,7 +152,7 @@ func loadFindings(ctx context.Context, cfg *engine.Config, runDir string, onErro
 			return v, nil
 		},
 		func(_ engine.PhaseFile, err error) { onError(err) })
-	if err := ctx.Err(); err != nil {
+	if err != nil {
 		return nil, 0, err
 	}
 	slices.SortFunc(out, func(a, b finding.Finding) int { return cmp.Compare(a.Fingerprint, b.Fingerprint) })
