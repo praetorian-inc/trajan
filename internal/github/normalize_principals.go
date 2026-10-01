@@ -161,6 +161,11 @@ func normalizePrincipals(prior engine.PriorPhase, cp engine.CurrentPhase, org st
 		onError(fmt.Errorf("principals: collaborators unavailable for %s (HTTP %d), grants incomplete",
 			repo, entInt(unavailable[repo])))
 	}
+	buckets := entObj(data, "_unavailable_buckets")
+	for _, b := range slices.Sorted(maps.Keys(buckets)) {
+		onError(fmt.Errorf("principals: %s unavailable (HTTP %d), the roster is incomplete",
+			b, entInt(buckets[b])))
+	}
 
 	for _, t := range entListOf(data, "teams") {
 		tm := entMap(t)

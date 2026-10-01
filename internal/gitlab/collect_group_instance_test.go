@@ -26,7 +26,7 @@ func TestCollectGroupSurfacesFanOut(t *testing.T) {
 	timer := engine.StartPhaseTimer(engine.PhaseCollect, "collect")
 	groupRaw := json.RawMessage(`{"id":42,"full_path":"g"}`)
 
-	collectGroupSurfaces(context.Background(), cl, cp, "g", gid, groupRaw, timer)
+	collectGroupSurfaces(context.Background(), cl, cp, "g", gid, groupRaw, 0, timer)
 
 	// detail comes straight from groupRaw, not a re-fetch.
 	if got := compact(t, readEnvelope(t, cp.RunDir, engine.CollectGLGroup("g"))["data"]); got != `{"id":42,"full_path":"g"}` {

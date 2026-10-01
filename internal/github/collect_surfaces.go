@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -103,18 +105,20 @@ func softPaginate(ctx context.Context, gh GitHub, p string, params url.Values, p
 	return items, 0, nil
 }
 
-// Swallows ANY GhError (not just 403/404) to an empty list; non-GhError propagates.
-func paginateSwallow(ctx context.Context, gh GitHub, p string, params url.Values) ([]json.RawMessage, error) {
+func paginateSwallow(ctx context.Context, gh GitHub, p string, params url.Values) ([]json.RawMessage, int, error) {
 	items, err := gh.Paginate(ctx, p, params, 0)
-	if err != nil {
-		var ghErr *GhError
-		if asGhError(err, &ghErr) {
-			engine.RecordSoft(ctx, cmp.Or(ghErr.Status, 500))
-			return []json.RawMessage{}, nil
-		}
-		return nil, err
+	if err == nil {
+		return items, 0, nil
 	}
-	return items, nil
+	if isSoft(err) {
+		engine.RecordSoft(ctx, softStatus(err))
+		return []json.RawMessage{}, softStatus(err), nil
+	}
+	var ghErr *GhError
+	if asGhError(err, &ghErr) {
+		return []json.RawMessage{}, cmp.Or(ghErr.Status, 500), err
+	}
+	return nil, 0, err
 }
 
 // Ensures a nil slice marshals as [] rather than null, since rules key on it.
@@ -312,16 +316,20 @@ func collectRulesetsOrg(ctx context.Context, gh GitHub, cp engine.CurrentPhase, 
 	if err != nil {
 		return err
 	}
+	data := map[string]any{"scope": "org", "owner": org}
 	if status != 0 {
-		return nil
+		data["rulesets"] = []json.RawMessage{}
+		markUnavailable(data, status)
+	} else {
+		detailed, denied, derr := rulesetDetails(ctx, gh, summaries, func(id string) string {
+			return fmt.Sprintf("/orgs/%s/rulesets/%s", org, id)
+		})
+		if derr != nil {
+			return derr
+		}
+		data["rulesets"] = rawArray(detailed)
+		markDetailUnavailable(data, denied)
 	}
-	detailed, err := rulesetDetails(ctx, gh, summaries, func(id string) string {
-		return fmt.Sprintf("/orgs/%s/rulesets/%s", org, id)
-	})
-	if err != nil {
-		return err
-	}
-	data := map[string]any{"scope": "org", "owner": org, "rulesets": rawArray(detailed)}
 	return envelope(cp, engine.CollectRulesetsOrg(org), "00_collect_rulesets.py",
 		fmt.Sprintf("/orgs/%s/rulesets", org), data)
 }
@@ -332,25 +340,28 @@ func collectRulesetsRepo(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	if err != nil {
 		return err
 	}
-	var data map[string]any
+	data := map[string]any{"scope": "repo", "owner": org, "repo": repo}
 	if status != 0 {
-		data = map[string]any{"scope": "repo", "owner": org, "repo": repo,
-			"rulesets": []json.RawMessage{}, "_unavailable": true}
+		data["rulesets"] = []json.RawMessage{}
+		data["_unavailable"] = true
+		data["_unavailable_status"] = status
 	} else {
-		detailed, derr := rulesetDetails(ctx, gh, summaries, func(id string) string {
+		detailed, denied, derr := rulesetDetails(ctx, gh, summaries, func(id string) string {
 			return fmt.Sprintf("/repos/%s/%s/rulesets/%s", org, repo, id)
 		})
 		if derr != nil {
 			return derr
 		}
-		data = map[string]any{"scope": "repo", "owner": org, "repo": repo, "rulesets": rawArray(detailed)}
+		data["rulesets"] = rawArray(detailed)
+		markDetailUnavailable(data, denied)
 	}
 	return envelope(cp, engine.CollectRulesetsRepo(repo), "00_collect_rulesets.py",
 		fmt.Sprintf("/repos/%s/%s/rulesets[*]", org, repo), data)
 }
 
-func rulesetDetails(ctx context.Context, gh GitHub, summaries []json.RawMessage, detailPath func(id string) string) ([]json.RawMessage, error) {
+func rulesetDetails(ctx context.Context, gh GitHub, summaries []json.RawMessage, detailPath func(id string) string) ([]json.RawMessage, map[string]int, error) {
 	detailed := make([]json.RawMessage, 0, len(summaries))
+	denied := map[string]int{}
 	for _, rs := range summaries {
 		id := numField(rs, "id")
 		if id == "" {
@@ -358,22 +369,24 @@ func rulesetDetails(ctx context.Context, gh GitHub, summaries []json.RawMessage,
 		}
 		full, status, err := softGet(ctx, gh, detailPath(id))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if status == 0 && full != nil {
 			detailed = append(detailed, full)
+			continue
 		}
+		denied[id] = cmp.Or(status, 404)
 	}
-	return detailed, nil
+	return detailed, denied, nil
 }
 
 func collectEnvironments(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org, repo string) error {
-	envsResp, _, err := softGet(ctx, gh, fmt.Sprintf("/repos/%s/%s/environments", org, repo))
+	envsResp, status, err := softGet(ctx, gh, fmt.Sprintf("/repos/%s/%s/environments", org, repo))
 	if err != nil {
 		return err
 	}
 	if envsResp == nil {
-		return nil
+		return writeEnvironmentsUnavailable(cp, org, repo, status)
 	}
 	for _, env := range rawArrayField(envsResp, "environments") {
 		name := strField(env, "name")
@@ -545,43 +558,44 @@ func enrichSelectedRepos(ctx context.Context, gh GitHub, org string, secrets []j
 // Unlike secrets, variable values are returned by the API and kept as-is.
 func collectVariables(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org, repo string) error {
 	if repo == "" {
-		orgVars, err := listVariables(ctx, gh, fmt.Sprintf("/orgs/%s/actions/variables", org))
-		if err != nil {
+		orgVars, status, listErr := listVariables(ctx, gh, fmt.Sprintf("/orgs/%s/actions/variables", org))
+		data := map[string]any{"scope": "org", "owner": org, "variables": rawArray(orgVars)}
+		markUnavailable(data, status)
+		if err := envelope(cp, engine.CollectVariables(org), "00_collect_variables.py",
+			fmt.Sprintf("/orgs/%s/actions/variables", org), data); err != nil {
 			return err
 		}
-		data := map[string]any{"scope": "org", "owner": org, "variables": rawArray(orgVars)}
-		return envelope(cp, engine.CollectVariables(org), "00_collect_variables.py",
-			fmt.Sprintf("/orgs/%s/actions/variables", org), data)
+		return listErr
 	}
 
-	repoVars, err := listVariables(ctx, gh, fmt.Sprintf("/repos/%s/%s/actions/variables", org, repo))
-	if err != nil {
-		return err
-	}
+	repoVars, status, repoVarErr := listVariables(ctx, gh, fmt.Sprintf("/repos/%s/%s/actions/variables", org, repo))
 	data := map[string]any{"scope": "repo", "owner": org, "repo": repo, "variables": rawArray(repoVars)}
+	markUnavailable(data, status)
 	if err := envelope(cp, engine.CollectVariables(repo), "00_collect_variables.py",
 		fmt.Sprintf("/repos/%s/%s/actions/variables", org, repo), data); err != nil {
 		return err
 	}
+	if repoVarErr != nil {
+		return repoVarErr
+	}
 
-	envsResp, _, err := softGet(ctx, gh, fmt.Sprintf("/repos/%s/%s/environments", org, repo))
+	envsResp, envsStatus, err := softGet(ctx, gh, fmt.Sprintf("/repos/%s/%s/environments", org, repo))
 	if err != nil {
 		return err
 	}
 	if envsResp == nil {
-		return nil
+		return writeEnvironmentsUnavailable(cp, org, repo, envsStatus)
 	}
+	var envErrs []error
 	for _, env := range rawArrayField(envsResp, "environments") {
 		name := strField(env, "name")
 		if name == "" {
 			continue
 		}
 		safe := url.PathEscape(name)
-		evars, err := listVariables(ctx, gh, fmt.Sprintf("/repos/%s/%s/environments/%s/variables", org, repo, safe))
-		if err != nil {
-			return err
-		}
-		if len(evars) == 0 {
+		evars, estatus, evarErr := listVariables(ctx, gh, fmt.Sprintf("/repos/%s/%s/environments/%s/variables", org, repo, safe))
+		envErrs = append(envErrs, evarErr)
+		if estatus == 0 && len(evars) == 0 {
 			continue
 		}
 		envData := map[string]any{
@@ -591,38 +605,41 @@ func collectVariables(ctx context.Context, gh GitHub, cp engine.CurrentPhase, or
 			"environment": name,
 			"variables":   rawArray(evars),
 		}
+		markUnavailable(envData, estatus)
 		key := repo + "__" + name
 		if err := envelope(cp, engine.CollectVariables(key), "00_collect_variables.py",
 			fmt.Sprintf("/repos/%s/%s/environments/%s/variables", org, repo, name), envData); err != nil {
 			return err
 		}
 	}
-	return nil
+	return errors.Join(envErrs...)
 }
 
-// Swallows ALL GhErrors (not just 403/404) to [].
-func listVariables(ctx context.Context, gh GitHub, p string) ([]json.RawMessage, error) {
+func listVariables(ctx context.Context, gh GitHub, p string) ([]json.RawMessage, int, error) {
 	raw, _, err := gh.Get(ctx, p, nil, true)
 	if err != nil {
+		if isSoft(err) {
+			engine.RecordSoft(ctx, softStatus(err))
+			return []json.RawMessage{}, softStatus(err), nil
+		}
 		var ghErr *GhError
 		if asGhError(err, &ghErr) {
-			engine.RecordSoft(ctx, cmp.Or(ghErr.Status, 500))
-			return []json.RawMessage{}, nil
+			return []json.RawMessage{}, cmp.Or(ghErr.Status, 500), err
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	if raw == nil {
 		engine.RecordSoft(ctx, 404)
-		return []json.RawMessage{}, nil
+		return []json.RawMessage{}, 404, nil
 	}
 	if vars := rawArrayField(raw, "variables"); len(vars) > 0 {
-		return vars, nil
+		return vars, 0, nil
 	}
 	var arr []json.RawMessage
 	if json.Unmarshal(raw, &arr) == nil {
-		return arr, nil
+		return arr, 0, nil
 	}
-	return []json.RawMessage{}, nil
+	return []json.RawMessage{}, 0, nil
 }
 
 func collectApps(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org string) error {
@@ -843,19 +860,12 @@ func collectTags(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org, re
 }
 
 func collectMembers(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org string) error {
-	members, err := paginateSwallow(ctx, gh, fmt.Sprintf("/orgs/%s/members", org), nil)
-	if err != nil {
-		return err
-	}
-	outside, err := paginateSwallow(ctx, gh, fmt.Sprintf("/orgs/%s/outside_collaborators", org), nil)
-	if err != nil {
-		return err
-	}
-	teamSummaries, err := paginateSwallow(ctx, gh, fmt.Sprintf("/orgs/%s/teams", org), nil)
-	if err != nil {
-		return err
-	}
+	members, memberStatus, memberErr := paginateSwallow(ctx, gh, fmt.Sprintf("/orgs/%s/members", org), nil)
+	outside, outsideStatus, outsideErr := paginateSwallow(ctx, gh, fmt.Sprintf("/orgs/%s/outside_collaborators", org), nil)
+	teamSummaries, teamStatus, teamErr := paginateSwallow(ctx, gh, fmt.Sprintf("/orgs/%s/teams", org), nil)
+	listErr := errors.Join(memberErr, outsideErr, teamErr)
 	teams := make([]json.RawMessage, 0, len(teamSummaries))
+	teamsUnavailable := map[string]int{}
 	for _, ts := range teamSummaries {
 		slug := strField(ts, "slug")
 		if slug == "" {
@@ -865,7 +875,9 @@ func collectMembers(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org 
 		if terr != nil {
 			var ghErr *GhError
 			if asGhError(terr, &ghErr) {
-				engine.RecordSoft(ctx, cmp.Or(ghErr.Status, 500))
+				status := cmp.Or(ghErr.Status, 500)
+				engine.RecordSoft(ctx, status)
+				teamsUnavailable["team/"+slug] = status
 				continue
 			}
 			return terr
@@ -896,9 +908,15 @@ func collectMembers(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org 
 	if len(perRepoUnavailable) > 0 {
 		data["per_repo_collaborators_unavailable"] = perRepoUnavailable
 	}
+	buckets := map[string]int{"members": memberStatus, "outside_collaborators": outsideStatus, "teams": teamStatus}
+	maps.Copy(buckets, teamsUnavailable)
+	mergeUnavailable(data, buckets)
 	// The members list (primary call) is graphql-offloaded; stamp accordingly.
-	return envelopeAPI(cp, engine.CollectMembers(org), "00_collect_members.py",
-		sourceAPI(gh, surfaceOrgMembers), fmt.Sprintf("/orgs/%s/members + ...outside_collaborators + ...teams (bundle)", org), data)
+	if err := envelopeAPI(cp, engine.CollectMembers(org), "00_collect_members.py",
+		sourceAPI(gh, surfaceOrgMembers), fmt.Sprintf("/orgs/%s/members + ...outside_collaborators + ...teams (bundle)", org), data); err != nil {
+		return err
+	}
+	return listErr
 }
 
 func collectRepoCollaborators(ctx context.Context, gh GitHub, org, repo string) ([]map[string]any, int, error) {
@@ -1017,6 +1035,30 @@ func anyArray(items []json.RawMessage) []any {
 }
 
 // For environments, only a 403 (not a 404) marks a bucket unavailable.
+func markUnavailable(data map[string]any, status int) {
+	if status == 0 {
+		return
+	}
+	data["_unavailable"] = true
+	data["_unavailable_status"] = status
+}
+
+func markDetailUnavailable(data map[string]any, denied map[string]int) {
+	if len(denied) == 0 {
+		return
+	}
+	data["_detail_unavailable"] = denied
+}
+
+func writeEnvironmentsUnavailable(cp engine.CurrentPhase, org, repo string, status int) error {
+	if status == 0 {
+		return nil
+	}
+	return envelope(cp, engine.CollectEnvironmentsUnavailable(repo), "00_collect_environments.py",
+		fmt.Sprintf("/repos/%s/%s/environments", org, repo),
+		map[string]any{"repo": repo, "_unavailable": true, "_unavailable_status": status})
+}
+
 func only403(buckets map[string]int) map[string]int {
 	out := map[string]int{}
 	for k, v := range buckets {

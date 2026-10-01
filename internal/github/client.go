@@ -355,7 +355,7 @@ func (c *Client) ResolveRefCommitSHA(ctx context.Context, owner, repo, ref strin
 	}
 	var data map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &data); err != nil {
-		return "", nil
+		return "", fmt.Errorf("%s/%s commits/%s: %w", owner, repo, ref, err)
 	}
 	return decodeString(data["sha"]), nil
 }

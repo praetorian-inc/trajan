@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"path"
 	"path/filepath"
@@ -30,7 +31,7 @@ func normalizeEntities(ctx context.Context, runDir string, onError func(error)) 
 		name string
 		fn   func() error
 	}{
-		{"org", func() error { return normalizeOrg(prior, cp, org) }},
+		{"org", func() error { return normalizeOrg(prior, cp, org, onError) }},
 		{"repos", func() error { return normalizeRepos(prior, cp, org) }},
 		{"environments", func() error { return normalizeEnvironments(prior, cp, org) }},
 		{"rulesets", func() error {
@@ -85,7 +86,7 @@ var orgAdminClassAppPerms = map[string]bool{
 	"self_hosted_runners": true, "organization_self_hosted_runners": true,
 }
 
-func normalizeOrg(prior engine.PriorPhase, cp engine.CurrentPhase, org string) error {
+func normalizeOrg(prior engine.PriorPhase, cp engine.CurrentPhase, org string, onError func(error)) error {
 	if org == "" {
 		return nil
 	}
@@ -111,6 +112,22 @@ func normalizeOrg(prior engine.PriorPhase, cp engine.CurrentPhase, org string) e
 	groups := orgRunnerGroups(entListOf(runnersPayload, "runner_groups"))
 	secrets := entListOf(secretsPayload, "actions_secrets")
 	variables := entListOf(variablesPayload, "variables")
+	for _, u := range []struct {
+		surface string
+		payload map[string]any
+	}{
+		{"variables", variablesPayload}, {"secrets", secretsPayload},
+		{"members", membersPayload}, {"runners", runnersPayload},
+	} {
+		if entTruthy(u.payload["_unavailable"]) {
+			onError(fmt.Errorf("org %s: %s unreadable (HTTP %d), the org record understates them",
+				org, u.surface, entInt(u.payload["_unavailable_status"])))
+		}
+		for _, b := range slices.Sorted(maps.Keys(entObj(u.payload, "_unavailable_buckets"))) {
+			onError(fmt.Errorf("org %s: %s/%s unreadable (HTTP %d), the org record understates them",
+				org, u.surface, b, entInt(entObj(u.payload, "_unavailable_buckets")[b])))
+		}
+	}
 
 	hookURLs := make([]any, 0, len(hooks))
 	hooksActive := 0
@@ -410,6 +427,7 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 		repoInfo := entObj(repoData, "repo")
 		workflowPerms := entObj(settings, "workflow_permissions")
 		actionsPerms := entObj(settings, "permissions")
+		envsUnavailable := entTruthy(entLoadData(prior, engine.CollectEnvironmentsUnavailable(repoName))["_unavailable"])
 
 		var legacyBP *RepoLegacyBPSummary
 		bpPresent := repoData["default_branch_protection"] != nil
@@ -440,6 +458,8 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 			DefaultBranchProtectionSummary: legacyBP,
 
 			Codeowners: parseCodeowners(repoData["codeowners"]),
+
+			EnvironmentsUnavailable: envsUnavailable,
 
 			Provenance: []SourceProvenance{
 				{File: engine.CollectRepo(repoName)},
@@ -592,24 +612,30 @@ func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org stri
 			scopeKey = entStr(owner)
 		}
 
-		if entTruthy(data["_unavailable"]) {
+		sourceFile := engine.CollectRulesetsRepo(scopeKey)
+		if scope == "org" {
+			sourceFile = engine.CollectRulesetsOrg(scopeKey)
+		}
+
+		// Falls through, not continues: the rulesets whose detail did resolve still land.
+		listDown := entTruthy(data["_unavailable"])
+		if listDown || len(entObj(data, "_detail_unavailable")) > 0 {
 			rec := RulesetSentinel{
 				ID:          scopeKey + "__unavailable",
-				Scope:       "repo",
+				Scope:       scope,
 				Owner:       nil,
-				Repo:        scopeKey,
 				Unavailable: true,
-				Provenance:  []SourceProvenance{{File: engine.CollectRulesetsRepo(scopeKey)}},
+				Provenance:  []SourceProvenance{{File: sourceFile}},
+			}
+			if scope == "repo" {
+				rec.Repo = scopeKey
 			}
 			if err := cp.Write(normRulesetSentinelPath(scopeKey, "unavailable"), rec); err != nil {
 				return nil, err
 			}
-			continue
-		}
-
-		sourceFile := engine.CollectRulesetsRepo(scopeKey)
-		if scope == "org" {
-			sourceFile = engine.CollectRulesetsOrg(scopeKey)
+			if listDown {
+				continue
+			}
 		}
 
 		rulesets := entList(data["rulesets"])

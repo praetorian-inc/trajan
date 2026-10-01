@@ -142,6 +142,8 @@ type RepoFact struct {
 	// fact as a repository that has no CODEOWNERS file.
 	Codeowners *CodeownersFact `json:"codeowners"`
 
+	EnvironmentsUnavailable bool `json:"environments_unavailable"`
+
 	Provenance []SourceProvenance `json:"_provenance"`
 }
 

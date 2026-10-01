@@ -37,6 +37,11 @@ func CollectEnvironment(repo, env string) string {
 	return path.Join(dirCollect, "environments", repo, env+".json")
 }
 
+// The leading "_" keeps this out of IterJSON, which reads its siblings as environment records.
+func CollectEnvironmentsUnavailable(repo string) string {
+	return path.Join(dirCollect, "environments", repo, "_unavailable.json")
+}
+
 // scopeKey is one of "<org>", "<repo>", or "<repo>__<env>".
 func CollectSecrets(scopeKey string) string {
 	return path.Join(dirCollect, "secrets", scopeKey+".json")

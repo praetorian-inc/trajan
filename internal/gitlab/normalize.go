@@ -48,7 +48,10 @@ func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	timer := engine.StartPhaseTimer(engine.PhaseNormalize, "normalize")
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
-	projs := projects(prior)
+	projs, err := projects(prior)
+	if err != nil {
+		return err
+	}
 
 	normErr := normalizeEntities(ctx, prior, cp, org, projs, timer)
 	if normErr == nil {
@@ -84,10 +87,10 @@ func itemErr(timer *engine.PhaseTimer, subject string, err error) {
 }
 
 // Directory iteration order is stable, so re-runs produce identical output.
-func projects(prior engine.PriorPhase) []projectMeta {
+func projects(prior engine.PriorPhase) ([]projectMeta, error) {
 	files, err := prior.IterJSON("00-collect/project")
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	out := make([]projectMeta, 0, len(files))
 	for _, f := range files {
@@ -106,5 +109,5 @@ func projects(prior engine.PriorPhase) []projectMeta {
 			DefaultBranch: entStr(d["default_branch"]),
 		})
 	}
-	return out
+	return out, nil
 }

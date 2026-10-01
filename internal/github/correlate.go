@@ -732,8 +732,16 @@ func cacheJobSummary(job map[string]any) map[string]any {
 
 func deriveBranchCoverage(repos, rulesets []map[string]any, branchesByRepo map[string][]string) (map[string]any, []map[string]any) {
 	var orgRulesets []map[string]any
+	orgUnavailable := false
 	for _, rs := range rulesets {
-		if mStr(rs, "scope") == "org" && !mBool(rs, "_empty") && !mBool(rs, "_unavailable") && targetsBranch(rs) {
+		if mStr(rs, "scope") != "org" {
+			continue
+		}
+		if mBool(rs, "_unavailable") {
+			orgUnavailable = true
+			continue
+		}
+		if !mBool(rs, "_empty") && targetsBranch(rs) {
 			orgRulesets = append(orgRulesets, rs)
 		}
 	}
@@ -752,7 +760,7 @@ func deriveBranchCoverage(repos, rulesets []map[string]any, branchesByRepo map[s
 		}
 
 		var repoRulesets []map[string]any
-		unavailable := false
+		unavailable := orgUnavailable
 		for _, rs := range rulesets {
 			if mStr(rs, "scope") != "repo" || mStr(rs, "repo") != repoName {
 				continue

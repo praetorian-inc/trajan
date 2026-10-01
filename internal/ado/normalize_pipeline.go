@@ -96,9 +96,16 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 		settable := settableVarSet(entObj(def, "variables"))
 		repoName := azureReposName(repo)
 		facts, jobs := pipelineYAMLFacts{}, 0
+		yamlStatus := 0
 		// entryYAML keys on the repository id, so a nameless Azure Repos pipeline still parses.
 		if processType == 2 && isAzureRepos(repo) {
-			content := entryYAML(prior, project, id, repo, entStr(process["yamlFilename"]))
+			var content string
+			content, yamlStatus = entryYAML(prior, project, id, repo, entStr(process["yamlFilename"]))
+			if yamlStatus != 0 {
+				timer.Errors = append(timer.Errors, fmt.Sprintf(
+					"pipeline %s/%d: entry YAML unreadable (HTTP %d); its triggers, templates and parameters are unknown",
+					project, id, yamlStatus))
+			}
 			if content != "" {
 				facts, jobs, err = parsePipelineYAML(cp, timer, project, repoName, id, content, settable)
 				if err != nil {
@@ -111,6 +118,7 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 				return err
 			}
 		}
+		pipe["yaml_unreadable"] = yamlStatus != 0
 		pipe["extends_template"] = strOrNull(facts.extendsTemplate)
 		pipe["extends_source"] = facts.extendsSource // resolved template source repo/ref (nil if none)
 		pipe["template_sources"] = entListOrEmpty(facts.templateSources)
@@ -174,8 +182,8 @@ func normalizePipelineVars(vars map[string]any) []any {
 }
 
 // Rebuilds the repoID@branch__yamlFilename stem the collector wrote, returning ""
-// when that file is absent.
-func entryYAML(prior engine.PriorPhase, project string, id int64, repo map[string]any, yamlFilename string) string {
+// when that file is absent and the collected status when it was unreadable.
+func entryYAML(prior engine.PriorPhase, project string, id int64, repo map[string]any, yamlFilename string) (string, int) {
 	repoID := entStr(repo["id"])
 	branch := stripRef(entStr(repo["defaultBranch"]))
 	if branch == "" {
@@ -183,7 +191,10 @@ func entryYAML(prior engine.PriorPhase, project string, id int64, repo map[strin
 	}
 	name := fmt.Sprintf("%s@%s__%s", repoID, branch, yamlFilename)
 	d := entLoadData(prior, engine.CollectADOPipelineYAML(project, id, name))
-	return entStr(d["content"])
+	if entBool(d["_unresolved"]) {
+		return "", int(entInt64(d["_status"]))
+	}
+	return entStr(d["content"]), 0
 }
 
 // The root-level facts a caller stamps onto the :Pipeline node. A nil trigger is

@@ -367,6 +367,10 @@ func normalizeGroup(prior engine.PriorPhase, cp engine.CurrentPhase, gpath strin
 	if detail == nil {
 		return nil
 	}
+	if entUnobserved(detail) {
+		itemErr(timer, "group "+gpath, fmt.Errorf("detail unobserved (HTTP %v); no group record emitted", detail["_unobserved"]))
+		return nil
+	}
 	duo := entLoadData(prior, engine.CollectGLGroupDuo(gpath))
 	vars := entLoadList(prior, engine.CollectGLGroupVariables(gpath))
 	saml := entLoadData(prior, engine.CollectGLGroupSAML(gpath))

@@ -1,6 +1,7 @@
 package gitlab
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,6 +30,9 @@ func (c *Client) Paginate(ctx context.Context, p string, params url.Values) ([]j
 		}
 		var arr []json.RawMessage
 		if err := json.Unmarshal(raw, &arr); err != nil {
+			if bytes.HasPrefix(bytes.TrimSpace(raw), []byte("[")) {
+				return nil, fmt.Errorf("%s page %d: %w", p, page, err)
+			}
 			items = append(items, raw)
 			return items, nil
 		}

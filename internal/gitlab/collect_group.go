@@ -8,14 +8,14 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-func collectGroupSurfaces(ctx context.Context, cl GitLab, cp engine.CurrentPhase, groupPath string, gid int64, groupRaw json.RawMessage, timer *engine.PhaseTimer) {
+func collectGroupSurfaces(ctx context.Context, cl GitLab, cp engine.CurrentPhase, groupPath string, gid int64, groupRaw json.RawMessage, groupStatus int, timer *engine.PhaseTimer) {
 	ref := groupRef(groupPath, gid)
 	sf := func(kind string, fn func(context.Context) error) {
 		softSurface(ctx, timer, "group/"+kind, "group/"+groupPath+"/"+kind, fn)
 	}
 
 	sf("detail", func(ctx context.Context) error {
-		return envelope(cp, engine.CollectGLGroup(groupPath), "group", "/groups/"+ref, groupRaw)
+		return writeOrMark(cp, engine.CollectGLGroup(groupPath), "group", "/groups/"+ref, groupRaw, groupStatus)
 	})
 
 	listSurface := func(label, apiPath, rel, collector string, params url.Values) {

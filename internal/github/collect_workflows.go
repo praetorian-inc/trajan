@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -197,12 +198,12 @@ func listWorkflowFiles(ctx context.Context, gh GitHub, org, repo, ref string) ([
 	if strings.HasPrefix(trimmed, "{") {
 		var single workflowEntry
 		if err := json.Unmarshal(raw, &single); err != nil {
-			return nil, nil
+			return nil, fmt.Errorf("%s/%s workflow directory listing: %w", org, repo, err)
 		}
 		entries = []workflowEntry{single}
 	} else {
 		if err := json.Unmarshal(raw, &entries); err != nil {
-			return nil, nil
+			return nil, fmt.Errorf("%s/%s workflow directory listing: %w", org, repo, err)
 		}
 	}
 	out := entries[:0]

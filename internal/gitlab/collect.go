@@ -80,6 +80,7 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl GitLab, cp engine.Cu
 	if err != nil {
 		return err
 	}
+	groupStatus := 0
 	if gstatus != 0 {
 		var pstatus int
 		var perr error
@@ -95,7 +96,11 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl GitLab, cp engine.Cu
 		groupPath = namespaceFullPath(projRaw)
 		scope.Group = groupPath
 		if groupPath != "" {
-			groupRaw, _, _ = softGet(ctx, cl, "/groups/"+url.PathEscape(groupPath), nil)
+			var gerr error
+			groupRaw, groupStatus, gerr = softGet(ctx, cl, "/groups/"+url.PathEscape(groupPath), nil)
+			if gerr != nil {
+				return gerr
+			}
 		}
 	}
 	state.Scope = scopeString(*scope)
@@ -104,7 +109,7 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl GitLab, cp engine.Cu
 	var gid int64
 	if groupPath != "" {
 		gid = numField(groupRaw, "id")
-		collectGroupSurfaces(ctx, cl, cp, groupPath, gid, groupRaw, timer)
+		collectGroupSurfaces(ctx, cl, cp, groupPath, gid, groupRaw, groupStatus, timer)
 	}
 
 	projects, err := scopedProjects(ctx, cl, timer, scope, projRaw, groupPath, gid)
