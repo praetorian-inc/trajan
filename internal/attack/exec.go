@@ -283,8 +283,9 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 	}
 
 	timer := engine.StartPhaseTimer(engine.PhaseAttack, "attack")
+	out := cfg.Sink()
 	x := &executor{
-		plan: p, sess: sess, runDir: runDir, execute: opts.Execute,
+		plan: p, sess: sess, runDir: runDir, execute: opts.Execute, out: out,
 		until:    opts.Until,
 		delay:    opts.StepDelay,
 		handles:  map[string]Handle{},
@@ -305,9 +306,9 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 		}
 	}
 
-	head(p, sess, mode)
+	head(out, p, sess, mode)
 
-	ui.Section("Attack Steps")
+	out.Section("Attack Steps")
 	walkErr := x.walk(ctx, p.Steps)
 	// Cleanup runs whatever happened to the steps, in declaration order: a
 	// template's cleanup block is already authored as the undo sequence. --until
@@ -315,7 +316,7 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 	// that the artifacts must still be there when the operator resumes.
 	if !x.stopped {
 		if len(p.Cleanup) > 0 {
-			ui.Section("Cleanup")
+			out.Section("Cleanup")
 		}
 		if cerr := x.walk(ctx, p.Cleanup); walkErr == nil {
 			walkErr = cerr
@@ -368,10 +369,10 @@ func Run(ctx context.Context, cfg *engine.Config, p *Plan, opts RunOptions) (*Ru
 		}
 	}
 
-	ui.Outcome("attack complete", outcomeCounts(res), elapsed(rec.DurationS))
-	ui.Note(planDir)
+	out.Outcome("attack complete", outcomeCounts(res), elapsed(rec.DurationS))
+	out.Note(planDir)
 	if res.StoppedAt != "" {
-		ui.Note(fmt.Sprintf("stopped after step %q; run `trajan gh attack resume -p %s` to continue", res.StoppedAt, runDir))
+		out.Note(fmt.Sprintf("stopped after step %q; run `trajan gh attack resume -p %s` to continue", res.StoppedAt, runDir))
 	}
 	// No engine.PhaseIssues here, unlike every other phase: a soft failure in this
 	// one already has a row of its own naming the step, its status and its reason,
@@ -427,6 +428,7 @@ func planSteps(steps []Step) []PlanStep {
 type executor struct {
 	plan    *Plan
 	sess    *Session
+	out     ui.Sink
 	runDir  string
 	execute bool
 	until   string
@@ -506,7 +508,7 @@ func (x *executor) step(ctx context.Context, st *Step) {
 		if err := writeRecord(); err != nil {
 			x.errs = append(x.errs, fmt.Sprintf("step %s: write record: %v", st.ID, err))
 		}
-		ui.Step(ui.StepLine{
+		x.out.Step(ui.StepLine{
 			Seq: rec.Seq, Total: x.total,
 			ID: st.ID, Uses: st.Uses,
 			Action:   actionOf(st.Uses),
@@ -734,7 +736,7 @@ func (x *executor) replay(st *Step, rec StepRecord) {
 			x.sess.alias(st.ID, id.Name)
 		}
 	}
-	ui.Step(ui.StepLine{
+	x.out.Step(ui.StepLine{
 		Seq: rec.Seq, Total: x.total,
 		ID: st.ID, Uses: rec.Uses,
 		Action:   actionOf(rec.Uses),

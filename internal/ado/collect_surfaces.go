@@ -362,7 +362,7 @@ func collectIdentities(ctx context.Context, cl ADO, cp engine.CurrentPhase, org 
 
 func aceDescriptors(prior engine.PriorPhase) ([]string, error) {
 	seen := map[string]bool{}
-	for _, dir := range []string{"00-collect/acl-repo", "00-collect/acl-build", "00-collect/acl-endpoint"} {
+	for _, dir := range []string{engine.DirCollect + "/acl-repo", engine.DirCollect + "/acl-build", engine.DirCollect + "/acl-endpoint"} {
 		files, err := prior.IterJSON(dir)
 		if err != nil {
 			return nil, fmt.Errorf("identities: load %s: %w", dir, err)

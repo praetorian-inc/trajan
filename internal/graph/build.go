@@ -19,11 +19,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
-const (
-	scanDir  = "20-scan"
-	graphDir = "30-graph"
-)
-
 func Build[L ~string, T ~string](ctx context.Context, cfg *engine.Config, runDir string,
 	p Provider[L, T], targets map[string]Target) error {
 
@@ -101,8 +96,8 @@ func runBuild[L ~string, T ~string](ctx context.Context, cfg *engine.Config, run
 			"findings_dropped", in.FindingsDropped)
 	}
 
-	if err := os.RemoveAll(filepath.Join(runDir, graphDir)); err != nil {
-		return buildStats{}, fmt.Errorf("clear %s: %w", graphDir, err)
+	if err := os.RemoveAll(filepath.Join(runDir, engine.DirGraph)); err != nil {
+		return buildStats{}, fmt.Errorf("clear %s: %w", engine.DirGraph, err)
 	}
 
 	nodes, err := b.Nodes(ctx)

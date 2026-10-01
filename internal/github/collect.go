@@ -50,10 +50,8 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if err := state.CheckPhase(engine.PhaseCollect); err != nil {
 		return "", err
 	}
-	for _, d := range state.StaleDirs(engine.PhaseCollect) {
-		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
-			return "", err
-		}
+	if err := engine.ClearStale(runDir, state, engine.PhaseCollect); err != nil {
+		return "", err
 	}
 	state.Platform = "gh"
 	state.Scope = scopeString(scope)
@@ -261,6 +259,10 @@ func selectBranchesToScan(ctx context.Context, cfg *engine.Config, gh GitHub, cp
 			}
 		}
 		slices.Sort(out)
+		if len(out) > maxSelectedBranches {
+			return out[:maxSelectedBranches],
+				[]string{fmt.Sprintf("branch selection truncated at %d for %s", maxSelectedBranches, repo)}
+		}
 		return out, nil
 	}
 	return selectNonDefaultBranches(ctx, gh, cp, org, repo, def)

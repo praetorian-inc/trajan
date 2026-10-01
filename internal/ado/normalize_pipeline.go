@@ -33,7 +33,7 @@ func sortedKeys(m map[string]any) []string {
 }
 
 func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer) error {
-	files, err := prior.IterJSON("00-collect/build-definition")
+	files, err := prior.IterJSON(engine.DirCollect + "/build-definition")
 	if err != nil {
 		return err
 	}

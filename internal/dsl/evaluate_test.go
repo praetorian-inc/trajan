@@ -247,3 +247,37 @@ func TestParseValue(t *testing.T) {
 		t.Errorf("set should have 3 members, got %d: %#v", len(set), set)
 	}
 }
+
+func TestEvaluatePredicateStringEqualityIsNotNumeric(t *testing.T) {
+	subj := map[string]any{
+		"sha":     "1e3",
+		"padded":  "00",
+		"nan":     "NaN",
+		"count":   float64(1000),
+		"version": " 1.0 ",
+	}
+	cases := []struct {
+		predicate string
+		want      bool
+	}{
+		{`padded == "0"`, false},
+		{`padded == "00"`, true},
+		{`sha == "1000"`, false},
+		{`sha == "1e3"`, true},
+		{`nan == "NaN"`, true},
+		{`count == 1000`, true},
+		{`version == "1.0"`, false},
+	}
+	for _, c := range cases {
+		if got := mustEval(t, c.predicate, subj); got != c.want {
+			t.Errorf("%q => %v, want %v", c.predicate, got, c.want)
+		}
+	}
+}
+
+func TestEvaluatePredicateUncompilablePatternIsAnError(t *testing.T) {
+	_, err := EvaluatePredicate(`name matches "([unclosed"`, map[string]any{"name": "ci"})
+	if err == nil {
+		t.Fatal("a broken pattern read as a rule that ran and matched nothing")
+	}
+}

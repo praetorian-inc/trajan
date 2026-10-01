@@ -741,7 +741,7 @@ func policyRepo(scope []any, repoNames map[string]string) string {
 }
 
 func normalizeAgentPools(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer) error {
-	files, err := prior.IterJSON("00-collect/pools")
+	files, err := prior.IterJSON(engine.DirCollect + "/pools")
 	if err != nil {
 		return err
 	}

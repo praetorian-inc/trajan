@@ -240,6 +240,12 @@ func fetchLocalAction(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	if !tc.claimWrite(outPath) {
 		return false, nil
 	}
+	written := false
+	defer func() {
+		if !written {
+			tc.releaseWrite(outPath)
+		}
+	}()
 	var fname, sha string
 	var body []byte
 	for _, candidate := range []string{"action.yml", "action.yaml"} {
@@ -254,7 +260,6 @@ func fetchLocalAction(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 		}
 	}
 	if body == nil {
-		tc.releaseWrite(outPath)
 		return false, nil
 	}
 	if err := cp.WriteRaw(outPath, body); err != nil {
@@ -279,6 +284,7 @@ func fetchLocalAction(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	if err := cp.Write(engine.CollectActionMeta(org, repo, actionPath, "HEAD"), meta); err != nil {
 		return false, err
 	}
+	written = true
 	return true, nil
 }
 
@@ -289,12 +295,17 @@ func fetchLocalReusable(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	if !tc.claimWrite(outPath) {
 		return false, nil
 	}
+	written := false
+	defer func() {
+		if !written {
+			tc.releaseWrite(outPath)
+		}
+	}()
 	body, sha, ok, err := gh.GetContentWithSHA(ctx, "/repos/"+org+"/"+repo+"/contents/"+localPath, "", true)
 	if err != nil {
 		return false, err
 	}
 	if !ok {
-		tc.releaseWrite(outPath)
 		return false, nil
 	}
 	if err := cp.WriteRaw(outPath, body); err != nil {
@@ -318,6 +329,7 @@ func fetchLocalReusable(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	if err := cp.Write(engine.CollectActionMeta(org, repo, localPath, "HEAD"), meta); err != nil {
 		return false, err
 	}
+	written = true
 	return true, nil
 }
 
@@ -327,13 +339,18 @@ func fetchRemoteReusable(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	if !tc.claimWrite(outPath) {
 		return false, nil
 	}
+	written := false
+	defer func() {
+		if !written {
+			tc.releaseWrite(outPath)
+		}
+	}()
 	body, sha, ok, err := gh.GetContentWithSHA(ctx,
 		"/repos/"+info.Owner+"/"+info.Repo+"/contents/"+info.Path, info.Ref, true)
 	if err != nil {
 		return false, err
 	}
 	if !ok {
-		tc.releaseWrite(outPath)
 		return false, nil
 	}
 	if err := cp.WriteRaw(outPath, body); err != nil {
@@ -357,6 +374,7 @@ func fetchRemoteReusable(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	if err := cp.Write(engine.CollectActionMeta(info.Owner, info.Repo, info.Path, info.Ref), meta); err != nil {
 		return false, err
 	}
+	written = true
 	return true, nil
 }
 

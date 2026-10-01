@@ -18,7 +18,7 @@ func fixture(t *testing.T, files map[string]any) (*ghCorpus, *nodeIndex) {
 	t.Helper()
 	dir := t.TempDir()
 	for rel, v := range files {
-		if err := engine.WriteJSON(filepath.Join(dir, "10-normalize", filepath.FromSlash(rel)), v); err != nil {
+		if err := engine.WriteJSON(filepath.Join(dir, engine.DirNormalize, filepath.FromSlash(rel)), v); err != nil {
 			t.Fatal(err)
 		}
 	}

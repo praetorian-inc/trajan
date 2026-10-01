@@ -939,7 +939,7 @@ func collectRepoCollaborators(ctx context.Context, gh GitHub, org, repo string) 
 }
 
 func collectedRepoNames(cp engine.CurrentPhase) []string {
-	dir := filepath.Join(cp.RunDir, "00-collect", "repos")
+	dir := filepath.Join(cp.RunDir, engine.DirCollect, "repos")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil

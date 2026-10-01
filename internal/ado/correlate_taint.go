@@ -62,7 +62,7 @@ func pipeKey(project string, id int64) string { return fmt.Sprintf("%s/%d", proj
 // edges are already on disk.
 func loadBuildValidated(prior engine.PriorPhase) (map[string]bool, error) {
 	out := map[string]bool{}
-	edges, err := loadRecords(prior, "10-normalize/edges/build-validates")
+	edges, err := loadRecords(prior, engine.DirNormalize+"/edges/build-validates")
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func indexPipelines(pipelines []map[string]any, validated map[string]bool) map[s
 func deriveReads(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, jobs []map[string]any) (map[string]bool, error) {
 	readsByJob := map[string]bool{}
 	secretsByGroup := map[int64][]map[string]any{}
-	secrets, err := loadRecords(prior, "10-normalize/secret-variables")
+	secrets, err := loadRecords(prior, engine.DirNormalize+"/secret-variables")
 	if err != nil {
 		return nil, fmt.Errorf("correlate: load secret-variables: %w", err)
 	}
@@ -117,14 +117,14 @@ func deriveReads(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.
 		secretsByGroup[gid] = append(secretsByGroup[gid], s)
 	}
 	vgGate := map[int64]map[string]any{}
-	vgs, err := loadRecords(prior, "10-normalize/variable-groups")
+	vgs, err := loadRecords(prior, engine.DirNormalize+"/variable-groups")
 	if err != nil {
 		return nil, fmt.Errorf("correlate: load variable-groups: %w", err)
 	}
 	for _, g := range vgs {
 		vgGate[mInt64(g, "id")] = g
 	}
-	cg, err := loadRecords(prior, "10-normalize/edges/consumes-group")
+	cg, err := loadRecords(prior, engine.DirNormalize+"/edges/consumes-group")
 	if err != nil {
 		return nil, fmt.Errorf("correlate: load consumes-group: %w", err)
 	}
@@ -472,11 +472,11 @@ type grantIndex struct {
 // who holds Queue builds or Contribute.
 func loadGrants(prior engine.PriorPhase) (grantIndex, error) {
 	idx := grantIndex{byProjectAction: map[string]map[string][]map[string]any{}}
-	roles, err := loadRecords(prior, "10-normalize/edges/has-role")
+	roles, err := loadRecords(prior, engine.DirNormalize+"/edges/has-role")
 	if err != nil {
 		return idx, err
 	}
-	projs, err := loadRecords(prior, "10-normalize/projects")
+	projs, err := loadRecords(prior, engine.DirNormalize+"/projects")
 	if err != nil {
 		return idx, err
 	}
@@ -484,7 +484,7 @@ func loadGrants(prior engine.PriorPhase) (grantIndex, error) {
 	for _, p := range projs {
 		projByID[mStr(p, "_id")] = mStr(p, "project")
 	}
-	repos, err := loadRecords(prior, "10-normalize/repos")
+	repos, err := loadRecords(prior, engine.DirNormalize+"/repos")
 	if err != nil {
 		return idx, err
 	}

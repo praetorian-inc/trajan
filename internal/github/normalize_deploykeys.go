@@ -65,7 +65,7 @@ func deployKeyFingerprint(pub string) string {
 }
 
 func normalizeDeployKeys(prior engine.PriorPhase, cp engine.CurrentPhase, org string, onError func(error)) error {
-	files, err := prior.IterJSON(path.Join("00-collect", "deploy-keys"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "deploy-keys"))
 	if err != nil {
 		return err
 	}

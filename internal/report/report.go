@@ -36,6 +36,12 @@ func Run(ctx context.Context, runDir string, opts Options) error {
 	}
 	opts.MinSeverity = cmp.Or(opts.MinSeverity, "info")
 	opts.MinConfidence = cmp.Or(opts.MinConfidence, "low")
+	if finding.SeverityRank(opts.MinSeverity) == 0 {
+		return fmt.Errorf("unknown severity %q (want critical|high|medium|low|info)", opts.MinSeverity)
+	}
+	if finding.ConfidenceRank(opts.MinConfidence) == 0 {
+		return fmt.Errorf("unknown confidence %q (want high|medium|low)", opts.MinConfidence)
+	}
 
 	findings, err := load(runDir)
 	if err != nil {
@@ -106,7 +112,7 @@ func Run(ctx context.Context, runDir string, opts Options) error {
 
 func load(runDir string) ([]finding.Finding, error) {
 	prior := engine.PriorPhase{RunDir: runDir}
-	files, err := prior.IterJSON(filepath.Join("20-scan", "findings"))
+	files, err := prior.IterJSON(filepath.Join(engine.DirScan, "findings"))
 	if err != nil {
 		return nil, fmt.Errorf("load findings: %w", err)
 	}

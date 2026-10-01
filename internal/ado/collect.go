@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -38,10 +37,8 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if err := state.CheckPhase(engine.PhaseCollect); err != nil {
 		return "", err
 	}
-	for _, d := range state.StaleDirs(engine.PhaseCollect) {
-		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
-			return "", err
-		}
+	if err := engine.ClearStale(runDir, state, engine.PhaseCollect); err != nil {
+		return "", err
 	}
 	state.Platform = "ado"
 	state.Scope = scopeString(scope)
@@ -304,7 +301,7 @@ func appendErr(timer *engine.PhaseTimer, msg string) {
 
 func countJSON(runDir string) int {
 	n := 0
-	_ = filepath.WalkDir(filepath.Join(runDir, "00-collect"), func(_ string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(filepath.Join(runDir, engine.DirCollect), func(_ string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && strings.HasSuffix(d.Name(), ".json") {
 			n++
 		}

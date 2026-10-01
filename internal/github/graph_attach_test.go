@@ -16,12 +16,12 @@ func attachFixture(t *testing.T, files map[string]any, findings []finding.Findin
 	t.Helper()
 	dir := t.TempDir()
 	for rel, v := range files {
-		if err := engine.WriteJSON(filepath.Join(dir, "10-normalize", filepath.FromSlash(rel)), v); err != nil {
+		if err := engine.WriteJSON(filepath.Join(dir, engine.DirNormalize, filepath.FromSlash(rel)), v); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, f := range findings {
-		if err := engine.WriteJSON(filepath.Join(dir, "20-scan", "findings", f.Fingerprint+".json"), f); err != nil {
+		if err := engine.WriteJSON(filepath.Join(dir, engine.DirScan, "findings", f.Fingerprint+".json"), f); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -58,30 +58,30 @@ func normalizeEntities(ctx context.Context, runDir string, onError func(error)) 
 }
 
 func normOrgPath(org string) string {
-	return path.Join("10-normalize", "org", engine.GHKey(org)+".json")
+	return path.Join(engine.DirNormalize, "org", engine.GHKey(org)+".json")
 }
 func normRepoPath(repo string) string {
-	return path.Join("10-normalize", "repos", engine.GHKey(repo)+".json")
+	return path.Join(engine.DirNormalize, "repos", engine.GHKey(repo)+".json")
 }
 
 func normEnvPath(repo, env string) string {
-	return path.Join("10-normalize", "environments", engine.GHKey(repo)+"__"+engine.GHKey(env)+".json")
+	return path.Join(engine.DirNormalize, "environments", engine.GHKey(repo)+"__"+engine.GHKey(env)+".json")
 }
 
 func normTagPath(repo, tag string) string {
-	return path.Join("10-normalize", "tags", engine.GHKey(repo)+"__"+engine.GHKey(engine.BranchSlug(tag))+".json")
+	return path.Join(engine.DirNormalize, "tags", engine.GHKey(repo)+"__"+engine.GHKey(engine.BranchSlug(tag))+".json")
 }
 
 func normRulesetPath(scopeKey string, rulesetID int64) string {
-	return path.Join("10-normalize", "rulesets", fmt.Sprintf("%s__%d.json", engine.GHKey(scopeKey), rulesetID))
+	return path.Join(engine.DirNormalize, "rulesets", fmt.Sprintf("%s__%d.json", engine.GHKey(scopeKey), rulesetID))
 }
 
 func normRulesetSentinelPath(scopeKey, suffix string) string {
-	return path.Join("10-normalize", "rulesets", engine.GHKey(scopeKey)+"__"+suffix+".json")
+	return path.Join(engine.DirNormalize, "rulesets", engine.GHKey(scopeKey)+"__"+suffix+".json")
 }
 
 func normAppPath(slug string) string {
-	return path.Join("10-normalize", "apps", engine.GHKey(slug)+".json")
+	return path.Join(engine.DirNormalize, "apps", engine.GHKey(slug)+".json")
 }
 
 // "write" on one of these, or any "admin", makes an installation admin-class for the
@@ -417,7 +417,7 @@ func isPatLikeVariable(u string) bool {
 }
 
 func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string) error {
-	files, err := prior.IterJSON(path.Join("00-collect", "repos"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "repos"))
 	if err != nil {
 		return err
 	}
@@ -497,7 +497,7 @@ func summarizeLegacyBP(bp map[string]any) *RepoLegacyBPSummary {
 }
 
 func normalizeEnvironments(prior engine.PriorPhase, cp engine.CurrentPhase, org string) error {
-	files, err := prior.IterJSON(path.Join("00-collect", "environments"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "environments"))
 	if err != nil {
 		return err
 	}
@@ -604,7 +604,7 @@ func entEnvBranchPolicy(base, branchPolicies map[string]any) EnvBranchPolicy {
 }
 
 func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org string) ([]RulesetFact, error) {
-	files, err := prior.IterJSON(path.Join("00-collect", "rulesets"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "rulesets"))
 	if err != nil {
 		return nil, err
 	}
@@ -675,7 +675,7 @@ func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org stri
 }
 
 func normalizeTags(prior engine.PriorPhase, cp engine.CurrentPhase, rulesets []RulesetFact) error {
-	files, err := prior.IterJSON(path.Join("00-collect", "tags"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "tags"))
 	if err != nil {
 		return err
 	}
@@ -839,7 +839,7 @@ var appBroadAdminPerms = map[string]bool{
 }
 
 func normalizeApps(prior engine.PriorPhase, cp engine.CurrentPhase, org string) error {
-	files, err := prior.IterJSON(path.Join("00-collect", "apps"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "apps"))
 	if err != nil {
 		return err
 	}

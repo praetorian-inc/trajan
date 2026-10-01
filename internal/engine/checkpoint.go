@@ -162,10 +162,10 @@ func resolvedRoot(runDir string) (string, error) {
 
 func LoadFindings(ctx context.Context, cfg *Config, runDir string, onError func(error)) ([]finding.Finding, int, error) {
 	pp := PriorPhase{RunDir: runDir}
-	if _, err := os.Stat(pp.Abs(dirScan)); err != nil {
-		return nil, 0, fmt.Errorf("%s unreadable; run the scan phase first: %w", dirScan, err)
+	if _, err := os.Stat(pp.Abs(DirScan)); err != nil {
+		return nil, 0, fmt.Errorf("%s unreadable; run the scan phase first: %w", DirScan, err)
 	}
-	files, err := pp.IterJSON(dirScan)
+	files, err := pp.IterJSON(DirScan)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -173,7 +173,7 @@ func LoadFindings(ctx context.Context, cfg *Config, runDir string, onError func(
 		func(_ context.Context, f PhaseFile) (finding.Finding, error) {
 			var v finding.Finding
 			if err := json.Unmarshal(f.Data, &v); err != nil {
-				return v, fmt.Errorf("%s/%s: %w", dirScan, f.Rel, err)
+				return v, fmt.Errorf("%s/%s: %w", DirScan, f.Rel, err)
 			}
 			return v, nil
 		},

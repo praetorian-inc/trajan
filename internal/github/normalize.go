@@ -23,10 +23,8 @@ func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	if err := state.CheckPhase(engine.PhaseNormalize); err != nil {
 		return err
 	}
-	for _, d := range state.StaleDirs(engine.PhaseNormalize) {
-		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
-			return err
-		}
+	if err := engine.ClearStale(runDir, state, engine.PhaseNormalize); err != nil {
+		return err
 	}
 
 	org := state.Org
@@ -72,11 +70,11 @@ func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 }
 
 func normalizeJobs(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) ([]JobFact, error) {
-	workflowsRoot := filepath.Join(prior.RunDir, "00-collect", "workflows")
+	workflowsRoot := filepath.Join(prior.RunDir, engine.DirCollect, "workflows")
 	repoDirs, err := os.ReadDir(workflowsRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
-			timer.Errors = append(timer.Errors, "00-collect/workflows missing")
+			timer.Errors = append(timer.Errors, engine.DirCollect+"/workflows missing")
 			return nil, nil
 		}
 		return nil, err
@@ -105,7 +103,7 @@ func normalizeJobs(ctx context.Context, prior engine.PriorPhase, cp engine.Curre
 		dirPath := filepath.Join(workflowsRoot, dirName)
 		for _, yamlName := range workflowYAMLNames(dirPath) {
 			timer.InputFiles++
-			relpath := filepath.ToSlash(filepath.Join("00-collect", "workflows", dirName, yamlName))
+			relpath := filepath.ToSlash(filepath.Join(engine.DirCollect, "workflows", dirName, yamlName))
 			text, err := os.ReadFile(filepath.Join(dirPath, yamlName))
 			if err != nil {
 				timer.Errors = append(timer.Errors, fmt.Sprintf("%s: %v", relpath, err))
@@ -1207,7 +1205,7 @@ func loadRepoDefaultPerms(prior engine.PriorPhase, repo string) string {
 func loadRefResolutions(prior engine.PriorPhase) map[string]string {
 	out := map[string]string{}
 	collect := func(dir, suffix string) {
-		root := prior.Abs(filepath.Join("00-collect", dir))
+		root := prior.Abs(filepath.Join(engine.DirCollect, dir))
 		entries, err := os.ReadDir(root)
 		if err != nil {
 			return
@@ -1262,7 +1260,7 @@ func loadSecretScopeIndex(prior engine.PriorPhase, org string) secretScopeIndex 
 		privateRepos: map[string]bool{},
 	}
 
-	files, err := prior.IterJSON("00-collect/secrets")
+	files, err := prior.IterJSON(engine.DirCollect + "/secrets")
 	if err != nil {
 		return ix
 	}
@@ -1311,7 +1309,7 @@ func loadSecretScopeIndex(prior engine.PriorPhase, org string) secretScopeIndex 
 		}
 	}
 
-	repos, err := prior.IterJSON("00-collect/repos")
+	repos, err := prior.IterJSON(engine.DirCollect + "/repos")
 	if err != nil {
 		return ix
 	}

@@ -311,11 +311,11 @@ func TestBuildKeepsThePriorGraphWhenInputsAreUnreadable(t *testing.T) {
 	if err := buildInto(t, dir); err == nil {
 		t.Fatal("a run with no 20-scan must fail rather than report zero findings")
 	}
-	if _, err := os.Stat(filepath.Join(dir, "30-graph")); !os.IsNotExist(err) {
-		t.Fatalf("a failed build wrote %s: %v", "30-graph", err)
+	if _, err := os.Stat(filepath.Join(dir, engine.DirGraph)); !os.IsNotExist(err) {
+		t.Fatalf("a failed build wrote %s: %v", engine.DirGraph, err)
 	}
 
-	if err := engine.WriteJSON(filepath.Join(dir, "20-scan", "findings", "aaaa.json"),
+	if err := engine.WriteJSON(filepath.Join(dir, engine.DirScan, "findings", "aaaa.json"),
 		mkFinding("aaaa", "cat-01/x", "repo", "conf-ci")); err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +324,7 @@ func TestBuildKeepsThePriorGraphWhenInputsAreUnreadable(t *testing.T) {
 	}
 	good := readSummary(t, dir)
 
-	if err := os.RemoveAll(filepath.Join(dir, "10-normalize")); err != nil {
+	if err := os.RemoveAll(filepath.Join(dir, engine.DirNormalize)); err != nil {
 		t.Fatal(err)
 	}
 	if err := buildInto(t, dir); err == nil {

@@ -14,7 +14,10 @@ import (
 	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
+const RunFormat = 2
+
 type State struct {
+	Format     int           `json:"format"`
 	RunID      string        `json:"run_id"`
 	Platform   string        `json:"platform"`
 	Scope      string        `json:"scope"`
@@ -70,27 +73,32 @@ type PhaseRecord struct {
 }
 
 type Phase struct {
-	Num  int
-	Name string
+	Num   int
+	Name  string
+	Needs int
 }
 
 const PhaseUnnumbered = -1
 
 var (
-	PhaseWhoAmI    = Phase{0, "whoami"}
-	PhaseCollect   = Phase{1, dirCollect}
-	PhaseNormalize = Phase{PhaseUnnumbered, dirNormalize}
-	PhaseScan      = Phase{2, dirScan}
-	PhaseGraph     = Phase{3, "graph"}
-	PhasePush      = Phase{4, "push"}
-	PhaseAnalyze   = Phase{PhaseUnnumbered, "analyze"}
-	PhaseAttack    = Phase{PhaseUnnumbered, "attack"}
+	PhaseWhoAmI    = Phase{Num: 0, Name: "whoami"}
+	PhaseCollect   = Phase{Num: 1, Name: DirCollect}
+	PhaseNormalize = Phase{Num: PhaseUnnumbered, Name: DirNormalize, Needs: 1}
+	PhaseScan      = Phase{Num: 2, Name: DirScan}
+	PhaseGraph     = Phase{Num: 3, Name: "graph"}
+	PhasePush      = Phase{Num: 4, Name: "push"}
+	PhaseAnalyze   = Phase{Num: PhaseUnnumbered, Name: "analyze"}
+	PhaseAttack    = Phase{Num: PhaseUnnumbered, Name: "attack"}
 )
 
 // A numbered phase may run only at or one step past the watermark; a bigger skip
-// ahead is ErrPhaseBackStep. Re-running an earlier phase is allowed, and
-// un-numbered phases are never gated.
+// ahead is ErrPhaseBackStep. Re-running an earlier phase is allowed. An un-numbered
+// phase is gated only on the watermark it declares.
 func (s *State) CheckPhase(p Phase) error {
+	if s.LastPhase < p.Needs {
+		return fmt.Errorf("%w: cannot run %s when last completed phase is %d, want at least %d",
+			ErrPhaseBackStep, p.Name, s.LastPhase, p.Needs)
+	}
 	if p.Num == PhaseUnnumbered {
 		return nil
 	}
@@ -149,29 +157,65 @@ func phaseLabel(phase string) string {
 func (s *State) StaleDirs(p Phase) []string {
 	switch {
 	case p.Num == PhaseCollect.Num:
-		return []string{dirNormalize, dirScan, dirGraph}
-	case p.Name == dirNormalize:
-		return []string{dirScan, dirGraph}
+		return []string{DirNormalize, DirScan, DirGraph}
+	case p.Name == DirNormalize:
+		return []string{DirScan, DirGraph}
 	case p.Num == PhaseScan.Num:
-		return []string{dirGraph}
+		return []string{DirGraph}
 	default:
 		return nil
 	}
 }
 
+// The attack ledger survives its findings: a mutation already made is undone from it.
+func ClearStale(runDir string, state *State, p Phase) error {
+	dirs := state.StaleDirs(p)
+	if len(dirs) == 0 {
+		return nil
+	}
+	for _, d := range dirs {
+		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
+			return err
+		}
+	}
+	plans, err := os.ReadDir(filepath.Join(runDir, DirAttack))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, plan := range plans {
+		if !plan.IsDir() {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(runDir, DirAttack, plan.Name(), "findings")); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var ErrRunFormat = errors.New("run directory format mismatch")
+
 func LoadState(runDir string) (*State, error) {
 	var s State
 	p := filepath.Join(runDir, "_meta.json")
 	if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
-		return &State{RunID: filepath.Base(runDir), Phases: []PhaseRecord{}}, nil
+		return &State{Format: RunFormat, RunID: filepath.Base(runDir), Phases: []PhaseRecord{}}, nil
 	}
 	if err := ReadJSON(p, &s); err != nil {
 		return nil, err
+	}
+	if s.Format != RunFormat {
+		return nil, fmt.Errorf("%w: %s was written as format %d, this build reads format %d; re-collect",
+			ErrRunFormat, runDir, s.Format, RunFormat)
 	}
 	return &s, nil
 }
 
 func (s *State) Save(runDir string) error {
+	s.Format = RunFormat
 	return WriteJSON(filepath.Join(runDir, "_meta.json"), s)
 }
 

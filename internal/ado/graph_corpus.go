@@ -3,6 +3,7 @@ package ado
 import (
 	"fmt"
 
+	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
@@ -38,7 +39,7 @@ func indexCorpus(src *graph.Corpus) (*corpus, error) {
 
 	orgs := c.byKind[string(Organization)]
 	if len(orgs) == 0 {
-		return nil, fmt.Errorf("10-normalize: %w; every node identity is qualified by it", graph.ErrNoOrgRecord)
+		return nil, fmt.Errorf("%s: %w; every node identity is qualified by it", engine.DirNormalize, graph.ErrNoOrgRecord)
 	}
 	c.org = str(orgs[0].fields["org"])
 	if c.org == "" {

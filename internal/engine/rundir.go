@@ -10,12 +10,15 @@ import (
 	"time"
 )
 
-const maxRunDirSuffix = 99
+const (
+	maxRunDirSuffix = 99
+	runDirTimestamp = "2006-01-02-1504"
+)
 
 // The minute-precision UTC timestamp leads the name so lexical order is
 // chronological and ResolveRunDir can pick the latest run for a platform.
 func MintRunDir(cfg *Config, platform, scopeSlug string) (string, error) {
-	ts := time.Now().UTC().Format("2006-01-02-1504")
+	ts := time.Now().UTC().Format(runDirTimestamp)
 	base := filepath.Join(cfg.OutputDir, fmt.Sprintf("%s-%s-%s", ts, platform, scopeSlug))
 	if err := os.MkdirAll(cfg.OutputDir, 0o755); err != nil {
 		return "", err
@@ -37,6 +40,14 @@ func MintRunDir(cfg *Config, platform, scopeSlug string) (string, error) {
 	return "", fmt.Errorf("mint run directory: %s and %d suffixes already exist", base, maxRunDirSuffix-1)
 }
 
+func platformOf(name string) string {
+	if len(name) <= len(runDirTimestamp)+1 {
+		return ""
+	}
+	tag, _, _ := strings.Cut(name[len(runDirTimestamp)+1:], "-")
+	return tag
+}
+
 func ResolveRunDir(cfg *Config, platform, explicit string) (string, error) {
 	if explicit != "" {
 		return explicit, nil
@@ -48,14 +59,13 @@ func ResolveRunDir(cfg *Config, platform, explicit string) (string, error) {
 		}
 		return "", err
 	}
-	tag := "-" + platform + "-"
 	best := ""
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
 		name := e.Name()
-		if !strings.Contains(name, tag) {
+		if platformOf(name) != platform {
 			continue
 		}
 		if name > best {

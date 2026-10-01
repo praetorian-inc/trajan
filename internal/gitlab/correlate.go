@@ -17,31 +17,31 @@ import (
 // Failing to load a join's inputs is phase-fatal. A per-tuple problem — a job whose
 // project record is missing, a malformed member map — is skipped.
 func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) error {
-	jobs, err := loadRecords(prior, "10-normalize/jobs")
+	jobs, err := loadRecords(prior, engine.DirNormalize+"/jobs")
 	if err != nil {
 		return fmt.Errorf("correlate: load jobs: %w", err)
 	}
-	projects, err := loadRecords(prior, "10-normalize/projects")
+	projects, err := loadRecords(prior, engine.DirNormalize+"/projects")
 	if err != nil {
 		return fmt.Errorf("correlate: load projects: %w", err)
 	}
-	groups, err := loadRecords(prior, "10-normalize/groups")
+	groups, err := loadRecords(prior, engine.DirNormalize+"/groups")
 	if err != nil {
 		return fmt.Errorf("correlate: load groups: %w", err)
 	}
-	instances, err := loadRecords(prior, "10-normalize/instance")
+	instances, err := loadRecords(prior, engine.DirNormalize+"/instance")
 	if err != nil {
 		return fmt.Errorf("correlate: load instance: %w", err)
 	}
-	runners, err := loadRecords(prior, "10-normalize/runners")
+	runners, err := loadRecords(prior, engine.DirNormalize+"/runners")
 	if err != nil {
 		return fmt.Errorf("correlate: load runners: %w", err)
 	}
-	agents, err := loadRecords(prior, "10-normalize/agents")
+	agents, err := loadRecords(prior, engine.DirNormalize+"/agents")
 	if err != nil {
 		return fmt.Errorf("correlate: load agents: %w", err)
 	}
-	credentials, err := loadRecords(prior, "10-normalize/credentials")
+	credentials, err := loadRecords(prior, engine.DirNormalize+"/credentials")
 	if err != nil {
 		return fmt.Errorf("correlate: load credentials: %w", err)
 	}

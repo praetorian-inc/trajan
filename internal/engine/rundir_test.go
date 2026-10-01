@@ -40,3 +40,20 @@ func TestMintRunDirNeverReusesADirectoryAndResolvePicksTheNewest(t *testing.T) {
 		t.Errorf("ResolveRunDir = %s, want the most recently minted %s", got, last)
 	}
 }
+
+func TestResolveRunDirMatchesThePlatformSegmentOnly(t *testing.T) {
+	cfg := &Config{OutputDir: t.TempDir()}
+	for _, name := range []string{"2026-09-30-1200-ado-myorg-my-gh-project", "2026-09-29-1200-gh-myorg"} {
+		if err := os.MkdirAll(filepath.Join(cfg.OutputDir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := ResolveRunDir(cfg, "gh", "")
+	if err != nil {
+		t.Fatalf("ResolveRunDir: %v", err)
+	}
+	if filepath.Base(got) != "2026-09-29-1200-gh-myorg" {
+		t.Errorf("ResolveRunDir(gh) = %s; a scope slug containing -gh- resolved as a GitHub run", got)
+	}
+}

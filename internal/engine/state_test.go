@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"errors"
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
@@ -118,5 +120,37 @@ func TestAddSurfaceFromConcurrentWorkers(t *testing.T) {
 		if s.Name == "actions" && s.Status != "ok" {
 			t.Errorf("actions = %q, want ok", s.Status)
 		}
+	}
+}
+
+func TestCheckPhaseGatesOnTheDeclaredWatermark(t *testing.T) {
+	fresh := &State{}
+	if err := fresh.CheckPhase(PhaseNormalize); !errors.Is(err, ErrPhaseBackStep) {
+		t.Errorf("normalize before collect: err = %v, want ErrPhaseBackStep", err)
+	}
+	if err := fresh.CheckPhase(PhaseCollect); err != nil {
+		t.Errorf("collect on a fresh run: %v", err)
+	}
+	collected := &State{LastPhase: 1}
+	if err := collected.CheckPhase(PhaseNormalize); err != nil {
+		t.Errorf("normalize after collect: %v", err)
+	}
+}
+
+func TestLoadStateRejectsAnotherFormat(t *testing.T) {
+	dir := t.TempDir()
+	if err := WriteJSON(filepath.Join(dir, "_meta.json"), map[string]any{"run_id": "r", "last_phase": 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadState(dir); !errors.Is(err, ErrRunFormat) {
+		t.Fatalf("LoadState = %v, want ErrRunFormat; a stale run directory reads as current", err)
+	}
+
+	cur := &State{RunID: "r"}
+	if err := cur.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadState(dir); err != nil {
+		t.Fatalf("LoadState after Save: %v", err)
 	}
 }

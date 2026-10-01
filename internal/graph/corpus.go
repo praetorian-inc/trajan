@@ -14,8 +14,6 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-const normalizeDir = "10-normalize"
-
 var ErrNoOrgRecord = errors.New("no organization record")
 
 type Record struct {
@@ -40,7 +38,7 @@ type Corpus struct {
 func LoadCorpus(ctx context.Context, cfg *engine.Config, runDir string, skipPrefixes []string,
 	onError func(error)) (*Corpus, error) {
 
-	all, err := engine.PriorPhase{RunDir: runDir}.IterJSON(normalizeDir)
+	all, err := engine.PriorPhase{RunDir: runDir}.IterJSON(engine.DirNormalize)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +51,7 @@ func LoadCorpus(ctx context.Context, cfg *engine.Config, runDir string, skipPref
 		wanted = append(wanted, f)
 	}
 	if len(wanted) == 0 {
-		return nil, fmt.Errorf("%s: no normalized records", normalizeDir)
+		return nil, fmt.Errorf("%s: no normalized records", engine.DirNormalize)
 	}
 
 	recs, err := engine.RunPartial(ctx, cfg.Concurrency, wanted,
@@ -62,7 +60,7 @@ func LoadCorpus(ctx context.Context, cfg *engine.Config, runDir string, skipPref
 			dec := json.NewDecoder(bytes.NewReader(f.Data))
 			dec.UseNumber()
 			if err := dec.Decode(&m); err != nil {
-				return Record{}, fmt.Errorf("%s/%s: %w", normalizeDir, f.Rel, err)
+				return Record{}, fmt.Errorf("%s/%s: %w", engine.DirNormalize, f.Rel, err)
 			}
 			rel := filepath.ToSlash(f.Rel)
 			dir, _, _ := strings.Cut(rel, "/")

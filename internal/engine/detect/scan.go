@@ -97,10 +97,11 @@ func runScan(ctx context.Context, cfg *engine.Config, runDir string, state *engi
 
 	// Clearing output only after every fatal input check has passed keeps a scan that
 	// aborts from destroying the previous run's findings and graph.
-	for _, d := range append([]string{"20-scan"}, state.StaleDirs(engine.PhaseScan)...) {
-		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
-			return nil, fmt.Errorf("clear %s: %w", d, err)
-		}
+	if err := os.RemoveAll(filepath.Join(runDir, engine.DirScan)); err != nil {
+		return nil, fmt.Errorf("clear %s: %w", engine.DirScan, err)
+	}
+	if err := engine.ClearStale(runDir, state, engine.PhaseScan); err != nil {
+		return nil, fmt.Errorf("clear stale phases: %w", err)
 	}
 
 	// One line naming the breadth of detection applied: a scan that shows nothing
@@ -163,9 +164,9 @@ func runScan(ctx context.Context, cfg *engine.Config, runDir string, state *engi
 func loadSubjects(prior engine.PriorPhase, p Provider, kind string) ([]map[string]any, error) {
 	dir, ok := p.SubjectDirs[kind]
 	if !ok {
-		return nil, nil
+		return nil, fmt.Errorf("subject kind %q is not in %s's SubjectDirs", kind, p.Name)
 	}
-	return loadRecords(prior, filepath.Join("10-normalize", dir))
+	return loadRecords(prior, filepath.Join(engine.DirNormalize, dir))
 }
 
 // A missing file yields (nil,nil) so the rule fires zero times; a missing join
@@ -174,7 +175,7 @@ func loadChain(prior engine.PriorPhase, chain *ChainOf) (map[string]any, error) 
 	if chain == nil || chain.Join == "" {
 		return nil, nil
 	}
-	p := prior.Abs(filepath.Join("10-normalize", "chains", chain.Join+".json"))
+	p := prior.Abs(filepath.Join(engine.DirNormalize, "chains", chain.Join+".json"))
 	b, err := os.ReadFile(p)
 	if os.IsNotExist(err) {
 		return nil, nil

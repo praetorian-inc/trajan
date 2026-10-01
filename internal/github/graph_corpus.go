@@ -44,7 +44,7 @@ func indexCorpus(src *graph.Corpus) (*ghCorpus, error) {
 	}
 
 	if len(c.dirs["org"]) == 0 {
-		return nil, fmt.Errorf("10-normalize/org: %w; every node identity is qualified by it", graph.ErrNoOrgRecord)
+		return nil, fmt.Errorf("%s/org: %w; every node identity is qualified by it", engine.DirNormalize, graph.ErrNoOrgRecord)
 	}
 	c.org = str(c.dirs["org"][0].fields["org"])
 	if c.org == "" {
