@@ -3,6 +3,7 @@ package github
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func walkTo(t *testing.T, n *LineNode, path ...any) *LineNode {
@@ -418,4 +419,67 @@ func TestLineNodeAccessors(t *testing.T) {
 			t.Fatalf("Range(a.b) = %v, want [2 2]", r)
 		}
 	})
+}
+
+func TestDecodeWorkflowDuplicateMappingKeyTakesTheLastValue(t *testing.T) {
+	src := "jobs:\n" +
+		"  build:\n" +
+		"    steps:\n" +
+		"      - run: ./benign.sh\n" +
+		"    steps:\n" +
+		"      - run: ./payload.sh\n"
+
+	tree, err := DecodeWorkflow(src)
+	if err != nil {
+		t.Fatalf("DecodeWorkflow: %v", err)
+	}
+	steps := walkTo(t, tree, "jobs", "build", "steps")
+	items, ok := steps.Value.([]*LineNode)
+	if !ok || len(items) != 1 {
+		t.Fatalf("steps = %#v, want a single sequence", steps.Value)
+	}
+	wantString(t, walkTo(t, tree, "jobs", "build", "steps", 0, "run"), "./payload.sh")
+}
+
+func TestDecodeWorkflowMergeKeyKeepsTheJobVisible(t *testing.T) {
+	src := "defaults: &d\n" +
+		"  runs-on: ubuntu-latest\n" +
+		"timeouts: &t\n" +
+		"  timeout-minutes: 5\n" +
+		"jobs:\n" +
+		"  build:\n" +
+		"    <<: [*d, *t]\n" +
+		"    steps:\n" +
+		"      - run: ./build.sh\n"
+
+	tree, err := DecodeWorkflow(src)
+	if err != nil {
+		t.Fatalf("DecodeWorkflow: %v", err)
+	}
+	wantString(t, walkTo(t, tree, "jobs", "build", "steps", 0, "run"), "./build.sh")
+}
+
+func TestDecodeWorkflowBoundsAliasExpansion(t *testing.T) {
+	src := "a: &a [x, x, x, x, x, x, x, x, x, x]\n" +
+		"b: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a, *a]\n" +
+		"c: &c [*b, *b, *b, *b, *b, *b, *b, *b, *b, *b]\n" +
+		"d: &d [*c, *c, *c, *c, *c, *c, *c, *c, *c, *c]\n" +
+		"e: &e [*d, *d, *d, *d, *d, *d, *d, *d, *d, *d]\n" +
+		"f: &f [*e, *e, *e, *e, *e, *e, *e, *e, *e, *e]\n" +
+		"g: &g [*f, *f, *f, *f, *f, *f, *f, *f, *f, *f]\n" +
+		"jobs: *g\n"
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := DecodeWorkflow(src)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("DecodeWorkflow expanded the alias tree instead of refusing it")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("DecodeWorkflow did not bound a %d-byte alias expansion", len(src))
+	}
 }

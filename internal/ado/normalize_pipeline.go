@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	yaml "go.yaml.in/yaml/v4"
+	yaml "go.yaml.in/yaml/v3"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 )

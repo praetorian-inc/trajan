@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	yaml "go.yaml.in/yaml/v4"
+	yaml "go.yaml.in/yaml/v3"
 )
 
 // runShell executes a rendered body the way the customer's runner would and returns

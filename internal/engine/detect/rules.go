@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	yaml "go.yaml.in/yaml/v4"
+	yaml "go.yaml.in/yaml/v3"
 
 	detectionrules "github.com/praetorian-inc/trajan/internal/detection-rules"
 	"github.com/praetorian-inc/trajan/internal/dsl"
