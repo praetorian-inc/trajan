@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/finding"
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 // mergeChain is a chain whose last mutation is the merge the plan exists to

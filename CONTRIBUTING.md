@@ -81,13 +81,17 @@ internal/               The current phased pipeline
   ado/                  Azure DevOps: collect, normalize, scan
   detection-rules/      Embedded YAML rule corpus, one directory per category
   dsl/                  Rule expression language: operators and evaluation
-  finding/              Finding shape and severity/confidence handling
   report/               Renderers (json, jsonl, md, html)
-  graph/                Neo4j schema, node/edge construction, push
+  graph/                Provider-agnostic graph mechanism: corpus, node/edge sets, resources, Neo4j push
   attack/               Attack primitives, plan loading, session and cleanup
   attack-plans/         Embedded attack plan YAML
   attack-payloads/      Embedded job-template corpus rendered into plans
   ui/                   Humanized phase output
+
+pkg/                    The module's exported surface
+  finding/              Finding shape and severity/confidence handling
+  resource/             Graph resource and relationship records
+  scan/                 In-process entry points for the phase pipeline
 ```
 
 Detections for the three supported platforms are YAML under `internal/detection-rules/`, evaluated by `internal/dsl`.
@@ -192,8 +196,8 @@ make test-coverage
 
 - Use `testify/assert` and `testify/require` (already a dependency).
 - Use table-driven tests with descriptive subtest names.
-- For detection tests: build a `graph.Graph` from YAML fixtures, run `Detect()`, and assert on the returned findings.
-- For parser tests: provide raw YAML and assert on the `NormalizedWorkflow` output.
+- For detection tests: write normalized records to a run directory, run the platform's `Scan`, and assert on the findings written to `20-scan/`.
+- For parser tests: provide raw workflow or pipeline YAML and assert on the normalized record.
 
 ## Code style
 
@@ -257,7 +261,6 @@ refactor: namespace attack plugin registry keys as platform/name
 
 - [ ] Tests pass (`make test`)
 - [ ] Lints pass (`make lint`)
-- [ ] New plugin registered in `init()` and imported in `all.go`
 - [ ] Commit messages follow conventional commit format
 - [ ] Documentation updated if adding user-facing features
 

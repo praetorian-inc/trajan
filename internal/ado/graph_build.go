@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/praetorian-inc/trajan/finding"
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/ui"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 const (

@@ -10,14 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/praetorian-inc/trajan/finding"
 	"github.com/praetorian-inc/trajan/internal/ado"
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/github"
 	"github.com/praetorian-inc/trajan/internal/gitlab"
 	"github.com/praetorian-inc/trajan/internal/graph"
 	"github.com/praetorian-inc/trajan/internal/ui"
-	"github.com/praetorian-inc/trajan/resource"
+	"github.com/praetorian-inc/trajan/pkg/finding"
+	"github.com/praetorian-inc/trajan/pkg/resource"
 )
 
 type Config struct {

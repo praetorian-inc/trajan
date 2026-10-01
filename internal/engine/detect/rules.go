@@ -12,10 +12,10 @@ import (
 
 	yaml "go.yaml.in/yaml/v4"
 
-	"github.com/praetorian-inc/trajan/finding"
 	detectionrules "github.com/praetorian-inc/trajan/internal/detection-rules"
 	"github.com/praetorian-inc/trajan/internal/dsl"
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 const RuleSourceBase = "https://github.com/praetorian-inc/trajan/blob/main"

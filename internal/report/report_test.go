@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/finding"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 func mk(sev, conf, ruleID, subjID string) finding.Finding {

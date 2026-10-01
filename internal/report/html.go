@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/praetorian-inc/trajan/finding"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 //go:embed assets/report.html

@@ -5,7 +5,7 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/praetorian-inc/trajan/resource"
+	"github.com/praetorian-inc/trajan/pkg/resource"
 )
 
 const resourceProvider = "github"

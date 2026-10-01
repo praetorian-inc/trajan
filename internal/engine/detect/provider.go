@@ -1,6 +1,6 @@
 package detect
 
-import "github.com/praetorian-inc/trajan/finding"
+import "github.com/praetorian-inc/trajan/pkg/finding"
 
 // Every func field is optional; the accessors below define the nil behavior.
 type Provider struct {

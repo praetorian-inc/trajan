@@ -14,8 +14,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/praetorian-inc/trajan/finding"
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 type Options struct {

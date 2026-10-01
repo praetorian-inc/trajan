@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/praetorian-inc/trajan/finding"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 // HTML escaping is off so '&', '<', '>' — pervasive in workflow data — are emitted

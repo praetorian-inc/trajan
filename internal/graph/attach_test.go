@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/praetorian-inc/trajan/finding"
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 func attachFixture(t *testing.T, files map[string]any, findings []finding.Finding,
