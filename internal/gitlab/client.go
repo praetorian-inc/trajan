@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -47,13 +48,26 @@ func NewClient(baseURL, token string, insecure bool, concurrency int) *Client {
 	if insecure {
 		tr = engine.InsecureTransport()
 	}
-	return &Client{
-		http:    &http.Client{Timeout: DefaultTimeout, Transport: tr},
+	c := &Client{
 		baseURL: baseURL,
 		token:   token,
 		limiter: NewRateLimiter(),
 		sleepFn: sleep,
 	}
+	c.http = &http.Client{Timeout: DefaultTimeout, Transport: tr, CheckRedirect: c.checkRedirect}
+	return c
+}
+
+// net/http strips Authorization on a cross-host redirect but not PRIVATE-TOKEN.
+func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
+	u, err := url.Parse(c.baseURL)
+	if err != nil || u.Host == "" || !strings.EqualFold(u.Host, req.URL.Host) || !strings.EqualFold(u.Scheme, req.URL.Scheme) {
+		return fmt.Errorf("refusing redirect to %s://%s: not the configured GitLab instance", req.URL.Scheme, req.URL.Host)
+	}
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	return nil
 }
 
 func normalizeBaseURL(baseURL string) string {

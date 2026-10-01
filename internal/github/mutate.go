@@ -27,7 +27,10 @@ var _ Mutator = (*Client)(nil)
 // primary-limit 403/429 the client slept for. A 5xx is never retried: a retried
 // POST /pulls opens two pull requests.
 func (c *Client) Mutate(ctx context.Context, method, pathOrURL string, body any) (json.RawMessage, int, error) {
-	u := c.resolveURL(pathOrURL)
+	u, err := c.resolveURL(pathOrURL)
+	if err != nil {
+		return nil, 0, err
+	}
 	var payload []byte
 	if body != nil {
 		var err error

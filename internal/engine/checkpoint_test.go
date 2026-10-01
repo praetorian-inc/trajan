@@ -147,3 +147,31 @@ func mustWrite(t *testing.T, path, content string) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 }
+
+func TestCurrentPhaseWriteRefusesEscape(t *testing.T) {
+	root := t.TempDir()
+	run := filepath.Join(root, "run1")
+	cp := CurrentPhase{RunDir: run}
+
+	for _, rel := range []string{
+		filepath.Join("..", "escaped.json"),
+		filepath.Join("00-collect", "environments", "..", "..", "..", "escaped.json"),
+	} {
+		if err := cp.Write(rel, map[string]int{"n": 1}); err == nil {
+			t.Errorf("Write(%q) was allowed", rel)
+		}
+		if err := cp.WriteRaw(rel, []byte("x")); err == nil {
+			t.Errorf("WriteRaw(%q) was allowed", rel)
+		}
+	}
+
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name() != "run1" {
+			t.Errorf("%q was created beside the run directory", e.Name())
+		}
+	}
+}

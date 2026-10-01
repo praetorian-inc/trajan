@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -147,15 +148,48 @@ func secondaryLimit(body []byte) bool {
 	return strings.Contains(msg, "secondary rate") || strings.Contains(msg, "abuse detection")
 }
 
-func (c *Client) resolveURL(pathOrURL string) string {
-	if strings.HasPrefix(pathOrURL, "http") {
-		return pathOrURL
+func (c *Client) allowsHost(scheme, host string) bool {
+	for _, endpoint := range [...]string{c.apiBase, c.graphQL} {
+		u, err := url.Parse(endpoint)
+		if err != nil || u.Host == "" {
+			continue
+		}
+		if strings.EqualFold(u.Host, host) && strings.EqualFold(u.Scheme, scheme) {
+			return true
+		}
 	}
-	return c.apiBase + pathOrURL
+	return false
+}
+
+func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
+	if !c.allowsHost(req.URL.Scheme, req.URL.Host) {
+		return fmt.Errorf("refusing redirect to %s://%s: not the configured GitHub instance", req.URL.Scheme, req.URL.Host)
+	}
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	return nil
+}
+
+func (c *Client) resolveURL(pathOrURL string) (string, error) {
+	if !strings.HasPrefix(pathOrURL, "http") {
+		return c.apiBase + pathOrURL, nil
+	}
+	u, err := url.Parse(pathOrURL)
+	if err != nil {
+		return "", err
+	}
+	if !c.allowsHost(u.Scheme, u.Host) {
+		return "", fmt.Errorf("refusing to request %s://%s: not the configured GitHub instance", u.Scheme, u.Host)
+	}
+	return pathOrURL, nil
 }
 
 func (c *Client) Get(ctx context.Context, pathOrURL string, params url.Values, allow404 bool) (json.RawMessage, http.Header, error) {
-	u := c.resolveURL(pathOrURL)
+	u, err := c.resolveURL(pathOrURL)
+	if err != nil {
+		return nil, nil, err
+	}
 	var lastStatus int
 	var lastBody []byte
 	for i := 0; i < 6; i++ {
@@ -193,7 +227,10 @@ func (c *Client) Get(ctx context.Context, pathOrURL string, params url.Values, a
 }
 
 func (c *Client) GetRaw(ctx context.Context, pathOrURL string, params url.Values, acceptOverride string) ([]byte, http.Header, error) {
-	u := c.resolveURL(pathOrURL)
+	u, err := c.resolveURL(pathOrURL)
+	if err != nil {
+		return nil, nil, err
+	}
 	var lastStatus int
 	var lastBody []byte
 	for i := 0; i < 6; i++ {
@@ -229,7 +266,10 @@ func (c *Client) GetRaw(ctx context.Context, pathOrURL string, params url.Values
 // archives) by hand: the storage host rejects a request carrying an Authorization
 // header, and authTransport would re-add ours on every redirect http.Client follows.
 func (c *Client) GetDownload(ctx context.Context, pathOrURL string) ([]byte, error) {
-	u := c.resolveURL(pathOrURL)
+	u, err := c.resolveURL(pathOrURL)
+	if err != nil {
+		return nil, err
+	}
 	api := &http.Client{
 		Transport:     c.http.Transport,
 		Timeout:       c.http.Timeout,

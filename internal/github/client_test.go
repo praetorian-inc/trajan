@@ -577,9 +577,80 @@ func TestInstanceEndpoints(t *testing.T) {
 				t.Errorf("NewClient(%q) endpoints = (%q, %q, %q), want (%q, %q, %q)",
 					tc.root, c.apiBase, c.graphQL, c.cloneBase, tc.apiBase, tc.graphQL, tc.cloneBase)
 			}
-			if got := c.resolveURL("/orgs/acme"); got != tc.apiBase+"/orgs/acme" {
-				t.Errorf("resolveURL = %q, want %q", got, tc.apiBase+"/orgs/acme")
+			got, err := c.resolveURL("/orgs/acme")
+			if err != nil || got != tc.apiBase+"/orgs/acme" {
+				t.Errorf("resolveURL = (%q, %v), want %q", got, err, tc.apiBase+"/orgs/acme")
 			}
 		})
+	}
+}
+
+func TestPaginateRefusesForeignNextLink(t *testing.T) {
+	var foreignHits atomic.Int32
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		foreignHits.Add(1)
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("foreign host received an Authorization header")
+		}
+		w.Write([]byte(`[]`))
+	}))
+	defer foreign.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Link", "<"+foreign.URL+`/p2>; rel="next"`)
+		w.Write([]byte(`[{"id":1}]`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	if _, err := c.Paginate(context.Background(), "/orgs/acme/repos", nil, 100); err == nil {
+		t.Fatal("Paginate followed the foreign next link")
+	}
+	if n := foreignHits.Load(); n != 0 {
+		t.Fatalf("foreign host was requested %d times", n)
+	}
+}
+
+func TestResolveURLPinsSchemeAndHost(t *testing.T) {
+	c := NewClient("https://ghes.example", "test-token", false)
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"/orgs/acme", true},
+		{"https://ghes.example/api/v3/orgs/acme/repos?page=2", true},
+		{"http://ghes.example/api/v3/orgs/acme/repos?page=2", false},
+		{"https://ghes.example.attacker.test/api/v3/x", false},
+	}
+	for _, tc := range cases {
+		_, err := c.resolveURL(tc.in)
+		if (err == nil) != tc.want {
+			t.Errorf("resolveURL(%q) err = %v, want allowed=%v", tc.in, err, tc.want)
+		}
+	}
+}
+
+func TestGetRefusesCrossHostRedirect(t *testing.T) {
+	var foreignHits atomic.Int32
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		foreignHits.Add(1)
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("foreign host received an Authorization header")
+		}
+		w.Write([]byte(`{}`))
+	}))
+	defer foreign.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, foreign.URL+"/landed", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	if _, _, err := c.Get(context.Background(), "/orgs/acme", nil, false); err == nil {
+		t.Fatal("Get followed the cross-host redirect")
+	}
+	if n := foreignHits.Load(); n != 0 {
+		t.Fatalf("foreign host was requested %d times", n)
 	}
 }

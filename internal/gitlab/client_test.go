@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 )
 
@@ -84,5 +85,30 @@ func TestIsSoftClassification(t *testing.T) {
 		if got := isSoft(err); got != want {
 			t.Errorf("isSoft(HTTP %d) = %v, want %v", status, got, want)
 		}
+	}
+}
+
+func TestGetRefusesCrossHostRedirect(t *testing.T) {
+	var foreignHits atomic.Int32
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		foreignHits.Add(1)
+		if r.Header.Get("PRIVATE-TOKEN") != "" {
+			t.Errorf("foreign host received a PRIVATE-TOKEN header")
+		}
+		w.Write([]byte(`{}`))
+	}))
+	defer foreign.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, foreign.URL+"/landed", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "secret-tok", false, 1)
+	if _, _, err := c.Get(context.Background(), "/projects/1", nil, false); err == nil {
+		t.Fatal("Get followed the cross-host redirect")
+	}
+	if n := foreignHits.Load(); n != 0 {
+		t.Fatalf("foreign host was requested %d times", n)
 	}
 }

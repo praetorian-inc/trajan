@@ -57,26 +57,32 @@ func normalizeEntities(ctx context.Context, runDir string, onError func(error)) 
 	return nil
 }
 
-func normOrgPath(org string) string   { return path.Join("10-normalize", "org", org+".json") }
-func normRepoPath(repo string) string { return path.Join("10-normalize", "repos", repo+".json") }
+func normOrgPath(org string) string {
+	return path.Join("10-normalize", "org", engine.GHKey(org)+".json")
+}
+func normRepoPath(repo string) string {
+	return path.Join("10-normalize", "repos", engine.GHKey(repo)+".json")
+}
 
 func normEnvPath(repo, env string) string {
-	return path.Join("10-normalize", "environments", repo+"__"+env+".json")
+	return path.Join("10-normalize", "environments", engine.GHKey(repo)+"__"+engine.GHKey(env)+".json")
 }
 
 func normTagPath(repo, tag string) string {
-	return path.Join("10-normalize", "tags", repo+"__"+engine.BranchSlug(tag)+".json")
+	return path.Join("10-normalize", "tags", engine.GHKey(repo)+"__"+engine.GHKey(engine.BranchSlug(tag))+".json")
 }
 
 func normRulesetPath(scopeKey string, rulesetID int64) string {
-	return path.Join("10-normalize", "rulesets", fmt.Sprintf("%s__%d.json", scopeKey, rulesetID))
+	return path.Join("10-normalize", "rulesets", fmt.Sprintf("%s__%d.json", engine.GHKey(scopeKey), rulesetID))
 }
 
 func normRulesetSentinelPath(scopeKey, suffix string) string {
-	return path.Join("10-normalize", "rulesets", scopeKey+"__"+suffix+".json")
+	return path.Join("10-normalize", "rulesets", engine.GHKey(scopeKey)+"__"+suffix+".json")
 }
 
-func normAppPath(slug string) string { return path.Join("10-normalize", "apps", slug+".json") }
+func normAppPath(slug string) string {
+	return path.Join("10-normalize", "apps", engine.GHKey(slug)+".json")
+}
 
 // "write" on one of these, or any "admin", makes an installation admin-class for the
 // org aggregate.

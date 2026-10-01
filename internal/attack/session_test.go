@@ -19,7 +19,7 @@ import (
 // unknownOutcomeSession drives Session.Mutate against a test server. The mutation
 // path is a full URL, which the client honors verbatim, so nothing global is
 // rewired.
-func unknownOutcomeSession(t *testing.T) (*Session, string) {
+func unknownOutcomeSession(t *testing.T, apiRoot string) (*Session, string) {
 	t.Helper()
 	runDir := t.TempDir()
 	if err := engine.WriteJSON(filepath.Join(runDir, engine.AttackPlan("p")), PlanRecord{
@@ -38,7 +38,7 @@ func unknownOutcomeSession(t *testing.T) (*Session, string) {
 		Plan: &Plan{ID: "p", Scope: []string{"acme/lab"}}, Ledger: l, PlanDir: runDir, Execute: true,
 		identities: map[string]*identityClient{}, aliases: map[string]string{}, extraScope: map[string]string{},
 	}
-	s.begin(actingContext{step: "open", uses: "pr.open", id: &identityClient{name: "operator", client: github.NewClient("", "tok", false)}})
+	s.begin(actingContext{step: "open", uses: "pr.open", id: &identityClient{name: "operator", client: github.NewClient(apiRoot, "tok", false)}})
 	return s, runDir
 }
 
@@ -76,7 +76,7 @@ func TestUnknownOutcomeReadBackNamesTheArtifact(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, runDir := unknownOutcomeSession(t)
+	s, runDir := unknownOutcomeSession(t, srv.URL)
 	var readBacks int
 	_, status, err := s.Mutate(t.Context(), Mutation{
 		Method: http.MethodPost,
@@ -154,7 +154,7 @@ func TestUnknownOutcomeWithoutReadBackIsReported(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, runDir := unknownOutcomeSession(t)
+	s, runDir := unknownOutcomeSession(t, srv.URL)
 	if _, _, err := s.Mutate(t.Context(), Mutation{
 		Method: http.MethodPost,
 		Path:   srv.URL + "/repos/acme/lab/issues",
@@ -194,7 +194,7 @@ func TestUnknownOutcomeFailedReadBackSaysSo(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, runDir := unknownOutcomeSession(t)
+	s, runDir := unknownOutcomeSession(t, srv.URL)
 	if _, _, err := s.Mutate(t.Context(), Mutation{
 		Method: http.MethodPost,
 		Path:   srv.URL + "/repos/acme/lab/issues",
@@ -224,7 +224,7 @@ func TestRefusedMutationIsNotAnUnknownOutcome(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, runDir := unknownOutcomeSession(t)
+	s, runDir := unknownOutcomeSession(t, srv.URL)
 	_, status, err := s.Mutate(t.Context(), Mutation{
 		Method: http.MethodPost,
 		Path:   srv.URL + "/repos/acme/lab/pulls",

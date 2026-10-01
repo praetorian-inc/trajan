@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/praetorian-inc/trajan/pkg/finding"
 )
@@ -107,11 +108,56 @@ func (p PriorPhase) IterJSON(phaseDir string) ([]PhaseFile, error) {
 type CurrentPhase struct{ RunDir string }
 
 func (c CurrentPhase) Write(rel string, v any) error {
-	return WriteJSON(filepath.Join(c.RunDir, rel), v)
+	abs, err := c.contain(rel)
+	if err != nil {
+		return err
+	}
+	return WriteJSON(abs, v)
 }
 
 func (c CurrentPhase) WriteRaw(rel string, b []byte) error {
-	return WriteRaw(filepath.Join(c.RunDir, rel), b)
+	abs, err := c.contain(rel)
+	if err != nil {
+		return err
+	}
+	return WriteRaw(abs, b)
+}
+
+func (c CurrentPhase) contain(rel string) (string, error) {
+	root, err := resolvedRoot(c.RunDir)
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(filepath.Join(root, rel))
+	if err != nil {
+		return "", err
+	}
+	if abs != root && !strings.HasPrefix(abs, root+string(filepath.Separator)) {
+		return "", fmt.Errorf("refusing to write %q: resolves outside the run directory", rel)
+	}
+	return abs, nil
+}
+
+var (
+	rootCacheMu sync.Mutex
+	rootCache   = map[string]string{}
+)
+
+func resolvedRoot(runDir string) (string, error) {
+	rootCacheMu.Lock()
+	defer rootCacheMu.Unlock()
+	if r, ok := rootCache[runDir]; ok {
+		return r, nil
+	}
+	abs, err := filepath.Abs(runDir)
+	if err != nil {
+		return "", err
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	rootCache[runDir] = abs
+	return abs, nil
 }
 
 func LoadFindings(ctx context.Context, cfg *Config, runDir string, onError func(error)) ([]finding.Finding, int, error) {

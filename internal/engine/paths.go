@@ -17,56 +17,75 @@ const (
 	dirAttack = "40-attack"
 )
 
-func CollectOrg(org string) string { return path.Join(dirCollect, "org", org+".json") }
+// '_' is preserved, unlike adoKey and glKey: these helpers take scope keys already joined with "__".
+func GHKey(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_' {
+			b.WriteByte(c)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	out := b.String()
+	if out == "." || out == ".." {
+		return "_"
+	}
+	return out
+}
 
-func CollectRepo(repo string) string { return path.Join(dirCollect, "repos", repo+".json") }
+func CollectOrg(org string) string { return path.Join(dirCollect, "org", GHKey(org)+".json") }
+
+func CollectRepo(repo string) string { return path.Join(dirCollect, "repos", GHKey(repo)+".json") }
 
 func CollectActionsSettings(repo string) string {
-	return path.Join(dirCollect, "actions-settings", repo+".json")
+	return path.Join(dirCollect, "actions-settings", GHKey(repo)+".json")
 }
 
 func CollectRulesetsOrg(org string) string {
-	return path.Join(dirCollect, "rulesets", org+".json")
+	return path.Join(dirCollect, "rulesets", GHKey(org)+".json")
 }
 
 func CollectRulesetsRepo(repo string) string {
-	return path.Join(dirCollect, "rulesets", repo+".json")
+	return path.Join(dirCollect, "rulesets", GHKey(repo)+".json")
 }
 
 func CollectEnvironment(repo, env string) string {
-	return path.Join(dirCollect, "environments", repo, env+".json")
+	return path.Join(dirCollect, "environments", GHKey(repo), GHKey(env)+".json")
 }
 
 // The leading "_" keeps this out of IterJSON, which reads its siblings as environment records.
 func CollectEnvironmentsUnavailable(repo string) string {
-	return path.Join(dirCollect, "environments", repo, "_unavailable.json")
+	return path.Join(dirCollect, "environments", GHKey(repo), "_unavailable.json")
 }
 
 // scopeKey is one of "<org>", "<repo>", or "<repo>__<env>".
 func CollectSecrets(scopeKey string) string {
-	return path.Join(dirCollect, "secrets", scopeKey+".json")
+	return path.Join(dirCollect, "secrets", GHKey(scopeKey)+".json")
 }
 
 // scopeKey is one of "<org>", "<repo>", or "<repo>__<env>".
 func CollectVariables(scopeKey string) string {
-	return path.Join(dirCollect, "variables", scopeKey+".json")
+	return path.Join(dirCollect, "variables", GHKey(scopeKey)+".json")
 }
 
 func CollectAppsInstallations(org string) string {
-	return path.Join(dirCollect, "apps", org, "installations.json")
+	return path.Join(dirCollect, "apps", GHKey(org), "installations.json")
 }
 
 func CollectApp(org, slug string) string {
-	return path.Join(dirCollect, "apps", org, slug+".json")
+	return path.Join(dirCollect, "apps", GHKey(org), GHKey(slug)+".json")
 }
 
 func CollectDeployKeys(repo string) string {
-	return path.Join(dirCollect, "deploy-keys", repo+".json")
+	return path.Join(dirCollect, "deploy-keys", GHKey(repo)+".json")
 }
 
 // scopeKey is the org name or a repo name.
 func CollectRunners(scopeKey string) string {
-	return path.Join(dirCollect, "runners", scopeKey+".json")
+	return path.Join(dirCollect, "runners", GHKey(scopeKey)+".json")
 }
 
 func CollectRunnerGroup(groupID int64) string {
@@ -74,23 +93,23 @@ func CollectRunnerGroup(groupID int64) string {
 }
 
 func CollectMembers(org string) string {
-	return path.Join(dirCollect, "members", org+".json")
+	return path.Join(dirCollect, "members", GHKey(org)+".json")
 }
 
 func CollectBranches(repo string) string {
-	return path.Join(dirCollect, "branches", repo+".json")
+	return path.Join(dirCollect, "branches", GHKey(repo)+".json")
 }
 
 func CollectTags(repo string) string {
-	return path.Join(dirCollect, "tags", repo+".json")
+	return path.Join(dirCollect, "tags", GHKey(repo)+".json")
 }
 
 func CollectWorkflowYAML(repo, filename string) string {
-	return path.Join(dirCollect, "workflows", repo, filename)
+	return path.Join(dirCollect, "workflows", GHKey(repo), GHKey(filename))
 }
 
 func CollectWorkflowMeta(repo, filename string) string {
-	return path.Join(dirCollect, "workflows", repo, filename+".meta.json")
+	return path.Join(dirCollect, "workflows", GHKey(repo), GHKey(filename)+".meta.json")
 }
 
 // Non-injective, matching safeRef: "release/1.0" and "release__1.0" collide.
@@ -103,32 +122,32 @@ func BranchSlug(ref string) string {
 // byte-stable; other branches get "<repo>@<BranchSlug>".
 func repoBranchDir(repo, ref string, isDefault bool) string {
 	if isDefault {
-		return repo
+		return GHKey(repo)
 	}
-	return repo + "@" + BranchSlug(ref)
+	return GHKey(repo) + "@" + GHKey(BranchSlug(ref))
 }
 
 func CollectWorkflowYAMLBranch(repo, ref string, isDefault bool, filename string) string {
-	return path.Join(dirCollect, "workflows", repoBranchDir(repo, ref, isDefault), filename)
+	return path.Join(dirCollect, "workflows", repoBranchDir(repo, ref, isDefault), GHKey(filename))
 }
 
 func CollectWorkflowMetaBranch(repo, ref string, isDefault bool, filename string) string {
-	return path.Join(dirCollect, "workflows", repoBranchDir(repo, ref, isDefault), filename+".meta.json")
+	return path.Join(dirCollect, "workflows", repoBranchDir(repo, ref, isDefault), GHKey(filename)+".meta.json")
 }
 
 func CollectActionYAML(owner, actionRepo, pathInRepo, ref string) string {
 	return path.Join(dirCollect, "actions",
-		fmt.Sprintf("%s__%s__%s@%s.yaml", owner, actionRepo, safePath(pathInRepo), safeRef(ref)))
+		fmt.Sprintf("%s__%s__%s@%s.yaml", GHKey(owner), GHKey(actionRepo), GHKey(safePath(pathInRepo)), GHKey(safeRef(ref))))
 }
 
 func CollectActionMeta(owner, actionRepo, pathInRepo, ref string) string {
 	return path.Join(dirCollect, "actions",
-		fmt.Sprintf("%s__%s__%s@%s.meta.json", owner, actionRepo, safePath(pathInRepo), safeRef(ref)))
+		fmt.Sprintf("%s__%s__%s@%s.meta.json", GHKey(owner), GHKey(actionRepo), GHKey(safePath(pathInRepo)), GHKey(safeRef(ref))))
 }
 
 func CollectRefResolution(owner, actionRepo, ref string) string {
 	return path.Join(dirCollect, "action-resolutions",
-		fmt.Sprintf("%s__%s@%s.json", owner, actionRepo, safeRef(ref)))
+		fmt.Sprintf("%s__%s@%s.json", GHKey(owner), GHKey(actionRepo), GHKey(safeRef(ref))))
 }
 
 // adoKey maps anything outside [A-Za-z0-9.-] to '-' so an ADO project/repo/host
@@ -495,7 +514,7 @@ func NormalizeGLChain(join string) string { return glNormalize("chains", join+".
 
 func NormalizeJob(repo, workflow, jobID string) string {
 	return path.Join(dirNormalize, "jobs",
-		fmt.Sprintf("%s__%s__%s.json", repo, wfStem(workflow), jobID))
+		fmt.Sprintf("%s__%s__%s.json", GHKey(repo), GHKey(wfStem(workflow)), GHKey(jobID)))
 }
 
 func NormalizeJobBranch(repo, ref string, isDefault bool, workflow, jobID string) string {
@@ -505,18 +524,18 @@ func NormalizeJobBranch(repo, ref string, isDefault bool, workflow, jobID string
 // A job's identity and its NormalizeJobBranch filename stem, derived once so the
 // two cannot disagree.
 func JobKey(repo, ref string, isDefault bool, workflow, jobID string) string {
-	return fmt.Sprintf("%s__%s__%s", repoBranchDir(repo, ref, isDefault), wfStem(workflow), jobID)
+	return fmt.Sprintf("%s__%s__%s", repoBranchDir(repo, ref, isDefault), GHKey(wfStem(workflow)), GHKey(jobID))
 }
 
 // kind ("user" or "team") prefixes the key so a user and a team sharing a name land
 // in different files.
 func NormalizePrincipal(kind, key string) string {
-	return path.Join(dirNormalize, "principals", kind+"__"+key+".json")
+	return path.Join(dirNormalize, "principals", GHKey(kind)+"__"+GHKey(key)+".json")
 }
 
 // scopeKey is the org name or a repo name.
 func NormalizeRunner(scopeKey string, runnerID int64) string {
-	return path.Join(dirNormalize, "runners", fmt.Sprintf("%s__%d.json", scopeKey, runnerID))
+	return path.Join(dirNormalize, "runners", fmt.Sprintf("%s__%d.json", GHKey(scopeKey), runnerID))
 }
 
 func NormalizeRunnerGroup(groupID int64) string {
@@ -526,11 +545,11 @@ func NormalizeRunnerGroup(groupID int64) string {
 // scopeKey is "<repo>" or "<repo>__<env>"; bucket ("actions", "codespaces" or
 // "dependabot") separates same-named secrets in different buckets.
 func NormalizeSecret(scopeKey, bucket, name string) string {
-	return path.Join(dirNormalize, "secrets", scopeKey+"__"+bucket+"__"+name+".json")
+	return path.Join(dirNormalize, "secrets", GHKey(scopeKey)+"__"+GHKey(bucket)+"__"+GHKey(name)+".json")
 }
 
 func NormalizeDeployKey(repo string, keyID int64) string {
-	return path.Join(dirNormalize, "deploy-keys", fmt.Sprintf("%s__%d.json", repo, keyID))
+	return path.Join(dirNormalize, "deploy-keys", fmt.Sprintf("%s__%d.json", GHKey(repo), keyID))
 }
 
 func Finding(ruleID, subjectHash string) string {

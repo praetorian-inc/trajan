@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os/exec"
@@ -26,11 +27,15 @@ func ResolveToken(ctx context.Context, explicit string) (string, error) {
 
 type authTransport struct {
 	token string
+	allow func(scheme, host string) bool
 	base  http.RoundTripper
 }
 
 func (t *authTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	r = r.Clone(r.Context())
+	if t.allow == nil || !t.allow(r.URL.Scheme, r.URL.Host) {
+		return nil, fmt.Errorf("refusing to send credentials to %s://%s: not the configured GitHub instance", r.URL.Scheme, r.URL.Host)
+	}
 	r.Header.Set("Authorization", "Bearer "+t.token)
 	if r.Header.Get("Accept") == "" {
 		r.Header.Set("Accept", accept)
@@ -46,12 +51,7 @@ func (t *authTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func NewClient(root, token string, insecure bool) *Client {
 	apiBase, graphQL, cloneBase := instanceEndpoints(root)
-	auth := &authTransport{token: token}
-	if insecure {
-		auth.base = engine.InsecureTransport()
-	}
-	return &Client{
-		http:      &http.Client{Timeout: 60 * time.Second, Transport: auth},
+	c := &Client{
 		token:     token,
 		apiBase:   apiBase,
 		graphQL:   graphQL,
@@ -59,4 +59,14 @@ func NewClient(root, token string, insecure bool) *Client {
 		insecure:  insecure,
 		sleepFn:   sleep,
 	}
+	auth := &authTransport{token: token, allow: c.allowsHost}
+	if insecure {
+		auth.base = engine.InsecureTransport()
+	}
+	c.http = &http.Client{
+		Timeout:       60 * time.Second,
+		Transport:     auth,
+		CheckRedirect: c.checkRedirect,
+	}
+	return c
 }
