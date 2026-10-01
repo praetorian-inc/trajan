@@ -87,21 +87,10 @@ internal/               The current phased pipeline
   attack/               Attack primitives, plan loading, session and cleanup
   attack-plans/         Embedded attack plan YAML
   attack-payloads/      Embedded job-template corpus rendered into plans
-  registry/             Detection and platform registries
   ui/                   Humanized phase output
-
-pkg/                    Legacy stack, no longer reachable from the CLI
-  platforms/            Platform interface and shared config types
-  analysis/             Workflow graph, per-platform parsers, taint and gate analysis
-  detections/           Go detection-plugin interface and shared helpers
-  scanner/              Scan orchestration
-  output/               Terminal and JSON output
-  lib/                  Library surface wrapping the legacy engine
-  gitlab/ azuredevops/ jenkins/ jfrog/ bitbucket/
-                        Per-platform clients and Go detection plugins
 ```
 
-Detections for the three supported platforms are YAML under `internal/detection-rules/`, evaluated by `internal/dsl`. The Go detection plugins under `pkg/detections/` belong to the retired engine and are not run by any CLI command.
+Detections for the three supported platforms are YAML under `internal/detection-rules/`, evaluated by `internal/dsl`.
 
 ## Architecture overview
 

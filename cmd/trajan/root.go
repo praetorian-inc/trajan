@@ -96,10 +96,8 @@ func init() {
 	rootCmd.AddCommand(gitlab.GitLabCmd)
 	rootCmd.AddCommand(ado.AdoCmd)
 
-	searchCmd.Hidden = true
 	versionCmd.GroupID = "utilities"
 
-	rootCmd.AddCommand(searchCmd)
 	rootCmd.AddCommand(versionCmd)
 
 	rootCmd.SetHelpCommandGroupID("utilities")
