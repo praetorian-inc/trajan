@@ -71,7 +71,7 @@ func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	return nil
 }
 
-func normalizeJobs(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) ([]Job, error) {
+func normalizeJobs(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) ([]JobFact, error) {
 	workflowsRoot := filepath.Join(prior.RunDir, "00-collect", "workflows")
 	repoDirs, err := os.ReadDir(workflowsRoot)
 	if err != nil {
@@ -87,7 +87,7 @@ func normalizeJobs(ctx context.Context, prior engine.PriorPhase, cp engine.Curre
 	refResolutions := loadRefResolutions(prior)
 	secretScopes := loadSecretScopeIndex(prior, org)
 
-	var allJobs []Job
+	var allJobs []JobFact
 	for _, rd := range repoDirs {
 		if err := ctx.Err(); err != nil {
 			return allJobs, err
@@ -188,7 +188,7 @@ type normalizeCtx struct {
 	secretScopes   secretScopeIndex
 }
 
-func normalizeWorkflowText(text string, nc normalizeCtx) ([]Job, error) {
+func normalizeWorkflowText(text string, nc normalizeCtx) ([]JobFact, error) {
 	root, err := DecodeWorkflow(text)
 	if err != nil {
 		return nil, err
@@ -226,7 +226,7 @@ func normalizeWorkflowText(text string, nc normalizeCtx) ([]Job, error) {
 	}
 	sort.Strings(jobIDs)
 
-	var out []Job
+	var out []JobFact
 	for _, jobID := range jobIDs {
 		rec, ok := normalizeJob(jobInputs{
 			repo:              nc.repo,
@@ -286,10 +286,10 @@ type jobInputs struct {
 	secretScopes      secretScopeIndex
 }
 
-func normalizeJob(in jobInputs) (Job, bool) {
+func normalizeJob(in jobInputs) (JobFact, bool) {
 	jobPlain, ok := in.jobNode.Plain().(map[string]any)
 	if !ok {
-		return Job{}, false
+		return JobFact{}, false
 	}
 
 	jobPermsNode := in.jobNode.Field("permissions")
@@ -504,7 +504,7 @@ func normalizeJob(in jobInputs) (Job, bool) {
 		}
 	}
 
-	return Job{
+	return JobFact{
 		ID:         engine.JobKey(in.repo, in.branch, in.isDefaultBranch, in.workflowFilename, in.jobID),
 		Provenance: &JobProvenance{WorkflowFile: in.relpath, YAMLLineRange: lineRangeOrZero(in.jobNode.Range()), Repo: in.repo},
 		Repo:       in.repo,

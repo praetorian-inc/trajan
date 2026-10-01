@@ -16,7 +16,7 @@ import (
 
 // Reads the normalized corpus back off disk as generic maps, ignoring the typed
 // jobs slice, so chain records mirror the on-disk shapes field-for-field.
-func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, _ []Job) error {
+func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, _ []JobFact) error {
 	jobs, err := loadRecords(prior, "10-normalize/jobs")
 	if err != nil {
 		return fmt.Errorf("correlate: load jobs: %w", err)

@@ -1,4 +1,4 @@
-package graph
+package github
 
 import (
 	"encoding/json"
@@ -6,44 +6,46 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
 func TestResourceHierarchyDegradesToTheOrgWhenNoRepoIsOwned(t *testing.T) {
 	const org = "ghektestorg"
 	cases := []struct {
 		name string
-		node node
+		node graph.Node[NodeLabel]
 		want []string
 	}{
 		{"repository names itself",
-			node{Key: map[string]string{"full_name": org + "/conf-ci"}},
+			graph.Node[NodeLabel]{Key: map[string]string{"full_name": org + "/conf-ci"}},
 			[]string{org, org + "/conf-ci"}},
 		{"branch carries a qualified repo key",
-			node{Key: map[string]string{"repo": org + "/conf-ci", "name": "main"}},
+			graph.Node[NodeLabel]{Key: map[string]string{"repo": org + "/conf-ci", "name": "main"}},
 			[]string{org, org + "/conf-ci"}},
 		{"ruleset carries the repo only as a property",
-			node{Key: map[string]string{"scope": "repo", "scope_key": org + "/conf-ci", "id": "1"},
+			graph.Node[NodeLabel]{Key: map[string]string{"scope": "repo", "scope_key": org + "/conf-ci", "id": "1"},
 				Properties: map[string]any{"repo": org + "/conf-ci"}},
 			[]string{org, org + "/conf-ci"}},
 		{"organization owns no repo",
-			node{Key: map[string]string{"login": org}},
+			graph.Node[NodeLabel]{Key: map[string]string{"login": org}},
 			[]string{org}},
 		{"unqualified repo is not a path",
-			node{Key: map[string]string{"repo": "conf-ci", "name": "main"}},
+			graph.Node[NodeLabel]{Key: map[string]string{"repo": "conf-ci", "name": "main"}},
 			[]string{org}},
 		{"foreign org repo is not this org's",
-			node{Key: map[string]string{"repo": "otherorg/shared-ci", "name": "main"}},
+			graph.Node[NodeLabel]{Key: map[string]string{"repo": "otherorg/shared-ci", "name": "main"}},
 			[]string{org}},
 		{"an org whose name only prefixes the owner",
-			node{Key: map[string]string{"repo": org + "2/conf-ci", "name": "main"}},
+			graph.Node[NodeLabel]{Key: map[string]string{"repo": org + "2/conf-ci", "name": "main"}},
 			[]string{org}},
 		{"org-scoped runner group",
-			node{Key: map[string]string{"org": org, "id": "3"}},
+			graph.Node[NodeLabel]{Key: map[string]string{"org": org, "id": "3"}},
 			[]string{org}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := resourceHierarchy(org, tc.node); !slices.Equal(got, tc.want) {
+			if got := GraphProvider().Hierarchy(org, tc.node); !slices.Equal(got, tc.want) {
 				t.Errorf("resourceHierarchy = %v, want %v", got, tc.want)
 			}
 		})
@@ -54,33 +56,38 @@ func TestResourceNameAndURLDerivation(t *testing.T) {
 	cases := []struct {
 		name     string
 		label    NodeLabel
-		node     node
+		node     graph.Node[NodeLabel]
 		wantName string
 		wantURL  string
 	}{
 		{"named property wins", Repository,
-			node{Key: map[string]string{"full_name": "ghektestorg/conf-ci"},
+			graph.Node[NodeLabel]{Key: map[string]string{"full_name": "ghektestorg/conf-ci"},
 				Properties: map[string]any{"name": "conf-ci", "html_url": "https://github.com/ghektestorg/conf-ci"}},
 			"conf-ci", "https://github.com/ghektestorg/conf-ci"},
 		{"last identity value stands in", Branch,
-			node{Key: map[string]string{"repo": "ghektestorg/conf-ci", "name": "main"}},
+			graph.Node[NodeLabel]{Key: map[string]string{"repo": "ghektestorg/conf-ci", "name": "main"}},
 			"main", ""},
 		{"a job is named by its job id, not its repo", Job,
-			node{Key: map[string]string{"repo": "ghektestorg/conf-ci",
+			graph.Node[NodeLabel]{Key: map[string]string{"repo": "ghektestorg/conf-ci",
 				"workflow": ".github/workflows/main.yml", "job_id": "deploy"}},
 			"deploy", ""},
 		{"an api path is not a url", Repository,
-			node{Key: map[string]string{"full_name": "ghektestorg/conf-ci"},
+			graph.Node[NodeLabel]{Key: map[string]string{"full_name": "ghektestorg/conf-ci"},
 				Properties: map[string]any{"url": "/repos/ghektestorg/conf-ci"}},
 			"ghektestorg/conf-ci", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := resourceName(tc.label, tc.node); got != tc.wantName {
-				t.Errorf("resourceName = %q, want %q", got, tc.wantName)
+			tc.node.Labels = []NodeLabel{tc.label}
+			got := graph.ToResources(GraphProvider(), "ghektestorg", []graph.Node[NodeLabel]{tc.node})
+			if len(got) != 1 {
+				t.Fatalf("ToResources returned %d resources, want 1", len(got))
 			}
-			if got := resourceURL(tc.node); got != tc.wantURL {
-				t.Errorf("resourceURL = %q, want %q", got, tc.wantURL)
+			if got[0].Name != tc.wantName {
+				t.Errorf("Name = %q, want %q", got[0].Name, tc.wantName)
+			}
+			if got[0].URL != tc.wantURL {
+				t.Errorf("URL = %q, want %q", got[0].URL, tc.wantURL)
 			}
 		})
 	}
@@ -116,7 +123,7 @@ func TestEveryBuiltNodeAndEdgeConverts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildEdges: %v", err)
 	}
-	nodes, edges := n.all(), s.all()
+	nodes, edges := n.All(), s.All()
 	if len(nodes) == 0 || len(edges) == 0 {
 		t.Fatalf("the fixture built %d nodes and %d edges", len(nodes), len(edges))
 	}
@@ -126,7 +133,7 @@ func TestEveryBuiltNodeAndEdgeConverts(t *testing.T) {
 		before[i] = maps.Clone(nodes[i].Properties)
 	}
 
-	resources := toResources(c.org, nodes)
+	resources := graph.ToResources(GraphProvider(), c.org, nodes)
 	if len(resources) != len(nodes) {
 		t.Errorf("converted %d of %d nodes", len(resources), len(nodes))
 	}
@@ -157,7 +164,7 @@ func TestEveryBuiltNodeAndEdgeConverts(t *testing.T) {
 		}
 	}
 
-	rels := toRelationships(edges)
+	rels := graph.ToRelationships(GraphProvider(), edges)
 	if len(rels) != len(edges) {
 		t.Errorf("converted %d of %d edges", len(rels), len(edges))
 	}
@@ -177,18 +184,18 @@ func TestEveryBuiltNodeAndEdgeConverts(t *testing.T) {
 }
 
 func TestFindingRefsSerializeAsAnEmptyArrayWhenUnattached(t *testing.T) {
-	attached := node{ID: "x", Labels: []NodeLabel{Repository},
+	attached := graph.Node[NodeLabel]{ID: "x", Labels: []NodeLabel{Repository},
 		Key: map[string]string{"full_name": "ghektestorg/conf-ci"},
-		Findings: []findingRef{
+		Findings: []graph.FindingRef{
 			{RuleID: "cat-01/a", Fingerprint: "1", Severity: "high", Confidence: "high"},
 			{RuleID: "cat-02/b", Fingerprint: "2", Severity: "low", Confidence: "medium"},
 		}}
-	if got := toResources("ghektestorg", []node{attached})[0].Findings; len(got) != 2 {
+	if got := graph.ToResources(GraphProvider(), "ghektestorg", []graph.Node[NodeLabel]{attached})[0].Findings; len(got) != 2 {
 		t.Fatalf("converted %d of 2 findings", len(got))
 	}
 
-	bare := node{ID: "y", Labels: []NodeLabel{Repository}, Key: map[string]string{"full_name": "ghektestorg/x"}}
-	got := toResources("ghektestorg", []node{bare})[0].Findings
+	bare := graph.Node[NodeLabel]{ID: "y", Labels: []NodeLabel{Repository}, Key: map[string]string{"full_name": "ghektestorg/x"}}
+	got := graph.ToResources(GraphProvider(), "ghektestorg", []graph.Node[NodeLabel]{bare})[0].Findings
 	if got == nil || len(got) != 0 {
 		t.Fatalf("findings = %v, want an empty slice", got)
 	}

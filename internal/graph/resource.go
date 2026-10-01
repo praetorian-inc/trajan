@@ -8,8 +8,6 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/resource"
 )
 
-const resourceProvider = "github"
-
 type resourcesFile struct {
 	Resources []resource.Resource `json:"resources"`
 }
@@ -18,7 +16,7 @@ type relationshipsFile struct {
 	Relationships []resource.Relationship `json:"relationships"`
 }
 
-func toResources(org string, nodes []node) []resource.Resource {
+func ToResources[L ~string, T ~string](p Provider[L, T], org string, nodes []Node[L]) []resource.Resource {
 	out := make([]resource.Resource, 0, len(nodes))
 	for _, n := range nodes {
 		if len(n.Labels) == 0 {
@@ -33,12 +31,12 @@ func toResources(org string, nodes []node) []resource.Resource {
 			props[k] = v
 		}
 		out = append(out, resource.Resource{
-			Provider:  resourceProvider,
-			Type:      nodeSlugs[label],
+			Provider:  p.Name(),
+			Type:      p.NodeSlug(label),
 			ID:        n.ID,
-			Name:      resourceName(label, n),
+			Name:      resourceName(p, label, n),
 			URL:       resourceURL(n),
-			Hierarchy: resourceHierarchy(org, n),
+			Hierarchy: p.Hierarchy(org, n),
 			Props:     props,
 			Findings:  toFindingRefs(n.Findings),
 		})
@@ -46,7 +44,7 @@ func toResources(org string, nodes []node) []resource.Resource {
 	return out
 }
 
-func toRelationships(edges []edge) []resource.Relationship {
+func ToRelationships[L ~string, T ~string](p Provider[L, T], edges []Edge[L, T]) []resource.Relationship {
 	out := make([]resource.Relationship, 0, len(edges))
 	for _, e := range edges {
 		props := maps.Clone(e.Properties)
@@ -54,8 +52,8 @@ func toRelationships(edges []edge) []resource.Relationship {
 			props = map[string]any{}
 		}
 		out = append(out, resource.Relationship{
-			Provider: resourceProvider,
-			Type:     edgeSlugs[e.Type],
+			Provider: p.Name(),
+			Type:     p.EdgeSlug(e.Type),
 			From:     e.From,
 			To:       e.To,
 			Props:    props,
@@ -65,7 +63,7 @@ func toRelationships(edges []edge) []resource.Relationship {
 	return out
 }
 
-func toFindingRefs(fs []findingRef) []resource.FindingRef {
+func toFindingRefs(fs []FindingRef) []resource.FindingRef {
 	out := make([]resource.FindingRef, 0, len(fs))
 	for _, f := range fs {
 		out = append(out, resource.FindingRef{
@@ -78,30 +76,21 @@ func toFindingRefs(fs []findingRef) []resource.FindingRef {
 	return out
 }
 
-func resourceName(label NodeLabel, n node) string {
-	ident := IdentityKey(label)
+func resourceName[L ~string, T ~string](p Provider[L, T], label L, n Node[L]) string {
+	ident := p.IdentityKey(label)
 	last := ""
 	if len(ident) > 0 {
 		last = n.Key[ident[len(ident)-1]]
 	}
-	return cmp.Or(str(n.Properties["name"]), last)
+	return cmp.Or(Str(n.Properties["name"]), last)
 }
 
-// ParseScope discards the host, so a synthesized URL would name the wrong GHES server.
-func resourceURL(n node) string {
+// ParseScope discards the host, so a synthesized URL would name the wrong server.
+func resourceURL[L ~string](n Node[L]) string {
 	for _, k := range []string{"url", "html_url"} {
-		if u := str(n.Properties[k]); strings.HasPrefix(u, "http") {
+		if u := Str(n.Properties[k]); strings.HasPrefix(u, "http") {
 			return u
 		}
 	}
 	return ""
-}
-
-// An unqualified or foreign-org repo fails the prefix test and must degrade to the org.
-func resourceHierarchy(org string, n node) []string {
-	repo := cmp.Or(n.Key["full_name"], n.Key["repo"], str(n.Properties["repo"]))
-	if !strings.HasPrefix(repo, org+"/") {
-		return []string{org}
-	}
-	return []string{org, repo}
 }

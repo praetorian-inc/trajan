@@ -1,4 +1,4 @@
-package graph
+package github
 
 import (
 	"encoding/json"
@@ -10,17 +10,24 @@ import (
 	"testing"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
+
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
-func fixture(t *testing.T, files map[string]any) (*corpus, *nodeSet) {
+func fixture(t *testing.T, files map[string]any) (*ghCorpus, *nodeIndex) {
 	t.Helper()
 	dir := t.TempDir()
 	for rel, v := range files {
-		if err := engine.WriteJSON(filepath.Join(dir, normalizeDir, filepath.FromSlash(rel)), v); err != nil {
+		if err := engine.WriteJSON(filepath.Join(dir, "10-normalize", filepath.FromSlash(rel)), v); err != nil {
 			t.Fatal(err)
 		}
 	}
-	c, err := loadCorpus(t.Context(), &engine.Config{Concurrency: 2}, dir, func(e error) { t.Fatalf("load: %v", e) })
+	src, err := graph.LoadCorpus(t.Context(), &engine.Config{Concurrency: 2}, dir,
+		[]string{"chains/indices/"}, func(e error) { t.Fatalf("load: %v", e) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := indexCorpus(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +38,7 @@ func fixture(t *testing.T, files map[string]any) (*corpus, *nodeSet) {
 	return c, n
 }
 
-func build(t *testing.T, files map[string]any) *edgeSet {
+func build(t *testing.T, files map[string]any) *edgeIndex {
 	t.Helper()
 	c, n := fixture(t, files)
 	s, err := buildEdges(t.Context(), c, n)
@@ -41,9 +48,9 @@ func build(t *testing.T, files map[string]any) *edgeSet {
 	return s
 }
 
-func edgesOfType(s *edgeSet, want EdgeType) []edge {
-	out := []edge{}
-	for _, e := range s.all() {
+func edgesOfType(s *edgeIndex, want EdgeType) []graph.Edge[NodeLabel, EdgeType] {
+	out := []graph.Edge[NodeLabel, EdgeType]{}
+	for _, e := range s.All() {
 		if e.Type == want {
 			out = append(out, e)
 		}
@@ -57,17 +64,17 @@ func edgesOfType(s *edgeSet, want EdgeType) []edge {
 func TestIDsAreInjectiveAcrossSeparators(t *testing.T) {
 	left := nd(Branch, "repo", "o/x", "name", `a|b`)
 	right := nd(Branch, "repo", `o/x|a`, "name", "b")
-	if left.id == right.id {
-		t.Fatalf("distinct identities collided: %q", left.id)
+	if left.ID == right.ID {
+		t.Fatalf("distinct identities collided: %q", left.ID)
 	}
 
 	esc1 := nd(Branch, "repo", "o/x", "name", `a\|b`)
-	if esc1.id == left.id {
-		t.Fatalf("backslash not escaped: %q collides with %q", esc1.id, left.id)
+	if esc1.ID == left.ID {
+		t.Fatalf("backslash not escaped: %q collides with %q", esc1.ID, left.ID)
 	}
 
-	a := edgeID(ProtectedBy, left.id, "Ruleset|repo|1")
-	b := edgeID(ProtectedBy, right.id, "Ruleset|repo|1")
+	a := graph.EdgeID(ProtectedBy, left.ID, "Ruleset|repo|1")
+	b := graph.EdgeID(ProtectedBy, right.ID, "Ruleset|repo|1")
 	if a == b {
 		t.Fatalf("distinct edges collided: %q", a)
 	}
@@ -105,7 +112,7 @@ func TestCanLandCodeKeepsSlashBearingBranchesDistinct(t *testing.T) {
 		seen[e.To] = true
 	}
 	for _, b := range branches {
-		want := nd(Branch, "repo", "ghektestorg/"+repo, "name", b).id
+		want := nd(Branch, "repo", "ghektestorg/"+repo, "name", b).ID
 		if !seen[want] {
 			t.Errorf("no CAN_LAND_CODE edge to branch %q", b)
 		}
@@ -142,7 +149,7 @@ func TestCanLandCodeResolvesDeployKeyAndKeepsEmptyArrays(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d CAN_LAND_CODE edges, want 1", len(got))
 	}
-	if want := nd(DeployKey, "fingerprint", fp).id; got[0].From != want {
+	if want := nd(DeployKey, "fingerprint", fp).ID; got[0].From != want {
 		t.Errorf("from = %q, want the fingerprint-keyed node %q", got[0].From, want)
 	}
 
@@ -183,11 +190,11 @@ func TestTargetsMergesBranchesAndCountsExpressionEnvironments(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d TARGETS edges, want 1 (7 branch variants of one job definition)", len(got))
 	}
-	if want := nd(Environment, "repo", "ghektestorg/"+repo, "name", "production").id; got[0].To != want {
+	if want := nd(Environment, "repo", "ghektestorg/"+repo, "name", "production").ID; got[0].To != want {
 		t.Errorf("to = %q, want %q", got[0].To, want)
 	}
-	if k := edgeKey(Targets, Job, Environment); s.unbuilt[k] != 1 {
-		t.Errorf("unbuilt[%s] = %d, want 1 for the expression-named environment", k, s.unbuilt[k])
+	if k := graph.EdgeKey(Targets, Job, Environment); s.Unbuilt()[k] != 1 {
+		t.Errorf("unbuilt[%s] = %d, want 1 for the expression-named environment", k, s.Unbuilt()[k])
 	}
 }
 
@@ -218,7 +225,7 @@ func TestCanApproveNeedsBothTheRepoToggleAndTheJobToken(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d CAN_APPROVE edges, want 1: %+v", len(got), got)
 	}
-	want := nodeID(Job, map[string]string{
+	want := graphNodeID(Job, map[string]string{
 		"repo":     "ghektestorg/fr-03-01-self-pr-approve-via-actions",
 		"workflow": ".github/workflows/approve.yml",
 		"job_id":   "approve",
@@ -258,8 +265,8 @@ func TestUnbuildableMintsCountsJobDefinitionsNotBranchVariants(t *testing.T) {
 		"org/ghektestorg.json":     map[string]any{"_id": "ghektestorg", "org": "ghektestorg"},
 		"chains/app-mintable.json": map[string]any{"chain": "app-mintable", "mints": mints},
 	})
-	if k := edgeKey(MintsTokenAs, Job, App); s.unbuilt[k] != 2 {
-		t.Errorf("unbuilt[%s] = %d, want 2 minting job definitions from 5 chain rows", k, s.unbuilt[k])
+	if k := graph.EdgeKey(MintsTokenAs, Job, App); s.Unbuilt()[k] != 2 {
+		t.Errorf("unbuilt[%s] = %d, want 2 minting job definitions from 5 chain rows", k, s.Unbuilt()[k])
 	}
 }
 
@@ -277,11 +284,11 @@ func TestEmptyEdgeTriplesSeesPastAPopulatedSiblingPair(t *testing.T) {
 		}},
 	})
 
-	got := emptyEdgeTriples(s.all())
-	if slices.Contains(got, edgeKey(Targets, Job, Environment)) {
+	got := s.EmptyTriples(s.All())
+	if slices.Contains(got, graph.EdgeKey(Targets, Job, Environment)) {
 		t.Error("TARGETS{Job,Environment} was emitted and must not be reported empty")
 	}
-	if !slices.Contains(got, edgeKey(Targets, Workflow, Branch)) {
+	if !slices.Contains(got, graph.EdgeKey(Targets, Workflow, Branch)) {
 		t.Errorf("TARGETS{Workflow,Branch} has no writer and must be reported empty: %v", got)
 	}
 }
@@ -290,31 +297,37 @@ func TestEmptyEdgeTriplesSeesPastAPopulatedSiblingPair(t *testing.T) {
 // written repeatedly. A scalar the records disagree on is first-wins and must be
 // counted; identical scalars are not conflicts and arrays still union.
 func TestAddCountsDiscardedScalarsAndUnionsArrays(t *testing.T) {
-	s := newEdgeSet()
+	s := newEdgeIndex()
 	from := nd(Job, "repo", "ghektestorg/fr-11-02", "workflow", ".github/workflows/main.yml", "job_id", "deploy")
 	to := nd(Environment, "repo", "ghektestorg/fr-11-02", "name", "production")
 	for i, noReviewers := range []bool{false, true} {
-		s.add(Targets, from, to, map[string]any{
+		s.Add(Targets, from, to, map[string]any{
 			"env_no_reviewers":   noReviewers,
 			"env_record_present": true,
 			"_source":            []any{fmt.Sprintf("chains/env-deployments.json#deploys[%d]", i)},
 		})
 	}
 
-	e := s.byID[edgeID(Targets, from.id, to.id)]
+	e := s.Get(graph.EdgeID(Targets, from.ID, to.ID))
 	if e == nil {
-		t.Fatalf("no TARGETS edge: %v", s.byID)
+		t.Fatalf("no TARGETS edge: %v", s.IDs())
 	}
 	if e.Properties["env_no_reviewers"] != false {
 		t.Errorf("env_no_reviewers = %v, want the first writer's false", e.Properties["env_no_reviewers"])
 	}
-	if got := s.conflicts[edgeConflictKey{Targets, "env_no_reviewers"}]; got != 1 {
+	conflicts := map[string]int{}
+	for _, c := range s.PropertyConflicts() {
+		if c.Type == Targets {
+			conflicts[c.Property] = c.Discarded
+		}
+	}
+	if got := conflicts["env_no_reviewers"]; got != 1 {
 		t.Errorf("discarded env_no_reviewers scalars = %d, want 1", got)
 	}
-	if _, dup := s.conflicts[edgeConflictKey{Targets, "env_record_present"}]; dup {
+	if _, dup := conflicts["env_record_present"]; dup {
 		t.Error("identical scalars must not count as conflicts")
 	}
-	if _, dup := s.conflicts[edgeConflictKey{Targets, "_source"}]; dup {
+	if _, dup := conflicts["_source"]; dup {
 		t.Error("a merged array must not count as a conflict")
 	}
 	if got := len(e.Properties["_source"].([]any)); got != 2 {
@@ -323,28 +336,28 @@ func TestAddCountsDiscardedScalarsAndUnionsArrays(t *testing.T) {
 }
 
 func TestAddRejectsIllegalEndpointPair(t *testing.T) {
-	s := newEdgeSet()
-	s.add(Reads, nd(Job, "repo", "o/r", "workflow", "w", "job_id", "j"), nd(Repository, "full_name", "o/r"), nil)
-	if len(s.byID) != 0 {
-		t.Errorf("wrote an edge the schema forbids: %v", s.byID)
+	s := newEdgeIndex()
+	s.Add(Reads, nd(Job, "repo", "o/r", "workflow", "w", "job_id", "j"), nd(Repository, "full_name", "o/r"), nil)
+	if s.Len() != 0 {
+		t.Errorf("wrote an edge the schema forbids: %v", s.IDs())
 	}
-	if s.illegal["READS{Job,Repository}"] != 1 {
-		t.Errorf("illegal = %v, want READS{Job,Repository}:1", s.illegal)
+	if s.Illegal()["READS{Job,Repository}"] != 1 {
+		t.Errorf("illegal = %v, want READS{Job,Repository}:1", s.Illegal())
 	}
-	if s.err() == nil {
+	if s.Err() == nil {
 		t.Error("err() = nil; an illegal endpoint pair is a contract violation and must abort the phase")
 	}
 }
 
 func TestAddDropsIncompleteIdentity(t *testing.T) {
-	s := newEdgeSet()
+	s := newEdgeIndex()
 	from := nd(Job, "repo", "o/r", "workflow", "w", "job_id", "j")
-	s.add(RunsOn, from, nd(Runner, "scope", "", "id", ""), nil)
-	if len(s.byID) != 0 {
-		t.Errorf("minted an edge to an unidentified endpoint: %v", s.byID)
+	s.Add(RunsOn, from, nd(Runner, "scope", "", "id", ""), nil)
+	if s.Len() != 0 {
+		t.Errorf("minted an edge to an unidentified endpoint: %v", s.IDs())
 	}
-	if k := edgeKey(RunsOn, Job, Runner); s.unbuilt[k] != 1 {
-		t.Errorf("unbuilt[%s] = %d, want 1", k, s.unbuilt[k])
+	if k := graph.EdgeKey(RunsOn, Job, Runner); s.Unbuilt()[k] != 1 {
+		t.Errorf("unbuilt[%s] = %d, want 1", k, s.Unbuilt()[k])
 	}
 }
 
@@ -377,8 +390,8 @@ func TestCacheIOStaysInsideOneRepo(t *testing.T) {
 	}
 
 	caches := 0
-	for _, node := range n.byID {
-		if node.Labels[0] == Cache {
+	for _, nd := range n.All() {
+		if nd.Labels[0] == Cache {
 			caches++
 		}
 	}
@@ -433,9 +446,9 @@ func TestTargetsBranchResolvesOnlyRefsThatExist(t *testing.T) {
 		got[str(e.Properties["branch_filter"])] = append(got[str(e.Properties["branch_filter"])], e.To)
 	}
 	want := map[string][]string{
-		"release/*":  {nd(Branch, "repo", "ghektestorg/"+glob, "name", "release/1.0").id},
-		"release/**": {nd(Branch, "repo", "ghektestorg/"+glob, "name", "release/1.0").id, nd(Branch, "repo", "ghektestorg/"+glob, "name", "release/2.0/hotfix").id},
-		"main":       {nd(Branch, "repo", "ghektestorg/"+absent, "name", "main").id},
+		"release/*":  {nd(Branch, "repo", "ghektestorg/"+glob, "name", "release/1.0").ID},
+		"release/**": {nd(Branch, "repo", "ghektestorg/"+glob, "name", "release/1.0").ID, nd(Branch, "repo", "ghektestorg/"+glob, "name", "release/2.0/hotfix").ID},
+		"main":       {nd(Branch, "repo", "ghektestorg/"+absent, "name", "main").ID},
 	}
 	for f, ids := range want {
 		slices.Sort(got[f])
@@ -447,12 +460,12 @@ func TestTargetsBranchResolvesOnlyRefsThatExist(t *testing.T) {
 	if len(got) != len(want) {
 		t.Errorf("resolved filters %v, want exactly %v", slices.Sorted(maps.Keys(got)), slices.Sorted(maps.Keys(want)))
 	}
-	if k := edgeKey(Targets, Workflow, Branch); s.unbuilt[k] != 1 {
-		t.Errorf("unbuilt[%s] = %d, want 1 (attacker-dev, which does not exist)", k, s.unbuilt[k])
+	if k := graph.EdgeKey(Targets, Workflow, Branch); s.Unbuilt()[k] != 1 {
+		t.Errorf("unbuilt[%s] = %d, want 1 (attacker-dev, which does not exist)", k, s.Unbuilt()[k])
 	}
 	for _, name := range []string{"release/*", "release/**", "attacker-dev"} {
 		for _, repo := range []string{glob, absent} {
-			if id := nd(Branch, "repo", "ghektestorg/"+repo, "name", name).id; n.has(id) {
+			if id := nd(Branch, "repo", "ghektestorg/"+repo, "name", name).ID; n.Has(id) {
 				t.Errorf("minted a Branch node for a ref that does not exist: %q", id)
 			}
 		}
@@ -491,7 +504,7 @@ func TestPassesSecretIgnoresJobLevelSecretReferences(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d PASSES_SECRET edges, want only the step-level reference: %+v", len(got), got)
 	}
-	if want := nd(Action, "ref", "third-party/publish@v1").id; got[0].To != want {
+	if want := nd(Action, "ref", "third-party/publish@v1").ID; got[0].To != want {
 		t.Errorf("to = %q, want %q", got[0].To, want)
 	}
 }

@@ -1,9 +1,11 @@
-package graph
+package github
 
 import (
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
 type NodeLabel string
@@ -298,24 +300,8 @@ func init() {
 		}
 	}
 	if len(missing) > 0 {
-		panic("internal/graph: no resource slug for " + strings.Join(missing, ", "))
+		panic("internal/github: no resource slug for " + strings.Join(missing, ", "))
 	}
-}
-
-// Findings are never nodes; each rule id lands in the bucket for its severity
-// on the node or edge it was raised against.
-const (
-	FindingsCritical = "findings_critical"
-	FindingsHigh     = "findings_high"
-	FindingsMedium   = "findings_medium"
-	FindingsLow      = "findings_low"
-)
-
-var severityBuckets = map[string]string{
-	"critical": FindingsCritical,
-	"high":     FindingsHigh,
-	"medium":   FindingsMedium,
-	"low":      FindingsLow,
 }
 
 func ValidNodeLabel(l NodeLabel) bool { _, ok := identityKeys[l]; return ok }
@@ -332,10 +318,20 @@ func EdgeTypes() []EdgeType { return slices.Sorted(maps.Keys(edgeEndpoints)) }
 
 func IdentityKey(l NodeLabel) []string { return identityKeys[l] }
 
-// SeverityBucket returns "" for info and unknown severities, which have no
-// bucket and are not written onto the graph.
-func SeverityBucket(severity string) string { return severityBuckets[severity] }
+type ghSchema struct{}
 
-func FindingBuckets() []string {
-	return []string{FindingsCritical, FindingsHigh, FindingsMedium, FindingsLow}
+func (ghSchema) NodeLabels() []NodeLabel                 { return NodeLabels() }
+func (ghSchema) EdgeTypes() []EdgeType                   { return EdgeTypes() }
+func (ghSchema) IdentityKey(l NodeLabel) []string        { return IdentityKey(l) }
+func (ghSchema) ValidNodeLabel(l NodeLabel) bool         { return ValidNodeLabel(l) }
+func (ghSchema) ValidEdgeType(t EdgeType) bool           { return ValidEdgeType(t) }
+func (ghSchema) NodeSlug(l NodeLabel) string             { return nodeSlugs[l] }
+func (ghSchema) EdgeSlug(t EdgeType) string              { return edgeSlugs[t] }
+func (ghSchema) Identifies(v string) bool                { return identifies(v) }
+func (ghSchema) EdgeEndpoints(t EdgeType) [][2]NodeLabel { return edgeEndpoints[t] }
+
+func (ghSchema) ValidEdge(t EdgeType, from, to NodeLabel) bool { return ValidEdge(t, from, to) }
+
+func graphNodeID(l NodeLabel, key map[string]string) string {
+	return graph.NodeID[NodeLabel, EdgeType](ghSchema{}, l, key)
 }

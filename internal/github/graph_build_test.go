@@ -1,4 +1,4 @@
-package graph
+package github
 
 import (
 	"maps"
@@ -8,6 +8,10 @@ import (
 	"testing"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
+
+	"github.com/praetorian-inc/trajan/internal/graph"
+
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 // backfillObserved rebuilds an endpoint's identity from its node id, so the
@@ -21,7 +25,7 @@ func TestParseNodeIDInvertsNodeID(t *testing.T) {
 		{"repo": `o/x|a`, "name": "b"},
 		{"repo": `o\x`, "name": `\|b`},
 	} {
-		label, got, ok := parseNodeID(nodeID(Branch, key))
+		label, got, ok := graph.ParseNodeID(ghSchema{}, graphNodeID(Branch, key))
 		if !ok {
 			t.Fatalf("%v: not parseable", key)
 		}
@@ -30,10 +34,10 @@ func TestParseNodeIDInvertsNodeID(t *testing.T) {
 		}
 	}
 
-	if _, _, ok := parseNodeID("Branch|only-one-value"); ok {
+	if _, _, ok := graph.ParseNodeID(ghSchema{}, "Branch|only-one-value"); ok {
 		t.Error("a tuple of the wrong arity must not parse")
 	}
-	if _, _, ok := parseNodeID("NotALabel|a|b"); ok {
+	if _, _, ok := graph.ParseNodeID(ghSchema{}, "NotALabel|a|b"); ok {
 		t.Error("an unknown label must not parse")
 	}
 }
@@ -63,15 +67,15 @@ func TestBackfillEmitsIdentifiedEndpointsWithoutRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	callee := nodeID(Workflow, map[string]string{"repo": "ghektestorg/shared-ci", "path": ".github/workflows/build.yml"})
-	if n.has(callee) {
+	callee := graphNodeID(Workflow, map[string]string{"repo": "ghektestorg/shared-ci", "path": ".github/workflows/build.yml"})
+	if n.Has(callee) {
 		t.Fatal("the callee must not exist before the backfill")
 	}
-	if minted := backfillObserved(n, s); minted != 1 {
+	if minted := graph.BackfillObserved(n.NodeSet, s); minted != 1 {
 		t.Fatalf("minted %d nodes, want 1", minted)
 	}
 
-	got := n.get(callee)
+	got := n.Get(callee)
 	if got == nil {
 		t.Fatal("the callee workflow was not emitted")
 	}
@@ -80,10 +84,10 @@ func TestBackfillEmitsIdentifiedEndpointsWithoutRecords(t *testing.T) {
 	}
 	// The callee's repository was never observed, so it must stay parentless
 	// rather than drag in a synthesized Repository.
-	if n.has(nodeID(Repository, map[string]string{"full_name": "ghektestorg/shared-ci"})) {
+	if n.Has(graphNodeID(Repository, map[string]string{"full_name": "ghektestorg/shared-ci"})) {
 		t.Error("a Repository node was invented for an uncollected repo")
 	}
-	if dropped := dropDangling(n, s); len(dropped) != 0 {
+	if dropped := graph.DropDangling(n.NodeSet, s); len(dropped) != 0 {
 		t.Errorf("dropped_dangling = %v, want empty after the backfill", dropped)
 	}
 }
@@ -92,7 +96,7 @@ func TestBackfillEmitsIdentifiedEndpointsWithoutRecords(t *testing.T) {
 // is omitted rather than written as [].
 func TestFinalizeFindingsBucketsBySeverity(t *testing.T) {
 	props := map[string]any{}
-	fs := finalizeFindings([]findingRef{
+	fs := graph.FinalizeFindings([]graph.FindingRef{
 		{RuleID: "b/low", Severity: "low", Confidence: "low", Fingerprint: "2"},
 		{RuleID: "a/high", Severity: "high", Confidence: "medium", Fingerprint: "3"},
 		{RuleID: "a/high", Severity: "high", Confidence: "high", Fingerprint: "1"},
@@ -105,15 +109,15 @@ func TestFinalizeFindingsBucketsBySeverity(t *testing.T) {
 	if props["findings_count"] != 4 {
 		t.Errorf("findings_count = %v, want 4 including the info finding", props["findings_count"])
 	}
-	if got, ok := props[FindingsHigh].([]string); !ok || len(got) != 1 || got[0] != "a/high" {
-		t.Errorf("%s = %v, want one deduplicated rule id", FindingsHigh, props[FindingsHigh])
+	if got, ok := props[graph.FindingsHigh].([]string); !ok || len(got) != 1 || got[0] != "a/high" {
+		t.Errorf("%s = %v, want one deduplicated rule id", graph.FindingsHigh, props[graph.FindingsHigh])
 	}
 	if props["findings_count_high"] != 2 {
 		t.Errorf("findings_count_high = %v, want 2 findings from the 1 deduplicated rule",
 			props["findings_count_high"])
 	}
-	if _, present := props[FindingsCritical]; present {
-		t.Errorf("%s must be omitted when empty", FindingsCritical)
+	if _, present := props[graph.FindingsCritical]; present {
+		t.Errorf("%s must be omitted when empty", graph.FindingsCritical)
 	}
 	if _, present := props["findings_count_critical"]; present {
 		t.Error("findings_count_critical must be omitted alongside its empty bucket")
@@ -139,7 +143,7 @@ func subjectTriples(subject string) []string {
 	var out []string
 	for _, f := range strings.Split(from, "|") {
 		for _, t := range strings.Split(to, "|") {
-			out = append(out, edgeKey(EdgeType(head), NodeLabel(f), NodeLabel(t)))
+			out = append(out, graph.EdgeKey(EdgeType(head), NodeLabel(f), NodeLabel(t)))
 		}
 	}
 	return out
@@ -152,7 +156,7 @@ func TestRegisterSubjectsNameDeclaredTriples(t *testing.T) {
 	declared := map[string]bool{}
 	for _, et := range EdgeTypes() {
 		for _, p := range edgeEndpoints[et] {
-			declared[edgeKey(et, p[0], p[1])] = true
+			declared[graph.EdgeKey(et, p[0], p[1])] = true
 		}
 	}
 	for _, row := range gapRegister {
@@ -171,7 +175,7 @@ func TestRegisterClaimsEachTargetOnce(t *testing.T) {
 	by := map[string]string{}
 	for _, row := range gapRegister {
 		for _, tgt := range row.Targets {
-			if _, err := ParseTarget(tgt); err != nil {
+			if _, err := graph.ParseTarget(GraphProvider(), tgt); err != nil {
 				t.Errorf("%s: target %q never matches a finding: %v", row.Subject, tgt, err)
 			}
 			if prev, dup := by[tgt]; dup {
@@ -205,7 +209,8 @@ func TestRegisterDoesNotDisclaimWhatTheRunBuilds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum := summarize(t.TempDir(), inputsSummary{}, n.all(), s.all(), s, n, 0, nil, &attachResult{})
+	sum := graph.Summarize(t.TempDir(), GraphProvider(), graph.InputsSummary{}, n.NodeSet, s, 0, nil,
+		graph.NewAttachResult(unattachedReasons))
 
 	if sum.Nodes.ByLabel[CloudRole] == 0 || sum.Edges.ByType[CanAssume] == 0 {
 		t.Fatalf("the oracle never reached the graph: CloudRole=%d CAN_ASSUME=%d",
@@ -236,9 +241,23 @@ func runDirWith(t *testing.T, files map[string]any) string {
 	return dir
 }
 
-func readSummary(t *testing.T, runDir string) summary {
+type testSummary struct {
+	Inputs graph.InputsSummary `json:"inputs"`
+	Nodes  struct {
+		Total   int               `json:"total"`
+		ByLabel map[NodeLabel]int `json:"by_label"`
+	} `json:"nodes"`
+	Edges struct {
+		ByType map[EdgeType]int `json:"by_type"`
+	} `json:"edges"`
+	Gaps struct {
+		Register []graph.GapEntry `json:"register"`
+	} `json:"gaps"`
+}
+
+func readSummary(t *testing.T, runDir string) testSummary {
 	t.Helper()
-	var s summary
+	var s testSummary
 	if err := engine.ReadJSON(filepath.Join(runDir, engine.GraphSummary()), &s); err != nil {
 		t.Fatal(err)
 	}
@@ -247,9 +266,12 @@ func readSummary(t *testing.T, runDir string) summary {
 
 func buildInto(t *testing.T, runDir string) error {
 	t.Helper()
-	timer := engine.StartPhaseTimer(engine.PhaseGraph, "graph")
-	_, err := runBuild(t.Context(), &engine.Config{Concurrency: 2}, runDir, nil, timer)
-	return err
+	state := &engine.State{RunID: filepath.Base(runDir), LastPhase: engine.PhaseScan.Num}
+	if err := state.Save(runDir); err != nil {
+		t.Fatal(err)
+	}
+	return graph.Build(t.Context(), &engine.Config{Concurrency: 2, UI: ui.Discard},
+		runDir, GraphProvider(), nil)
 }
 
 // A record that fails to parse is dropped and the phase continues, so the count of what
@@ -257,11 +279,11 @@ func buildInto(t *testing.T, runDir string) error {
 // is indistinguishable from a complete one.
 func TestBuildReportsDroppedInputs(t *testing.T) {
 	dir := runDirWith(t, map[string]any{
-		normalizeDir + "/org/ghektestorg.json": map[string]any{"_id": "ghektestorg", "org": "ghektestorg"},
-		normalizeDir + "/repos/conf-ci.json":   map[string]any{"_id": "conf-ci", "repo": "conf-ci"},
-		scanDir + "/findings/aaaa.json":        mkFinding("aaaa", "cat-01/x", "repo", "conf-ci"),
+		"10-normalize/org/ghektestorg.json": map[string]any{"_id": "ghektestorg", "org": "ghektestorg"},
+		"10-normalize/repos/conf-ci.json":   map[string]any{"_id": "conf-ci", "repo": "conf-ci"},
+		"20-scan/findings/aaaa.json":        mkFinding("aaaa", "cat-01/x", "repo", "conf-ci"),
 	})
-	for _, rel := range []string{normalizeDir + "/repos/broken.json", scanDir + "/findings/bbbb.json"} {
+	for _, rel := range []string{"10-normalize/repos/broken.json", "20-scan/findings/bbbb.json"} {
 		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(rel)), []byte("{not json"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -271,7 +293,7 @@ func TestBuildReportsDroppedInputs(t *testing.T) {
 		t.Fatalf("a dropped record must not fail the phase: %v", err)
 	}
 	got := readSummary(t, dir).Inputs
-	want := inputsSummary{NormalizeSeen: 3, NormalizeDropped: 1, FindingsSeen: 2, FindingsDropped: 1}
+	want := graph.InputsSummary{NormalizeSeen: 3, NormalizeDropped: 1, FindingsSeen: 2, FindingsDropped: 1}
 	if got != want {
 		t.Errorf("inputs = %+v, want %+v", got, want)
 	}
@@ -282,18 +304,18 @@ func TestBuildReportsDroppedInputs(t *testing.T) {
 // good one alone, and must not present an unscanned run as a clean one.
 func TestBuildKeepsThePriorGraphWhenInputsAreUnreadable(t *testing.T) {
 	dir := runDirWith(t, map[string]any{
-		normalizeDir + "/org/ghektestorg.json": map[string]any{"_id": "ghektestorg", "org": "ghektestorg"},
-		normalizeDir + "/repos/conf-ci.json":   map[string]any{"_id": "conf-ci", "repo": "conf-ci"},
+		"10-normalize/org/ghektestorg.json": map[string]any{"_id": "ghektestorg", "org": "ghektestorg"},
+		"10-normalize/repos/conf-ci.json":   map[string]any{"_id": "conf-ci", "repo": "conf-ci"},
 	})
 
 	if err := buildInto(t, dir); err == nil {
 		t.Fatal("a run with no 20-scan must fail rather than report zero findings")
 	}
-	if _, err := os.Stat(filepath.Join(dir, graphDir)); !os.IsNotExist(err) {
-		t.Fatalf("a failed build wrote %s: %v", graphDir, err)
+	if _, err := os.Stat(filepath.Join(dir, "30-graph")); !os.IsNotExist(err) {
+		t.Fatalf("a failed build wrote %s: %v", "30-graph", err)
 	}
 
-	if err := engine.WriteJSON(filepath.Join(dir, scanDir, "findings", "aaaa.json"),
+	if err := engine.WriteJSON(filepath.Join(dir, "20-scan", "findings", "aaaa.json"),
 		mkFinding("aaaa", "cat-01/x", "repo", "conf-ci")); err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +324,7 @@ func TestBuildKeepsThePriorGraphWhenInputsAreUnreadable(t *testing.T) {
 	}
 	good := readSummary(t, dir)
 
-	if err := os.RemoveAll(filepath.Join(dir, normalizeDir)); err != nil {
+	if err := os.RemoveAll(filepath.Join(dir, "10-normalize")); err != nil {
 		t.Fatal(err)
 	}
 	if err := buildInto(t, dir); err == nil {

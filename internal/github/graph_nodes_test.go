@@ -1,12 +1,12 @@
-package graph
+package github
 
 import (
 	"encoding/json"
-	"maps"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
 // A node id is split on unescaped '|', so distinct identity tuples must never
@@ -25,12 +25,12 @@ func TestNodeIDInjective(t *testing.T) {
 	}
 	seen := map[string][2]string{}
 	for _, tp := range tuples {
-		id := nodeID(Branch, map[string]string{"repo": tp[0], "name": tp[1]})
+		id := graphNodeID(Branch, map[string]string{"repo": tp[0], "name": tp[1]})
 		if prev, dup := seen[id]; dup {
 			t.Fatalf("collision %q: %v and %v", id, prev, tp)
 		}
 		seen[id] = tp
-		if again := nodeID(Branch, map[string]string{"repo": tp[0], "name": tp[1]}); again != id {
+		if again := graphNodeID(Branch, map[string]string{"repo": tp[0], "name": tp[1]}); again != id {
 			t.Fatalf("unstable id for %v: %q then %q", tp, id, again)
 		}
 	}
@@ -40,7 +40,7 @@ func TestNodeIDInjective(t *testing.T) {
 // branch set must survive, the default-branch flag must OR, and a scalar that
 // differs between the branches must be counted rather than hidden.
 func TestUpsertMergesBranchScopedJobs(t *testing.T) {
-	s := newNodeSet()
+	s := newNodeIndex()
 	key := map[string]string{
 		"repo":     "ghektestorg/fr-11-02",
 		"workflow": ".github/workflows/main.yml",
@@ -48,7 +48,7 @@ func TestUpsertMergesBranchScopedJobs(t *testing.T) {
 	}
 	branches := []string{"main", "release/1.0", "hotfix/a"}
 	for i, b := range branches {
-		s.upsert(Job, key, map[string]any{
+		s.Upsert(Job, key, map[string]any{
 			"branches":              []any{b},
 			"is_default_branch_any": i == 0,
 			"token_source":          []string{"job", "repo_default", "repo_default"}[i],
@@ -57,20 +57,20 @@ func TestUpsertMergesBranchScopedJobs(t *testing.T) {
 		}, "jobs/fr-11-02__"+b+".json")
 	}
 
-	if got := len(s.byID); got != 1 {
-		t.Fatalf("want 1 node, got %d", got)
+	if got := s.Len(); got != 1 {
+		t.Fatalf("want 1 nd, got %d", got)
 	}
-	n := s.get(nodeID(Job, key))
+	n := s.Get(graphNodeID(Job, key))
 	if want := []any{"hotfix/a", "main", "release/1.0"}; !reflect.DeepEqual(n.Properties["branches"], want) {
 		t.Errorf("branches = %v, want %v", n.Properties["branches"], want)
 	}
 	if n.Properties["is_default_branch_any"] != true {
 		t.Error("is_default_branch_any must OR across merged records")
 	}
-	if got := s.conflicts[conflictKey{Job, "token_source"}]; got != 2 {
+	if got := nodeConflict(s, Job, "token_source"); got != 2 {
 		t.Errorf("discarded token_source scalars = %d, want 2", got)
 	}
-	if _, dup := s.conflicts[conflictKey{Job, "workflow_name"}]; dup {
+	if nodeConflict(s, Job, "workflow_name") != 0 {
 		t.Error("identical scalars must not count as conflicts")
 	}
 	if want := []any{"push"}; !reflect.DeepEqual(n.Properties["triggers"], want) {
@@ -79,7 +79,7 @@ func TestUpsertMergesBranchScopedJobs(t *testing.T) {
 	if got := len(n.Properties["_source"].([]any)); got != 3 {
 		t.Errorf("_source has %d entries, want 3", got)
 	}
-	if m := s.merges(); len(m) != 1 || m[0].SourceRecords != 3 || m[0].Nodes != 1 || m[0].MergedRecords != 2 {
+	if m := s.Merges(); len(m) != 1 || m[0].SourceRecords != 3 || m[0].Nodes != 1 || m[0].MergedRecords != 2 {
 		t.Errorf("merges = %+v", m)
 	}
 }
@@ -87,14 +87,14 @@ func TestUpsertMergesBranchScopedJobs(t *testing.T) {
 // An invented identity value is an invented path, so an incomplete tuple mints
 // nothing and is counted.
 func TestUpsertDropsIncompleteIdentity(t *testing.T) {
-	s := newNodeSet()
-	if n := s.upsert(Runner, map[string]string{"scope": "ghektestorg"}, nil, "x"); n != nil {
+	s := newNodeIndex()
+	if n := s.Upsert(Runner, map[string]string{"scope": "ghektestorg"}, nil, "x"); n != nil {
 		t.Fatal("upsert with an empty identity value must return nil")
 	}
-	if len(s.byID) != 0 {
+	if s.Len() != 0 {
 		t.Fatal("no node may be emitted")
 	}
-	if s.incompleteIdentities()[Runner] != 1 {
+	if s.IncompleteIdentities()[Runner] != 1 {
 		t.Fatal("the dropped candidate must be counted")
 	}
 }
@@ -116,8 +116,8 @@ func TestRecordPropsRegistersIllegalKeys(t *testing.T) {
 	}`), &fields); err != nil {
 		t.Fatal(err)
 	}
-	s := newNodeSet()
-	got := s.recordProps(Branch, fields)
+	s := newNodeIndex()
+	got := s.RecordProps(Branch, fields)
 
 	want := []string{"count", "flag", "missing", "labels", "empty"}
 	if len(got) != len(want) {
@@ -127,17 +127,17 @@ func TestRecordPropsRegistersIllegalKeys(t *testing.T) {
 		if _, ok := got[k]; !ok {
 			t.Errorf("%q was dropped", k)
 		}
-		if s.illegal[conflictKey{Branch, k}] {
+		if s.IllegalProp(Branch, k) {
 			t.Errorf("%q is storable and must not be registered", k)
 		}
 	}
 	for _, k := range []string{"steps", "mixed", "holes"} {
-		if !s.illegal[conflictKey{Branch, k}] {
+		if !s.IllegalProp(Branch, k) {
 			t.Errorf("%q was skipped without registering the key for the sweep", k)
 		}
 	}
 	for _, k := range []string{"_id", "_provenance", "repo", "name"} {
-		if s.illegal[conflictKey{Branch, k}] {
+		if s.IllegalProp(Branch, k) {
 			t.Errorf("%q is excluded by name, not by shape", k)
 		}
 	}
@@ -173,17 +173,17 @@ func TestRulesetStatusChecksAreProjectedNotInverted(t *testing.T) {
 		{"20204729", "ghektestorg/fr-11-02-protection-targets-default-branch-only-but-deploy-fires-from", []any{"ci/build"}},
 		{"20204724", "ghektestorg/fr-11-03-required-status-check-name-is-attacker-creatable", []any{}},
 	} {
-		node := n.get(nodeID(Ruleset, map[string]string{"scope": "repo", "scope_key": tc.repo, "id": tc.id}))
-		if node == nil {
+		nd := n.Get(graphNodeID(Ruleset, map[string]string{"scope": "repo", "scope_key": tc.repo, "id": tc.id}))
+		if nd == nil {
 			t.Fatalf("ruleset %s was not emitted", tc.id)
 		}
-		if _, kept := node.Properties["required_status_checks"]; kept {
+		if _, kept := nd.Properties["required_status_checks"]; kept {
 			t.Errorf("ruleset %s kept the nested required_status_checks", tc.id)
 		}
-		if got := node.Properties["required_status_check_contexts"]; !reflect.DeepEqual(got, tc.contexts) {
+		if got := nd.Properties["required_status_check_contexts"]; !reflect.DeepEqual(got, tc.contexts) {
 			t.Errorf("ruleset %s contexts = %v, want %v", tc.id, got, tc.contexts)
 		}
-		if got := node.Properties["repo"]; got != tc.repo {
+		if got := nd.Properties["repo"]; got != tc.repo {
 			t.Errorf("ruleset %s repo = %v, want the owner-qualified %q", tc.id, got, tc.repo)
 		}
 	}
@@ -217,32 +217,32 @@ func TestEmitJobsResolvesBranchesAndProjectsTheToken(t *testing.T) {
 	files["chains/effective-ruleset.json"] = map[string]any{"chain": "effective-ruleset", "effective_per_branch": rows}
 
 	_, n := fixture(t, files)
-	node := n.get(nodeID(Job, map[string]string{
+	nd := n.Get(graphNodeID(Job, map[string]string{
 		"repo": "ghektestorg/" + repo, "workflow": ".github/workflows/main.yml", "job_id": "deploy",
 	}))
-	if node == nil {
+	if nd == nil {
 		t.Fatal("the merged job was not emitted")
 	}
 
 	want := []any{"deploy", "hotfix/a", "hotfix/b/c", "main", "release/1.0", "release/2.0/hotfix", "releases/1.0"}
-	if got := node.Properties["branches"]; !reflect.DeepEqual(got, want) {
+	if got := nd.Properties["branches"]; !reflect.DeepEqual(got, want) {
 		t.Errorf("branches = %v, want the 7 unslugged names %v", got, want)
 	}
-	if node.Properties["is_default_branch_any"] != true {
+	if nd.Properties["is_default_branch_any"] != true {
 		t.Error("the job fires from the default branch and must say so")
 	}
 	for _, k := range []string{"branch", "is_default_branch", "steps"} {
-		if _, kept := node.Properties[k]; kept {
+		if _, kept := nd.Properties[k]; kept {
 			t.Errorf("%q survived on the merged job", k)
 		}
 	}
-	if got, want := node.Properties["token_write_scopes"], ([]any{"id-token"}); !reflect.DeepEqual(got, want) {
+	if got, want := nd.Properties["token_write_scopes"], ([]any{"id-token"}); !reflect.DeepEqual(got, want) {
 		t.Errorf("token_write_scopes = %v, want %v", got, want)
 	}
-	if got := node.Properties["token_source"]; got != "job" {
+	if got := nd.Properties["token_source"]; got != "job" {
 		t.Errorf("token_source = %v, want job", got)
 	}
-	if got, want := node.Properties["sinks"], ([]any{"local_script_invocation"}); !reflect.DeepEqual(got, want) {
+	if got, want := nd.Properties["sinks"], ([]any{"local_script_invocation"}); !reflect.DeepEqual(got, want) {
 		t.Errorf("sinks = %v, want %v", got, want)
 	}
 }
@@ -278,16 +278,16 @@ func TestJobBranchDegradesOnSlugCollision(t *testing.T) {
 				{"feat__a", []any{"feat__a"}, true},
 				{"sandbox__x", []any{"sandbox/x"}, false},
 			} {
-				node := n.get(nodeID(Job, map[string]string{
+				nd := n.Get(graphNodeID(Job, map[string]string{
 					"repo": "ghektestorg/" + repo, "workflow": ".github/workflows/ci.yml", "job_id": tc.jobID,
 				}))
-				if node == nil {
+				if nd == nil {
 					t.Fatalf("job %s was not emitted", tc.jobID)
 				}
-				if got := node.Properties["branches"]; !reflect.DeepEqual(got, tc.branches) {
+				if got := nd.Properties["branches"]; !reflect.DeepEqual(got, tc.branches) {
 					t.Errorf("job %s branches = %v, want %v", tc.jobID, got, tc.branches)
 				}
-				if got := truthy(node.Properties["branches_slugged"]); got != tc.slugged {
+				if got := truthy(nd.Properties["branches_slugged"]); got != tc.slugged {
 					t.Errorf("job %s branches_slugged = %v, want %v", tc.jobID, got, tc.slugged)
 				}
 			}
@@ -328,16 +328,16 @@ func TestCalleeArtifactResolvesToTheCallSiteInput(t *testing.T) {
 		t.Fatalf("buildEdges: %v", err)
 	}
 
-	art := nd(Artifact, "repo", "ghektestorg/"+repo, "name", "build-out").id
-	if !n.has(art) {
-		t.Fatalf("no %s node; have %v", art, slices.Sorted(maps.Keys(n.byID)))
+	art := nd(Artifact, "repo", "ghektestorg/"+repo, "name", "build-out").ID
+	if !n.Has(art) {
+		t.Fatalf("no %s node; have %v", art, n.IDs())
 	}
 	for _, want := range []struct {
 		t   EdgeType
 		job string
 	}{{Writes, "upstream.yml|build"}, {Reads, "_reusable.yml|release"}} {
 		from := "Job|ghektestorg/" + repo + `|.github/workflows/` + want.job
-		if _, ok := s.byID[edgeID(want.t, from, art)]; !ok {
+		if s.Get(graph.EdgeID(want.t, from, art)) == nil {
 			t.Errorf("no %s from %s to the shared artifact", want.t, from)
 		}
 	}
@@ -362,15 +362,24 @@ func TestUnresolvableExpressionIdentityIsCountedNotMinted(t *testing.T) {
 		t.Fatalf("buildEdges: %v", err)
 	}
 
-	for id := range n.byID {
+	for _, id := range n.IDs() {
 		if strings.Contains(id, "${{") {
 			t.Errorf("minted a node for an unevaluated expression: %q", id)
 		}
 	}
-	if got := n.incompleteIdentities()[Action]; got != 1 {
+	if got := n.IncompleteIdentities()[Action]; got != 1 {
 		t.Errorf("incomplete_identities[Action] = %d, want 1", got)
 	}
-	if k := edgeKey(UsesAction, Job, Action); s.unbuilt[k] != 1 {
-		t.Errorf("unbuilt[%s] = %d, want 1", k, s.unbuilt[k])
+	if k := graph.EdgeKey(UsesAction, Job, Action); s.Unbuilt()[k] != 1 {
+		t.Errorf("unbuilt[%s] = %d, want 1", k, s.Unbuilt()[k])
 	}
+}
+
+func nodeConflict(s *nodeIndex, l NodeLabel, property string) int {
+	for _, c := range s.PropertyConflicts() {
+		if c.Label == l && c.Property == property {
+			return c.Discarded
+		}
+	}
+	return 0
 }

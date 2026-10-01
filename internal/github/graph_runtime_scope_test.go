@@ -1,8 +1,10 @@
-package graph
+package github
 
 import (
 	"slices"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
 func orgFixture(secrets ...any) map[string]any {
@@ -14,7 +16,7 @@ func orgFixture(secrets ...any) map[string]any {
 
 // Both visibility fan-outs run repository -> resource, so the thing whose blast
 // radius is under test is the "to" end and the repositories are what collect.
-func canAccessSources(s *edgeSet, to NodeLabel) map[string][]string {
+func canAccessSources(s *edgeIndex, to NodeLabel) map[string][]string {
 	out := map[string][]string{}
 	for _, e := range edgesOfType(s, CanAccess) {
 		if e.ToLabel == to {
@@ -105,7 +107,7 @@ func TestRunnerGroupSelectedWithEmptyListReachesNoRepository(t *testing.T) {
 	}
 }
 
-func runsOnCorpus(t *testing.T, jobFields map[string]any) *edgeSet {
+func runsOnCorpus(t *testing.T, jobFields map[string]any) *edgeIndex {
 	t.Helper()
 	job := map[string]any{
 		"_id": "portus-cli__ci__build", "repo": "portus-cli",
@@ -149,7 +151,7 @@ func TestRunsOnRequiresTheRunnerToCarryEveryRequestedLabel(t *testing.T) {
 			if len(got) != tc.wantEdges {
 				t.Errorf("RUNS_ON edges = %d, want %d (%v)", len(got), tc.wantEdges, got)
 			}
-			if miss := s.unbuilt[edgeKey(RunsOn, Job, Runner)]; miss != tc.wantMiss {
+			if miss := s.Unbuilt()[graph.EdgeKey(RunsOn, Job, Runner)]; miss != tc.wantMiss {
 				t.Errorf("unbuilt RUNS_ON{Job,Runner} = %d, want %d", miss, tc.wantMiss)
 			}
 		})
@@ -165,7 +167,7 @@ func TestRunsOnIgnoresGitHubHostedJobs(t *testing.T) {
 	if got := edgesOfType(s, RunsOn); len(got) != 0 {
 		t.Errorf("RUNS_ON edges = %v, want none for a GitHub-hosted job", got)
 	}
-	if miss := s.unbuilt[edgeKey(RunsOn, Job, Runner)]; miss != 0 {
+	if miss := s.Unbuilt()[graph.EdgeKey(RunsOn, Job, Runner)]; miss != 0 {
 		t.Errorf("unbuilt RUNS_ON{Job,Runner} = %d, want 0: no runner was ever asked for", miss)
 	}
 }
@@ -174,7 +176,7 @@ func TestRunsOnIgnoresGitHubHostedJobs(t *testing.T) {
 // from the groups' member_runner_ids. Reading the null field leaves every org runner
 // ungated: a pinned job lands on another group's machine and scoping stops binding.
 func TestRunsOnHonorsGroupMembership(t *testing.T) {
-	corpus := func(t *testing.T, group map[string]any, job map[string]any) *edgeSet {
+	edgesFor := func(t *testing.T, group map[string]any, job map[string]any) *edgeIndex {
 		t.Helper()
 		base := map[string]any{"_id": "portus-cli__ci__build", "repo": "portus-cli",
 			"workflow_filename": "ci.yml", "job_id": "build",
@@ -196,7 +198,7 @@ func TestRunsOnHonorsGroupMembership(t *testing.T) {
 	}
 
 	t.Run("a group scoped away from the repo does not serve it", func(t *testing.T) {
-		s := corpus(t, map[string]any{"_id": "1", "group_id": 1, "org": "portus-labs",
+		s := edgesFor(t, map[string]any{"_id": "1", "group_id": 1, "org": "portus-labs",
 			"name": "Locked", "visibility": "selected", "member_runner_ids": []any{9},
 			"selected_repositories": []any{"payments-api"}}, nil)
 		if got := edgesOfType(s, RunsOn); len(got) != 0 {
@@ -205,7 +207,7 @@ func TestRunsOnHonorsGroupMembership(t *testing.T) {
 	})
 
 	t.Run("a job pinned to one group does not reach another group's runner", func(t *testing.T) {
-		s := corpus(t, map[string]any{"_id": "1", "group_id": 1, "org": "portus-labs",
+		s := edgesFor(t, map[string]any{"_id": "1", "group_id": 1, "org": "portus-labs",
 			"name": "Dev", "visibility": "all", "member_runner_ids": []any{9},
 			"selected_repositories": []any{}}, map[string]any{"runner_group": "Prod"})
 		for _, e := range edgesOfType(s, RunsOn) {

@@ -1,213 +1,60 @@
-package graph
+package github
 
 import (
-	"cmp"
 	"context"
-	"fmt"
 	"maps"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
-func edgeID(t EdgeType, from, to string) string {
-	return string(t) + "|" + esc(from) + "|" + esc(to)
-}
-
-// endpoint is an identity tuple, not a node: the edge writer never emits nodes.
+// nd builds an identity tuple, not a node: the edge writer never emits nodes.
 // Keys outside IdentityKey are dropped on construction, so a caller may supply
 // scope_key unconditionally and let the schema decide whether it identifies.
-type endpoint struct {
-	label NodeLabel
-	key   map[string]string
-	id    string
-}
-
-func nd(l NodeLabel, kv ...string) endpoint {
+func nd(l NodeLabel, kv ...string) graph.Endpoint[NodeLabel] {
 	want := IdentityKey(l)
-	e := endpoint{label: l, key: make(map[string]string, len(want))}
+	e := graph.Endpoint[NodeLabel]{Label: l, Key: make(map[string]string, len(want))}
 	for i := 0; i+1 < len(kv); i += 2 {
 		if slices.Contains(want, kv[i]) && identifies(kv[i+1]) {
-			e.key[kv[i]] = kv[i+1]
+			e.Key[kv[i]] = kv[i+1]
 		}
 	}
-	if e.complete() {
-		e.id = nodeID(l, e.key)
+	if complete(e) {
+		e.ID = graph.NodeID[NodeLabel, EdgeType](ghSchema{}, l, e.Key)
 	}
 	return e
 }
 
-// resolved names a node the node writer already emitted and whose identity the
-// edge writer cannot rebuild — a Secret, whose canonical scope_key is only
-// recoverable from the secret record, not from the job reference that cites it.
-func resolved(l NodeLabel, id string) endpoint { return endpoint{label: l, id: id} }
-
-func (e endpoint) complete() bool {
-	if e.id != "" {
-		return true
-	}
-	want := IdentityKey(e.label)
+func complete(e graph.Endpoint[NodeLabel]) bool {
+	want := IdentityKey(e.Label)
 	if len(want) == 0 {
 		return false
 	}
 	for _, k := range want {
-		if e.key[k] == "" {
+		if e.Key[k] == "" {
 			return false
 		}
 	}
 	return true
 }
 
-type edge struct {
-	ID         string         `json:"id"`
-	Type       EdgeType       `json:"type"`
-	From       string         `json:"from"`
-	To         string         `json:"to"`
-	FromLabel  NodeLabel      `json:"from_label"`
-	ToLabel    NodeLabel      `json:"to_label"`
-	Properties map[string]any `json:"properties"`
-	Findings   []findingRef   `json:"findings"`
+// resolved names a node the node writer already emitted and whose identity the
+// edge writer cannot rebuild: a Secret, whose canonical scope_key is only
+// recoverable from the secret record, not from the job reference that cites it.
+func resolved(l NodeLabel, id string) graph.Endpoint[NodeLabel] {
+	return graph.Endpoint[NodeLabel]{Label: l, ID: id}
 }
 
-type edgeConflictKey struct {
-	edgeType EdgeType
-	property string
-}
+type edgeIndex = graph.EdgeSet[NodeLabel, EdgeType]
 
-type edgeConflict struct {
-	Type      EdgeType `json:"type"`
-	Property  string   `json:"property"`
-	Discarded int      `json:"discarded"`
-}
+func newEdgeIndex() *edgeIndex { return graph.NewEdgeSet[NodeLabel, EdgeType](ghSchema{}) }
 
-type edgeSet struct {
-	byID map[string]*edge
-	// Keyed by triple, not by type: a type with several declared endpoint pairs
-	// otherwise reports one number that no pair can be held responsible for.
-	unbuilt   map[string]int
-	conflicts map[edgeConflictKey]int
-	illegal   map[string]int
-}
-
-func newEdgeSet() *edgeSet {
-	return &edgeSet{byID: map[string]*edge{}, unbuilt: map[string]int{},
-		conflicts: map[edgeConflictKey]int{}, illegal: map[string]int{}}
-}
-
-// An empty from or to names an endpoint the writer could not label at all.
-func edgeKey(t EdgeType, from, to NodeLabel) string {
-	return fmt.Sprintf("%s{%s,%s}", t, from, to)
-}
-
-// Merges into the existing edge when (type, from, to) repeats: parallel edges of one
-// type between one pair do not exist in this model. An endpoint with an incomplete
-// identity is dropped and counted rather than invented.
-func (s *edgeSet) add(t EdgeType, from, to endpoint, props map[string]any) {
-	if !from.complete() || !to.complete() {
-		s.unbuilt[edgeKey(t, from.label, to.label)]++
-		return
-	}
-	if !ValidEdge(t, from.label, to.label) {
-		s.illegal[edgeKey(t, from.label, to.label)]++
-		return
-	}
-	id := edgeID(t, from.id, to.id)
-	e := s.byID[id]
-	if e == nil {
-		e = &edge{
-			ID: id, Type: t, From: from.id, To: to.id,
-			FromLabel: from.label, ToLabel: to.label,
-			Properties: map[string]any{}, Findings: []findingRef{},
-		}
-		s.byID[id] = e
-	}
-	for _, k := range slices.Sorted(maps.Keys(props)) {
-		v := props[k]
-		old, seen := e.Properties[k]
-		if !seen {
-			e.Properties[k] = v
-			continue
-		}
-		ao, aok := old.([]any)
-		an, nok := v.([]any)
-		if aok && nok {
-			e.Properties[k] = unionArray(ao, an)
-			continue
-		}
-		if scalarKey(old) != scalarKey(v) {
-			s.conflicts[edgeConflictKey{t, k}]++
-		}
-	}
-	e.Properties["graph_id"] = id
-}
-
-func (s *edgeSet) miss(t EdgeType, from, to NodeLabel, n int) { s.unbuilt[edgeKey(t, from, to)] += n }
-
-func (s *edgeSet) propertyConflicts() []edgeConflict {
-	out := make([]edgeConflict, 0, len(s.conflicts))
-	for k, n := range s.conflicts {
-		out = append(out, edgeConflict{k.edgeType, k.property, n})
-	}
-	slices.SortFunc(out, func(a, b edgeConflict) int {
-		return cmp.Or(cmp.Compare(b.Discarded, a.Discarded),
-			cmp.Compare(a.Type, b.Type), cmp.Compare(a.Property, b.Property))
-	})
-	return out
-}
-
-// byType cannot report this: a pair with no writer hides behind a sibling pair of the
-// same type, so the types with the most missing code look the healthiest.
-func emptyEdgeTriples(edgeList []edge) []string {
-	present := make(map[string]bool, len(edgeList))
-	for _, e := range edgeList {
-		present[edgeKey(e.Type, e.FromLabel, e.ToLabel)] = true
-	}
-	out := []string{}
-	for _, t := range EdgeTypes() {
-		for _, p := range edgeEndpoints[t] {
-			if k := edgeKey(t, p[0], p[1]); !present[k] {
-				out = append(out, k)
-			}
-		}
-	}
-	return out
-}
-
-func (s *edgeSet) all() []edge {
-	out := make([]edge, 0, len(s.byID))
-	for _, e := range s.byID {
-		out = append(out, *e)
-	}
-	slices.SortFunc(out, func(a, b edge) int {
-		return cmp.Or(cmp.Compare(a.Type, b.Type), cmp.Compare(a.From, b.From), cmp.Compare(a.To, b.To))
-	})
-	return out
-}
-
-func (s *edgeSet) byType() map[EdgeType]int {
-	out := make(map[EdgeType]int, len(edgeEndpoints))
-	for _, t := range EdgeTypes() {
-		out[t] = 0
-	}
-	for _, e := range s.byID {
-		out[e.Type]++
-	}
-	return out
-}
-
-// err reports rejected endpoint pairs. A pair the schema forbids is a builder
-// bug, not a data gap, so the caller aborts the phase on it.
-func (s *edgeSet) err() error {
-	if len(s.illegal) == 0 {
-		return nil
-	}
-	return fmt.Errorf("%d illegal endpoint pair(s): %v", len(s.illegal), s.illegal)
-}
-
-func buildEdges(ctx context.Context, c *corpus, n *nodeSet) (*edgeSet, error) {
-	s := newEdgeSet()
-	for _, emit := range []func(*corpus, *nodeSet, *edgeSet){
+func buildEdges(ctx context.Context, c *ghCorpus, n *nodeIndex) (*edgeIndex, error) {
+	s := newEdgeIndex()
+	for _, emit := range []func(*ghCorpus, *nodeIndex, *edgeIndex){
 		emitContains, emitMemberOf, emitHasAccess, emitInstalledOn, emitGoverns,
 		emitProtectedBy, emitCanBypass, emitCanLandCode, emitCanApprove,
 		emitUsesAction, emitSecretReads, emitArtifactIO, emitCacheIO, emitNeeds,
@@ -220,7 +67,7 @@ func buildEdges(ctx context.Context, c *corpus, n *nodeSet) (*edgeSet, error) {
 		}
 		emit(c, n, s)
 	}
-	return s, s.err()
+	return s, s.Err()
 }
 
 func obj(v any) map[string]any {
@@ -240,62 +87,62 @@ func list(v any) []any {
 
 func source(rel string) map[string]any { return map[string]any{"_source": []any{rel}} }
 
-func jobEndpoint(c *corpus, f map[string]any) endpoint {
+func jobEndpoint(c *ghCorpus, f map[string]any) graph.Endpoint[NodeLabel] {
 	return nd(Job,
 		"repo", c.full(str(f["repo"])),
 		"workflow", workflowPath(str(f["workflow_filename"])),
 		"job_id", str(f["job_id"]))
 }
 
-func workflowEndpoint(c *corpus, f map[string]any) endpoint {
+func workflowEndpoint(c *ghCorpus, f map[string]any) graph.Endpoint[NodeLabel] {
 	return nd(Workflow, "repo", c.full(str(f["repo"])), "path", workflowPath(str(f["workflow_filename"])))
 }
 
-func repoEndpoint(c *corpus, repo string) endpoint {
+func repoEndpoint(c *ghCorpus, repo string) graph.Endpoint[NodeLabel] {
 	return nd(Repository, "full_name", c.full(repo))
 }
 
-func branchEndpoint(c *corpus, repo, name string) endpoint {
+func branchEndpoint(c *ghCorpus, repo, name string) graph.Endpoint[NodeLabel] {
 	return nd(Branch, "repo", c.full(repo), "name", name)
 }
 
-func envEndpoint(c *corpus, repo, name string) endpoint {
+func envEndpoint(c *ghCorpus, repo, name string) graph.Endpoint[NodeLabel] {
 	return nd(Environment, "repo", c.full(repo), "name", name)
 }
 
-func cacheEndpoint(c *corpus, repo, prefix string) endpoint {
+func cacheEndpoint(c *ghCorpus, repo, prefix string) graph.Endpoint[NodeLabel] {
 	return nd(Cache, "repo", c.full(repo), "key_prefix", prefix)
 }
 
-func tagEndpoint(c *corpus, repo, name string) endpoint {
+func tagEndpoint(c *ghCorpus, repo, name string) graph.Endpoint[NodeLabel] {
 	return nd(Tag, "repo", c.full(repo), "name", name)
 }
 
-func rulesetEndpoint(c *corpus, f map[string]any, repo string) endpoint {
+func rulesetEndpoint(c *ghCorpus, f map[string]any, repo string) graph.Endpoint[NodeLabel] {
 	scope := str(f["scope"])
 	return nd(Ruleset, "scope", scope, "scope_key", c.rulesetScopeKey(scope, repo),
 		"id", decimal(f["ruleset_id"]))
 }
 
-func runnerEndpoint(c *corpus, f map[string]any) endpoint {
+func runnerEndpoint(c *ghCorpus, f map[string]any) graph.Endpoint[NodeLabel] {
 	return nd(Runner, "scope", str(f["scope"]), "scope_key", c.runnerScopeKey(f), "id", decimal(f["runner_id"]))
 }
 
 // A callee names its role "${{ inputs.role-arn }}" and only the caller knows the
 // literal, so the identifier resolves across the call edge the way an artifact name
 // does — callers disagreeing on an input leave it unresolvable.
-func emitCanAssume(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitCanAssume(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	inputs := calleeInputs(c)
 	for _, r := range c.dirs["jobs"] {
 		in := inputs[calleeKey(c, r.fields)]
 		for _, cr := range list(r.fields["cloud_roles"]) {
 			m := obj(cr)
 			to := nd(CloudRole, "identifier", resolveInput(str(m["identifier"]), in))
-			if !to.complete() {
-				s.miss(CanAssume, Job, CloudRole, 1)
+			if !complete(to) {
+				s.Miss(CanAssume, Job, CloudRole, 1)
 				continue
 			}
-			s.add(CanAssume, jobEndpoint(c, r.fields), to, source(r.rel))
+			s.Add(CanAssume, jobEndpoint(c, r.fields), to, source(r.rel))
 		}
 	}
 }
@@ -303,14 +150,14 @@ func emitCanAssume(c *corpus, _ *nodeSet, s *edgeSet) {
 // A secret's blast radius is not derivable from the node: "selected" names a list only
 // the secret record carries, and an empty list means the secret is reachable by
 // nothing — the exact inverse of a fan-out from Secret.visibility.
-func emitOrgSecretAccess(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitOrgSecretAccess(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	for _, r := range c.dirs["org"] {
 		src := r.rel + "#org_actions_secrets"
 		for _, e := range objects(r.fields["org_actions_secrets"]) {
 			vis := str(e["visibility"])
 			to := nd(Secret, "scope", "org", "scope_key", c.org, "name", str(e["name"]))
 			for _, repo := range scopedRepos(c, e) {
-				s.add(CanAccess, repoEndpoint(c, repo), to,
+				s.Add(CanAccess, repoEndpoint(c, repo), to,
 					map[string]any{"visibility": vis, "_source": []any{src}})
 			}
 		}
@@ -319,7 +166,7 @@ func emitOrgSecretAccess(c *corpus, _ *nodeSet, s *edgeSet) {
 
 // app is null where the mint site names an app id the corpus cannot resolve to an
 // installation, leaving the token's identity — and so its permissions — unknown.
-func emitMintsTokenAs(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitMintsTokenAs(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	src := c.chainSource("app-mintable", "mints")
 	// Job identity omits branch, so one minting job seen on several branches is several
 	// chain rows and at most one edge; the miss is counted per job, not per row.
@@ -327,42 +174,42 @@ func emitMintsTokenAs(c *corpus, _ *nodeSet, s *edgeSet) {
 	for _, m := range c.chainArray("app-mintable", "mints") {
 		from := jobEndpoint(c, obj(m["minter"]))
 		to := nd(App, "app_slug", str(obj(m["app"])["slug"]))
-		if !to.complete() {
-			unresolved[from.id] = true
+		if !complete(to) {
+			unresolved[from.ID] = true
 			continue
 		}
-		s.add(MintsTokenAs, from, to, map[string]any{
+		s.Add(MintsTokenAs, from, to, map[string]any{
 			"action":     str(m["action"]),
 			"action_ref": str(m["action_ref"]),
 			"_source":    []any{src},
 		})
 	}
-	s.miss(MintsTokenAs, Job, App, len(unresolved))
+	s.Miss(MintsTokenAs, Job, App, len(unresolved))
 }
 
-func emitContains(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitContains(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	org := nd(Organization, "login", c.org)
 	for _, r := range c.dirs["repos"] {
-		s.add(Contains, org, repoEndpoint(c, str(r.fields["repo"])), source(r.rel))
+		s.Add(Contains, org, repoEndpoint(c, str(r.fields["repo"])), source(r.rel))
 	}
 	for _, r := range c.dirs["principals"] {
 		if str(r.fields["kind"]) == "team" {
-			s.add(Contains, org, nd(Team, "org", c.org, "slug", str(r.fields["slug"])), source(r.rel))
+			s.Add(Contains, org, nd(Team, "org", c.org, "slug", str(r.fields["slug"])), source(r.rel))
 		}
 	}
 	for _, r := range c.dirs["apps"] {
-		s.add(Contains, org, nd(App, "app_slug", str(r.fields["app_slug"])), source(r.rel))
+		s.Add(Contains, org, nd(App, "app_slug", str(r.fields["app_slug"])), source(r.rel))
 	}
 	for _, r := range c.dirs["runner-groups"] {
-		s.add(Contains, org, nd(RunnerGroup, "org", str(r.fields["org"]), "id", decimal(r.fields["group_id"])), source(r.rel))
+		s.Add(Contains, org, nd(RunnerGroup, "org", str(r.fields["org"]), "id", decimal(r.fields["group_id"])), source(r.rel))
 	}
 	for _, r := range c.dirs["runners"] {
 		run := runnerEndpoint(c, r.fields)
 		switch str(r.fields["scope"]) {
 		case "org":
-			s.add(Contains, org, run, source(r.rel))
+			s.Add(Contains, org, run, source(r.rel))
 		case "repo":
-			s.add(Contains, repoEndpoint(c, str(r.fields["repo"])), run, source(r.rel))
+			s.Add(Contains, repoEndpoint(c, str(r.fields["repo"])), run, source(r.rel))
 		}
 	}
 	// member_runner_ids rather than the runner's own runner_group_id: the org
@@ -371,7 +218,7 @@ func emitContains(c *corpus, _ *nodeSet, s *edgeSet) {
 	for _, r := range c.dirs["runner-groups"] {
 		from := nd(RunnerGroup, "org", str(r.fields["org"]), "id", decimal(r.fields["group_id"]))
 		for _, id := range list(r.fields["member_runner_ids"]) {
-			s.add(Contains, from, nd(Runner, "scope", "org", "scope_key", c.org, "id", decimal(id)),
+			s.Add(Contains, from, nd(Runner, "scope", "org", "scope_key", c.org, "id", decimal(id)),
 				source(r.rel+"#member_runner_ids"))
 		}
 	}
@@ -381,19 +228,19 @@ func emitContains(c *corpus, _ *nodeSet, s *edgeSet) {
 		}
 		rs := rulesetEndpoint(c, r.fields, str(r.fields["repo"]))
 		if str(r.fields["scope"]) == "org" {
-			s.add(Contains, org, rs, source(r.rel))
+			s.Add(Contains, org, rs, source(r.rel))
 		} else {
-			s.add(Contains, repoEndpoint(c, str(r.fields["repo"])), rs, source(r.rel))
+			s.Add(Contains, repoEndpoint(c, str(r.fields["repo"])), rs, source(r.rel))
 		}
 	}
 	for _, r := range c.dirs["org"] {
 		for _, e := range objects(r.fields["org_actions_secrets"]) {
-			s.add(Contains, org, nd(Secret, "scope", "org", "scope_key", c.org, "name", str(e["name"])),
+			s.Add(Contains, org, nd(Secret, "scope", "org", "scope_key", c.org, "name", str(e["name"])),
 				source(r.rel+"#org_actions_secrets"))
 		}
 	}
 	for _, e := range c.chainArray("effective-ruleset", "effective_per_branch") {
-		s.add(Contains, repoEndpoint(c, str(e["repo"])), branchEndpoint(c, str(e["repo"]), str(e["branch"])),
+		s.Add(Contains, repoEndpoint(c, str(e["repo"])), branchEndpoint(c, str(e["repo"]), str(e["branch"])),
 			source(c.chainSource("effective-ruleset", "effective_per_branch")))
 	}
 	unslugged := 0
@@ -403,53 +250,53 @@ func emitContains(c *corpus, _ *nodeSet, s *edgeSet) {
 		// through trueBranch; an ambiguous slug leaves containment unrecoverable.
 		repo := str(r.fields["repo"])
 		if name := c.trueBranch[c.full(repo)+"\x00"+str(r.fields["branch"])]; name != "" {
-			s.add(Contains, branchEndpoint(c, repo, name), wf, source(r.rel))
+			s.Add(Contains, branchEndpoint(c, repo, name), wf, source(r.rel))
 		} else {
 			unslugged++
 		}
-		s.add(Contains, wf, jobEndpoint(c, r.fields), source(r.rel))
+		s.Add(Contains, wf, jobEndpoint(c, r.fields), source(r.rel))
 	}
-	s.miss(Contains, Branch, Workflow, unslugged)
+	s.Miss(Contains, Branch, Workflow, unslugged)
 	for _, r := range c.dirs["environments"] {
-		s.add(Contains, repoEndpoint(c, str(r.fields["repo"])), envEndpoint(c, str(r.fields["repo"]), str(r.fields["name"])), source(r.rel))
+		s.Add(Contains, repoEndpoint(c, str(r.fields["repo"])), envEndpoint(c, str(r.fields["repo"]), str(r.fields["name"])), source(r.rel))
 	}
 	for _, r := range c.dirs["tags"] {
 		repo := str(r.fields["repo"])
-		s.add(Contains, repoEndpoint(c, repo), tagEndpoint(c, repo, str(r.fields["name"])), source(r.rel))
+		s.Add(Contains, repoEndpoint(c, repo), tagEndpoint(c, repo, str(r.fields["name"])), source(r.rel))
 	}
 	for _, r := range c.dirs["secrets"] {
 		sec := nd(Secret, "scope", str(r.fields["scope"]), "scope_key", c.secretScopeKey(r.fields), "name", str(r.fields["name"]))
 		switch str(r.fields["scope"]) {
 		case "org":
-			s.add(Contains, org, sec, source(r.rel))
+			s.Add(Contains, org, sec, source(r.rel))
 		case "repo":
-			s.add(Contains, repoEndpoint(c, str(r.fields["repo"])), sec, source(r.rel))
+			s.Add(Contains, repoEndpoint(c, str(r.fields["repo"])), sec, source(r.rel))
 		case "environment":
-			s.add(Contains, envEndpoint(c, str(r.fields["repo"]), str(r.fields["environment"])), sec, source(r.rel))
+			s.Add(Contains, envEndpoint(c, str(r.fields["repo"]), str(r.fields["environment"])), sec, source(r.rel))
 		}
 	}
 }
 
-func emitMemberOf(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitMemberOf(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	org := nd(Organization, "login", c.org)
 	for _, r := range c.dirs["principals"] {
 		switch str(r.fields["kind"]) {
 		case "user":
 			if truthy(r.fields["is_org_member"]) {
-				s.add(MemberOf, nd(User, "login", str(r.fields["login"])), org, source(r.rel))
+				s.Add(MemberOf, nd(User, "login", str(r.fields["login"])), org, source(r.rel))
 			}
 		case "team":
 			team := nd(Team, "org", c.org, "slug", str(r.fields["slug"]))
 			for _, m := range objects(r.fields["members"]) {
-				s.add(MemberOf, nd(User, "login", str(m["login"])), team, source(r.rel+"#members"))
+				s.Add(MemberOf, nd(User, "login", str(m["login"])), team, source(r.rel+"#members"))
 			}
 		}
 	}
 }
 
-func emitHasAccess(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitHasAccess(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	for _, r := range c.dirs["principals"] {
-		var from endpoint
+		var from graph.Endpoint[NodeLabel]
 		switch str(r.fields["kind"]) {
 		case "user":
 			from = nd(User, "login", str(r.fields["login"]))
@@ -459,7 +306,7 @@ func emitHasAccess(c *corpus, _ *nodeSet, s *edgeSet) {
 			continue
 		}
 		for _, g := range objects(r.fields["repo_grants"]) {
-			s.add(HasAccess, from, repoEndpoint(c, str(g["repo"])), map[string]any{
+			s.Add(HasAccess, from, repoEndpoint(c, str(g["repo"])), map[string]any{
 				"permission":                g["permission"],
 				"can_push":                  truthy(g["can_push"]),
 				"is_admin":                  truthy(g["is_admin"]),
@@ -472,9 +319,9 @@ func emitHasAccess(c *corpus, _ *nodeSet, s *edgeSet) {
 
 // deploy-keys/ rather than chains/deploy-key-reuse: the chain is empty here and
 // its instances[] carry no fingerprint even when populated.
-func emitInstalledOn(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitInstalledOn(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	for _, r := range c.dirs["deploy-keys"] {
-		s.add(InstalledOn, nd(DeployKey, "fingerprint", str(r.fields["fingerprint"])),
+		s.Add(InstalledOn, nd(DeployKey, "fingerprint", str(r.fields["fingerprint"])),
 			repoEndpoint(c, str(r.fields["repo"])), map[string]any{
 				"key_id":     r.fields["key_id"],
 				"title":      str(r.fields["title"]),
@@ -488,7 +335,7 @@ func emitInstalledOn(c *corpus, _ *nodeSet, s *edgeSet) {
 	}
 }
 
-func emitGoverns(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitGoverns(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	for _, r := range c.dirs["rulesets"] {
 		if truthy(r.fields["_empty"]) {
 			continue
@@ -501,29 +348,29 @@ func emitGoverns(c *corpus, _ *nodeSet, s *edgeSet) {
 		}
 		from := rulesetEndpoint(c, r.fields, str(r.fields["repo"]))
 		if str(r.fields["scope"]) == "org" {
-			s.add(Governs, from, nd(Organization, "login", c.org), props)
+			s.Add(Governs, from, nd(Organization, "login", c.org), props)
 		} else {
-			s.add(Governs, from, repoEndpoint(c, str(r.fields["repo"])), props)
+			s.Add(Governs, from, repoEndpoint(c, str(r.fields["repo"])), props)
 		}
 	}
 }
 
 // branch-coverage rather than effective-ruleset.active_ruleset_ids: the latter
 // omits the enforcement:"disabled" ruleset that fr-11-15 exists to test.
-func emitProtectedBy(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitProtectedBy(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	src := c.chainSource("branch-coverage", "repo_branch_coverage")
 	for _, b := range c.chainArray("branch-coverage", "repo_branch_coverage") {
 		repo := str(b["repo"])
 		from := branchEndpoint(c, repo, str(b["branch"]))
 		for _, a := range objects(b["applicable_rulesets"]) {
-			s.add(ProtectedBy, from, rulesetEndpoint(c, a, repo), protectedByProps(a, src))
+			s.Add(ProtectedBy, from, rulesetEndpoint(c, a, repo), protectedByProps(a, src))
 		}
 	}
 	for _, r := range c.dirs["tags"] {
 		repo := str(r.fields["repo"])
 		from := tagEndpoint(c, repo, str(r.fields["name"]))
 		for _, a := range objects(r.fields["applicable_rulesets"]) {
-			s.add(ProtectedBy, from, rulesetEndpoint(c, a, repo), protectedByProps(a, r.rel+"#applicable_rulesets"))
+			s.Add(ProtectedBy, from, rulesetEndpoint(c, a, repo), protectedByProps(a, r.rel+"#applicable_rulesets"))
 		}
 	}
 }
@@ -540,7 +387,7 @@ func protectedByProps(a map[string]any, src string) map[string]any {
 
 // rulesets/ rather than chains/capability-edges: the chain's bypass_actors_matched
 // names an actor but never the ruleset it bypasses.
-func emitCanBypass(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitCanBypass(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	users, teams, apps := map[string]string{}, map[string]string{}, map[string]string{}
 	for _, r := range c.dirs["principals"] {
 		switch str(r.fields["kind"]) {
@@ -563,7 +410,7 @@ func emitCanBypass(c *corpus, _ *nodeSet, s *edgeSet) {
 		for _, field := range []string{"bypass_always", "bypass_pull_request_only"} {
 			for _, a := range objects(bypass[field]) {
 				id := decimal(a["actor_id"])
-				var from endpoint
+				var from graph.Endpoint[NodeLabel]
 				switch {
 				case str(a["actor_type"]) == "User" && users[id] != "":
 					from = nd(User, "login", users[id])
@@ -574,10 +421,10 @@ func emitCanBypass(c *corpus, _ *nodeSet, s *edgeSet) {
 				default:
 					// The unresolvable side is the actor itself — a null actor_id,
 					// or an actor_type with no NodeLabel — so it gets no label.
-					s.miss(CanBypass, "", Ruleset, 1)
+					s.Miss(CanBypass, "", Ruleset, 1)
 					continue
 				}
-				s.add(CanBypass, from, to, map[string]any{
+				s.Add(CanBypass, from, to, map[string]any{
 					"bypass_mode": str(a["bypass_mode"]),
 					"actor_type":  str(a["actor_type"]),
 					"_source":     []any{r.rel + "#bypass." + field},
@@ -587,7 +434,7 @@ func emitCanBypass(c *corpus, _ *nodeSet, s *edgeSet) {
 	}
 }
 
-func deployKeyFingerprints(c *corpus) map[string]string {
+func deployKeyFingerprints(c *ghCorpus) map[string]string {
 	out := map[string]string{}
 	for _, r := range c.dirs["deploy-keys"] {
 		out[r.id] = str(r.fields["fingerprint"])
@@ -595,7 +442,7 @@ func deployKeyFingerprints(c *corpus) map[string]string {
 	return out
 }
 
-func capabilityPrincipal(c *corpus, fingerprints map[string]string, e map[string]any) endpoint {
+func capabilityPrincipal(c *ghCorpus, fingerprints map[string]string, e map[string]any) graph.Endpoint[NodeLabel] {
 	switch str(e["principal_kind"]) {
 	case "user":
 		return nd(User, "login", str(e["principal_name"]))
@@ -608,15 +455,15 @@ func capabilityPrincipal(c *corpus, fingerprints map[string]string, e map[string
 		// exists only on the deploy-keys record the principal_id names.
 		return nd(DeployKey, "fingerprint", fingerprints[str(e["principal_id"])])
 	}
-	return endpoint{}
+	return graph.Endpoint[NodeLabel]{}
 }
 
-func emitCanLandCode(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitCanLandCode(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	fingerprints := deployKeyFingerprints(c)
 	src := c.chainSource("capability-edges", "edges")
 	for _, e := range c.chainArray("capability-edges", "edges") {
 		from := capabilityPrincipal(c, fingerprints, e)
-		s.add(CanLandCode, from, branchEndpoint(c, str(e["repo"]), str(e["branch"])), map[string]any{
+		s.Add(CanLandCode, from, branchEndpoint(c, str(e["repo"]), str(e["branch"])), map[string]any{
 			"circumvents":       list(e["circumvents"]),
 			"routes_open":       list(e["routes_open"]),
 			"routes_blocked":    list(e["routes_blocked"]),
@@ -630,7 +477,7 @@ func emitCanLandCode(c *corpus, _ *nodeSet, s *edgeSet) {
 	}
 }
 
-func emitCanApprove(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitCanApprove(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	approves := map[string]bool{}
 	for _, r := range c.dirs["repos"] {
 		approves[str(r.fields["repo"])] = truthy(r.fields["can_approve_pull_request_reviews"])
@@ -642,11 +489,11 @@ func emitCanApprove(c *corpus, _ *nodeSet, s *edgeSet) {
 		if !approves[repo] || str(obj(r.fields["permissions"])["pull-requests"]) != "write" {
 			continue
 		}
-		s.add(CanApprove, jobEndpoint(c, r.fields), repoEndpoint(c, repo), source(r.rel))
+		s.Add(CanApprove, jobEndpoint(c, r.fields), repoEndpoint(c, repo), source(r.rel))
 	}
 }
 
-func emitUsesAction(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitUsesAction(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	for _, r := range c.dirs["jobs"] {
 		from := jobEndpoint(c, r.fields)
 		for _, e := range objects(r.fields["action_refs"]) {
@@ -654,7 +501,7 @@ func emitUsesAction(c *corpus, _ *nodeSet, s *edgeSet) {
 			if !ok {
 				continue
 			}
-			s.add(UsesAction, from, nd(Action, "ref", ref), map[string]any{
+			s.Add(UsesAction, from, nd(Action, "ref", ref), map[string]any{
 				"ref_kind":     str(e["ref_kind"]),
 				"ref_mutable":  truthy(e["ref_mutable"]),
 				"resolved_sha": e["resolved_sha"],
@@ -681,20 +528,20 @@ func actionIdentity(repo, uses string) (string, bool) {
 
 // The Secret endpoint comes from the node writer's index: a job cites the raw
 // "<repo>__<env>" scope_key, and splitting it back apart is ambiguous.
-func emitSecretReads(c *corpus, n *nodeSet, s *edgeSet) {
+func emitSecretReads(c *ghCorpus, n *nodeIndex, s *edgeIndex) {
 	for _, r := range c.dirs["jobs"] {
 		from := jobEndpoint(c, r.fields)
 		for _, e := range objects(r.fields["secrets_referenced"]) {
 			id, ok := n.secretID(str(e["scope"]), str(e["scope_key"]), str(e["name"]))
 			if !ok {
-				s.miss(Reads, Job, Secret, 1)
+				s.Miss(Reads, Job, Secret, 1)
 				continue
 			}
 			steps := []any{}
 			if v, present := e["step_index"]; present && v != nil {
 				steps = append(steps, v)
 			}
-			s.add(Reads, from, resolved(Secret, id), map[string]any{
+			s.Add(Reads, from, resolved(Secret, id), map[string]any{
 				"step_indexes": steps,
 				"_source":      []any{r.rel + "#secrets_referenced"},
 			})
@@ -702,7 +549,7 @@ func emitSecretReads(c *corpus, n *nodeSet, s *edgeSet) {
 	}
 }
 
-func emitArtifactIO(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitArtifactIO(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	inputs := calleeInputs(c)
 	for _, r := range c.dirs["jobs"] {
 		from := jobEndpoint(c, r.fields)
@@ -713,14 +560,14 @@ func emitArtifactIO(c *corpus, _ *nodeSet, s *edgeSet) {
 			field string
 		}{{Reads, "artifact_reads"}, {Writes, "artifact_writes"}} {
 			for _, e := range objects(r.fields[io.field]) {
-				s.add(io.t, from, nd(Artifact, "repo", repo, "name", resolveInput(str(e["name"]), in)),
+				s.Add(io.t, from, nd(Artifact, "repo", repo, "name", resolveInput(str(e["name"]), in)),
 					source(r.rel+"#"+io.field))
 			}
 		}
 	}
 }
 
-func emitCacheIO(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitCacheIO(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	for _, io := range []struct {
 		t     EdgeType
 		field string
@@ -730,7 +577,7 @@ func emitCacheIO(c *corpus, _ *nodeSet, s *edgeSet) {
 		for _, prefix := range slices.Sorted(maps.Keys(m)) {
 			for _, e := range objects(m[prefix]) {
 				job := obj(e["job"])
-				s.add(io.t, jobEndpoint(c, job), cacheEndpoint(c, str(job["repo"]), prefix), map[string]any{
+				s.Add(io.t, jobEndpoint(c, job), cacheEndpoint(c, str(job["repo"]), prefix), map[string]any{
 					"keys":    []any{str(e["key"])},
 					"_source": []any{src},
 				})
@@ -741,7 +588,7 @@ func emitCacheIO(c *corpus, _ *nodeSet, s *edgeSet) {
 
 // jobs[].needs rather than chains/job-output-flow, whose endpoints carry only an
 // _id; the chain contributes the attacker-flow properties, keyed by record _id.
-func emitNeeds(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitNeeds(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	jobs := map[string]map[string]any{}
 	for _, r := range c.dirs["jobs"] {
 		jobs[r.id] = r.fields
@@ -753,7 +600,7 @@ func emitNeeds(c *corpus, _ *nodeSet, s *edgeSet) {
 		if !okp || !okq {
 			continue
 		}
-		flow[[2]string{jobEndpoint(c, q).id, jobEndpoint(c, p).id}] = map[string]any{
+		flow[[2]string{jobEndpoint(c, q).ID, jobEndpoint(c, p).ID}] = map[string]any{
 			"attacker_influenced": truthy(e["attacker_influenced"]),
 			"attacker_path":       list(e["attacker_path"]),
 			"_source":             []any{c.chainSource("job-output-flow", "edges")},
@@ -763,18 +610,18 @@ func emitNeeds(c *corpus, _ *nodeSet, s *edgeSet) {
 	for _, r := range c.dirs["jobs"] {
 		from := jobEndpoint(c, r.fields)
 		for _, dep := range list(r.fields["needs"]) {
-			to := nd(Job, "repo", from.key["repo"], "workflow", from.key["workflow"], "job_id", str(dep))
+			to := nd(Job, "repo", from.Key["repo"], "workflow", from.Key["workflow"], "job_id", str(dep))
 			props := source(r.rel + "#needs")
-			if extra, ok := flow[[2]string{from.id, to.id}]; ok {
+			if extra, ok := flow[[2]string{from.ID, to.ID}]; ok {
 				maps.Copy(props, extra)
 				props["_source"] = []any{r.rel + "#needs", c.chainSource("job-output-flow", "edges")}
 			}
-			s.add(Needs, from, to, props)
+			s.Add(Needs, from, to, props)
 		}
 	}
 }
 
-func emitCalls(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitCalls(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	src := c.chainSource("reusable-callgraph", "edges")
 	for _, e := range c.chainArray("reusable-callgraph", "edges") {
 		caller, callee := obj(e["caller"]), obj(e["callee"])
@@ -782,7 +629,7 @@ func emitCalls(c *corpus, _ *nodeSet, s *edgeSet) {
 		if truthy(callee["is_local"]) || repo == "" {
 			repo = str(caller["repo"])
 		}
-		s.add(Calls, jobEndpoint(c, caller), nd(Workflow, "repo", c.full(repo), "path", str(callee["path"])),
+		s.Add(Calls, jobEndpoint(c, caller), nd(Workflow, "repo", c.full(repo), "path", str(callee["path"])),
 			map[string]any{
 				"ref":             str(callee["ref"]),
 				"ref_kind":        str(callee["ref_kind"]),
@@ -794,20 +641,20 @@ func emitCalls(c *corpus, _ *nodeSet, s *edgeSet) {
 	}
 }
 
-func emitTriggers(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitTriggers(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	src := c.chainSource("trigger-channels", "workflow_run_pairs")
 	for _, p := range c.chainArray("trigger-channels", "workflow_run_pairs") {
-		s.add(Triggers, workflowEndpoint(c, obj(p["upstream"])), workflowEndpoint(c, obj(p["downstream"])),
+		s.Add(Triggers, workflowEndpoint(c, obj(p["upstream"])), workflowEndpoint(c, obj(p["downstream"])),
 			map[string]any{"event_types": list(p["event_types"]), "_source": []any{src}})
 	}
 }
 
-func emitTargets(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitTargets(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	src := c.chainSource("env-deployments", "deploys")
 	for _, d := range c.chainArray("env-deployments", "deploys") {
 		job := obj(d["job"])
 		env := envEndpoint(c, str(job["repo"]), str(d["env_name"]))
-		s.add(Targets, jobEndpoint(c, job), env, map[string]any{
+		s.Add(Targets, jobEndpoint(c, job), env, map[string]any{
 			"env_record_present":   truthy(d["env_record_present"]),
 			"env_admins_bypass":    truthy(d["env_admins_bypass"]),
 			"env_no_branch_policy": truthy(d["env_no_branch_policy"]),
@@ -817,8 +664,8 @@ func emitTargets(c *corpus, _ *nodeSet, s *edgeSet) {
 		// emitContains derives the parent from environments/ alone, so an
 		// environment only a deployment names would otherwise have none. Guarded
 		// because an unidentifiable env_name is already counted against TARGETS.
-		if env.complete() {
-			s.add(Contains, repoEndpoint(c, str(job["repo"])), env, source(src))
+		if complete(env) {
+			s.Add(Contains, repoEndpoint(c, str(job["repo"])), env, source(src))
 		}
 	}
 }
@@ -826,7 +673,7 @@ func emitTargets(c *corpus, _ *nodeSet, s *edgeSet) {
 // trigger_filters is a workflow-level fact replicated onto every job record of that
 // workflow, so a filter is emitted and counted once however many jobs it has. A glob
 // is not a ref identity: it only yields an edge against a Branch node that exists.
-func emitTargetsBranch(c *corpus, n *nodeSet, s *edgeSet) {
+func emitTargetsBranch(c *ghCorpus, n *nodeIndex, s *edgeIndex) {
 	seen := map[[3]string]bool{}
 	for _, r := range c.dirs["jobs"] {
 		from := workflowEndpoint(c, r.fields)
@@ -835,7 +682,7 @@ func emitTargetsBranch(c *corpus, n *nodeSet, s *edgeSet) {
 		for _, event := range slices.Sorted(maps.Keys(filters)) {
 			for _, b := range list(obj(filters[event])["branches"]) {
 				filter := str(b)
-				key := [3]string{from.id, event, filter}
+				key := [3]string{from.ID, event, filter}
 				if seen[key] {
 					continue
 				}
@@ -848,16 +695,16 @@ func emitTargetsBranch(c *corpus, n *nodeSet, s *edgeSet) {
 				}
 				if !isBranchPattern(filter) {
 					to := branchEndpoint(c, repo, filter)
-					if !to.complete() || !n.has(to.id) {
-						s.miss(Targets, Workflow, Branch, 1)
+					if !complete(to) || !n.Has(to.ID) {
+						s.Miss(Targets, Workflow, Branch, 1)
 						continue
 					}
-					s.add(Targets, from, to, props())
+					s.Add(Targets, from, to, props())
 					continue
 				}
 				re, ok := branchPattern(filter)
 				if !ok {
-					s.miss(Targets, Workflow, Branch, 1)
+					s.Miss(Targets, Workflow, Branch, 1)
 					continue
 				}
 				matched := 0
@@ -866,14 +713,14 @@ func emitTargetsBranch(c *corpus, n *nodeSet, s *edgeSet) {
 						continue
 					}
 					to := branchEndpoint(c, repo, name)
-					if !to.complete() || !n.has(to.id) {
+					if !complete(to) || !n.Has(to.ID) {
 						continue
 					}
-					s.add(Targets, from, to, props())
+					s.Add(Targets, from, to, props())
 					matched++
 				}
 				if matched == 0 {
-					s.miss(Targets, Workflow, Branch, 1)
+					s.Miss(Targets, Workflow, Branch, 1)
 				}
 			}
 		}
@@ -912,7 +759,7 @@ func branchPattern(f string) (*regexp.Regexp, bool) {
 // action_refs carries no step index and secrets_referenced carries no action, so the
 // step a reference sits on is the only join between a credential and the third-party
 // code that receives it. step_index -1 is job-env-level and belongs to no step.
-func emitPassesSecret(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitPassesSecret(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	for _, r := range c.dirs["jobs"] {
 		steps := list(r.fields["steps"])
 		from := jobEndpoint(c, r.fields)
@@ -926,7 +773,7 @@ func emitPassesSecret(c *corpus, _ *nodeSet, s *edgeSet) {
 			if !ok {
 				continue
 			}
-			s.add(PassesSecret, from, nd(Action, "ref", ref), map[string]any{
+			s.Add(PassesSecret, from, nd(Action, "ref", ref), map[string]any{
 				"secret_names": []any{str(e["name"])},
 				"_source":      []any{r.rel + "#secrets_referenced"},
 			})
@@ -934,7 +781,7 @@ func emitPassesSecret(c *corpus, _ *nodeSet, s *edgeSet) {
 	}
 }
 
-func emitDefines(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitDefines(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	repos := map[string]bool{}
 	for _, r := range c.dirs["repos"] {
 		repos[str(r.fields["repo"])] = true
@@ -949,7 +796,7 @@ func emitDefines(c *corpus, _ *nodeSet, s *edgeSet) {
 			if !ok || owner != c.org || !repos[repo] {
 				continue
 			}
-			s.add(Defines, repoEndpoint(c, repo), nd(Action, "ref", ref), source(r.rel+"#action_refs"))
+			s.Add(Defines, repoEndpoint(c, repo), nd(Action, "ref", ref), source(r.rel+"#action_refs"))
 		}
 	}
 }
@@ -965,25 +812,25 @@ func splitActionOwner(ref string) (string, string, bool) {
 
 // A glob is not a ref identity, so a pattern only yields an edge when it names a
 // Branch or Tag node that already exists.
-func emitDeployableFrom(c *corpus, n *nodeSet, s *edgeSet) {
+func emitDeployableFrom(c *ghCorpus, n *nodeIndex, s *edgeIndex) {
 	for _, r := range c.dirs["environments"] {
 		repo := str(r.fields["repo"])
 		for _, p := range list(obj(r.fields["deployment_branch_policy"])["patterns"]) {
 			to := branchEndpoint(c, repo, str(p))
-			if !to.complete() || !n.has(to.id) {
+			if !complete(to) || !n.Has(to.ID) {
 				to = tagEndpoint(c, repo, str(p))
 			}
-			if !to.complete() || !n.has(to.id) {
-				s.miss(DeployableFrom, Environment, Branch, 1)
+			if !complete(to) || !n.Has(to.ID) {
+				s.Miss(DeployableFrom, Environment, Branch, 1)
 				continue
 			}
-			s.add(DeployableFrom, envEndpoint(c, repo, str(r.fields["name"])), to,
+			s.Add(DeployableFrom, envEndpoint(c, repo, str(r.fields["name"])), to,
 				source(r.rel+"#deployment_branch_policy"))
 		}
 	}
 }
 
-func emitRequiresReviewBy(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitRequiresReviewBy(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	for _, r := range c.dirs["environments"] {
 		from := envEndpoint(c, str(r.fields["repo"]), str(r.fields["name"]))
 		src := source(r.rel + "#reviewers_required")
@@ -991,11 +838,11 @@ func emitRequiresReviewBy(c *corpus, _ *nodeSet, s *edgeSet) {
 			// type is the reviewer's account type for a user and the team's ownership type for a team; "Team" never appears.
 			switch str(rv["type"]) {
 			case "User", "Bot":
-				s.add(RequiresReviewBy, from, nd(User, "login", str(rv["login"])), src)
+				s.Add(RequiresReviewBy, from, nd(User, "login", str(rv["login"])), src)
 			case "organization", "enterprise":
-				s.add(RequiresReviewBy, from, nd(Team, "org", c.org, "slug", str(rv["login"])), src)
+				s.Add(RequiresReviewBy, from, nd(Team, "org", c.org, "slug", str(rv["login"])), src)
 			default:
-				s.miss(RequiresReviewBy, Environment, "", 1)
+				s.Miss(RequiresReviewBy, Environment, "", 1)
 			}
 		}
 	}
@@ -1004,7 +851,7 @@ func emitRequiresReviewBy(c *corpus, _ *nodeSet, s *edgeSet) {
 // Org secrets and runner groups spell visibility the same way. An empty "selected"
 // list reaches nothing, which is the point of the setting. An archived repository runs
 // no workflow, so it consumes no secret and takes no job however the scope is written.
-func scopedRepos(c *corpus, f map[string]any) []string {
+func scopedRepos(c *ghCorpus, f map[string]any) []string {
 	live := func(g map[string]any) bool { return !truthy(g["archived"]) }
 	switch str(f["visibility"]) {
 	case "all":
@@ -1021,11 +868,11 @@ func scopedRepos(c *corpus, f map[string]any) []string {
 	return nil
 }
 
-func emitRunnerGroupAccess(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitRunnerGroupAccess(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	for _, r := range c.dirs["runner-groups"] {
 		to := nd(RunnerGroup, "org", str(r.fields["org"]), "id", decimal(r.fields["group_id"]))
 		for _, repo := range scopedRepos(c, r.fields) {
-			s.add(CanAccess, repoEndpoint(c, repo), to, map[string]any{
+			s.Add(CanAccess, repoEndpoint(c, repo), to, map[string]any{
 				"visibility": str(r.fields["visibility"]),
 				"_source":    []any{r.rel},
 			})
@@ -1036,7 +883,7 @@ func emitRunnerGroupAccess(c *corpus, _ *nodeSet, s *edgeSet) {
 // Neither a runner label nor a group NAME is an identity: the join is a runner whose
 // labels cover the job's, and a group whose name is unique in the org. An unresolved
 // job is counted but gets no placeholder: one stand-in Runner would fake a shared machine.
-func emitRunsOn(c *corpus, _ *nodeSet, s *edgeSet) {
+func emitRunsOn(c *ghCorpus, _ *nodeIndex, s *edgeIndex) {
 	reach := map[string][]string{}
 	byName := map[string][]map[string]any{}
 	groupOf := map[string]string{}
@@ -1060,10 +907,10 @@ func emitRunsOn(c *corpus, _ *nodeSet, s *edgeSet) {
 			// to no group rather than to an arbitrary one.
 			if g := byName[pinned]; len(g) == 1 {
 				wantGroup = decimal(g[0]["group_id"])
-				s.add(RunsOn, from, nd(RunnerGroup, "org", str(g[0]["org"]), "id", wantGroup),
+				s.Add(RunsOn, from, nd(RunnerGroup, "org", str(g[0]["org"]), "id", wantGroup),
 					map[string]any{"runner_group": pinned, "_source": []any{r.rel}})
 			} else {
-				s.miss(RunsOn, Job, RunnerGroup, 1)
+				s.Miss(RunsOn, Job, RunnerGroup, 1)
 			}
 		}
 
@@ -1080,13 +927,13 @@ func emitRunsOn(c *corpus, _ *nodeSet, s *edgeSet) {
 				if !runnerServes(c, run.fields, repo, reach, groupOf) || !runnerHasLabels(run.fields, want) {
 					continue
 				}
-				s.add(RunsOn, from, runnerEndpoint(c, run.fields),
+				s.Add(RunsOn, from, runnerEndpoint(c, run.fields),
 					map[string]any{"runner_labels": stringArray(want), "_source": []any{r.rel}})
 				matched++
 			}
 		}
 		if matched == 0 {
-			s.miss(RunsOn, Job, Runner, 1)
+			s.Miss(RunsOn, Job, Runner, 1)
 		}
 	}
 }
@@ -1121,7 +968,7 @@ func runnerHasLabels(f map[string]any, want []string) bool {
 // A repo runner serves only its own repository; an org runner serves whatever its
 // group reaches. The listing omits runner_group_id, so membership comes off the groups'
 // member_runner_ids; a runner no group claims is left ungated, not excluded.
-func runnerServes(c *corpus, f map[string]any, repo string, reach map[string][]string, groupOf map[string]string) bool {
+func runnerServes(c *ghCorpus, f map[string]any, repo string, reach map[string][]string, groupOf map[string]string) bool {
 	switch str(f["scope"]) {
 	case "repo":
 		return c.runnerScopeKey(f) == c.full(repo)

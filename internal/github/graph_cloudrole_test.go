@@ -1,8 +1,10 @@
-package graph
+package github
 
 import (
 	"slices"
 	"testing"
+
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
 func callerEdge(repo, roleARN string) map[string]any {
@@ -14,7 +16,7 @@ func callerEdge(repo, roleARN string) map[string]any {
 	}
 }
 
-func calleeCorpus(t *testing.T, callers ...map[string]any) (*nodeSet, *edgeSet) {
+func calleeCorpus(t *testing.T, callers ...map[string]any) (*nodeIndex, *edgeIndex) {
 	t.Helper()
 	files := map[string]any{
 		"org/portus-labs.json": map[string]any{"_id": "portus-labs", "org": "portus-labs"},
@@ -43,11 +45,11 @@ func anySlice(ms []map[string]any) []any {
 	return out
 }
 
-func cloudRoleIDs(n *nodeSet) []string {
+func cloudRoleIDs(n *nodeIndex) []string {
 	out := []string{}
-	for _, node := range n.all() {
-		if node.Labels[0] == CloudRole {
-			out = append(out, node.Key["identifier"])
+	for _, nd := range n.All() {
+		if nd.Labels[0] == CloudRole {
+			out = append(out, nd.Key["identifier"])
 		}
 	}
 	slices.Sort(out)
@@ -66,10 +68,10 @@ func TestCloudRoleResolvesThroughCallerInputsAndDropsDisputedOnes(t *testing.T) 
 			t.Errorf("CloudRole nodes = %v, want [%s]", got, arn)
 		}
 		got := edgesOfType(s, CanAssume)
-		if len(got) != 1 || got[0].To != nodeID(CloudRole, map[string]string{"identifier": arn}) {
+		if len(got) != 1 || got[0].To != graphNodeID(CloudRole, map[string]string{"identifier": arn}) {
 			t.Errorf("CAN_ASSUME = %v, want one edge into the caller's literal ARN", got)
 		}
-		if miss := s.unbuilt[edgeKey(CanAssume, Job, CloudRole)]; miss != 0 {
+		if miss := s.Unbuilt()[graph.EdgeKey(CanAssume, Job, CloudRole)]; miss != 0 {
 			t.Errorf("unbuilt CAN_ASSUME = %d, want 0", miss)
 		}
 	})
@@ -91,7 +93,7 @@ func TestCloudRoleResolvesThroughCallerInputsAndDropsDisputedOnes(t *testing.T) 
 		if got := edgesOfType(s, CanAssume); len(got) != 0 {
 			t.Errorf("CAN_ASSUME = %v, want none", got)
 		}
-		if miss := s.unbuilt[edgeKey(CanAssume, Job, CloudRole)]; miss != 1 {
+		if miss := s.Unbuilt()[graph.EdgeKey(CanAssume, Job, CloudRole)]; miss != 1 {
 			t.Errorf("unbuilt CAN_ASSUME = %d, want 1: the relation is asserted and unresolvable", miss)
 		}
 	})
@@ -101,7 +103,7 @@ func TestCloudRoleResolvesThroughCallerInputsAndDropsDisputedOnes(t *testing.T) 
 		if got := cloudRoleIDs(n); len(got) != 0 {
 			t.Errorf("CloudRole nodes = %v, want none: ${{ }} is not a role identity", got)
 		}
-		if miss := s.unbuilt[edgeKey(CanAssume, Job, CloudRole)]; miss != 1 {
+		if miss := s.Unbuilt()[graph.EdgeKey(CanAssume, Job, CloudRole)]; miss != 1 {
 			t.Errorf("unbuilt CAN_ASSUME = %d, want 1", miss)
 		}
 	})

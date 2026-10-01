@@ -1,4 +1,4 @@
-package graph
+package github
 
 import (
 	"path/filepath"
@@ -7,26 +7,32 @@ import (
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/pkg/finding"
+
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
 func attachFixture(t *testing.T, files map[string]any, findings []finding.Finding,
-	targets map[string]Target) (*nodeSet, *edgeSet, *attachResult) {
+	targets map[string]graph.Target) (*nodeIndex, *edgeIndex, *graph.AttachResult) {
 	t.Helper()
 	dir := t.TempDir()
 	for rel, v := range files {
-		if err := engine.WriteJSON(filepath.Join(dir, normalizeDir, filepath.FromSlash(rel)), v); err != nil {
+		if err := engine.WriteJSON(filepath.Join(dir, "10-normalize", filepath.FromSlash(rel)), v); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, f := range findings {
-		if err := engine.WriteJSON(filepath.Join(dir, scanDir, "findings", f.Fingerprint+".json"), f); err != nil {
+		if err := engine.WriteJSON(filepath.Join(dir, "20-scan", "findings", f.Fingerprint+".json"), f); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	cfg := &engine.Config{Concurrency: 2}
 	fail := func(e error) { t.Fatalf("load: %v", e) }
-	c, err := loadCorpus(t.Context(), cfg, dir, fail)
+	src, err := graph.LoadCorpus(t.Context(), cfg, dir, []string{"chains/indices/"}, fail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := indexCorpus(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +44,7 @@ func attachFixture(t *testing.T, files map[string]any, findings []finding.Findin
 	if err != nil {
 		t.Fatal(err)
 	}
-	backfillObserved(n, s)
+	graph.BackfillObserved(n.NodeSet, s)
 	loaded, _, err := engine.LoadFindings(t.Context(), cfg, dir, fail)
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +53,7 @@ func attachFixture(t *testing.T, files map[string]any, findings []finding.Findin
 	if err := a.run(t.Context(), loaded); err != nil {
 		t.Fatal(err)
 	}
-	return n, s, &a.res
+	return n, s, a.res
 }
 
 func mkFinding(fp, rule, kind, subject string) finding.Finding {
@@ -58,9 +64,9 @@ func mkFinding(fp, rule, kind, subject string) finding.Finding {
 	}
 }
 
-func mustTarget(t *testing.T, s string) Target {
+func mustTarget(t *testing.T, s string) graph.Target {
 	t.Helper()
-	tg, err := ParseTarget(s)
+	tg, err := graph.ParseTarget(GraphProvider(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +104,7 @@ func TestAttackEdgeVictimizesTheDownstreamJob(t *testing.T) {
 			},
 		},
 		[]finding.Finding{mkFinding("aaaa", "cat-05/workflow-run-checkout-execute", "chain", pairID)},
-		map[string]Target{"cat-05/workflow-run-checkout-execute": mustTarget(t, "attack(PWN_REQUEST)")},
+		map[string]graph.Target{"cat-05/workflow-run-checkout-execute": mustTarget(t, "attack(PWN_REQUEST)")},
 	)
 
 	got := edgesOfType(s, PwnRequest)
@@ -109,7 +115,7 @@ func TestAttackEdgeVictimizesTheDownstreamJob(t *testing.T) {
 	if got[0].To != wantTo {
 		t.Errorf("victim = %q, want the downstream job %q", got[0].To, wantTo)
 	}
-	if got[0].From != nodeID(ExternalActor, map[string]string{"kind": "external"}) {
+	if got[0].From != graphNodeID(ExternalActor, map[string]string{"kind": "external"}) {
 		t.Errorf("from = %q, want the ExternalActor singleton", got[0].From)
 	}
 	if want := []any{}; !reflect.DeepEqual(got[0].Properties["trigger_classes_low_trust"], want) {
@@ -119,13 +125,13 @@ func TestAttackEdgeVictimizesTheDownstreamJob(t *testing.T) {
 	if want := []any{"workflow_run"}; !reflect.DeepEqual(got[0].Properties["trigger_classes_medium"], want) {
 		t.Errorf("trigger_classes_medium = %v, want %v", got[0].Properties["trigger_classes_medium"], want)
 	}
-	if res.attached != 1 || len(res.unattached) != 0 {
-		t.Errorf("attached=%d unattached=%d, want 1/0", res.attached, len(res.unattached))
+	if res.Attached != 1 || len(res.Unattached) != 0 {
+		t.Errorf("attached=%d unattached=%d, want 1/0", res.Attached, len(res.Unattached))
 	}
 }
 
 func jobEndpointFor(repo, workflow, jobID string) string {
-	return nodeID(Job, map[string]string{
+	return graphNodeID(Job, map[string]string{
 		"repo": "ghektestorg/" + repo, "workflow": ".github/workflows/" + workflow, "job_id": jobID,
 	})
 }
@@ -142,7 +148,7 @@ func TestChainBranchAnchorNeverParsesTheSubjectID(t *testing.T) {
 		{"fr-11-05-islands", "sandbox/x", "fr-11-05-islands__sandbox__x"},
 	} {
 		rows = append(rows, map[string]any{"_id": tc.id, "repo": tc.repo, "branch": tc.branch})
-		want[tc.id] = nodeID(Branch, map[string]string{"repo": "ghektestorg/" + tc.repo, "name": tc.branch})
+		want[tc.id] = graphNodeID(Branch, map[string]string{"repo": "ghektestorg/" + tc.repo, "name": tc.branch})
 	}
 
 	findings := []finding.Finding{}
@@ -158,19 +164,19 @@ func TestChainBranchAnchorNeverParsesTheSubjectID(t *testing.T) {
 			},
 		},
 		findings,
-		map[string]Target{"cat-11/ruleset-no-deletion-restriction": mustTarget(t, "node(Branch)")},
+		map[string]graph.Target{"cat-11/ruleset-no-deletion-restriction": mustTarget(t, "node(Branch)")},
 	)
 
-	if res.attached != len(want) {
-		t.Fatalf("attached %d of %d: %+v", res.attached, len(want), res.unattached)
+	if res.Attached != len(want) {
+		t.Fatalf("attached %d of %d: %+v", res.Attached, len(want), res.Unattached)
 	}
 	for id, nodeID := range want {
-		node := n.get(nodeID)
-		if node == nil {
+		nd := n.Get(nodeID)
+		if nd == nil {
 			t.Fatalf("no Branch node %q", nodeID)
 		}
-		if len(node.Findings) != 1 || node.Findings[0].SubjectID != id {
-			t.Errorf("branch %q carries %v, want the finding for %q", nodeID, node.Findings, id)
+		if len(nd.Findings) != 1 || nd.Findings[0].SubjectID != id {
+			t.Errorf("branch %q carries %v, want the finding for %q", nodeID, nd.Findings, id)
 		}
 	}
 }
@@ -197,11 +203,11 @@ func TestEdgeTargetFiltersOnEndpointLabels(t *testing.T) {
 			"jobs/" + str(job["_id"]) + ".json": job,
 		},
 		[]finding.Finding{mkFinding("bbbb", "cat-02/secret-isolation-repo-secret-any-push", "job", str(job["_id"]))},
-		map[string]Target{"cat-02/secret-isolation-repo-secret-any-push": mustTarget(t, "edge(READS, Job, Secret)")},
+		map[string]graph.Target{"cat-02/secret-isolation-repo-secret-any-push": mustTarget(t, "edge(READS, Job, Secret)")},
 	)
 
-	if res.attached != 1 {
-		t.Fatalf("attached=%d, unattached=%+v", res.attached, res.unattached)
+	if res.Attached != 1 {
+		t.Fatalf("attached=%d, unattached=%+v", res.Attached, res.Unattached)
 	}
 	for _, e := range edgesOfType(s, Reads) {
 		want := 0
@@ -233,28 +239,28 @@ func TestUnattachedFindingsAreRegistered(t *testing.T) {
 			mkFinding("dddd", "cat-99/retired-rule", "job", str(job["_id"])),
 			mkFinding("eeee", "cat-07/self-hosted-non-ephemeral", "job", "no-such-job"),
 		},
-		map[string]Target{"cat-07/self-hosted-non-ephemeral": mustTarget(t, "edge(RUNS_ON, Job, Runner)")},
+		map[string]graph.Target{"cat-07/self-hosted-non-ephemeral": mustTarget(t, "edge(RUNS_ON, Job, Runner)")},
 	)
 
-	if res.total != 3 || res.attached != 0 || len(res.unattached) != 3 {
-		t.Fatalf("total=%d attached=%d unattached=%d, want 3/0/3", res.total, res.attached, len(res.unattached))
+	if res.Total != 3 || res.Attached != 0 || len(res.Unattached) != 3 {
+		t.Fatalf("total=%d attached=%d unattached=%d, want 3/0/3", res.Total, res.Attached, len(res.Unattached))
 	}
 	want := map[string]int{
-		reasonEndpointUnresolved: 1,
-		reasonNoTarget:           1,
-		reasonSubjectUnresolved:  1,
+		graph.ReasonEndpointUnresolved: 1,
+		graph.ReasonNoTarget:           1,
+		graph.ReasonSubjectUnresolved:  1,
 	}
 	for reason, n := range want {
-		if res.byReason[reason] != n {
-			t.Errorf("byReason[%s] = %d, want %d (all: %v)", reason, res.byReason[reason], n, res.byReason)
+		if res.ByReason[reason] != n {
+			t.Errorf("byReason[%s] = %d, want %d (all: %v)", reason, res.ByReason[reason], n, res.ByReason)
 		}
 	}
-	for _, r := range unattachedReasons() {
-		if _, listed := res.byReason[r]; !listed {
+	for _, r := range unattachedReasons {
+		if _, listed := res.ByReason[r]; !listed {
 			t.Errorf("reason %q missing: every code must be reported, including zeros", r)
 		}
 	}
-	for _, u := range res.unattached {
+	for _, u := range res.Unattached {
 		if u.SubjectID == "" || u.Detail == "" {
 			t.Errorf("unattached entry is not auditable: %+v", u)
 		}

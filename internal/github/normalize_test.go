@@ -45,7 +45,7 @@ jobs:
 	}
 
 	var jobs []map[string]any
-	byFile := map[string]Job{}
+	byFile := map[string]JobFact{}
 	for name, text := range files {
 		recs, err := normalizeWorkflowText(text, normalizeCtx{
 			org: "ghektestorg", repo: "ghektestorg/fr-05-06-workflow-run-chain",

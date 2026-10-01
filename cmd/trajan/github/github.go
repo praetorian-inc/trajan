@@ -121,11 +121,12 @@ func newGitHubCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			targets, err := graph.RuleTargets(func(e error) { slog.Warn("rule skipped", "err", e) })
+			provider := github.GraphProvider()
+			targets, err := graph.RuleTargets(provider, func(e error) { slog.Warn("rule skipped", "err", e) })
 			if err != nil {
 				return err
 			}
-			return graph.Build(cmd.Context(), cfg, runDir, targets)
+			return graph.Build(cmd.Context(), cfg, runDir, provider, targets)
 		},
 	}
 	push := &cobra.Command{
@@ -137,7 +138,7 @@ func newGitHubCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return graph.Push(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser, neo4jPass, neo4jReset)
+			return graph.Push(cmd.Context(), cfg, github.GraphProvider(), runDir, neo4jURL, neo4jUser, neo4jPass, neo4jReset)
 		},
 	}
 	analyze := &cobra.Command{

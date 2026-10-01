@@ -22,7 +22,9 @@ import (
 
 const pushBatch = 1000
 
-func Push(ctx context.Context, cfg *engine.Config, runDir, neo4jURL, neo4jUser, neo4jPass string, reset bool) error {
+func Push[L ~string, T ~string](ctx context.Context, cfg *engine.Config, sc Schema[L, T],
+	runDir, neo4jURL, neo4jUser, neo4jPass string, reset bool) error {
+
 	state, err := engine.LoadState(runDir)
 	if err != nil {
 		return err
@@ -33,7 +35,7 @@ func Push(ctx context.Context, cfg *engine.Config, runDir, neo4jURL, neo4jUser, 
 	out := cfg.Sink()
 	out.PhaseHeader("Push")
 	timer := engine.StartPhaseTimer(engine.PhasePush, "push")
-	stats, pushErr := runPush(ctx, runDir, state, neo4jURL, neo4jUser, neo4jPass, reset)
+	stats, pushErr := runPush(ctx, sc, runDir, state, neo4jURL, neo4jUser, neo4jPass, reset)
 	rec := timer.Stop(pushErr)
 	state.RecordPhase(rec)
 	saveErr := state.Save(runDir)
@@ -48,9 +50,11 @@ func Push(ctx context.Context, cfg *engine.Config, runDir, neo4jURL, neo4jUser, 
 
 type pushStats struct{ nodes, edges int }
 
-func runPush(ctx context.Context, runDir string, state *engine.State, url, user, pass string, reset bool) (pushStats, error) {
-	var nf nodesFile
-	var ef edgesFile
+func runPush[L ~string, T ~string](ctx context.Context, sc Schema[L, T], runDir string,
+	state *engine.State, url, user, pass string, reset bool) (pushStats, error) {
+
+	var nf nodesFile[L]
+	var ef edgesFile[L, T]
 	for _, in := range []struct {
 		rel string
 		v   any
@@ -77,20 +81,20 @@ func runPush(ctx context.Context, runDir string, state *engine.State, url, user,
 	sess := drv.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer sess.Close(ctx)
 
-	if err := ensureConstraints(ctx, sess, nf.Nodes); err != nil {
+	if err := ensureConstraints(ctx, sc, sess, nf.Nodes); err != nil {
 		return pushStats{}, err
 	}
 	if reset {
-		if _, err := run(ctx, sess, "MATCH (n) DETACH DELETE n", nil); err != nil {
+		if _, err := runCypher(ctx, sess, "MATCH (n) DETACH DELETE n", nil); err != nil {
 			return pushStats{}, err
 		}
 	}
 
-	nodesWritten, err := pushNodes(ctx, sess, nf.Nodes, state)
+	nodesWritten, err := pushNodes(ctx, sc, sess, nf.Nodes, state)
 	if err != nil {
 		return pushStats{}, err
 	}
-	edgesWritten, err := pushEdges(ctx, sess, ef.Edges, state)
+	edgesWritten, err := pushEdges(ctx, sc, sess, ef.Edges, state)
 	if err != nil {
 		return pushStats{}, err
 	}
@@ -103,7 +107,7 @@ func runPush(ctx context.Context, runDir string, state *engine.State, url, user,
 	return pushStats{nodes: nodesWritten, edges: edgesWritten}, nil
 }
 
-func run(ctx context.Context, sess neo4j.SessionWithContext, cypher string, params map[string]any) (int, error) {
+func runCypher(ctx context.Context, sess neo4j.SessionWithContext, cypher string, params map[string]any) (int, error) {
 	res, err := sess.Run(ctx, cypher, params)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", firstLine(cypher), err)
@@ -147,22 +151,24 @@ func firstLine(s string) string {
 // _id is the node identity the edge writer already resolved, so the import never
 // has to rebuild a composite key. One uniqueness constraint per label both
 // enforces that and gives the edge MATCHes an index to seek on.
-func ensureConstraints(ctx context.Context, sess neo4j.SessionWithContext, nodes []node) error {
+func ensureConstraints[L ~string, T ~string](ctx context.Context, sc Schema[L, T],
+	sess neo4j.SessionWithContext, nodes []Node[L]) error {
+
 	for _, l := range slices.Sorted(maps.Keys(labelsPresent(nodes))) {
-		if !ValidNodeLabel(l) {
+		if !sc.ValidNodeLabel(l) {
 			return fmt.Errorf("node label %q is not in the schema", l)
 		}
 		q := fmt.Sprintf("CREATE CONSTRAINT trajan_%s_id IF NOT EXISTS FOR (n:%s) REQUIRE n._id IS UNIQUE",
 			strings.ToLower(string(l)), l)
-		if _, err := run(ctx, sess, q, nil); err != nil {
+		if _, err := runCypher(ctx, sess, q, nil); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func labelsPresent(nodes []node) map[NodeLabel]bool {
-	out := map[NodeLabel]bool{}
+func labelsPresent[L ~string](nodes []Node[L]) map[L]bool {
+	out := map[L]bool{}
 	for _, n := range nodes {
 		if len(n.Labels) > 0 {
 			out[n.Labels[0]] = true
@@ -171,8 +177,10 @@ func labelsPresent(nodes []node) map[NodeLabel]bool {
 	return out
 }
 
-func pushNodes(ctx context.Context, sess neo4j.SessionWithContext, nodes []node, state *engine.State) (int, error) {
-	byLabel := map[NodeLabel][]any{}
+func pushNodes[L ~string, T ~string](ctx context.Context, sc Schema[L, T],
+	sess neo4j.SessionWithContext, nodes []Node[L], state *engine.State) (int, error) {
+
+	byLabel := map[L][]any{}
 	for _, n := range nodes {
 		if len(n.Labels) == 0 {
 			continue
@@ -186,12 +194,12 @@ func pushNodes(ctx context.Context, sess neo4j.SessionWithContext, nodes []node,
 
 	total := 0
 	for _, l := range slices.Sorted(maps.Keys(labelsPresent(nodes))) {
-		if !ValidNodeLabel(l) {
+		if !sc.ValidNodeLabel(l) {
 			return total, fmt.Errorf("node label %q is not in the schema", l)
 		}
 		q := fmt.Sprintf("UNWIND $rows AS r MERGE (n:%s {_id: r.id}) SET n += r.props", l)
 		for chunk := range slices.Chunk(byLabel[l], pushBatch) {
-			if _, err := run(ctx, sess, q, map[string]any{"rows": chunk}); err != nil {
+			if _, err := runCypher(ctx, sess, q, map[string]any{"rows": chunk}); err != nil {
 				return total, err
 			}
 			total += len(chunk)
@@ -202,10 +210,12 @@ func pushNodes(ctx context.Context, sess neo4j.SessionWithContext, nodes []node,
 
 // Grouped by the whole triple, not by type: the endpoint labels are what let
 // each MATCH seek the per-label _id index instead of scanning every node.
-func pushEdges(ctx context.Context, sess neo4j.SessionWithContext, edges []edge, state *engine.State) (int, error) {
+func pushEdges[L ~string, T ~string](ctx context.Context, sc Schema[L, T],
+	sess neo4j.SessionWithContext, edges []Edge[L, T], state *engine.State) (int, error) {
+
 	type triple struct {
-		t        EdgeType
-		from, to NodeLabel
+		t        T
+		from, to L
 	}
 	byTriple := map[triple][]any{}
 	for _, e := range edges {
@@ -226,7 +236,7 @@ func pushEdges(ctx context.Context, sess neo4j.SessionWithContext, edges []edge,
 
 	total := 0
 	for _, k := range keys {
-		if !ValidEdge(k.t, k.from, k.to) {
+		if !sc.ValidEdge(k.t, k.from, k.to) {
 			return total, fmt.Errorf("%s does not connect %s -> %s in the schema", k.t, k.from, k.to)
 		}
 		q := fmt.Sprintf(`UNWIND $rows AS r
@@ -263,7 +273,7 @@ func findingProps() []string {
 // Neo4j stores scalars and homogeneous scalar arrays. A null property is dropped
 // because SET n += {k: null} removes the key anyway, and findings are flattened
 // to their fingerprints and rule ids so the graph joins back to 20-scan.
-func scalarProps(props map[string]any, findings []findingRef, id string, state *engine.State) map[string]any {
+func scalarProps(props map[string]any, findings []FindingRef, id string, state *engine.State) map[string]any {
 	out := make(map[string]any, len(props)+5)
 	for k, v := range props {
 		if v == nil {
@@ -299,11 +309,22 @@ func scalarProps(props map[string]any, findings []findingRef, id string, state *
 	return out
 }
 
-// JSON decodes every number as a float64, so a whole one is restored to an
-// integer: member_runner_ids must stay [2], not [2.0], to match on.
+// The corpus decodes with UseNumber, so an identity value that reached a property as
+// json.Number must land as an integer rather than a string.
 func scalar(v any) any {
-	if f, ok := v.(float64); ok && f == float64(int64(f)) {
-		return int64(f)
+	switch t := v.(type) {
+	case json.Number:
+		if n, err := t.Int64(); err == nil {
+			return n
+		}
+		if f, err := t.Float64(); err == nil {
+			return f
+		}
+		return t.String()
+	case float64:
+		if t == float64(int64(t)) {
+			return int64(t)
+		}
 	}
 	return v
 }
@@ -316,23 +337,15 @@ func scalarArray(a []any) any {
 	case string:
 		out := make([]string, 0, len(a))
 		for _, v := range a {
-			s, ok := v.(string)
+			s, ok := scalar(v).(string)
 			if !ok {
 				return jsonArray(a)
 			}
 			out = append(out, s)
 		}
 		return out
-	case int64:
-		out := make([]int64, 0, len(a))
-		for _, v := range a {
-			n, ok := scalar(v).(int64)
-			if !ok {
-				return jsonArray(a)
-			}
-			out = append(out, n)
-		}
-		return out
+	case int64, float64:
+		return numericArray(a)
 	case bool:
 		out := make([]bool, 0, len(a))
 		for _, v := range a {
@@ -347,8 +360,39 @@ func scalarArray(a []any) any {
 	return jsonArray(a)
 }
 
-// A heterogeneous or nested array is not storable, and dropping it would make a
-// missing capability list look like an empty one.
+const maxExactFloat = 1 << 53
+
+// Neo4j takes a mixed int/float collection, but Go does not, so one float in the
+// array widens the whole of it rather than falling back to JSON strings.
+func numericArray(a []any) any {
+	ints := make([]int64, 0, len(a))
+	floats := make([]float64, 0, len(a))
+	widened := false
+	for _, v := range a {
+		switch n := scalar(v).(type) {
+		case int64:
+			ints = append(ints, n)
+			floats = append(floats, float64(n))
+		case float64:
+			widened = true
+			floats = append(floats, n)
+		default:
+			return jsonArray(a)
+		}
+	}
+	if !widened {
+		return ints
+	}
+	// Past 2^53 a float64 no longer holds every integer, so widening would change the
+	// value; the JSON form keeps it exact.
+	for _, n := range ints {
+		if n > maxExactFloat || n < -maxExactFloat {
+			return jsonArray(a)
+		}
+	}
+	return floats
+}
+
 func jsonArray(a []any) []string {
 	out := make([]string, 0, len(a))
 	for _, v := range a {

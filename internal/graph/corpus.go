@@ -2,11 +2,11 @@ package graph
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -18,39 +18,36 @@ const normalizeDir = "10-normalize"
 
 var ErrNoOrgRecord = errors.New("no organization record")
 
-type record struct {
-	rel    string
-	dir    string
-	id     string
-	fields map[string]any
+type Record struct {
+	Rel    string
+	Dir    string
+	Path   string
+	Kind   string
+	ID     string
+	Fields map[string]any
 }
 
-type corpus struct {
-	org    string
-	dirs   map[string][]record
-	chains map[string]map[string]any
+type Corpus struct {
+	Org     string
+	Records []Record
 
-	// Maps "<full repo>\x00<slug>" to the unslugged branch name, and to "" where two
-	// branches share a slug ("feat/a" and "feat__a"). BranchSlug is not injective, so
-	// an ambiguous slug must make the caller degrade rather than name one of the two.
-	trueBranch map[string]string
-
-	// seen is what 10-normalize offered, files is what parsed; the difference is
+	// Seen is what 10-normalize offered, Files is what parsed; the difference is
 	// dropped records the graph is silently missing.
-	seen  int
-	files int
+	Seen  int
+	Files int
 }
 
-// chains/indices is skipped: it re-keys data the primary records already carry, and
-// its filenames embed raw ${{ }} expressions.
-func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError func(error)) (*corpus, error) {
+func LoadCorpus(ctx context.Context, cfg *engine.Config, runDir string, skipPrefixes []string,
+	onError func(error)) (*Corpus, error) {
+
 	all, err := engine.PriorPhase{RunDir: runDir}.IterJSON(normalizeDir)
 	if err != nil {
 		return nil, err
 	}
 	wanted := make([]engine.PhaseFile, 0, len(all))
 	for _, f := range all {
-		if strings.HasPrefix(filepath.ToSlash(f.Rel), "chains/indices/") {
+		rel := filepath.ToSlash(f.Rel)
+		if slices.ContainsFunc(skipPrefixes, func(p string) bool { return strings.HasPrefix(rel, p) }) {
 			continue
 		}
 		wanted = append(wanted, f)
@@ -60,133 +57,29 @@ func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError 
 	}
 
 	recs, err := engine.RunPartial(ctx, cfg.Concurrency, wanted,
-		func(_ context.Context, f engine.PhaseFile) (record, error) {
+		func(_ context.Context, f engine.PhaseFile) (Record, error) {
 			var m map[string]any
 			dec := json.NewDecoder(bytes.NewReader(f.Data))
 			dec.UseNumber()
 			if err := dec.Decode(&m); err != nil {
-				return record{}, fmt.Errorf("%s/%s: %w", normalizeDir, f.Rel, err)
+				return Record{}, fmt.Errorf("%s/%s: %w", normalizeDir, f.Rel, err)
 			}
 			rel := filepath.ToSlash(f.Rel)
 			dir, _, _ := strings.Cut(rel, "/")
 			id, _ := m["_id"].(string)
-			return record{rel: rel, dir: dir, id: id, fields: m}, nil
+			kind, _ := m["kind"].(string)
+			return Record{Rel: rel, Dir: dir, Path: path.Dir(rel), Kind: kind, ID: id, Fields: m}, nil
 		},
 		func(_ engine.PhaseFile, err error) { onError(err) })
 	if err != nil {
 		return nil, err
 	}
-	slices.SortFunc(recs, func(a, b record) int { return strings.Compare(a.rel, b.rel) })
+	slices.SortFunc(recs, func(a, b Record) int { return strings.Compare(a.Rel, b.Rel) })
 
-	c := &corpus{
-		dirs:       map[string][]record{},
-		chains:     map[string]map[string]any{},
-		trueBranch: map[string]string{},
-		seen:       len(wanted),
-		files:      len(recs),
-	}
-	for _, r := range recs {
-		if r.dir == "chains" {
-			c.chains[strings.TrimSuffix(filepath.Base(r.rel), ".json")] = r.fields
-			continue
-		}
-		c.dirs[r.dir] = append(c.dirs[r.dir], r)
-	}
-
-	if len(c.dirs["org"]) == 0 {
-		return nil, fmt.Errorf("%s/org: %w; every node identity is qualified by it", normalizeDir, ErrNoOrgRecord)
-	}
-	c.org = str(c.dirs["org"][0].fields["org"])
-	if c.org == "" {
-		return nil, fmt.Errorf("%s: organization record has no %q", c.dirs["org"][0].rel, "org")
-	}
-
-	for _, e := range c.chainArray("effective-ruleset", "effective_per_branch") {
-		branch := str(e["branch"])
-		repo := c.full(str(e["repo"]))
-		if repo == "" || branch == "" {
-			continue
-		}
-		k := repo + "\x00" + engine.BranchSlug(branch)
-		if prev, dup := c.trueBranch[k]; dup && prev != branch {
-			branch = ""
-		}
-		c.trueBranch[k] = branch
-	}
-	return c, nil
+	return &Corpus{Records: recs, Seen: len(wanted), Files: len(recs)}, nil
 }
 
-// Every identity property naming a repository holds "owner/repo", so joins survive
-// a second org being scanned.
-func (c *corpus) full(repo string) string {
-	if repo == "" {
-		return ""
-	}
-	return c.org + "/" + repo
-}
-
-func (c *corpus) repoNames(keep func(map[string]any) bool) []string {
-	out := make([]string, 0, len(c.dirs["repos"]))
-	for _, r := range c.dirs["repos"] {
-		if keep != nil && !keep(r.fields) {
-			continue
-		}
-		if name := str(r.fields["repo"]); name != "" {
-			out = append(out, name)
-		}
-	}
-	return out
-}
-
-func (c *corpus) chainArray(file, key string) []map[string]any {
-	return objects(c.chains[file][key])
-}
-
-func (c *corpus) chainSource(file, key string) string {
-	return "chains/" + file + ".json#" + key
-}
-
-// The canonical scope is built from the record's own repo/environment fields, never
-// by splitting the "__"-slugged scope_key, which is ambiguous.
-func (c *corpus) secretScopeKey(f map[string]any) string {
-	switch str(f["scope"]) {
-	case "org":
-		return c.org
-	case "repo":
-		return c.full(str(f["repo"]))
-	case "environment":
-		repo, env := c.full(str(f["repo"])), str(f["environment"])
-		if repo == "" || env == "" {
-			return ""
-		}
-		return repo + ":" + env
-	}
-	return ""
-}
-
-// Repo runner ids are a per-repository sequence, so an unqualified scope_key would
-// collapse every repo's first runner onto one node.
-func (c *corpus) runnerScopeKey(f map[string]any) string {
-	switch str(f["scope"]) {
-	case "org":
-		return c.org
-	case "repo":
-		return c.full(cmp.Or(str(f["repo"]), str(f["scope_key"])))
-	}
-	return ""
-}
-
-func (c *corpus) rulesetScopeKey(scope, repo string) string {
-	switch scope {
-	case "org":
-		return c.org
-	case "repo":
-		return c.full(repo)
-	}
-	return ""
-}
-
-func str(v any) string {
+func Str(v any) string {
 	switch t := v.(type) {
 	case string:
 		return t
@@ -196,16 +89,16 @@ func str(v any) string {
 	return ""
 }
 
-func truthy(v any) bool {
+func Truthy(v any) bool {
 	b, _ := v.(bool)
 	return b
 }
 
-func objects(v any) []map[string]any {
-	a, _ := v.([]any)
-	out := make([]map[string]any, 0, len(a))
-	for _, e := range a {
-		if m, ok := e.(map[string]any); ok {
+func Objects(v any) []map[string]any {
+	items, _ := v.([]any)
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if m, ok := item.(map[string]any); ok {
 			out = append(out, m)
 		}
 	}

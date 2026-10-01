@@ -1,4 +1,4 @@
-package ado
+package graph
 
 import (
 	"encoding/json"
@@ -60,7 +60,7 @@ func TestScalarPropsClearsStaleFindingProperties(t *testing.T) {
 	}
 
 	withFinding := scalarProps(map[string]any{"findings_high": []any{"cat-01/x"}, "findings_count_high": json.Number("1")},
-		[]findingRef{{RuleID: "cat-01/x", Fingerprint: "abc", Severity: "high"}}, "id", &engine.State{})
+		[]FindingRef{{RuleID: "cat-01/x", Fingerprint: "abc", Severity: "high"}}, "id", &engine.State{})
 	if got := withFinding["finding_rule_ids"]; !reflect.DeepEqual(got, []string{"cat-01/x"}) {
 		t.Errorf("finding_rule_ids = %#v", got)
 	}

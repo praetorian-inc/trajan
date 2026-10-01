@@ -54,18 +54,20 @@ type Result struct {
 func GitHub(ctx context.Context, cfg Config) (Result, error) {
 	opts := github.ScanOptions{HierarchyOnly: cfg.HierarchyOnly}
 	return run(ctx, cfg, phases{
+		name:      "github",
 		collect:   github.Collect,
 		normalize: github.Normalize,
 		scan: func(ctx context.Context, ec *engine.Config, runDir string) error {
 			return github.Scan(ctx, ec, runDir, opts)
 		},
-		graph: buildGraph,
+		graph: buildGraph(github.GraphProvider()),
 	})
 }
 
 func GitLab(ctx context.Context, cfg Config) (Result, error) {
 	opts := gitlab.ScanOptions{HierarchyOnly: cfg.HierarchyOnly}
 	return run(ctx, cfg, phases{
+		name:      "gitlab",
 		collect:   gitlab.Collect,
 		normalize: gitlab.Normalize,
 		scan: func(ctx context.Context, ec *engine.Config, runDir string) error {
@@ -77,16 +79,20 @@ func GitLab(ctx context.Context, cfg Config) (Result, error) {
 func ADO(ctx context.Context, cfg Config) (Result, error) {
 	opts := ado.ScanOptions{HierarchyOnly: cfg.HierarchyOnly}
 	return run(ctx, cfg, phases{
+		name:      "ado",
 		collect:   ado.Collect,
 		normalize: ado.Normalize,
 		scan: func(ctx context.Context, ec *engine.Config, runDir string) error {
 			return ado.Scan(ctx, ec, runDir, opts)
 		},
+		graph: buildGraph(ado.GraphProvider()),
 	})
 }
 
-// graph is nil on a platform with no graph builder, which makes BuildGraph a no-op.
+// graph is nil on a platform with no graph builder, which BuildGraph records as a
+// skipped surface rather than leaving silent.
 type phases struct {
+	name      string
 	collect   func(context.Context, *engine.Config, string) (string, error)
 	normalize func(context.Context, *engine.Config, string) error
 	scan      func(context.Context, *engine.Config, string) error
@@ -126,10 +132,15 @@ func run(ctx context.Context, cfg Config, p phases) (Result, error) {
 	var extra []SurfaceStatus
 
 	built := false
-	if cfg.BuildGraph && p.graph != nil {
-		st := runGraph(ctx, ec, runDir, p.graph)
-		extra = append(extra, st)
-		built = st.Status == "ok"
+	if cfg.BuildGraph {
+		if p.graph == nil {
+			extra = append(extra, SurfaceStatus{Name: "graph", Status: "skipped",
+				Reason: "no graph builder for " + p.name})
+		} else {
+			st := runGraph(ctx, ec, runDir, p.graph)
+			extra = append(extra, st)
+			built = st.Status == "ok"
+		}
 	}
 
 	var seen int
@@ -171,12 +182,14 @@ func runGraph(ctx context.Context, ec *engine.Config, runDir string,
 	}
 }
 
-func buildGraph(ctx context.Context, ec *engine.Config, runDir string) error {
-	targets, err := graph.RuleTargets(func(e error) { slog.Warn("rule skipped", "err", e) })
-	if err != nil {
-		return err
+func buildGraph[L ~string, T ~string](p graph.Provider[L, T]) func(context.Context, *engine.Config, string) error {
+	return func(ctx context.Context, ec *engine.Config, runDir string) error {
+		targets, err := graph.RuleTargets(p, func(e error) { slog.Warn("rule skipped", "err", e) })
+		if err != nil {
+			return err
+		}
+		return graph.Build(ctx, ec, runDir, p, targets)
 	}
-	return graph.Build(ctx, ec, runDir, targets)
 }
 
 func readGraph(runDir string) ([]resource.Resource, []resource.Relationship, error) {

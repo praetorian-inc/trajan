@@ -37,7 +37,6 @@ func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 
 	var path string
 	var tokenFlag string
-	var neo4jURL, neo4jUser, neo4jPass string
 	var writeBack, noGraph, detailed bool
 	var groupDetectionsOnly bool
 	var reportFormat, reportMinSev, reportMinConf, reportOut string
@@ -100,20 +99,6 @@ func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 			})
 		},
 	}
-	push := &cobra.Command{
-		Use:   "push",
-		Short: "Push facts + findings into the graph",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			runDir, err := engine.ResolveRunDir(cfg, "gl", path)
-			if err != nil {
-				return err
-			}
-			// No --reset: GitLab has no graph phase yet, so there is nothing for a
-			// reset to protect against.
-			return graph.Push(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser, neo4jPass, false)
-		},
-	}
 	analyze := &cobra.Command{
 		Use:   "analyze",
 		Short: "Run deeper analysis over the graph",
@@ -152,16 +137,13 @@ func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 
 	scan.Flags().BoolVar(&groupDetectionsOnly, "group-detections-only", false, "evaluate only rules above the project (group and instance subjects)")
 
-	for _, c := range []*cobra.Command{normalize, scan, reportCmd, push, analyze, attack} {
+	for _, c := range []*cobra.Command{normalize, scan, reportCmd, analyze, attack} {
 		c.Flags().StringVarP(&path, "path", "p", "", "run directory (default: latest)")
 	}
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
 	reportCmd.Flags().StringVar(&reportMinSev, "min-severity", "info", "drop findings below this severity")
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
 	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: the run dir)")
-	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j Bolt URL")
-	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")
-	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "", "Neo4j password")
 	analyze.Flags().BoolVarP(&writeBack, "write-back", "w", false, "persist analysis results")
 	analyze.Flags().BoolVarP(&noGraph, "no-graph", "G", false, "analyze in-memory (no Neo4j)")
 	analyze.Flags().BoolVarP(&detailed, "detailed", "d", false, "expand output")
@@ -179,6 +161,6 @@ func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 		c.PreRunE = resolveToken
 	}
 
-	gl.AddCommand(whoami, collect, normalize, scan, reportCmd, push, analyze, attack, run)
+	gl.AddCommand(whoami, collect, normalize, scan, reportCmd, analyze, attack, run)
 	return gl
 }

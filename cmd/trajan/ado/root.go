@@ -2,7 +2,6 @@ package ado
 
 import (
 	"cmp"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -11,7 +10,7 @@ import (
 
 	adopkg "github.com/praetorian-inc/trajan/internal/ado"
 	"github.com/praetorian-inc/trajan/internal/engine"
-	"github.com/praetorian-inc/trajan/internal/engine/detect"
+	"github.com/praetorian-inc/trajan/internal/graph"
 	"github.com/praetorian-inc/trajan/internal/report"
 	"github.com/praetorian-inc/trajan/internal/ui"
 )
@@ -20,22 +19,13 @@ func orgFromEnv() string { return strings.TrimSpace(os.Getenv("ORG_NAME")) }
 
 var AdoCmd = newAdoCmd()
 
-func ruleTargets() (map[string]adopkg.Target, error) {
-	onError := func(e error) { slog.Warn("rule skipped", "err", e) }
-	rules, err := detect.LoadRules("ado", onError)
+func buildGraph(cmd *cobra.Command, cfg *engine.Config, runDir string) error {
+	provider := adopkg.GraphProvider()
+	targets, err := graph.RuleTargets(provider, func(e error) { slog.Warn("rule skipped", "err", e) })
 	if err != nil {
-		return nil, err
+		return err
 	}
-	targets := make(map[string]adopkg.Target, len(rules))
-	for _, r := range rules {
-		t, err := adopkg.ParseTarget(r.Graph)
-		if err != nil {
-			onError(fmt.Errorf("%s: %w", r.ID, err))
-			continue
-		}
-		targets[r.ID] = t
-	}
-	return targets, nil
+	return graph.Build(cmd.Context(), cfg, runDir, provider, targets)
 }
 
 const (
@@ -160,11 +150,7 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 			if err != nil {
 				return err
 			}
-			targets, err := ruleTargets()
-			if err != nil {
-				return err
-			}
-			return adopkg.BuildGraph(cmd.Context(), cfg, runDir, targets)
+			return buildGraph(cmd, cfg, runDir)
 		},
 	}
 	push := &cobra.Command{
@@ -195,11 +181,7 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 			if err := adopkg.Scan(cmd.Context(), cfg, runDir, adopkg.ScanOptions{}); err != nil {
 				return err
 			}
-			targets, err := ruleTargets()
-			if err != nil {
-				return err
-			}
-			return adopkg.BuildGraph(cmd.Context(), cfg, runDir, targets)
+			return buildGraph(cmd, cfg, runDir)
 		},
 	}
 
