@@ -232,9 +232,6 @@ func SubjectHash(subject map[string]any) string {
 	if sid == "" {
 		b, _ := json.Marshal(subject) // sorted map keys make the hash deterministic across runs
 		sid = string(b)
-		if len(sid) > 80 {
-			sid = sid[:80]
-		}
 	}
 	return hash12(sid)
 }

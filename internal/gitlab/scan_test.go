@@ -44,3 +44,36 @@ func TestHierarchyRulesKeepGroupAndInstanceSubjects(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectIsReadFromTheRecordNotSplitOutOfTheID(t *testing.T) {
+	job := map[string]any{"_id": "grp/api:build:image", "project": "grp/api"}
+	if got := gitlabRepo(job); got != "grp/api" {
+		t.Errorf("gitlabRepo = %q, want grp/api; a colon in the job name is not a separator", got)
+	}
+	if got := jobProject(job); got != "grp/api" {
+		t.Errorf("jobProject = %q, want grp/api", got)
+	}
+	if got := gitlabRepo(map[string]any{"_id": "instance"}); got != "" {
+		t.Errorf("gitlabRepo(instance subject) = %q, want empty", got)
+	}
+}
+
+func TestProtectedVarTupleIDCarriesTheProject(t *testing.T) {
+	c := &correlator{}
+	var tuples []map[string]any
+	v := map[string]any{"key": "DEPLOY_TOKEN", "protected": true, "environment_scope": "*"}
+	for _, proj := range []string{"grp/a", "grp/b"} {
+		p := map[string]any{
+			"_id":                proj,
+			"members":            []any{map[string]any{"access_level": int64(30)}},
+			"protected_branches": []any{map[string]any{"pattern": "main"}},
+		}
+		c.emitVarTuples(&tuples, p, v, "instance", nil)
+	}
+	if len(tuples) != 2 {
+		t.Fatalf("emitted %d tuples, want one per project", len(tuples))
+	}
+	if tuples[0]["_id"] == tuples[1]["_id"] {
+		t.Fatalf("both projects produced _id %q; one finding file overwrites the other", tuples[0]["_id"])
+	}
+}

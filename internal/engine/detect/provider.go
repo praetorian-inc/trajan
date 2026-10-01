@@ -13,14 +13,16 @@ type Provider struct {
 	Code           func(runDir string, subject map[string]any) *finding.Code
 	Repo           func(subject map[string]any) string
 	File           func(subject map[string]any) string
-	// Names the finding file. A platform whose subjects lack a natural _id (ADO's
-	// derived-edge records) supplies this so distinct subjects don't collide.
+	// Names the finding file for a platform whose subjects need a key other than
+	// _id. An empty result falls back to SubjectHash.
 	SubjectKey func(subject map[string]any) string
 }
 
 func (p Provider) subjectHash(subject map[string]any) string {
 	if p.SubjectKey != nil {
-		return hash12(p.SubjectKey(subject))
+		if k := p.SubjectKey(subject); k != "" {
+			return hash12(k)
+		}
 	}
 	return SubjectHash(subject)
 }

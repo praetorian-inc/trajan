@@ -17,21 +17,10 @@ const (
 	dirAttack = "40-attack"
 )
 
-// '_' is preserved, unlike adoKey and glKey: these helpers take scope keys already joined with "__".
 func GHKey(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_' {
-			b.WriteByte(c)
-		} else {
-			b.WriteByte('-')
-		}
-	}
-	out := b.String()
+	out := foldName(s, true)
 	if out == "." || out == ".." {
-		return "_"
+		return hashSuffix("_", s)
 	}
 	return out
 }
@@ -120,11 +109,13 @@ func BranchSlug(ref string) string {
 
 // The default branch keeps the bare "<repo>" segment so existing paths stay
 // byte-stable; other branches get "<repo>@<BranchSlug>".
+func BranchDirSlug(ref string) string { return GHKey(BranchSlug(ref)) }
+
 func repoBranchDir(repo, ref string, isDefault bool) string {
 	if isDefault {
 		return GHKey(repo)
 	}
-	return GHKey(repo) + "@" + GHKey(BranchSlug(ref))
+	return GHKey(repo) + "@" + BranchDirSlug(ref)
 }
 
 func CollectWorkflowYAMLBranch(repo, ref string, isDefault bool, filename string) string {
@@ -150,27 +141,45 @@ func CollectRefResolution(owner, actionRepo, ref string) string {
 		fmt.Sprintf("%s__%s@%s.json", GHKey(owner), GHKey(actionRepo), GHKey(safeRef(ref))))
 }
 
-// adoKey maps anything outside [A-Za-z0-9.-] to '-' so an ADO project/repo/host
-// name is safe as one path segment.
-func adoKey(s string) string {
+func foldKey(s string) string {
+	if s == "" {
+		return "_"
+	}
+	return foldName(s, false)
+}
+
+func foldName(s string, keepUnderscore bool) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		// '_' is deliberately NOT preserved: the helpers join sanitized components
-		// with "__", so a component containing "_" would make that delimiter
-		// ambiguous (X + Y__Z vs X__Y + Z collide).
-		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' {
+		// '_' is deliberately NOT preserved for adoKey and glKey: those helpers join
+		// sanitized components with "__", so a component containing "_" would make
+		// that delimiter ambiguous (X + Y__Z vs X__Y + Z collide).
+		switch {
+		case (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-':
 			b.WriteByte(c)
-		} else {
+		case c == '_' && keepUnderscore:
+			b.WriteByte(c)
+		default:
 			b.WriteByte('-')
 		}
 	}
-	if b.Len() == 0 {
-		return "_"
+	out := b.String()
+	if out == s {
+		return out
 	}
-	return b.String()
+	return hashSuffix(out, s)
 }
+
+func hashSuffix(folded, original string) string {
+	sum := sha256.Sum256([]byte(original))
+	return folded + "~" + hex.EncodeToString(sum[:8])
+}
+
+// adoKey maps anything outside [A-Za-z0-9.-] to '-' so an ADO project/repo/host
+// name is safe as one path segment.
+func adoKey(s string) string { return foldKey(s) }
 
 func adoCollect(parts ...string) string {
 	return path.Join(append([]string{dirCollect}, parts...)...)
@@ -353,22 +362,7 @@ func NormalizeADOProjectAgentPool(project string, poolID int64) string {
 
 // glKey maps anything outside [A-Za-z0-9.-] to '-' so a slash-separated GitLab full
 // path is safe as one path segment; '_' is folded too, for adoKey's reason.
-func glKey(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' {
-			b.WriteByte(c)
-		} else {
-			b.WriteByte('-')
-		}
-	}
-	if b.Len() == 0 {
-		return "_"
-	}
-	return b.String()
-}
+func glKey(s string) string { return foldKey(s) }
 
 func glCollect(parts ...string) string {
 	return path.Join(append([]string{dirCollect}, parts...)...)
@@ -473,8 +467,23 @@ func CollectGLClusterAgents(p string) string { return glCollect("cluster-agents"
 func CollectGLAgentConfig(p, name string) string {
 	return glCollect("agent-configs", glKey(p), glKey(name)+".json")
 }
-func CollectGLCIConfig(p, rel string) string { return glCollect("ci-config", glKey(p), rel) }
-func CollectGLRepoFile(p, rel string) string { return glCollect("repo-files", glKey(p), rel) }
+func CollectGLCIConfig(p, rel string) string { return glCollect("ci-config", glKey(p), relPath(rel)) }
+func CollectGLRepoFile(p, rel string) string { return glCollect("repo-files", glKey(p), relPath(rel)) }
+
+func relPath(rel string) string {
+	parts := strings.Split(path.Clean("/"+strings.ReplaceAll(rel, "\\", "/")), "/")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p == "" || p == "." || p == ".." {
+			continue
+		}
+		out = append(out, foldKey(p))
+	}
+	if len(out) == 0 {
+		return "_"
+	}
+	return path.Join(out...)
+}
 
 // Instance scope: self-hosted / admin token.
 func CollectGLInstanceVariables() string { return glCollect("variables", "instance.json") }

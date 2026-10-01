@@ -2,6 +2,7 @@ package engine
 
 import (
 	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -184,5 +185,56 @@ func TestNormalizeADOEdgesBoundedDistinct(t *testing.T) {
 	long := NormalizeADOEdges("uses-connection", strings.Repeat("refs/heads/very-long-branch/", 40))
 	if base := path.Base(long); len(base) > 64 {
 		t.Errorf("edge filename not bounded: %d bytes (%q)", len(base), base)
+	}
+}
+
+func TestFoldedKeysAreInjective(t *testing.T) {
+	groups := map[string][]string{
+		"GHKey":  {"evil workflow.yml", "evil-workflow.yml", "evil/workflow.yml", "evil:workflow.yml"},
+		"glKey":  {"acme/api-server", "acme/api/server", "acme-api-server", "acme_api_server"},
+		"adoKey": {"Team_A", "Team-A", "Team A", "Team/A"},
+	}
+	fns := map[string]func(string) string{"GHKey": GHKey, "glKey": glKey, "adoKey": adoKey}
+	for name, inputs := range groups {
+		t.Run(name, func(t *testing.T) {
+			seen := map[string]string{}
+			for _, in := range inputs {
+				got := fns[name](in)
+				if prev, dup := seen[got]; dup {
+					t.Errorf("%q and %q both key to %q", prev, in, got)
+				}
+				seen[got] = in
+				if strings.ContainsAny(got, `/\`) || got == "." || got == ".." {
+					t.Errorf("%q keys to %q, which is not a single safe path segment", in, got)
+				}
+			}
+		})
+	}
+}
+
+func TestGHKeyLeavesACleanScopeKeyUnchanged(t *testing.T) {
+	for _, s := range []string{"acme", "acme__prod", "ci.yml", "release__1.0"} {
+		if got := GHKey(s); got != s {
+			t.Errorf("GHKey(%q) = %q; existing GitHub paths and fingerprints move", s, got)
+		}
+	}
+}
+
+func TestGLRepoPathsConfineARemoteFilePath(t *testing.T) {
+	const proj = "g/p"
+	for _, in := range []string{"../../etc/passwd", "/etc/passwd", "a/../../b", "..\\..\\win"} {
+		for dir, got := range map[string]string{
+			"ci-config":  CollectGLCIConfig(proj, in),
+			"repo-files": CollectGLRepoFile(proj, in),
+		} {
+			base := glCollect(dir, glKey(proj))
+			rel, err := filepath.Rel(base, got)
+			if err != nil || strings.HasPrefix(rel, "..") {
+				t.Errorf("%q builds %q, outside %q", in, got, base)
+			}
+			if strings.ContainsRune(path.Base(got), '\\') {
+				t.Errorf("%q builds %q, whose last segment is not a single path segment", in, got)
+			}
+		}
 	}
 }

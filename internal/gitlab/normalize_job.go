@@ -134,6 +134,7 @@ func buildJobRecord(p projectMeta, name string, job map[string]any, jc jobContex
 
 	rec := map[string]any{
 		"_id":                                        jobID(p.FullPath, name),
+		"project":                                    p.FullPath,
 		"triggers":                                   toSet(triggers),
 		"runs_on_untrusted_ref":                      untrustedRef,
 		"runs_fork_mr_in_parent":                     hasMergeRequestTrigger(triggers) && mBool(proj, "fork_pipelines_run_in_parent"),

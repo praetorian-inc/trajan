@@ -36,18 +36,14 @@ func Scan(ctx context.Context, cfg *engine.Config, runDir string, opts ScanOptio
 	return detect.Scan(ctx, cfg, runDir, gitlabScanProvider, opts)
 }
 
-// A project-scoped subject carries a project full path in its _id; group, instance and
-// credential subjects are not project-scoped and have no repo.
 func gitlabRepo(s map[string]any) string {
-	id := detect.StringField(s, "_id")
-	switch {
-	case strings.Contains(id, ":"): // job "<project>:<name>"
-		return id[:strings.LastIndex(id, ":")]
-	case strings.Contains(id, "/"): // env/agent "<project>/<name>"; project/MR full path
-		return id
-	default:
-		return ""
+	if p := detect.StringField(s, "project"); p != "" {
+		return p
 	}
+	if id := detect.StringField(s, "_id"); strings.Contains(id, "/") {
+		return id
+	}
+	return ""
 }
 
 // Every GitLab job comes from the one .gitlab-ci.yml; a non-job subject has no

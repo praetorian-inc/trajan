@@ -206,6 +206,8 @@ func collectOneRepo(ctx context.Context, cfg *engine.Config, gh GitHub, cp engin
 	written += stats.total()
 
 	selected, selErrs := selectBranchesToScan(ctx, cfg, gh, cp, org, repo, def)
+	selected, slugErrs := dropAmbiguousBranchSlugs(repo, selected)
+	selErrs = append(selErrs, slugErrs...)
 	for _, e := range selErrs {
 		appendErr(timer, e)
 	}
@@ -220,6 +222,22 @@ func collectOneRepo(ctx context.Context, cfg *engine.Config, gh GitHub, cp engin
 		written += stats.total()
 	}
 	return written, nil
+}
+
+func dropAmbiguousBranchSlugs(repo string, branches []string) ([]string, []string) {
+	taken := make(map[string]string, len(branches))
+	kept := make([]string, 0, len(branches))
+	var errs []string
+	for _, b := range branches {
+		slug := engine.BranchDirSlug(b)
+		if prev, dup := taken[slug]; dup {
+			errs = append(errs, fmt.Sprintf("%s: branch %q shares the directory slug of %q and was skipped", repo, b, prev))
+			continue
+		}
+		taken[slug] = b
+		kept = append(kept, b)
+	}
+	return kept, errs
 }
 
 func selectBranchesToScan(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.CurrentPhase,

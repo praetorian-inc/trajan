@@ -28,10 +28,10 @@ func requireKeys(t *testing.T, role string, m map[string]any, keys ...string) {
 func TestDotenvParticipantFields(t *testing.T) {
 	c := &correlator{
 		jobs: []map[string]any{
-			{"_id": "g/p:prod", "produces_dotenv": true, "runs_on_untrusted_ref": true,
+			{"_id": "g/p:prod", "project": "g/p", "produces_dotenv": true, "runs_on_untrusted_ref": true,
 				"runs_on_protected_ref": false, "dotenv_content_attacker_influenced": true,
 				"dotenv_content_from_untrusted_source": true},
-			{"_id": "g/p:cons", "consumes_dotenv": true, "dotenv_inheritance_unnarrowed": true,
+			{"_id": "g/p:cons", "project": "g/p", "consumes_dotenv": true, "dotenv_inheritance_unnarrowed": true,
 				"inherited_var_in_exec_sink": true, "dotenv_key_collides_declared_var": true,
 				"colliding_var_in_exec_sink": true, "runs_on_protected_ref": true,
 				"cross_project_needs": []any{map[string]any{"project": "g/up"}}},
@@ -61,7 +61,7 @@ func TestDotenvParticipantFields(t *testing.T) {
 func TestCrossProjectArtifactParticipantFields(t *testing.T) {
 	c := &correlator{
 		jobs: []map[string]any{
-			{"_id": "g/cons:gen", "runs_on_protected_ref": true, "executes_fetched_artifact": true,
+			{"_id": "g/cons:gen", "project": "g/cons", "runs_on_protected_ref": true, "executes_fetched_artifact": true,
 				"artifact_integrity_checked": false, "artifact_source_ref_mutable": true,
 				"cross_project_needs": []any{map[string]any{"project": "g/prod", "artifacts": true}}},
 		},
@@ -113,11 +113,11 @@ func TestAgentCIAccessProjectFields(t *testing.T) {
 func TestCacheKeyspaceParticipantRoles(t *testing.T) {
 	c := &correlator{
 		jobs: []map[string]any{
-			{"_id": "g/p:build", "runs_on_untrusted_ref": true, "protected_ref_gate": "none",
+			{"_id": "g/p:build", "project": "g/p", "runs_on_untrusted_ref": true, "protected_ref_gate": "none",
 				"cache_policy_writes": true, "cache_paths_executable": true,
 				"cache_key_static_cross_boundary": true, "cache_key_files_attacker_writable": true,
 				"cache": []any{map[string]any{"key": "deps-v1", "policy": "pull-push"}}},
-			{"_id": "g/p:deploy", "runs_on_untrusted_ref": false, "protected_ref_gate": "strong",
+			{"_id": "g/p:deploy", "project": "g/p", "runs_on_untrusted_ref": false, "protected_ref_gate": "strong",
 				"cache_paths_executable": true, "cache_key_static_cross_boundary": true,
 				"cache": []any{map[string]any{"key": "deps-v1", "policy": "pull"}}},
 		},
