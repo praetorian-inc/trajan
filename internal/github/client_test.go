@@ -13,15 +13,15 @@ import (
 )
 
 func newTestClient(srv *httptest.Server) *Client {
-	return NewClient("test-token")
+	c := NewClient("", "test-token", false)
+	c.apiBase = srv.URL
+	return c
 }
 
-func captureSleeps(t *testing.T) (*[]float64, func()) {
-	t.Helper()
+func captureSleeps(c *Client) *[]float64 {
 	var rec []float64
-	orig := sleepFn
-	sleepFn = func(_ context.Context, sec float64) { rec = append(rec, sec) }
-	return &rec, func() { sleepFn = orig }
+	c.sleepFn = func(_ context.Context, sec float64) { rec = append(rec, sec) }
+	return &rec
 }
 
 func TestGet200Success(t *testing.T) {
@@ -85,9 +85,6 @@ func TestGet404NoAllowIsError(t *testing.T) {
 }
 
 func TestGet502ThenRetried(t *testing.T) {
-	rec, restore := captureSleeps(t)
-	defer restore()
-
 	var n int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if atomic.AddInt32(&n, 1) == 1 {
@@ -99,6 +96,7 @@ func TestGet502ThenRetried(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
+	rec := captureSleeps(c)
 
 	body, _, err := c.Get(context.Background(), srv.URL+"/x", nil, false)
 	if err != nil {
@@ -116,9 +114,6 @@ func TestGet502ThenRetried(t *testing.T) {
 }
 
 func TestGet403RetryAfterSleepsCapped(t *testing.T) {
-	rec, restore := captureSleeps(t)
-	defer restore()
-
 	var n int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if atomic.AddInt32(&n, 1) == 1 {
@@ -131,6 +126,7 @@ func TestGet403RetryAfterSleepsCapped(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
+	rec := captureSleeps(c)
 
 	if _, _, err := c.Get(context.Background(), srv.URL+"/x", nil, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -144,9 +140,6 @@ func TestGet403RetryAfterSleepsCapped(t *testing.T) {
 }
 
 func TestGet403RateLimitResetSleep(t *testing.T) {
-	rec, restore := captureSleeps(t)
-	defer restore()
-
 	reset := time.Now().Unix() + 10
 	var n int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -161,6 +154,7 @@ func TestGet403RateLimitResetSleep(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
+	rec := captureSleeps(c)
 
 	if _, _, err := c.Get(context.Background(), srv.URL+"/x", nil, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -180,9 +174,6 @@ func TestGet403RateLimitResetSleep(t *testing.T) {
 // A primary limit answers 403 or 429, and the 429 carries no Retry-After of its
 // own: the reset header is the whole instruction.
 func TestGet429PrimaryLimitWaitsForReset(t *testing.T) {
-	rec, restore := captureSleeps(t)
-	defer restore()
-
 	reset := time.Now().Unix() + 10
 	var n int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -198,6 +189,7 @@ func TestGet429PrimaryLimitWaitsForReset(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
+	rec := captureSleeps(c)
 
 	body, _, err := c.Get(context.Background(), srv.URL+"/x", nil, false)
 	if err != nil {
@@ -214,9 +206,6 @@ func TestGet429PrimaryLimitWaitsForReset(t *testing.T) {
 // A secondary limit can arrive with neither Retry-After nor a zeroed remaining
 // count, and the documented answer is to wait a minute and back off from there.
 func TestGetSecondaryLimitWithNoHeadersBacksOff(t *testing.T) {
-	rec, restore := captureSleeps(t)
-	defer restore()
-
 	var n int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&n, 1)
@@ -226,6 +215,7 @@ func TestGetSecondaryLimitWithNoHeadersBacksOff(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
+	rec := captureSleeps(c)
 
 	_, _, err := c.Get(context.Background(), srv.URL+"/x", nil, false)
 	var ghErr *GhError
@@ -248,9 +238,6 @@ func TestGetSecondaryLimitWithNoHeadersBacksOff(t *testing.T) {
 // A 403 that is a permission denial must not be slept for: it carries the same
 // status as a rate limit and no wait will ever clear it.
 func TestGetPermissionDenied403DoesNotWait(t *testing.T) {
-	rec, restore := captureSleeps(t)
-	defer restore()
-
 	var n int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&n, 1)
@@ -260,6 +247,7 @@ func TestGetPermissionDenied403DoesNotWait(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
+	rec := captureSleeps(c)
 
 	_, _, err := c.Get(context.Background(), srv.URL+"/x", nil, false)
 	var ghErr *GhError
@@ -303,9 +291,6 @@ func TestRateLimitWaitEndsWithTheContext(t *testing.T) {
 }
 
 func TestGetSixAttemptExhaustion(t *testing.T) {
-	rec, restore := captureSleeps(t)
-	defer restore()
-
 	var n int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&n, 1)
@@ -313,6 +298,7 @@ func TestGetSixAttemptExhaustion(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
+	rec := captureSleeps(c)
 
 	_, _, err := c.Get(context.Background(), srv.URL+"/x", nil, false)
 	var ghErr *GhError
@@ -520,10 +506,6 @@ func TestResolveRefCommitSHA404ReturnsEmpty(t *testing.T) {
 		w.Write([]byte(`no commit`))
 	}))
 	defer srv.Close()
-	// ResolveRefCommitSHA builds its URL from apiBase, so point it at the test server
-	orig := apiBase
-	apiBase = srv.URL
-	defer func() { apiBase = orig }()
 	c := newTestClient(srv)
 
 	sha, err := c.ResolveRefCommitSHA(context.Background(), "o", "r", "deleted-branch")
@@ -563,5 +545,112 @@ func TestQuoteKeepSlash(t *testing.T) {
 		if got := quoteKeepSlash(tc.in); got != tc.want {
 			t.Errorf("quoteKeepSlash(%q) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestInstanceEndpoints(t *testing.T) {
+	cases := []struct {
+		name                        string
+		root                        string
+		apiBase, graphQL, cloneBase string
+	}{
+		{"saas default", "", "https://api.github.com", "https://api.github.com/graphql", "https://github.com"},
+		{"blank root is the saas default", "   ", "https://api.github.com", "https://api.github.com/graphql", "https://github.com"},
+		{"enterprise server", "https://ghes.corp.example",
+			"https://ghes.corp.example/api/v3", "https://ghes.corp.example/api/graphql", "https://ghes.corp.example"},
+		{"trailing slash", "https://ghes.corp.example/",
+			"https://ghes.corp.example/api/v3", "https://ghes.corp.example/api/graphql", "https://ghes.corp.example"},
+		{"trailing slashes and spaces", "  https://ghes.corp.example//  ",
+			"https://ghes.corp.example/api/v3", "https://ghes.corp.example/api/graphql", "https://ghes.corp.example"},
+		{"subpath root", "https://corp.example/github",
+			"https://corp.example/github/api/v3", "https://corp.example/github/api/graphql", "https://corp.example/github"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			api, gql, clone := instanceEndpoints(tc.root)
+			if api != tc.apiBase || gql != tc.graphQL || clone != tc.cloneBase {
+				t.Errorf("instanceEndpoints(%q) = (%q, %q, %q), want (%q, %q, %q)",
+					tc.root, api, gql, clone, tc.apiBase, tc.graphQL, tc.cloneBase)
+			}
+			c := NewClient(tc.root, "t", false)
+			if c.apiBase != tc.apiBase || c.graphQL != tc.graphQL || c.cloneBase != tc.cloneBase {
+				t.Errorf("NewClient(%q) endpoints = (%q, %q, %q), want (%q, %q, %q)",
+					tc.root, c.apiBase, c.graphQL, c.cloneBase, tc.apiBase, tc.graphQL, tc.cloneBase)
+			}
+			got, err := c.resolveURL("/orgs/acme")
+			if err != nil || got != tc.apiBase+"/orgs/acme" {
+				t.Errorf("resolveURL = (%q, %v), want %q", got, err, tc.apiBase+"/orgs/acme")
+			}
+		})
+	}
+}
+
+func TestPaginateRefusesForeignNextLink(t *testing.T) {
+	var foreignHits atomic.Int32
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		foreignHits.Add(1)
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("foreign host received an Authorization header")
+		}
+		w.Write([]byte(`[]`))
+	}))
+	defer foreign.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Link", "<"+foreign.URL+`/p2>; rel="next"`)
+		w.Write([]byte(`[{"id":1}]`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	if _, err := c.Paginate(context.Background(), "/orgs/acme/repos", nil, 100); err == nil {
+		t.Fatal("Paginate followed the foreign next link")
+	}
+	if n := foreignHits.Load(); n != 0 {
+		t.Fatalf("foreign host was requested %d times", n)
+	}
+}
+
+func TestResolveURLPinsSchemeAndHost(t *testing.T) {
+	c := NewClient("https://ghes.example", "test-token", false)
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"/orgs/acme", true},
+		{"https://ghes.example/api/v3/orgs/acme/repos?page=2", true},
+		{"http://ghes.example/api/v3/orgs/acme/repos?page=2", false},
+		{"https://ghes.example.attacker.test/api/v3/x", false},
+	}
+	for _, tc := range cases {
+		_, err := c.resolveURL(tc.in)
+		if (err == nil) != tc.want {
+			t.Errorf("resolveURL(%q) err = %v, want allowed=%v", tc.in, err, tc.want)
+		}
+	}
+}
+
+func TestGetRefusesCrossHostRedirect(t *testing.T) {
+	var foreignHits atomic.Int32
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		foreignHits.Add(1)
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("foreign host received an Authorization header")
+		}
+		w.Write([]byte(`{}`))
+	}))
+	defer foreign.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, foreign.URL+"/landed", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	if _, _, err := c.Get(context.Background(), "/orgs/acme", nil, false); err == nil {
+		t.Fatal("Get followed the cross-host redirect")
+	}
+	if n := foreignHits.Load(); n != 0 {
+		t.Fatalf("foreign host was requested %d times", n)
 	}
 }

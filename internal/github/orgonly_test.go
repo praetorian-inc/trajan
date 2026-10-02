@@ -14,8 +14,8 @@ func TestOrgOnlyFilterSelectsExactlyOrgSubjects(t *testing.T) {
 	}
 
 	full := len(rules)
-	// OrgOnlyRules mutates its input via slices.DeleteFunc, so clone first.
-	org := detect.OrgOnlyRules(slices.Clone(rules))
+	// HierarchyRules mutates its input via slices.DeleteFunc, so clone first.
+	org := detect.HierarchyRules(slices.Clone(rules), provider.HierarchyKinds)
 	if len(org) == 0 {
 		t.Fatal("expected at least one subject==org rule")
 	}

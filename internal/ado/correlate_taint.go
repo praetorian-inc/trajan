@@ -62,7 +62,7 @@ func pipeKey(project string, id int64) string { return fmt.Sprintf("%s/%d", proj
 // edges are already on disk.
 func loadBuildValidated(prior engine.PriorPhase) (map[string]bool, error) {
 	out := map[string]bool{}
-	edges, err := loadRecords(prior, "10-normalize/edges/build-validates")
+	edges, err := loadRecords(prior, engine.DirNormalize+"/edges/build-validates")
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func indexPipelines(pipelines []map[string]any, validated map[string]bool) map[s
 func deriveReads(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, jobs []map[string]any) (map[string]bool, error) {
 	readsByJob := map[string]bool{}
 	secretsByGroup := map[int64][]map[string]any{}
-	secrets, err := loadRecords(prior, "10-normalize/secret-variables")
+	secrets, err := loadRecords(prior, engine.DirNormalize+"/secret-variables")
 	if err != nil {
 		return nil, fmt.Errorf("correlate: load secret-variables: %w", err)
 	}
@@ -117,14 +117,14 @@ func deriveReads(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.
 		secretsByGroup[gid] = append(secretsByGroup[gid], s)
 	}
 	vgGate := map[int64]map[string]any{}
-	vgs, err := loadRecords(prior, "10-normalize/variable-groups")
+	vgs, err := loadRecords(prior, engine.DirNormalize+"/variable-groups")
 	if err != nil {
 		return nil, fmt.Errorf("correlate: load variable-groups: %w", err)
 	}
 	for _, g := range vgs {
 		vgGate[mInt64(g, "id")] = g
 	}
-	cg, err := loadRecords(prior, "10-normalize/edges/consumes-group")
+	cg, err := loadRecords(prior, engine.DirNormalize+"/edges/consumes-group")
 	if err != nil {
 		return nil, fmt.Errorf("correlate: load consumes-group: %w", err)
 	}
@@ -162,7 +162,7 @@ func deriveReads(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.
 			}
 			for _, s := range secretsByGroup[gid] {
 				rec := map[string]any{
-					"kind": "READS", "project": project, "pipeline_id": pid, "stage": stage, "job": job,
+					"kind": "READS", "project": project, "repo": mStr(j, "repo"), "pipeline_id": pid, "stage": stage, "job": job,
 					"variable_group_id": gid, "owner_project": mStr(s, "project"),
 					"secret_name": mStr(s, "name"), "secret_id": mStr(s, "_id"),
 					"via_level": mStr(e, "level"), "gate_strength": strength, "gate_state": state, "confidence": confidence,
@@ -205,7 +205,7 @@ func deriveQueueTimeInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, 
 	emitEdge := func(sinkType, name, via, location, confidence string, ms map[string]any) error {
 		rec := map[string]any{
 			"kind": "QUEUE_TIME_INJECTION", "technique": "queue_time_injection",
-			"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+			"project": project, "repo": mStr(j, "repo"), "pipeline_id": mInt64(j, "pipeline_id"),
 			"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 			"source": "queue_build_principal", "source_permission": "QueueBuilds", "source_principals": sources,
 			"sink_type": sinkType, "macro_name": name, "sink_location": location, "via": via,
@@ -295,7 +295,7 @@ func deriveLoggingInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j 
 	emitEdge := func(cmdType, via, effect, source string, echoStep int, consumer map[string]any, confidence string) error {
 		rec := map[string]any{
 			"kind": "LOGGING_COMMAND_INJECTION", "technique": "logging_command_injection",
-			"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+			"project": project, "repo": mStr(j, "repo"), "pipeline_id": mInt64(j, "pipeline_id"),
 			"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 			"command_type": cmdType, "untrusted_source": source, "echo_step": echoStep,
 			"via": via, "effect": effect, "consumer_step": consumer["step_index"],
@@ -390,7 +390,7 @@ func deriveAgentInjection(cp engine.CurrentPhase, timer *engine.PhaseTimer, j ma
 		}
 		rec := map[string]any{
 			"kind": "AGENT_INJECTION", "technique": "prompt_injection",
-			"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+			"project": project, "repo": mStr(j, "repo"), "pipeline_id": mInt64(j, "pipeline_id"),
 			"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 			"via": via, "source_kind": "pr_description", "vendor": entStr(sink["vendor"]),
 			"capabilities": caps, "gate_state": "absent", "source_principals": sources,
@@ -432,7 +432,7 @@ func derivePipelinePoisoning(cp engine.CurrentPhase, timer *engine.PhaseTimer, j
 	}
 	rec := map[string]any{
 		"kind": "PIPELINE_POISONING", "technique": "pipeline_poisoning",
-		"project": project, "pipeline_id": mInt64(j, "pipeline_id"),
+		"project": project, "repo": mStr(j, "repo"), "pipeline_id": mInt64(j, "pipeline_id"),
 		"stage": mStr(j, "stage"), "job": mStr(j, "job"),
 		"trigger": trigger, "via": via, "sink_kind": sinkKind, "sink_form": "script",
 		"exposes_system_access_token": mBool(j, "exposes_system_access_token"),
@@ -472,11 +472,11 @@ type grantIndex struct {
 // who holds Queue builds or Contribute.
 func loadGrants(prior engine.PriorPhase) (grantIndex, error) {
 	idx := grantIndex{byProjectAction: map[string]map[string][]map[string]any{}}
-	roles, err := loadRecords(prior, "10-normalize/edges/has-role")
+	roles, err := loadRecords(prior, engine.DirNormalize+"/edges/has-role")
 	if err != nil {
 		return idx, err
 	}
-	projs, err := loadRecords(prior, "10-normalize/projects")
+	projs, err := loadRecords(prior, engine.DirNormalize+"/projects")
 	if err != nil {
 		return idx, err
 	}
@@ -484,7 +484,7 @@ func loadGrants(prior engine.PriorPhase) (grantIndex, error) {
 	for _, p := range projs {
 		projByID[mStr(p, "_id")] = mStr(p, "project")
 	}
-	repos, err := loadRecords(prior, "10-normalize/repos")
+	repos, err := loadRecords(prior, engine.DirNormalize+"/repos")
 	if err != nil {
 		return idx, err
 	}

@@ -57,7 +57,7 @@ type RunnerGroupFact struct {
 }
 
 func normalizeRunners(prior engine.PriorPhase, cp engine.CurrentPhase, org string, onError func(error)) error {
-	files, err := prior.IterJSON(path.Join("00-collect", "runners"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "runners"))
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func normalizeRunners(prior engine.PriorPhase, cp engine.CurrentPhase, org strin
 
 	// The per-group files carry the same enriched objects as the org bundle; they win
 	// so provenance points at the narrower file when it was collected.
-	groupFiles, err := prior.IterJSON(path.Join("00-collect", "runner-groups"))
+	groupFiles, err := prior.IterJSON(path.Join(engine.DirCollect, "runner-groups"))
 	if err != nil {
 		return err
 	}

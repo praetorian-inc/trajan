@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/praetorian-inc/trajan/internal/attack/payload"
+	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/github"
 )
 
@@ -69,6 +70,8 @@ type Session struct {
 	publicKeyPEM string
 
 	explicitToken string
+	baseURL       string
+	insecure      bool
 }
 
 type identityClient struct {
@@ -115,7 +118,7 @@ type Provocation struct {
 	At     time.Time `json:"at"`
 }
 
-func NewSession(ctx context.Context, p *Plan, planDir string, ledger *Ledger, execute bool, explicitToken string) (*Session, error) {
+func NewSession(ctx context.Context, p *Plan, planDir string, ledger *Ledger, execute bool, cfg *engine.Config) (*Session, error) {
 	s := &Session{
 		Plan:          p,
 		PlanDir:       planDir,
@@ -125,7 +128,9 @@ func NewSession(ctx context.Context, p *Plan, planDir string, ledger *Ledger, ex
 		identities:    map[string]*identityClient{},
 		aliases:       map[string]string{},
 		extraScope:    map[string]string{},
-		explicitToken: explicitToken,
+		explicitToken: cfg.Token,
+		baseURL:       cfg.BaseURL,
+		insecure:      cfg.Insecure,
 	}
 
 	def, err := s.resolveIdentity(ctx, "", cmp.Or(p.Identity, kindEnv))
@@ -190,7 +195,7 @@ func (s *Session) resolveIdentity(ctx context.Context, name, from string) (*iden
 		return ic, err
 	}
 	ic.kind = kind
-	ic.client = github.NewClient(token)
+	ic.client = github.NewClient(s.baseURL, token, s.insecure)
 	ic.login, ic.scopes = whoami(ctx, ic.client)
 	// Debug, not Info: the run's head block names every identity it resolved, and
 	// resolution happens before there is a head to sit under.
@@ -210,7 +215,7 @@ func (s *Session) adoptCredential(ctx context.Context, token string) *identityCl
 		return ic
 	}
 	ic.kind = tokenClass(token)
-	ic.client = github.NewClient(token)
+	ic.client = github.NewClient(s.baseURL, token, s.insecure)
 	ic.login, ic.scopes = whoami(ctx, ic.client)
 	slog.Info("identity adopted from harvested evidence", "identity", ic.name, "login", ic.login, "class", ic.kind)
 	return ic

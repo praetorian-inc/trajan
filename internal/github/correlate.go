@@ -2,6 +2,7 @@ package github
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -15,36 +16,36 @@ import (
 
 // Reads the normalized corpus back off disk as generic maps, ignoring the typed
 // jobs slice, so chain records mirror the on-disk shapes field-for-field.
-func correlate(prior engine.PriorPhase, cp engine.CurrentPhase, _ []Job) error {
-	jobs, err := loadRecords(prior, "10-normalize/jobs")
+func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, _ []JobFact) error {
+	jobs, err := loadRecords(prior, engine.DirNormalize+"/jobs")
 	if err != nil {
 		return fmt.Errorf("correlate: load jobs: %w", err)
 	}
-	repos, err := loadRecords(prior, "10-normalize/repos")
+	repos, err := loadRecords(prior, engine.DirNormalize+"/repos")
 	if err != nil {
 		return fmt.Errorf("correlate: load repos: %w", err)
 	}
-	rulesets, err := loadRecords(prior, "10-normalize/rulesets")
+	rulesets, err := loadRecords(prior, engine.DirNormalize+"/rulesets")
 	if err != nil {
 		return fmt.Errorf("correlate: load rulesets: %w", err)
 	}
-	envs, err := loadRecords(prior, "10-normalize/environments")
+	envs, err := loadRecords(prior, engine.DirNormalize+"/environments")
 	if err != nil {
 		return fmt.Errorf("correlate: load environments: %w", err)
 	}
-	apps, err := loadRecords(prior, "10-normalize/apps")
+	apps, err := loadRecords(prior, engine.DirNormalize+"/apps")
 	if err != nil {
 		return fmt.Errorf("correlate: load apps: %w", err)
 	}
-	principals, err := loadRecords(prior, "10-normalize/principals")
+	principals, err := loadRecords(prior, engine.DirNormalize+"/principals")
 	if err != nil {
 		return fmt.Errorf("correlate: load principals: %w", err)
 	}
-	deployKeys, err := loadRecords(prior, "10-normalize/deploy-keys")
+	deployKeys, err := loadRecords(prior, engine.DirNormalize+"/deploy-keys")
 	if err != nil {
 		return fmt.Errorf("correlate: load normalized deploy-keys: %w", err)
 	}
-	deployKeyFiles, err := prior.IterJSON("00-collect/deploy-keys")
+	deployKeyFiles, err := prior.IterJSON(engine.DirCollect + "/deploy-keys")
 	if err != nil {
 		return fmt.Errorf("correlate: load deploy-keys: %w", err)
 	}
@@ -73,6 +74,9 @@ func correlate(prior engine.PriorPhase, cp engine.CurrentPhase, _ []Job) error {
 		func() error { return cp.Write(chainPath("job-output-flow"), deriveJobOutputFlow(jobs)) },
 	}
 	for _, w := range writers {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := w(); err != nil {
 			return fmt.Errorf("correlate: write chain: %w", err)
 		}
@@ -84,8 +88,8 @@ func correlate(prior engine.PriorPhase, cp engine.CurrentPhase, _ []Job) error {
 	return nil
 }
 
-func chainPath(name string) string { return path.Join("10-normalize", "chains", name+".json") }
-func indexDir(name string) string  { return path.Join("10-normalize", "chains", "indices", name) }
+func chainPath(name string) string { return path.Join(engine.DirNormalize, "chains", name+".json") }
+func indexDir(name string) string  { return path.Join(engine.DirNormalize, "chains", "indices", name) }
 func indexPath(name, key string) string {
 	return path.Join(indexDir(name), key+".json")
 }
@@ -728,8 +732,16 @@ func cacheJobSummary(job map[string]any) map[string]any {
 
 func deriveBranchCoverage(repos, rulesets []map[string]any, branchesByRepo map[string][]string) (map[string]any, []map[string]any) {
 	var orgRulesets []map[string]any
+	orgUnavailable := false
 	for _, rs := range rulesets {
-		if mStr(rs, "scope") == "org" && !mBool(rs, "_empty") && !mBool(rs, "_unavailable") && targetsBranch(rs) {
+		if mStr(rs, "scope") != "org" {
+			continue
+		}
+		if mBool(rs, "_unavailable") {
+			orgUnavailable = true
+			continue
+		}
+		if !mBool(rs, "_empty") && targetsBranch(rs) {
 			orgRulesets = append(orgRulesets, rs)
 		}
 	}
@@ -748,7 +760,7 @@ func deriveBranchCoverage(repos, rulesets []map[string]any, branchesByRepo map[s
 		}
 
 		var repoRulesets []map[string]any
-		unavailable := false
+		unavailable := orgUnavailable
 		for _, rs := range rulesets {
 			if mStr(rs, "scope") != "repo" || mStr(rs, "repo") != repoName {
 				continue
@@ -836,7 +848,7 @@ func deriveBranchCoverage(repos, rulesets []map[string]any, branchesByRepo map[s
 				"any_bypass_present_in_active": anyApplicable(applicable, func(a map[string]any) bool {
 					return mBool(a, "any_bypass_present") && mStr(a, "enforcement") == "active"
 				}),
-				"_provenance": []any{map[string]any{"file": path.Join("10-normalize", "repos", repoName+".json")}},
+				"_provenance": []any{map[string]any{"file": path.Join(engine.DirNormalize, "repos", repoName+".json")}},
 			})
 		}
 	}
@@ -887,7 +899,7 @@ func decodeConditions(conds map[string]any) rulesetConditions {
 // A run collected before 00-collect/branches existed yields an empty map, and
 // deriveBranchCoverage falls back to the repo's default branch.
 func loadBranchInventory(prior engine.PriorPhase) (map[string][]string, error) {
-	recs, err := loadRecords(prior, "00-collect/branches")
+	recs, err := loadRecords(prior, engine.DirCollect+"/branches")
 	if err != nil {
 		return nil, err
 	}

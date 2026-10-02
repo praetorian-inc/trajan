@@ -39,11 +39,11 @@ func Run[I, O any](ctx context.Context, limit int, items []I, fn func(context.Co
 // Like Run, but a per-item failure — including a panic — goes to onError and the
 // item is dropped instead of aborting the batch. Results are in completion order.
 func RunPartial[I, O any](ctx context.Context, limit int, items []I,
-	fn func(context.Context, I) (O, error), onError func(I, error)) []O {
+	fn func(context.Context, I) (O, error), onError func(I, error)) ([]O, error) {
 	if limit < 1 {
 		limit = 1
 	}
-	g, ctx := errgroup.WithContext(ctx)
+	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(limit)
 	var mu sync.Mutex
 	out := make([]O, 0, len(items))
@@ -57,7 +57,7 @@ func RunPartial[I, O any](ctx context.Context, limit int, items []I,
 						err = fmt.Errorf("panic: %v", r)
 					}
 				}()
-				o, err = fn(ctx, it)
+				o, err = fn(gctx, it)
 			}()
 			if err != nil {
 				if onError != nil {
@@ -72,5 +72,5 @@ func RunPartial[I, O any](ctx context.Context, limit int, items []I,
 		})
 	}
 	_ = g.Wait()
-	return out
+	return out, ctx.Err()
 }

@@ -82,13 +82,15 @@ func TestPaginateSetsPerPage(t *testing.T) {
 	}
 }
 
+func noSleepClient(baseURL string) *Client {
+	c := NewClient(baseURL, "t", false, 1)
+	c.sleepFn = func(context.Context, float64) {}
+	return c
+}
+
 // 5xx responses are retried (with a backoff sleep) before finally surfacing an
 // error; a subsequent success returns cleanly.
 func TestServerErrorRetriesThenSucceeds(t *testing.T) {
-	orig := sleepFn
-	sleepFn = func(context.Context, float64) {}
-	defer func() { sleepFn = orig }()
-
 	attempt := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempt++
@@ -100,7 +102,7 @@ func TestServerErrorRetriesThenSucceeds(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, _, err := NewClient(srv.URL, "t", false, 1).Get(context.Background(), "/x", nil, false); err != nil {
+	if _, _, err := noSleepClient(srv.URL).Get(context.Background(), "/x", nil, false); err != nil {
 		t.Fatalf("Get after transient 502s: %v", err)
 	}
 	if attempt != 3 {
@@ -109,16 +111,12 @@ func TestServerErrorRetriesThenSucceeds(t *testing.T) {
 }
 
 func TestServerErrorExhaustsRetries(t *testing.T) {
-	orig := sleepFn
-	sleepFn = func(context.Context, float64) {}
-	defer func() { sleepFn = orig }()
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 
-	_, _, err := NewClient(srv.URL, "t", false, 1).Get(context.Background(), "/x", nil, false)
+	_, _, err := noSleepClient(srv.URL).Get(context.Background(), "/x", nil, false)
 	if softStatus(err) != http.StatusInternalServerError {
 		t.Errorf("err = %v, want a 500 GitLabError after exhausting retries", err)
 	}

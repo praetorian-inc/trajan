@@ -17,31 +17,31 @@ import (
 // Failing to load a join's inputs is phase-fatal. A per-tuple problem — a job whose
 // project record is missing, a malformed member map — is skipped.
 func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) error {
-	jobs, err := loadRecords(prior, "10-normalize/jobs")
+	jobs, err := loadRecords(prior, engine.DirNormalize+"/jobs")
 	if err != nil {
 		return fmt.Errorf("correlate: load jobs: %w", err)
 	}
-	projects, err := loadRecords(prior, "10-normalize/projects")
+	projects, err := loadRecords(prior, engine.DirNormalize+"/projects")
 	if err != nil {
 		return fmt.Errorf("correlate: load projects: %w", err)
 	}
-	groups, err := loadRecords(prior, "10-normalize/groups")
+	groups, err := loadRecords(prior, engine.DirNormalize+"/groups")
 	if err != nil {
 		return fmt.Errorf("correlate: load groups: %w", err)
 	}
-	instances, err := loadRecords(prior, "10-normalize/instance")
+	instances, err := loadRecords(prior, engine.DirNormalize+"/instance")
 	if err != nil {
 		return fmt.Errorf("correlate: load instance: %w", err)
 	}
-	runners, err := loadRecords(prior, "10-normalize/runners")
+	runners, err := loadRecords(prior, engine.DirNormalize+"/runners")
 	if err != nil {
 		return fmt.Errorf("correlate: load runners: %w", err)
 	}
-	agents, err := loadRecords(prior, "10-normalize/agents")
+	agents, err := loadRecords(prior, engine.DirNormalize+"/agents")
 	if err != nil {
 		return fmt.Errorf("correlate: load agents: %w", err)
 	}
-	credentials, err := loadRecords(prior, "10-normalize/credentials")
+	credentials, err := loadRecords(prior, engine.DirNormalize+"/credentials")
 	if err != nil {
 		return fmt.Errorf("correlate: load credentials: %w", err)
 	}
@@ -112,14 +112,7 @@ func firstOrEmpty(recs []map[string]any) map[string]any {
 }
 
 // A job _id is "project/path:jobname", and a project path may itself contain slashes.
-func jobProject(job map[string]any) string {
-	id := mStr(job, "_id")
-	i := strings.LastIndex(id, ":")
-	if i < 0 {
-		return ""
-	}
-	return id[:i]
-}
+func jobProject(job map[string]any) string { return mStr(job, "project") }
 
 // for_each: edges.
 //
@@ -321,7 +314,7 @@ func (c *correlator) emitVarTuples(tuples *[]map[string]any, p, v map[string]any
 		for _, mraw := range members {
 			m := entMap(mraw)
 			tup := map[string]any{
-				"_id":     fmt.Sprintf("pvr__%s__%s__%s:%s__m:%d", scopeTag, mStr(v, "key"), refKind, entStr(ref["pattern"]), entInt64(m["access_level"])),
+				"_id":     fmt.Sprintf("pvr__%s__%s__%s__%s:%s__m:%d", proj, scopeTag, mStr(v, "key"), refKind, entStr(ref["pattern"]), entInt64(m["access_level"])),
 				"var":     varParticipant(v, scopeLevel, proj),
 				"branch":  map[string]any{},
 				"tag":     map[string]any{},
@@ -461,7 +454,8 @@ func dotenvConsumer(j map[string]any) map[string]any {
 // Jobs sharing a static cache-key prefix write to the same keyspace, so one can poison
 // what another restores. An overlap needs two distinct jobs on one prefix.
 func (c *correlator) cacheKeyspace() map[string]any {
-	byPrefix := map[string][]map[string]any{}
+	type keyspace struct{ project, prefix string }
+	byPrefix := map[keyspace][]map[string]any{}
 	for _, job := range c.jobs {
 		for _, raw := range mList(job, "cache") {
 			cache := entMap(raw)
@@ -469,18 +463,25 @@ func (c *correlator) cacheKeyspace() map[string]any {
 			if prefix == "" {
 				continue
 			}
-			byPrefix[prefix] = append(byPrefix[prefix], map[string]any{"job": job, "cache": cache})
+			k := keyspace{jobProject(job), prefix}
+			byPrefix[k] = append(byPrefix[k], map[string]any{"job": job, "cache": cache})
 		}
 	}
-	prefixes := make([]string, 0, len(byPrefix))
-	for p := range byPrefix {
-		prefixes = append(prefixes, p)
+	keys := make([]keyspace, 0, len(byPrefix))
+	for k := range byPrefix {
+		keys = append(keys, k)
 	}
-	sort.Strings(prefixes)
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].project != keys[j].project {
+			return keys[i].project < keys[j].project
+		}
+		return keys[i].prefix < keys[j].prefix
+	})
 
 	overlaps := []map[string]any{}
-	for _, prefix := range prefixes {
-		participants := byPrefix[prefix]
+	for _, k := range keys {
+		prefix := k.prefix
+		participants := byPrefix[k]
 		ids := map[string]bool{}
 		for _, part := range participants {
 			ids[mStr(mMap(part, "job"), "_id")] = true
@@ -512,7 +513,8 @@ func (c *correlator) cacheKeyspace() map[string]any {
 			}
 		}
 		overlaps = append(overlaps, map[string]any{
-			"_id":                   "cache_overlap__" + prefix,
+			"_id":                   "cache_overlap__" + k.project + "__" + prefix,
+			"project":               k.project,
 			"key_prefix":            prefix,
 			"producer":              firstOrEmptyMap(producer),
 			"consumer":              firstOrEmptyMap(consumer),

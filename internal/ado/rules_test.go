@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
+
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
 
 // detect carries rule.Graph unparsed, so a typo'd target survives loading and then
@@ -19,7 +21,7 @@ func TestEveryEmbeddedRuleHasAParsableGraphTarget(t *testing.T) {
 	}
 	var bad []string
 	for _, r := range rules {
-		if _, err := ParseTarget(r.Graph); err != nil {
+		if _, err := graph.ParseTarget(GraphProvider(), r.Graph); err != nil {
 			bad = append(bad, r.ID+": "+err.Error())
 		}
 	}

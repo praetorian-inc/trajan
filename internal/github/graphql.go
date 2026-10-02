@@ -8,9 +8,6 @@ import (
 	"net/http"
 )
 
-// var not const so tests can repoint it at an httptest server, mirroring apiBase
-var graphqlEndpoint = "https://api.github.com/graphql"
-
 type gqlError struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
@@ -35,8 +32,9 @@ func (g *gqlClient) query(ctx context.Context, query string, vars map[string]any
 	if err != nil {
 		return err
 	}
+	endpoint := g.c.graphQL
 	for i := 0; i < 6; i++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, graphqlEndpoint, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
 			return err
 		}
@@ -49,10 +47,10 @@ func (g *gqlClient) query(ctx context.Context, query string, vars map[string]any
 			raw, _ := readAllClose(resp)
 			var env gqlEnvelope
 			if uerr := json.Unmarshal(raw, &env); uerr != nil {
-				return &GhError{Status: 200, URL: graphqlEndpoint, Body: "graphql: " + uerr.Error()}
+				return &GhError{Status: 200, URL: endpoint, Body: "graphql: " + uerr.Error()}
 			}
 			if len(env.Errors) > 0 {
-				return gqlErrorsToGhError(env.Errors)
+				return gqlErrorsToGhError(endpoint, env.Errors)
 			}
 			if out == nil {
 				return nil
@@ -62,25 +60,25 @@ func (g *gqlClient) query(ctx context.Context, query string, vars map[string]any
 		switch resp.StatusCode {
 		case 502, 503, 504:
 			b, _ := readAllClose(resp)
-			sleepFn(ctx, 2)
+			g.c.sleepFn(ctx, 2)
 			if i == 5 {
-				return &GhError{Status: resp.StatusCode, URL: graphqlEndpoint, Body: string(b)}
+				return &GhError{Status: resp.StatusCode, URL: endpoint, Body: string(b)}
 			}
 		default:
 			b, _ := readAllClose(resp)
 			if g.c.sleepForRateLimit(ctx, resp, b, i) {
 				continue
 			}
-			return &GhError{Status: resp.StatusCode, URL: graphqlEndpoint, Body: string(b)}
+			return &GhError{Status: resp.StatusCode, URL: endpoint, Body: string(b)}
 		}
 	}
-	return &GhError{Status: 0, URL: graphqlEndpoint, Body: "graphql: retries exhausted"}
+	return &GhError{Status: 0, URL: endpoint, Body: "graphql: retries exhausted"}
 }
 
 // Collapses the errors array into the *GhError shape collectors soft-degrade on:
 // NOT_FOUND -> 404, FORBIDDEN -> 403, else status 0, which the router treats as
 // transient and falls through to REST on.
-func gqlErrorsToGhError(errs []gqlError) *GhError {
+func gqlErrorsToGhError(endpoint string, errs []gqlError) *GhError {
 	status := 0
 	for _, e := range errs {
 		switch e.Type {
@@ -93,7 +91,7 @@ func gqlErrorsToGhError(errs []gqlError) *GhError {
 		}
 	}
 	b, _ := json.Marshal(errs)
-	return &GhError{Status: status, URL: graphqlEndpoint, Body: "graphql errors: " + string(b)}
+	return &GhError{Status: status, URL: endpoint, Body: "graphql errors: " + string(b)}
 }
 
 // A raw JSON number (null when absent), matching REST ids serialized unquoted.

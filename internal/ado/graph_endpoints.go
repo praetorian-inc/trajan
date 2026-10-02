@@ -5,11 +5,6 @@ import (
 	"strings"
 )
 
-type endpoint struct {
-	Label NodeLabel
-	Key   map[string]string
-}
-
 type resolved struct {
 	Type EdgeType
 	From endpoint
@@ -32,6 +27,9 @@ func num(m map[string]any, k string) string {
 }
 
 func complete(e endpoint) bool {
+	if e.ID != "" {
+		return true
+	}
 	if len(IdentityKey(e.Label)) == 0 {
 		return false
 	}
@@ -55,7 +53,7 @@ func (c graphCtx) principalOf(descriptor string) (endpoint, bool) {
 	if !ok {
 		return endpoint{}, false
 	}
-	return endpoint{label, map[string]string{"descriptor": descriptor}}, true
+	return endpoint{Label: label, Key: map[string]string{"descriptor": descriptor}}, true
 }
 
 func (c graphCtx) fanOut(t EdgeType, descriptors []string, to endpoint) []resolved {
@@ -81,28 +79,28 @@ func sourcePrincipals(rec map[string]any) []string {
 }
 
 func (c graphCtx) branchOf(rec map[string]any) endpoint {
-	return endpoint{Branch, map[string]string{
+	return endpoint{Label: Branch, Key: map[string]string{
 		"org": c.Org, "project": mStr(rec, "project"),
 		"repo": mStr(rec, "repo"), "name": mStr(rec, "branch"),
 	}}
 }
 
 func (c graphCtx) pipelineOf(project, id string) endpoint {
-	return endpoint{Pipeline, map[string]string{"org": c.Org, "project": project, "pipeline_id": id}}
+	return endpoint{Label: Pipeline, Key: map[string]string{"org": c.Org, "project": project, "pipeline_id": id}}
 }
 
 func (c graphCtx) groupOf(owner, id string) endpoint {
-	return endpoint{VariableGroup, map[string]string{"org": c.Org, "owner_project": owner, "group_id": id}}
+	return endpoint{Label: VariableGroup, Key: map[string]string{"org": c.Org, "owner_project": owner, "group_id": id}}
 }
 
 func (c graphCtx) policyOf(rec map[string]any) endpoint {
-	return endpoint{BranchPolicy, map[string]string{
+	return endpoint{Label: BranchPolicy, Key: map[string]string{
 		"org": c.Org, "project": mStr(rec, "project"), "config_id": num(rec, "config_id"),
 	}}
 }
 
 func (c graphCtx) jobOf(rec map[string]any) endpoint {
-	return endpoint{Job, map[string]string{
+	return endpoint{Label: Job, Key: map[string]string{
 		"org": c.Org, "project": mStr(rec, "project"),
 		"pipeline_id": num(rec, "pipeline_id"),
 		"stage":       mStr(rec, "stage"), "job": mStr(rec, "job"),
@@ -147,7 +145,7 @@ func (c graphCtx) authorizationSource(kind, id string) (endpoint, bool) {
 	case SecureFile:
 		key["project"], key["file_id"] = scope, name
 	}
-	return endpoint{label, key}, true
+	return endpoint{Label: label, Key: key}, true
 }
 
 var endpointResolvers = map[EdgeType]endpointResolver{
@@ -178,14 +176,14 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 	BuildsFrom: func(c graphCtx, rec map[string]any) []resolved {
 		project := mStr(rec, "project")
 		return one(BuildsFrom, c.pipelineOf(project, num(rec, "pipeline_id")),
-			endpoint{Repository, map[string]string{
+			endpoint{Label: Repository, Key: map[string]string{
 				"org": c.Org, "project": project, "repo": mStr(rec, "repo"),
 			}})
 	},
 
 	Extends: func(c graphCtx, rec map[string]any) []resolved {
 		return one(Extends, c.pipelineOf(mStr(rec, "project"), num(rec, "pipeline_id")),
-			endpoint{Repository, map[string]string{
+			endpoint{Label: Repository, Key: map[string]string{
 				"org": c.Org, "project": mStr(rec, "source_project"), "repo": mStr(rec, "repo"),
 			}})
 	},
@@ -193,7 +191,7 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 	DependsOn: func(c graphCtx, rec map[string]any) []resolved {
 		project, id := mStr(rec, "project"), num(rec, "pipeline_id")
 		stage := func(name string) endpoint {
-			return endpoint{Stage, map[string]string{
+			return endpoint{Label: Stage, Key: map[string]string{
 				"org": c.Org, "project": project, "pipeline_id": id, "stage": name,
 			}}
 		}
@@ -210,7 +208,7 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 		owner, gid := mStr(rec, "project"), num(rec, "group_id")
 		return one(Defines,
 			c.groupOf(owner, gid),
-			endpoint{SecretVariable, map[string]string{
+			endpoint{Label: SecretVariable, Key: map[string]string{
 				"org": c.Org, "owner_project": owner, "group_id": gid, "name": mStr(rec, "secret_name"),
 			}})
 	},
@@ -226,25 +224,25 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 
 	ReferencesPool: func(c graphCtx, rec map[string]any) []resolved {
 		return one(ReferencesPool,
-			endpoint{ProjectAgentPool, map[string]string{
+			endpoint{Label: ProjectAgentPool, Key: map[string]string{
 				"org": c.Org, "project": mStr(rec, "project"), "queue_id": num(rec, "queue_id"),
 			}},
-			endpoint{OrgAgentPool, map[string]string{"org": c.Org, "pool_id": num(rec, "org_pool_id")}})
+			endpoint{Label: OrgAgentPool, Key: map[string]string{"org": c.Org, "pool_id": num(rec, "org_pool_id")}})
 	},
 
 	LinksTo: func(c graphCtx, rec map[string]any) []resolved {
 		return one(LinksTo,
 			c.groupOf(mStr(rec, "project"), num(rec, "variable_group_id")),
-			endpoint{KeyVault, map[string]string{"name": mStr(rec, "keyvault_name")}})
+			endpoint{Label: KeyVault, Key: map[string]string{"name": mStr(rec, "keyvault_name")}})
 	},
 
 	FederatesTo: func(c graphCtx, rec map[string]any) []resolved {
 		owner, conn := mStr(rec, "project"), mStr(rec, "connection_id")
 		return one(FederatesTo,
-			endpoint{ServiceConnection, map[string]string{
+			endpoint{Label: ServiceConnection, Key: map[string]string{
 				"org": c.Org, "owner_project": owner, "connection_id": conn,
 			}},
-			endpoint{WIFCredential, map[string]string{
+			endpoint{Label: WIFCredential, Key: map[string]string{
 				"org": c.Org, "owner_project": owner, "connection_id": conn, "subject": mStr(rec, "subject"),
 			}})
 	},
@@ -252,13 +250,13 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 	Installs: func(c graphCtx, rec map[string]any) []resolved {
 		ext := mStr(rec, "extension_id")
 		return one(Installs,
-			endpoint{Extension, map[string]string{"org": c.Org, "extension_id": ext}},
-			endpoint{PipelineDecorator, map[string]string{"org": c.Org, "extension_id": ext}})
+			endpoint{Label: Extension, Key: map[string]string{"org": c.Org, "extension_id": ext}},
+			endpoint{Label: PipelineDecorator, Key: map[string]string{"org": c.Org, "extension_id": ext}})
 	},
 
 	Reads: func(c graphCtx, rec map[string]any) []resolved {
 		return one(Reads, c.jobOf(rec),
-			endpoint{SecretVariable, map[string]string{
+			endpoint{Label: SecretVariable, Key: map[string]string{
 				"org": c.Org, "owner_project": mStr(rec, "owner_project"),
 				"group_id": num(rec, "variable_group_id"), "name": mStr(rec, "secret_name"),
 			}})
@@ -270,7 +268,7 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 		case "pipeline":
 			from = c.pipelineOf(mStr(rec, "project"), num(rec, "pipeline_id"))
 		case "stage":
-			from = endpoint{Stage, map[string]string{
+			from = endpoint{Label: Stage, Key: map[string]string{
 				"org": c.Org, "project": mStr(rec, "project"),
 				"pipeline_id": num(rec, "pipeline_id"), "stage": mStr(rec, "stage"),
 			}}
@@ -285,7 +283,7 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 
 	UsesConnection: func(c graphCtx, rec map[string]any) []resolved {
 		return one(UsesConnection, c.jobOf(rec),
-			endpoint{ServiceConnection, map[string]string{
+			endpoint{Label: ServiceConnection, Key: map[string]string{
 				"org": c.Org, "owner_project": mStr(rec, "owner_project"),
 				"connection_id": mStr(rec, "service_connection_id"),
 			}})
@@ -293,7 +291,7 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 
 	RunsOn: func(c graphCtx, rec map[string]any) []resolved {
 		return one(RunsOn, c.jobOf(rec),
-			endpoint{ProjectAgentPool, map[string]string{
+			endpoint{Label: ProjectAgentPool, Key: map[string]string{
 				"org": c.Org, "project": mStr(rec, "project"),
 				"queue_id": num(rec, "project_agent_pool_id"),
 			}})
@@ -301,7 +299,7 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 
 	Targets: func(c graphCtx, rec map[string]any) []resolved {
 		return one(Targets, c.jobOf(rec),
-			endpoint{Environment, map[string]string{
+			endpoint{Label: Environment, Key: map[string]string{
 				"org": c.Org, "project": mStr(rec, "project"), "name": mStr(rec, "environment"),
 			}})
 	},
@@ -362,29 +360,29 @@ func roleResourceEndpoint(org string, label NodeLabel, resourceID string) (endpo
 		if len(parts) != 2 {
 			return endpoint{}, false
 		}
-		return endpoint{Project, map[string]string{"org": org, "project": parts[1]}}, true
+		return endpoint{Label: Project, Key: map[string]string{"org": org, "project": parts[1]}}, true
 	case Repository:
 		if len(parts) != 3 {
 			return endpoint{}, false
 		}
-		return endpoint{Repository, map[string]string{"org": org, "project": parts[1], "repo": parts[2]}}, true
+		return endpoint{Label: Repository, Key: map[string]string{"org": org, "project": parts[1], "repo": parts[2]}}, true
 	case Pipeline:
 		if len(parts) != 3 {
 			return endpoint{}, false
 		}
-		return endpoint{Pipeline, map[string]string{"org": org, "project": parts[1], "pipeline_id": parts[2]}}, true
+		return endpoint{Label: Pipeline, Key: map[string]string{"org": org, "project": parts[1], "pipeline_id": parts[2]}}, true
 	case ServiceConnection:
 		if len(parts) != 2 {
 			return endpoint{}, false
 		}
-		return endpoint{ServiceConnection, map[string]string{
+		return endpoint{Label: ServiceConnection, Key: map[string]string{
 			"org": org, "owner_project": parts[0], "connection_id": parts[1],
 		}}, true
 	case ArtifactsFeed:
 		if len(parts) != 2 {
 			return endpoint{}, false
 		}
-		return endpoint{ArtifactsFeed, map[string]string{
+		return endpoint{Label: ArtifactsFeed, Key: map[string]string{
 			"org": org, "scope": parts[0], "feed_id": parts[1],
 		}}, true
 	}

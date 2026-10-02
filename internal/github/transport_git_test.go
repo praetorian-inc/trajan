@@ -56,7 +56,7 @@ func fixtureRepo(t *testing.T) (string, *gitTransport) {
 	gitRun(t, repo, "commit", "-q", "-m", "release")
 	gitRun(t, repo, "checkout", "-q", "main")
 
-	gt, err := newGitTransport("")
+	gt, err := newGitTransport("", dotComCloneBase, t.TempDir(), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +283,7 @@ func TestGitCloneFailureIsUnservable(t *testing.T) {
 	if !gitAvailable() {
 		t.Skip("git not available")
 	}
-	gt, err := newGitTransport("")
+	gt, err := newGitTransport("", dotComCloneBase, t.TempDir(), false)
 	if err != nil {
 		t.Fatal(err)
 	}

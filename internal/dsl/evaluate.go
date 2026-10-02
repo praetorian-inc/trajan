@@ -101,7 +101,7 @@ func EvaluatePredicate(predicate string, subject any) (bool, error) {
 		pattern := ToStringValue(expected)
 		re, err := regexp.Compile(pattern)
 		if err != nil {
-			return false, nil
+			return false, fmt.Errorf("matches %q: %w", pattern, err)
 		}
 		if items, isList := asList(actual); isList {
 			for _, item := range items {
@@ -235,16 +235,20 @@ func asList(v any) ([]any, bool) {
 }
 
 // JSON numbers decode to float64 but rhs integers parse to int, so numeric
-// equality is compared in float space.
+// equality is compared in float space. Two strings never are, or "00" would equal "0".
 func valuesEqual(actual, expected any) bool {
 	if actual == nil || expected == nil {
 		return actual == nil && expected == nil
 	}
-	if a, aok := toFloat(actual); aok {
-		if e, eok := toFloat(expected); eok {
-			return a == e
+	_, actualIsString := actual.(string)
+	_, expectedIsString := expected.(string)
+	if !(actualIsString && expectedIsString) {
+		if a, aok := toFloat(actual); aok {
+			if e, eok := toFloat(expected); eok {
+				return a == e
+			}
+			return false
 		}
-		return false
 	}
 	switch e := expected.(type) {
 	case string:

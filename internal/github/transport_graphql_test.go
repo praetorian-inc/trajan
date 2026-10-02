@@ -26,11 +26,9 @@ func gqlFixtureServer(t *testing.T, responses ...string) *graphqlTransport {
 	}))
 	t.Cleanup(srv.Close)
 
-	old := graphqlEndpoint
-	graphqlEndpoint = srv.URL
-	t.Cleanup(func() { graphqlEndpoint = old })
-
-	return newGraphQLTransport(NewClient("tok"))
+	c := NewClient("", "tok", false)
+	c.graphQL = srv.URL
+	return newGraphQLTransport(c)
 }
 
 // Numbers land as float64, matching what the normalizer's json decode produces.
@@ -53,6 +51,7 @@ func TestGraphQLRepoMetaMapsToRESTShape(t *testing.T) {
         "isPrivate": true,
         "isArchived": false,
         "isFork": false,
+        "url": "https://github.com/ghektestorg/fr-02-02",
         "visibility": "PRIVATE",
         "owner": {"login": "ghektestorg"},
         "defaultBranchRef": {"name": "main"}
@@ -71,6 +70,7 @@ func TestGraphQLRepoMetaMapsToRESTShape(t *testing.T) {
 		"private":        true,
 		"archived":       false,
 		"fork":           false,
+		"html_url":       "https://github.com/ghektestorg/fr-02-02",
 		"visibility":     "private", // lowercased to match REST
 		"owner":          map[string]any{"login": "ghektestorg"},
 		"default_branch": "main",
@@ -188,9 +188,9 @@ func TestGraphQLErrorsAreUnservable(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte(`{"data":null,"errors":[{"type":"` + typ + `","message":"x"}]}`))
 		}))
-		old := graphqlEndpoint
-		graphqlEndpoint = srv.URL
-		g := newGraphQLTransport(NewClient("tok"))
+		c := NewClient("", "tok", false)
+		c.graphQL = srv.URL
+		g := newGraphQLTransport(c)
 
 		_, _, err := g.Get(context.Background(), "/repos/o/r", nil, false)
 		if !errors.Is(err, errUnservable) {
@@ -201,12 +201,11 @@ func TestGraphQLErrorsAreUnservable(t *testing.T) {
 			t.Fatalf("%s must not surface as a GhError (router would not fall through)", typ)
 		}
 		srv.Close()
-		graphqlEndpoint = old
 	}
 }
 
 func TestGraphQLUnmappedSurfaceFallsThrough(t *testing.T) {
-	g := newGraphQLTransport(NewClient("tok"))
+	g := newGraphQLTransport(NewClient("", "tok", false))
 	_, _, err := g.Get(context.Background(), "/orgs/o/rulesets", nil, false)
 	if !errors.Is(err, errUnservable) {
 		t.Fatalf("unmapped Get err = %v, want unservable", err)

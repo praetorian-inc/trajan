@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	yaml "go.yaml.in/yaml/v4"
+	yaml "go.yaml.in/yaml/v3"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
@@ -33,7 +33,7 @@ func sortedKeys(m map[string]any) []string {
 }
 
 func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer) error {
-	files, err := prior.IterJSON("00-collect/build-definition")
+	files, err := prior.IterJSON(engine.DirCollect + "/build-definition")
 	if err != nil {
 		return err
 	}
@@ -85,6 +85,7 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 				"id":             entStr(repo["id"]),
 				"name":           entStr(repo["name"]),
 				"type":           entStr(repo["type"]),
+				"url":            entStr(repo["url"]),
 				"default_branch": entStr(repo["defaultBranch"]),
 			},
 			"triggers":    entListOrEmpty(def["triggers"]),
@@ -93,21 +94,31 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 		}
 
 		settable := settableVarSet(entObj(def, "variables"))
+		repoName := azureReposName(repo)
 		facts, jobs := pipelineYAMLFacts{}, 0
-		if processType == 2 && strings.EqualFold(entStr(repo["type"]), "TfsGit") {
-			content := entryYAML(prior, project, id, repo, entStr(process["yamlFilename"]))
+		yamlStatus := 0
+		// entryYAML keys on the repository id, so a nameless Azure Repos pipeline still parses.
+		if processType == 2 && isAzureRepos(repo) {
+			var content string
+			content, yamlStatus = entryYAML(prior, project, id, repo, entStr(process["yamlFilename"]))
+			if yamlStatus != 0 {
+				timer.Errors = append(timer.Errors, fmt.Sprintf(
+					"pipeline %s/%d: entry YAML unreadable (HTTP %d); its triggers, templates and parameters are unknown",
+					project, id, yamlStatus))
+			}
 			if content != "" {
-				facts, jobs, err = parsePipelineYAML(cp, timer, project, id, content, settable)
+				facts, jobs, err = parsePipelineYAML(cp, timer, project, repoName, id, content, settable)
 				if err != nil {
 					return err
 				}
 			}
 		}
 		if jobs == 0 {
-			if err := expandFromPreview(prior, cp, timer, project, id, settable); err != nil {
+			if err := expandFromPreview(prior, cp, timer, project, repoName, id, settable); err != nil {
 				return err
 			}
 		}
+		pipe["yaml_unreadable"] = yamlStatus != 0
 		pipe["extends_template"] = strOrNull(facts.extendsTemplate)
 		pipe["extends_source"] = facts.extendsSource // resolved template source repo/ref (nil if none)
 		pipe["template_sources"] = entListOrEmpty(facts.templateSources)
@@ -129,6 +140,17 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 		}
 	}
 	return nil
+}
+
+func isAzureRepos(repo map[string]any) bool {
+	return strings.EqualFold(entStr(repo["type"]), "TfsGit")
+}
+
+func azureReposName(repo map[string]any) string {
+	if !isAzureRepos(repo) {
+		return ""
+	}
+	return entStr(repo["name"])
 }
 
 func sourceType(t int64) string {
@@ -160,8 +182,8 @@ func normalizePipelineVars(vars map[string]any) []any {
 }
 
 // Rebuilds the repoID@branch__yamlFilename stem the collector wrote, returning ""
-// when that file is absent.
-func entryYAML(prior engine.PriorPhase, project string, id int64, repo map[string]any, yamlFilename string) string {
+// when that file is absent and the collected status when it was unreadable.
+func entryYAML(prior engine.PriorPhase, project string, id int64, repo map[string]any, yamlFilename string) (string, int) {
 	repoID := entStr(repo["id"])
 	branch := stripRef(entStr(repo["defaultBranch"]))
 	if branch == "" {
@@ -169,7 +191,10 @@ func entryYAML(prior engine.PriorPhase, project string, id int64, repo map[strin
 	}
 	name := fmt.Sprintf("%s@%s__%s", repoID, branch, yamlFilename)
 	d := entLoadData(prior, engine.CollectADOPipelineYAML(project, id, name))
-	return entStr(d["content"])
+	if entBool(d["_unresolved"]) {
+		return "", int(entInt64(d["_status"]))
+	}
+	return entStr(d["content"]), 0
 }
 
 // The root-level facts a caller stamps onto the :Pipeline node. A nil trigger is
@@ -265,7 +290,7 @@ func splitRepoName(name, dfltProject string) (project, repo string) {
 // Variable groups are deliberately not merged down levels: each of Pipeline, Stage
 // and Job carries only what it declares, which is what makes the CONSUMES_GROUP level
 // recoverable later.
-func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, content string, settable map[string]bool) (pipelineYAMLFacts, int, error) {
+func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project, repo string, pipelineID int64, content string, settable map[string]bool) (pipelineYAMLFacts, int, error) {
 	var root map[string]any
 	if err := yaml.Unmarshal([]byte(content), &root); err != nil {
 		timer.Errors = append(timer.Errors, fmt.Sprintf("pipeline %s/%d: yaml parse: %v", project, pipelineID, err))
@@ -298,11 +323,11 @@ func parsePipelineYAML(cp engine.CurrentPhase, timer *engine.PhaseTimer, project
 	if root["extends"] != nil {
 		return facts, 0, nil // the jobs live in the template, recovered from the preview
 	}
-	n, err := emitStagesAndJobs(cp, timer, project, pipelineID, root, settable, engine.CollectADOBuildDefFull(project, pipelineID))
+	n, err := emitStagesAndJobs(cp, timer, project, repo, pipelineID, root, settable, engine.CollectADOBuildDefFull(project, pipelineID))
 	return facts, n, err
 }
 
-func expandFromPreview(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, settable map[string]bool) error {
+func expandFromPreview(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer, project, repo string, pipelineID int64, settable map[string]bool) error {
 	rel := engine.CollectADOPipelinePreview(project, pipelineID)
 	content := entStr(entLoadData(prior, rel)["finalYaml"])
 	if content == "" {
@@ -313,11 +338,11 @@ func expandFromPreview(prior engine.PriorPhase, cp engine.CurrentPhase, timer *e
 		timer.Errors = append(timer.Errors, fmt.Sprintf("pipeline %s/%d: preview yaml parse: %v", project, pipelineID, err))
 		return nil
 	}
-	_, err := emitStagesAndJobs(cp, timer, project, pipelineID, root, settable, rel)
+	_, err := emitStagesAndJobs(cp, timer, project, repo, pipelineID, root, settable, rel)
 	return err
 }
 
-func emitStagesAndJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, root map[string]any, settable map[string]bool, provFile string) (int, error) {
+func emitStagesAndJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project, repo string, pipelineID int64, root map[string]any, settable map[string]bool, provFile string) (int, error) {
 	pipelinePool := root["pool"]
 	if stages, ok := root["stages"].([]any); ok {
 		n := 0
@@ -330,7 +355,7 @@ func emitStagesAndJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project
 				continue
 			}
 			stageName := firstStr(sm, "stage", fmt.Sprintf("stage_%d", i))
-			c, err := emitStageJobs(cp, timer, project, pipelineID, stageName, sm, pipelinePool, settable, provFile)
+			c, err := emitStageJobs(cp, timer, project, repo, pipelineID, stageName, sm, pipelinePool, settable, provFile)
 			if err != nil {
 				return n, err
 			}
@@ -343,7 +368,7 @@ func emitStagesAndJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project
 	// stands in for the Stage/Job — otherwise one declaration is counted at every level
 	// and CONSUMES_GROUP is emitted three times.
 	delete(root, "variables")
-	return emitStageJobs(cp, timer, project, pipelineID, "__default", root, pipelinePool, settable, provFile)
+	return emitStageJobs(cp, timer, project, repo, pipelineID, "__default", root, pipelinePool, settable, provFile)
 }
 
 // A resources.pipelines entry is a pipeline-completion trigger, which is the
@@ -372,7 +397,7 @@ func emitPipelineResources(cp engine.CurrentPhase, timer *engine.PhaseTimer, pro
 	return nil
 }
 
-func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, stage string, m map[string]any, inheritedPool any, settable map[string]bool, provFile string) (int, error) {
+func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project, repo string, pipelineID int64, stage string, m map[string]any, inheritedPool any, settable map[string]bool, provFile string) (int, error) {
 	stagePool := m["pool"]
 	if stagePool == nil {
 		stagePool = inheritedPool
@@ -382,6 +407,7 @@ func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project str
 		"_id":             fmt.Sprintf("%d/%s", pipelineID, stage),
 		"kind":            "Stage",
 		"project":         project,
+		"repo":            repo,
 		"pipeline_id":     pipelineID,
 		"stage":           stage,
 		"condition":       yamlStr(m["condition"]),
@@ -396,7 +422,7 @@ func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project str
 
 	jobs, ok := m["jobs"].([]any)
 	if !ok {
-		if err := emitJob(cp, timer, project, pipelineID, stage, "__default", m, stagePool, settable, provFile); err != nil {
+		if err := emitJob(cp, timer, project, repo, pipelineID, stage, "__default", m, stagePool, settable, provFile); err != nil {
 			return 0, err
 		}
 		return 1, nil
@@ -411,7 +437,7 @@ func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project str
 			continue
 		}
 		jobName := firstStr(jm, "job", firstStr(jm, "deployment", fmt.Sprintf("job_%d", i)))
-		if err := emitJob(cp, timer, project, pipelineID, stage, jobName, jm, stagePool, settable, provFile); err != nil {
+		if err := emitJob(cp, timer, project, repo, pipelineID, stage, jobName, jm, stagePool, settable, provFile); err != nil {
 			return n, err
 		}
 		n++
@@ -419,7 +445,7 @@ func emitStageJobs(cp engine.CurrentPhase, timer *engine.PhaseTimer, project str
 	return n, nil
 }
 
-func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, pipelineID int64, stage, job string, m map[string]any, inheritedPool any, settable map[string]bool, provFile string) error {
+func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project, repo string, pipelineID int64, stage, job string, m map[string]any, inheritedPool any, settable map[string]bool, provFile string) error {
 	jobPool := m["pool"]
 	if jobPool == nil {
 		jobPool = inheritedPool
@@ -440,6 +466,7 @@ func emitJob(cp engine.CurrentPhase, timer *engine.PhaseTimer, project string, p
 		"_id":                         fmt.Sprintf("%d/%s/%s", pipelineID, stage, job),
 		"kind":                        "Job",
 		"project":                     project,
+		"repo":                        repo,
 		"pipeline_id":                 pipelineID,
 		"stage":                       stage,
 		"job":                         job,

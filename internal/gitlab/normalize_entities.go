@@ -62,6 +62,8 @@ func normalizeProject(prior engine.PriorPhase, cp engine.CurrentPhase, p project
 
 	rec := map[string]any{
 		"_id":                                  fp,
+		"id":                                   entInt64(detail["id"]),
+		"url":                                  entStr(detail["web_url"]),
 		"visibility":                           entStr(detail["visibility"]),
 		"forking_enabled":                      entStr(detail["forking_access_level"]) != "disabled",
 		"fork_pipelines_run_in_parent":         entBool(detail["ci_allow_fork_pipelines_to_run_in_parent_project"]),
@@ -363,6 +365,10 @@ func groupRoster(prior engine.PriorPhase, org string) []string {
 func normalizeGroup(prior engine.PriorPhase, cp engine.CurrentPhase, gpath string, projs []projectMeta, timer *engine.PhaseTimer) error {
 	detail := entLoadData(prior, engine.CollectGLGroup(gpath))
 	if detail == nil {
+		return nil
+	}
+	if entUnobserved(detail) {
+		itemErr(timer, "group "+gpath, fmt.Errorf("detail unobserved (HTTP %v); no group record emitted", detail["_unobserved"]))
 		return nil
 	}
 	duo := entLoadData(prior, engine.CollectGLGroupDuo(gpath))

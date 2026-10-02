@@ -22,7 +22,7 @@ type projectMeta struct {
 // correlation joins, because each stage reads back what the previous one wrote.
 // Per-item failures accumulate in timer.Errors; only IO or a contract violation
 // aborts the phase.
-func Normalize(ctx context.Context, runDir string) error {
+func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
 		return err
@@ -30,14 +30,12 @@ func Normalize(ctx context.Context, runDir string) error {
 	if err := state.CheckPhase(engine.PhaseNormalize); err != nil {
 		return err
 	}
-	for _, d := range state.StaleDirs(engine.PhaseNormalize) {
-		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
-			return err
-		}
+	if err := engine.ClearStale(runDir, state, engine.PhaseNormalize); err != nil {
+		return err
 	}
 	// Clear this phase's own output so a re-run against shrunk input leaves no
 	// orphan records for correlate to read back.
-	if err := os.RemoveAll(filepath.Join(runDir, "10-normalize")); err != nil {
+	if err := os.RemoveAll(filepath.Join(runDir, engine.DirNormalize)); err != nil {
 		return err
 	}
 	org := state.Org
@@ -48,7 +46,10 @@ func Normalize(ctx context.Context, runDir string) error {
 	timer := engine.StartPhaseTimer(engine.PhaseNormalize, "normalize")
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
-	projs := projects(prior)
+	projs, err := projects(prior)
+	if err != nil {
+		return err
+	}
 
 	normErr := normalizeEntities(ctx, prior, cp, org, projs, timer)
 	if normErr == nil {
@@ -66,7 +67,7 @@ func Normalize(ctx context.Context, runDir string) error {
 	if normErr != nil {
 		return normErr
 	}
-	engine.PhaseDone(rec)
+	engine.PhaseDone(rec, cfg.Sink())
 	return nil
 }
 
@@ -84,10 +85,10 @@ func itemErr(timer *engine.PhaseTimer, subject string, err error) {
 }
 
 // Directory iteration order is stable, so re-runs produce identical output.
-func projects(prior engine.PriorPhase) []projectMeta {
-	files, err := prior.IterJSON("00-collect/project")
+func projects(prior engine.PriorPhase) ([]projectMeta, error) {
+	files, err := prior.IterJSON(engine.DirCollect + "/project")
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	out := make([]projectMeta, 0, len(files))
 	for _, f := range files {
@@ -106,5 +107,5 @@ func projects(prior engine.PriorPhase) []projectMeta {
 			DefaultBranch: entStr(d["default_branch"]),
 		})
 	}
-	return out
+	return out, nil
 }

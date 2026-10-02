@@ -23,31 +23,31 @@ func hashKey(parts ...string) string {
 }
 
 func correlate(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) error {
-	pipelines, err := loadRecords(prior, "10-normalize/pipelines")
+	pipelines, err := loadRecords(prior, engine.DirNormalize+"/pipelines")
 	if err != nil {
 		return fmt.Errorf("correlate: load pipelines: %w", err)
 	}
-	repos, err := loadRecords(prior, "10-normalize/repos")
+	repos, err := loadRecords(prior, engine.DirNormalize+"/repos")
 	if err != nil {
 		return fmt.Errorf("correlate: load repos: %w", err)
 	}
-	projectsRec, err := loadRecords(prior, "10-normalize/projects")
+	projectsRec, err := loadRecords(prior, engine.DirNormalize+"/projects")
 	if err != nil {
 		return fmt.Errorf("correlate: load projects: %w", err)
 	}
-	policies, err := loadRecords(prior, "10-normalize/policies")
+	policies, err := loadRecords(prior, engine.DirNormalize+"/policies")
 	if err != nil {
 		return fmt.Errorf("correlate: load policies: %w", err)
 	}
-	jobs, err := loadRecords(prior, "10-normalize/jobs")
+	jobs, err := loadRecords(prior, engine.DirNormalize+"/jobs")
 	if err != nil {
 		return fmt.Errorf("correlate: load jobs: %w", err)
 	}
-	stages, err := loadRecords(prior, "10-normalize/stages")
+	stages, err := loadRecords(prior, engine.DirNormalize+"/stages")
 	if err != nil {
 		return fmt.Errorf("correlate: load stages: %w", err)
 	}
-	feeds, err := loadRecords(prior, "10-normalize/feeds")
+	feeds, err := loadRecords(prior, engine.DirNormalize+"/feeds")
 	if err != nil {
 		return fmt.Errorf("correlate: load feeds: %w", err)
 	}
@@ -219,9 +219,9 @@ func deriveEffectiveRoles(ctx context.Context, prior engine.PriorPhase, cp engin
 		dir string
 		ns  string
 	}{
-		{"00-collect/acl-repo", gitNS},
-		{"00-collect/acl-build", buildNS},
-		{"00-collect/acl-endpoint", endpointNS},
+		{engine.DirCollect + "/acl-repo", gitNS},
+		{engine.DirCollect + "/acl-build", buildNS},
+		{engine.DirCollect + "/acl-endpoint", endpointNS},
 	}
 	for _, src := range sources {
 		if err := ctx.Err(); err != nil {
@@ -318,21 +318,21 @@ func synthesizeInherited(projectRow map[string]any, projectToken string, seen ma
 
 func roleTokenIndexes(prior engine.PriorPhase, org string) (repoIdx, scIdx, projIdx, pipeIdx map[string]string, err error) {
 	repoIdx, scIdx, projIdx, pipeIdx = map[string]string{}, map[string]string{}, map[string]string{}, map[string]string{}
-	repos, err := loadRecords(prior, "10-normalize/repos")
+	repos, err := loadRecords(prior, engine.DirNormalize+"/repos")
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("correlate: load repos: %w", err)
 	}
 	for _, r := range repos {
 		repoIdx[mStr(r, "id")] = mStr(r, "_id")
 	}
-	scs, err := loadRecords(prior, "10-normalize/service-connections")
+	scs, err := loadRecords(prior, engine.DirNormalize+"/service-connections")
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("correlate: load service-connections: %w", err)
 	}
 	for _, s := range scs {
 		scIdx[mStr(s, "id")] = mStr(s, "_id")
 	}
-	projs, err := loadRecords(prior, "10-normalize/projects")
+	projs, err := loadRecords(prior, engine.DirNormalize+"/projects")
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("correlate: load projects: %w", err)
 	}
@@ -341,7 +341,7 @@ func roleTokenIndexes(prior engine.PriorPhase, org string) (repoIdx, scIdx, proj
 		projIdx[mStr(p, "id")] = mStr(p, "_id")
 		guidByName[mStr(p, "project")] = mStr(p, "id")
 	}
-	pipes, err := loadRecords(prior, "10-normalize/pipelines")
+	pipes, err := loadRecords(prior, engine.DirNormalize+"/pipelines")
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("correlate: load pipelines: %w", err)
 	}
@@ -569,7 +569,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 	type scRef struct{ id, owner string }
 	vgByProjectName := map[string]map[string]vgRef{}
 	scByProjectName := map[string]map[string]scRef{}
-	vgs, err := loadRecords(prior, "10-normalize/variable-groups")
+	vgs, err := loadRecords(prior, engine.DirNormalize+"/variable-groups")
 	if err != nil {
 		return fmt.Errorf("correlate: load variable-groups: %w", err)
 	}
@@ -585,7 +585,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 			vgByProjectName[proj][mStr(g, "name")] = vgRef{mInt64(g, "id"), mStr(g, "owner_project")}
 		}
 	}
-	scs, err := loadRecords(prior, "10-normalize/service-connections")
+	scs, err := loadRecords(prior, engine.DirNormalize+"/service-connections")
 	if err != nil {
 		return fmt.Errorf("correlate: load service-connections: %w", err)
 	}
@@ -598,7 +598,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 		}
 	}
 	envByProjectName := map[string]map[string]int64{}
-	envs, err := loadRecords(prior, "10-normalize/environments")
+	envs, err := loadRecords(prior, engine.DirNormalize+"/environments")
 	if err != nil {
 		return fmt.Errorf("correlate: load environments: %w", err)
 	}
@@ -610,7 +610,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 		envByProjectName[proj][mStr(e, "name")] = mInt64(e, "id")
 	}
 	poolByProjectName := map[string]map[string]int64{}
-	pools, err := loadRecords(prior, "10-normalize/project-agent-pools")
+	pools, err := loadRecords(prior, engine.DirNormalize+"/project-agent-pools")
 	if err != nil {
 		return fmt.Errorf("correlate: load project-agent-pools: %w", err)
 	}
@@ -635,7 +635,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 		key := fmt.Sprintf("%s__%d__%s__%s__%s__%s", adoSafe(project), pipelineID, level, adoSafe(stage), adoSafe(job), adoSafe(name))
 		return emitEdge(cp, timer, "consumes-group", key, rec)
 	}
-	pipelineRecs, err := loadRecords(prior, "10-normalize/pipelines")
+	pipelineRecs, err := loadRecords(prior, engine.DirNormalize+"/pipelines")
 	if err != nil {
 		return fmt.Errorf("correlate: load pipelines: %w", err)
 	}
@@ -648,7 +648,7 @@ func deriveJobResourceEdges(prior engine.PriorPhase, cp engine.CurrentPhase, tim
 			}
 		}
 	}
-	stageRecs, err := loadRecords(prior, "10-normalize/stages")
+	stageRecs, err := loadRecords(prior, engine.DirNormalize+"/stages")
 	if err != nil {
 		return fmt.Errorf("correlate: load stages: %w", err)
 	}
@@ -790,7 +790,7 @@ func deriveResourceAuthorization(prior engine.PriorPhase, cp engine.CurrentPhase
 		byProject[p] = append(byProject[p], mInt64(pl, "id"))
 	}
 	for dir, label := range authorizationKinds {
-		records, err := loadRecords(prior, "10-normalize/"+dir)
+		records, err := loadRecords(prior, engine.DirNormalize+"/"+dir)
 		if err != nil {
 			return fmt.Errorf("correlate: load %s: %w", dir, err)
 		}

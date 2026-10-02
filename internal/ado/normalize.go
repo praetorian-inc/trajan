@@ -15,7 +15,7 @@ type projectMeta struct {
 	Name string
 }
 
-func Normalize(ctx context.Context, runDir string) error {
+func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
 		return err
@@ -23,14 +23,12 @@ func Normalize(ctx context.Context, runDir string) error {
 	if err := state.CheckPhase(engine.PhaseNormalize); err != nil {
 		return err
 	}
-	for _, d := range state.StaleDirs(engine.PhaseNormalize) {
-		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
-			return err
-		}
+	if err := engine.ClearStale(runDir, state, engine.PhaseNormalize); err != nil {
+		return err
 	}
 	// Clear this phase's own output so a re-run against shrunk input leaves no
 	// orphan records for correlate to read back.
-	if err := os.RemoveAll(filepath.Join(runDir, "10-normalize")); err != nil {
+	if err := os.RemoveAll(filepath.Join(runDir, engine.DirNormalize)); err != nil {
 		return err
 	}
 	org := state.Org
@@ -63,7 +61,7 @@ func Normalize(ctx context.Context, runDir string) error {
 	if normErr != nil {
 		return normErr
 	}
-	engine.PhaseDone(rec)
+	engine.PhaseDone(rec, cfg.Sink())
 	return nil
 }
 

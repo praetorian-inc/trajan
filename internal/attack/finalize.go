@@ -11,7 +11,7 @@ import (
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
-	"github.com/praetorian-inc/trajan/internal/finding"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 // finalize assembles the run's finding. There is no reporting step in a plan:

@@ -55,9 +55,9 @@ func TestChainForEachKeys(t *testing.T) {
 func TestDotenvFlowTupleShape(t *testing.T) {
 	c := &correlator{
 		jobs: []map[string]any{
-			{"_id": "grp/a:build", "produces_dotenv": true, "runs_on_untrusted_ref": true},
-			{"_id": "grp/a:deploy", "consumes_dotenv": true, "image_from_variable": true},
-			{"_id": "grp/b:deploy", "consumes_dotenv": true}, // different project: no edge
+			{"_id": "grp/a:build", "project": "grp/a", "produces_dotenv": true, "runs_on_untrusted_ref": true},
+			{"_id": "grp/a:deploy", "project": "grp/a", "consumes_dotenv": true, "image_from_variable": true},
+			{"_id": "grp/b:deploy", "project": "grp/b", "consumes_dotenv": true}, // different project: no edge
 		},
 	}
 	edges := c.dotenvFlow()["edges"].([]map[string]any)
@@ -81,10 +81,10 @@ func TestDotenvFlowTupleShape(t *testing.T) {
 func TestCrossProjectArtifactEdge(t *testing.T) {
 	c := &correlator{
 		jobs: []map[string]any{
-			{"_id": "grp/consumer:gen", "cross_project_needs": []any{
+			{"_id": "grp/consumer:gen", "project": "grp/consumer", "cross_project_needs": []any{
 				map[string]any{"project": "grp/producer", "artifacts": true},
 			}},
-			{"_id": "grp/other:x", "cross_project_needs": []any{}},
+			{"_id": "grp/other:x", "project": "grp/other", "cross_project_needs": []any{}},
 		},
 		projects: map[string]map[string]any{
 			"grp/producer": {"_id": "grp/producer", "visibility": "private", "has_developer_reachable_secret": true},
@@ -104,7 +104,7 @@ func TestCrossProjectArtifactEdge(t *testing.T) {
 	}
 	// An absent producer project is marked present:false, never dropped.
 	c2 := &correlator{
-		jobs: []map[string]any{{"_id": "grp/c:g", "cross_project_needs": []any{
+		jobs: []map[string]any{{"_id": "grp/c:g", "project": "grp/c", "cross_project_needs": []any{
 			map[string]any{"project": "missing/proj"},
 		}}},
 		projects: map[string]map[string]any{},
@@ -191,7 +191,8 @@ func TestJobTokenTargets(t *testing.T) {
 	// needs:project: targets are collected; a CI_JOB_TOKEN script use with no
 	// nameable target still yields the source project so token posture is seen.
 	job := map[string]any{
-		"_id": "grp/a:build",
+		"_id":     "grp/a:build",
+		"project": "grp/a",
 		"cross_project_needs": []any{
 			map[string]any{"project": "grp/b"},
 			map[string]any{"project": "grp/c"},
@@ -209,7 +210,7 @@ func TestJobTokenTargets(t *testing.T) {
 		}
 	}
 	// No cross-project use and no needs → no edge.
-	none := map[string]any{"_id": "grp/a:x", "job_token_cross_project_use": "none"}
+	none := map[string]any{"_id": "grp/a:x", "project": "grp/a", "job_token_cross_project_use": "none"}
 	if got := jobTokenTargets(none); len(got) != 0 {
 		t.Errorf("jobTokenTargets(no-use)=%v want empty", got)
 	}
@@ -368,7 +369,7 @@ func TestProtectedVarParticipantProvenance(t *testing.T) {
 func TestJobTokenTargetParticipant(t *testing.T) {
 	c := &correlator{
 		jobs: []map[string]any{
-			{"_id": "grp/src:build", "job_token_cross_project_use": "none", "cross_project_needs": []any{map[string]any{"project": "grp/tgt"}}},
+			{"_id": "grp/src:build", "project": "grp/src", "job_token_cross_project_use": "none", "cross_project_needs": []any{map[string]any{"project": "grp/tgt"}}},
 		},
 		projects: map[string]map[string]any{
 			"grp/src": {"_id": "grp/src", "members": []any{}},
@@ -399,7 +400,7 @@ func TestJobTokenTargetParticipant(t *testing.T) {
 	}
 	// A missing target project must default these to false, never omit them.
 	c2 := &correlator{
-		jobs:     []map[string]any{{"_id": "grp/src:b", "job_token_cross_project_use": "none", "cross_project_needs": []any{map[string]any{"project": "missing/p"}}}},
+		jobs:     []map[string]any{{"_id": "grp/src:b", "project": "grp/src", "job_token_cross_project_use": "none", "cross_project_needs": []any{map[string]any{"project": "missing/p"}}}},
 		projects: map[string]map[string]any{"grp/src": {"_id": "grp/src", "members": []any{}}},
 	}
 	tgt2 := c2.jobTokenAllowlist()["edges"].([]map[string]any)[0]["target"].(map[string]any)

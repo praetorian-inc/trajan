@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
-	"github.com/praetorian-inc/trajan/internal/finding"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 type reportMeta struct {

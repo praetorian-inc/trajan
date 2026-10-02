@@ -10,17 +10,15 @@ import (
 	"strings"
 	"time"
 
-	yaml "go.yaml.in/yaml/v4"
+	yaml "go.yaml.in/yaml/v3"
 
 	detectionrules "github.com/praetorian-inc/trajan/internal/detection-rules"
 	"github.com/praetorian-inc/trajan/internal/dsl"
 	"github.com/praetorian-inc/trajan/internal/engine"
-	"github.com/praetorian-inc/trajan/internal/finding"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
-// Turns an embedded rule path into a browsable URL. Overridable at build time
-// (-ldflags) to pin a release ref; "" omits rule.url entirely.
-var RuleSourceBase = "https://github.com/praetorian-inc/trajan/blob/main"
+const RuleSourceBase = "https://github.com/praetorian-inc/trajan/blob/main"
 
 type Block struct {
 	Predicate string
@@ -234,9 +232,6 @@ func SubjectHash(subject map[string]any) string {
 	if sid == "" {
 		b, _ := json.Marshal(subject) // sorted map keys make the hash deterministic across runs
 		sid = string(b)
-		if len(sid) > 80 {
-			sid = sid[:80]
-		}
 	}
 	return hash12(sid)
 }
@@ -302,7 +297,7 @@ func buildRuleDSL(rule *Rule) any {
 }
 
 func ruleURL(ruleFile string) string {
-	if RuleSourceBase == "" || ruleFile == "" {
+	if ruleFile == "" {
 		return ""
 	}
 	return RuleSourceBase + "/internal/detection-rules/" + ruleFile

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	yaml "go.yaml.in/yaml/v4"
+	yaml "go.yaml.in/yaml/v3"
 )
 
 // Lines are 1-based inclusive.
@@ -29,11 +29,35 @@ func DecodeWorkflow(text string) (*LineNode, error) {
 	if root == nil {
 		return nil, nil
 	}
-	tree := convertNode(root)
+	tree, err := convertNode(root, &aliasBudget{left: aliasExpansionFactor * countNodes(root)})
+	if err != nil {
+		return nil, err
+	}
 	if len(originals) > 0 {
 		restoreInTree(tree, originals)
 	}
 	return tree, nil
+}
+
+// The library's aliasing guard fires only when decoding into any, not into yaml.Node.
+const aliasExpansionFactor = 10
+
+type aliasBudget struct{ left int }
+
+func (b *aliasBudget) spend() error {
+	b.left--
+	if b.left < 0 {
+		return fmt.Errorf("decode workflow yaml: document contains excessive aliasing")
+	}
+	return nil
+}
+
+func countNodes(node *yaml.Node) int {
+	n := 1
+	for _, c := range node.Content {
+		n += countNodes(c)
+	}
+	return n
 }
 
 func (n *LineNode) Field(key string) *LineNode {
@@ -97,7 +121,10 @@ func documentRoot(doc *yaml.Node) *yaml.Node {
 	return doc
 }
 
-func convertNode(node *yaml.Node) *LineNode {
+func convertNode(node *yaml.Node, budget *aliasBudget) (*LineNode, error) {
+	if err := budget.spend(); err != nil {
+		return nil, err
+	}
 	start := node.Line
 	switch node.Kind {
 	case yaml.MappingNode:
@@ -106,34 +133,43 @@ func convertNode(node *yaml.Node) *LineNode {
 		for i := 0; i+1 < len(node.Content); i += 2 {
 			keyNode, valNode := node.Content[i], node.Content[i+1]
 			key := scalarKey(keyNode)
-			child := convertNode(valNode)
+			child, err := convertNode(valNode, budget)
+			if err != nil {
+				return nil, err
+			}
 			mapping[key] = child
 			end = max(end, child.EndLine)
 		}
-		return &LineNode{Value: mapping, StartLine: start, EndLine: end}
+		return &LineNode{Value: mapping, StartLine: start, EndLine: end}, nil
 	case yaml.SequenceNode:
 		items := make([]*LineNode, 0, len(node.Content))
 		end := start
 		for _, c := range node.Content {
-			child := convertNode(c)
+			child, err := convertNode(c, budget)
+			if err != nil {
+				return nil, err
+			}
 			items = append(items, child)
 			end = max(end, child.EndLine)
 		}
-		return &LineNode{Value: items, StartLine: start, EndLine: end}
+		return &LineNode{Value: items, StartLine: start, EndLine: end}, nil
 	case yaml.AliasNode:
 		if node.Alias != nil {
-			resolved := convertNode(node.Alias)
+			resolved, err := convertNode(node.Alias, budget)
+			if err != nil {
+				return nil, err
+			}
 			resolved.StartLine = start
-			return resolved
+			return resolved, nil
 		}
-		return &LineNode{Value: nil, StartLine: start, EndLine: start}
+		return &LineNode{Value: nil, StartLine: start, EndLine: start}, nil
 	default:
 		val := scalarValue(node)
 		end := start
 		if s, ok := val.(string); ok {
 			end = start + strings.Count(s, "\n")
 		}
-		return &LineNode{Value: val, StartLine: start, EndLine: max(start, end)}
+		return &LineNode{Value: val, StartLine: start, EndLine: max(start, end)}, nil
 	}
 }
 
@@ -143,7 +179,11 @@ func scalarKey(keyNode *yaml.Node) string {
 			return s
 		}
 	}
-	return fmt.Sprintf("%v", convertNode(keyNode).Plain())
+	key, err := convertNode(keyNode, &aliasBudget{left: aliasExpansionFactor * countNodes(keyNode)})
+	if err != nil {
+		return keyNode.Value
+	}
+	return fmt.Sprintf("%v", key.Plain())
 }
 
 // Timestamps keep their raw textual form rather than leaking time.Time.

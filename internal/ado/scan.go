@@ -3,6 +3,7 @@ package ado
 import (
 	"context"
 
+	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
 )
 
@@ -38,15 +39,31 @@ var adoScanProvider = detect.Provider{
 		"can_merge_via_pr":          "edges/can-merge-via-pr",
 		"can_bypass":                "edges/can-bypass",
 	},
-	Display: adoDisplay,
-	Repo:    func(s map[string]any) string { return detect.StringField(s, "project") },
-	File:    func(s map[string]any) string { return detect.StringField(s, "yaml_path") },
+	HierarchyKinds: []string{"org", "project"},
+	Display:        adoDisplay,
+	Repo:           adoRepo,
+	File:           func(s map[string]any) string { return detect.StringField(s, "yaml_path") },
 }
 
 type ScanOptions = detect.ScanOptions
 
-func Scan(ctx context.Context, runDir string, opts ScanOptions) error {
-	return detect.Scan(ctx, runDir, adoScanProvider, opts)
+func Scan(ctx context.Context, cfg *engine.Config, runDir string, opts ScanOptions) error {
+	return detect.Scan(ctx, cfg, runDir, adoScanProvider, opts)
+}
+
+func adoRepo(s map[string]any) string {
+	project := detect.StringField(s, "project")
+	repo := detect.StringField(s, "repo")
+	switch detect.StringField(s, "kind") {
+	case "Repository":
+		repo = detect.StringField(s, "name")
+	case "Pipeline":
+		repo = azureReposName(entObj(s, "repository"))
+	}
+	if project == "" || repo == "" {
+		return ""
+	}
+	return project + "/" + repo
 }
 
 // An edge subject's _id discriminates rather than names, so it renders from its target.

@@ -126,8 +126,8 @@ func TestNamespaceFullPath(t *testing.T) {
 }
 
 // enumerateProjects drops entries missing an id or path_with_namespace (they can't
-// be collected), and a soft 403 on the list yields (nil, nil) — an empty seed set,
-// not a fatal error.
+// be collected), and a soft 403 on the list degrades the group/projects surface
+// instead of aborting a run whose group and instance rules need no project list.
 func TestEnumerateProjectsFiltersAndSoftFails(t *testing.T) {
 	cl := newFake()
 	cl.list["/groups/42/projects"] = []json.RawMessage{
@@ -136,9 +136,9 @@ func TestEnumerateProjectsFiltersAndSoftFails(t *testing.T) {
 		json.RawMessage(`{"id":2}`),                             // no path
 		json.RawMessage(`{"id":3,"path_with_namespace":"g/c"}`),
 	}
-	cp := engine.CurrentPhase{RunDir: t.TempDir()}
 
-	out, err := enumerateProjects(context.Background(), cl, cp, "g", 42)
+	timer := engine.StartPhaseTimer(engine.PhaseCollect, "collect")
+	out, err := enumerateProjects(context.Background(), cl, timer, "g", 42)
 	if err != nil {
 		t.Fatalf("enumerateProjects: %v", err)
 	}
@@ -147,28 +147,11 @@ func TestEnumerateProjectsFiltersAndSoftFails(t *testing.T) {
 	}
 
 	cl.softPath["/groups/g/projects"] = http.StatusForbidden
-	out, err = enumerateProjects(context.Background(), cl, cp, "g", 0) // gid 0 -> escaped path
-	if err != nil {
-		t.Fatalf("enumerateProjects(soft 403) = fatal error: %v", err)
+	if _, err := enumerateProjects(context.Background(), cl, timer, "g", 0); err != nil { // gid 0 -> escaped path
+		t.Errorf("enumerateProjects(soft 403) = %v, want a degraded surface rather than an error", err)
 	}
-	if out != nil {
-		t.Errorf("enumerateProjects(soft 403) = %+v, want nil (empty, non-fatal)", out)
-	}
-}
-
-func TestFilterProjects(t *testing.T) {
-	projects := []projectRef{
-		{ID: 1, FullPath: "g/One"},
-		{ID: 2, FullPath: "g/two"},
-	}
-	// Match is case-insensitive.
-	got := filterProjects(projects, "g/one")
-	if len(got) != 1 || got[0].ID != 1 {
-		t.Errorf("filterProjects(g/one) = %+v, want the g/One ref", got)
-	}
-	// No match yields an empty (nil) set, not the full list.
-	if got := filterProjects(projects, "g/absent"); got != nil {
-		t.Errorf("filterProjects(no match) = %+v, want nil", got)
+	if got := timer.Surfaces[0]; got.Name != "group/projects" || got.Status != "degraded" {
+		t.Errorf("group/projects surface = %+v, want a degraded entry", got)
 	}
 }
 

@@ -15,7 +15,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
-func Normalize(ctx context.Context, runDir string) error {
+func Normalize(ctx context.Context, cfg *engine.Config, runDir string) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
 		return err
@@ -23,10 +23,8 @@ func Normalize(ctx context.Context, runDir string) error {
 	if err := state.CheckPhase(engine.PhaseNormalize); err != nil {
 		return err
 	}
-	for _, d := range state.StaleDirs(engine.PhaseNormalize) {
-		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
-			return err
-		}
+	if err := engine.ClearStale(runDir, state, engine.PhaseNormalize); err != nil {
+		return err
 	}
 
 	org := state.Org
@@ -34,25 +32,26 @@ func Normalize(ctx context.Context, runDir string) error {
 		return fmt.Errorf("org not set in %s; run collect first", engine.RunMeta())
 	}
 
-	ui.PhaseHeader("Normalize")
+	out := cfg.Sink()
+	out.PhaseHeader("Normalize")
 
 	timer := engine.StartPhaseTimer(engine.PhaseNormalize, "normalize")
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
 
-	jobs, normErr := normalizeJobs(prior, cp, org, timer)
+	jobs, normErr := normalizeJobs(ctx, prior, cp, org, timer)
 	if normErr == nil {
-		ui.Row(ui.RowLine{Seq: 1, Total: 3, Label: "jobs", Status: "ok"})
-		normErr = normalizeEntities(runDir, func(err error) {
+		out.Row(ui.RowLine{Seq: 1, Total: 3, Label: "jobs", Status: "ok"})
+		normErr = normalizeEntities(ctx, runDir, func(err error) {
 			timer.Errors = append(timer.Errors, err.Error())
 		})
 	}
 	if normErr == nil {
-		ui.Row(ui.RowLine{Seq: 2, Total: 3, Label: "entities", Status: "ok"})
-		normErr = correlate(prior, cp, jobs)
+		out.Row(ui.RowLine{Seq: 2, Total: 3, Label: "entities", Status: "ok"})
+		normErr = correlate(ctx, prior, cp, jobs)
 	}
 	if normErr == nil {
-		ui.Row(ui.RowLine{Seq: 3, Total: 3, Label: "correlate", Status: "ok"})
+		out.Row(ui.RowLine{Seq: 3, Total: 3, Label: "correlate", Status: "ok"})
 	}
 
 	rec := timer.Stop(normErr)
@@ -63,19 +62,19 @@ func Normalize(ctx context.Context, runDir string) error {
 	if normErr != nil {
 		return normErr
 	}
-	ui.Outcome("Normalize complete", []ui.Count{
+	out.Outcome("Normalize complete", []ui.Count{
 		{Label: "jobs", N: len(jobs)},
 		{Label: "degraded", N: len(rec.Errors)},
 	}, engine.Elapsed(rec.DurationS))
 	return nil
 }
 
-func normalizeJobs(prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) ([]Job, error) {
-	workflowsRoot := filepath.Join(prior.RunDir, "00-collect", "workflows")
+func normalizeJobs(ctx context.Context, prior engine.PriorPhase, cp engine.CurrentPhase, org string, timer *engine.PhaseTimer) ([]JobFact, error) {
+	workflowsRoot := filepath.Join(prior.RunDir, engine.DirCollect, "workflows")
 	repoDirs, err := os.ReadDir(workflowsRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
-			timer.Errors = append(timer.Errors, "00-collect/workflows missing")
+			timer.Errors = append(timer.Errors, engine.DirCollect+"/workflows missing")
 			return nil, nil
 		}
 		return nil, err
@@ -86,8 +85,11 @@ func normalizeJobs(prior engine.PriorPhase, cp engine.CurrentPhase, org string, 
 	refResolutions := loadRefResolutions(prior)
 	secretScopes := loadSecretScopeIndex(prior, org)
 
-	var allJobs []Job
+	var allJobs []JobFact
 	for _, rd := range repoDirs {
+		if err := ctx.Err(); err != nil {
+			return allJobs, err
+		}
 		if !rd.IsDir() {
 			continue
 		}
@@ -101,7 +103,7 @@ func normalizeJobs(prior engine.PriorPhase, cp engine.CurrentPhase, org string, 
 		dirPath := filepath.Join(workflowsRoot, dirName)
 		for _, yamlName := range workflowYAMLNames(dirPath) {
 			timer.InputFiles++
-			relpath := filepath.ToSlash(filepath.Join("00-collect", "workflows", dirName, yamlName))
+			relpath := filepath.ToSlash(filepath.Join(engine.DirCollect, "workflows", dirName, yamlName))
 			text, err := os.ReadFile(filepath.Join(dirPath, yamlName))
 			if err != nil {
 				timer.Errors = append(timer.Errors, fmt.Sprintf("%s: %v", relpath, err))
@@ -184,7 +186,7 @@ type normalizeCtx struct {
 	secretScopes   secretScopeIndex
 }
 
-func normalizeWorkflowText(text string, nc normalizeCtx) ([]Job, error) {
+func normalizeWorkflowText(text string, nc normalizeCtx) ([]JobFact, error) {
 	root, err := DecodeWorkflow(text)
 	if err != nil {
 		return nil, err
@@ -222,7 +224,7 @@ func normalizeWorkflowText(text string, nc normalizeCtx) ([]Job, error) {
 	}
 	sort.Strings(jobIDs)
 
-	var out []Job
+	var out []JobFact
 	for _, jobID := range jobIDs {
 		rec, ok := normalizeJob(jobInputs{
 			repo:              nc.repo,
@@ -282,10 +284,10 @@ type jobInputs struct {
 	secretScopes      secretScopeIndex
 }
 
-func normalizeJob(in jobInputs) (Job, bool) {
+func normalizeJob(in jobInputs) (JobFact, bool) {
 	jobPlain, ok := in.jobNode.Plain().(map[string]any)
 	if !ok {
-		return Job{}, false
+		return JobFact{}, false
 	}
 
 	jobPermsNode := in.jobNode.Field("permissions")
@@ -500,7 +502,7 @@ func normalizeJob(in jobInputs) (Job, bool) {
 		}
 	}
 
-	return Job{
+	return JobFact{
 		ID:         engine.JobKey(in.repo, in.branch, in.isDefaultBranch, in.workflowFilename, in.jobID),
 		Provenance: &JobProvenance{WorkflowFile: in.relpath, YAMLLineRange: lineRangeOrZero(in.jobNode.Range()), Repo: in.repo},
 		Repo:       in.repo,
@@ -1203,7 +1205,7 @@ func loadRepoDefaultPerms(prior engine.PriorPhase, repo string) string {
 func loadRefResolutions(prior engine.PriorPhase) map[string]string {
 	out := map[string]string{}
 	collect := func(dir, suffix string) {
-		root := prior.Abs(filepath.Join("00-collect", dir))
+		root := prior.Abs(filepath.Join(engine.DirCollect, dir))
 		entries, err := os.ReadDir(root)
 		if err != nil {
 			return
@@ -1258,7 +1260,7 @@ func loadSecretScopeIndex(prior engine.PriorPhase, org string) secretScopeIndex 
 		privateRepos: map[string]bool{},
 	}
 
-	files, err := prior.IterJSON("00-collect/secrets")
+	files, err := prior.IterJSON(engine.DirCollect + "/secrets")
 	if err != nil {
 		return ix
 	}
@@ -1307,7 +1309,7 @@ func loadSecretScopeIndex(prior engine.PriorPhase, org string) secretScopeIndex 
 		}
 	}
 
-	repos, err := prior.IterJSON("00-collect/repos")
+	repos, err := prior.IterJSON(engine.DirCollect + "/repos")
 	if err != nil {
 		return ix
 	}

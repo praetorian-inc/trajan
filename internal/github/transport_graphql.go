@@ -101,6 +101,7 @@ func (g *graphqlTransport) repoMeta(ctx context.Context, p string) (json.RawMess
 			IsPrivate     bool   `json:"isPrivate"`
 			IsArchived    bool   `json:"isArchived"`
 			IsFork        bool   `json:"isFork"`
+			URL           string `json:"url"`
 			Visibility    string `json:"visibility"`
 			Owner         struct {
 				Login string `json:"login"`
@@ -110,7 +111,7 @@ func (g *graphqlTransport) repoMeta(ctx context.Context, p string) (json.RawMess
 			} `json:"defaultBranchRef"`
 		} `json:"repository"`
 	}
-	const q = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){databaseId name nameWithOwner isPrivate isArchived isFork visibility owner{login} defaultBranchRef{name}}}`
+	const q = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){databaseId name nameWithOwner isPrivate isArchived isFork url visibility owner{login} defaultBranchRef{name}}}`
 	if err := g.gql.query(ctx, q, map[string]any{"owner": owner, "name": repo}, &out); err != nil {
 		return nil, err
 	}
@@ -129,6 +130,7 @@ func (g *graphqlTransport) repoMeta(ctx context.Context, p string) (json.RawMess
 		"private":        jsonBool(r.IsPrivate),
 		"archived":       jsonBool(r.IsArchived),
 		"fork":           jsonBool(r.IsFork),
+		"html_url":       jsonStr(r.URL),
 		"visibility":     jsonStr(strings.ToLower(r.Visibility)),
 		"owner":          json.RawMessage(`{"login":` + jsonString(r.Owner.Login) + `}`),
 		"default_branch": defaultBranch,

@@ -273,7 +273,7 @@ jobs:
 	if err != nil {
 		t.Fatalf("normalizeWorkflowText: %v", err)
 	}
-	var build *Job
+	var build *JobFact
 	for i := range recs {
 		if recs[i].JobID == "build" {
 			build = &recs[i]

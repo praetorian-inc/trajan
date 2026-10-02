@@ -13,9 +13,6 @@ import (
 // A 5xx may have created the resource, so the one thing Mutate must not do is
 // send the request again.
 func TestMutate5xxIsAmbiguousAndSentOnce(t *testing.T) {
-	rec, restore := captureSleeps(t)
-	defer restore()
-
 	var posts int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&posts, 1)
@@ -24,6 +21,7 @@ func TestMutate5xxIsAmbiguousAndSentOnce(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
+	rec := captureSleeps(c)
 
 	_, status, err := c.Mutate(context.Background(), http.MethodPost, srv.URL+"/repos/o/r/pulls", map[string]any{"title": "t"})
 	if !errors.Is(err, ErrAmbiguous) {
@@ -43,9 +41,6 @@ func TestMutate5xxIsAmbiguousAndSentOnce(t *testing.T) {
 // The one rejection Mutate does retry is a rate limit, which provably applied
 // nothing — and the retry has to carry the same body as the first attempt.
 func TestMutateRetriesOnceAfterSecondaryLimit(t *testing.T) {
-	rec, restore := captureSleeps(t)
-	defer restore()
-
 	var bodies []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -60,6 +55,7 @@ func TestMutateRetriesOnceAfterSecondaryLimit(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
+	rec := captureSleeps(c)
 
 	raw, status, err := c.Mutate(context.Background(), http.MethodPost, srv.URL+"/repos/o/r/pulls", map[string]any{"title": "t"})
 	if err != nil {
@@ -77,9 +73,6 @@ func TestMutateRetriesOnceAfterSecondaryLimit(t *testing.T) {
 }
 
 func TestMutatePermissionDeniedIsNotRetried(t *testing.T) {
-	rec, restore := captureSleeps(t)
-	defer restore()
-
 	var n int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&n, 1)
@@ -88,6 +81,7 @@ func TestMutatePermissionDeniedIsNotRetried(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestClient(srv)
+	rec := captureSleeps(c)
 
 	_, status, err := c.Mutate(context.Background(), http.MethodPost, srv.URL+"/repos/o/r/issues", nil)
 	var ghErr *GhError

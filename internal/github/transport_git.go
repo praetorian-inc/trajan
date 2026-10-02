@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,8 +21,12 @@ import (
 // stays byte-compatible. What git cannot serve yields errUnservable, not a 404; a
 // path absent from a cloned tree yields ok=false.
 type gitTransport struct {
-	token string
-	base  string
+	token      string
+	cloneBase  string
+	cloneHost  string
+	cloneProto string
+	base       string
+	insecure   bool
 	// urlFn is overridable in tests to point at a local fixture repo.
 	urlFn func(owner, repo string) string
 
@@ -53,12 +58,15 @@ func sourceAPI(gh GitHub, s surface) string {
 	return "github_rest"
 }
 
-func newGitTransport(token string) (*gitTransport, error) {
-	base, err := os.MkdirTemp("", "trajan-git-")
+func newGitTransport(token, cloneBase, root string, insecure bool) (*gitTransport, error) {
+	base, err := os.MkdirTemp(root, "trajan-git-")
 	if err != nil {
 		return nil, err
 	}
-	g := &gitTransport{token: token, base: base, clones: map[string]*gitClone{}}
+	g := &gitTransport{token: token, cloneBase: cloneBase, base: base, insecure: insecure, clones: map[string]*gitClone{}}
+	if u, perr := url.Parse(cloneBase); perr == nil {
+		g.cloneHost, g.cloneProto = u.Host, u.Scheme
+	}
 	g.urlFn = g.githubURL
 	return g, nil
 }
@@ -79,10 +87,37 @@ func (g *gitTransport) repoURL(owner, repo string) string {
 }
 
 func (g *gitTransport) githubURL(owner, repo string) string {
-	if g.token != "" {
-		return fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", g.token, owner, repo)
-	}
-	return fmt.Sprintf("https://github.com/%s/%s.git", owner, repo)
+	return fmt.Sprintf("%s/%s/%s.git", g.cloneBase, owner, repo)
+}
+
+const (
+	gitTokenEnv = "TRAJAN_GIT_TOKEN"
+	gitHostEnv  = "TRAJAN_GIT_HOST"
+	gitProtoEnv = "TRAJAN_GIT_PROTO"
+)
+
+// Answering every get, rather than only the expected host, hands the token to whatever host git was redirected to.
+const gitCredentialHelper = `!f() {
+test "$1" = get || return 0
+h=; p=
+while IFS= read -r line; do
+case "$line" in
+host=*) h=${line#host=} ;;
+protocol=*) p=${line#protocol=} ;;
+"") break ;;
+esac
+done
+test "$h" = "$` + gitHostEnv + `" || return 0
+test "$p" = "$` + gitProtoEnv + `" || return 0
+echo username=x-access-token
+echo "password=$` + gitTokenEnv + `"
+}; f`
+
+// The empty helper first clears any helper the operator's own git config would try.
+var gitCredentialArgs = []string{
+	"-c", "credential.helper=",
+	"-c", "credential.helper=" + gitCredentialHelper,
+	"-c", "http.followRedirects=false",
 }
 
 // Shallow-clones every branch once, caching the dir or the clone error so a failed
@@ -118,7 +153,18 @@ func (g *gitTransport) ensureClone(ctx context.Context, owner, repo string) (str
 }
 
 func (g *gitTransport) run(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	argv := args
+	var env []string
+	if g.token != "" {
+		argv = append(slices.Clone(gitCredentialArgs), args...)
+		env = append(os.Environ(),
+			gitTokenEnv+"="+g.token, gitHostEnv+"="+g.cloneHost, gitProtoEnv+"="+g.cloneProto)
+	}
+	if g.insecure {
+		argv = append([]string{"-c", "http.sslVerify=false"}, argv...)
+	}
+	cmd := exec.CommandContext(ctx, "git", argv...)
+	cmd.Env = env
 	if dir != "" {
 		cmd.Dir = dir
 	}

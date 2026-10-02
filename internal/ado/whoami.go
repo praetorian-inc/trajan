@@ -1,39 +1,36 @@
 package ado
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-func WhoAmI(ctx context.Context, org, explicitPAT, explicitBearer string) error {
-	org = cmp.Or(strings.TrimSpace(org), strings.TrimSpace(os.Getenv("ORG_NAME")))
-	if org == "" {
+func WhoAmI(ctx context.Context, cfg *engine.Config, org string) error {
+	if cfg.BaseURL != "" {
+		return ErrServerUnsupported
+	}
+	if strings.TrimSpace(org) == "" {
 		return errors.New("no Azure DevOps organization: pass --org or set ORG_NAME")
 	}
 	scope, err := ParseScope(org)
 	if err != nil {
 		return err
 	}
-	cred, err := ResolveCredential(explicitPAT, explicitBearer)
+	cl, err := clientFor(cfg, scope.Org)
 	if err != nil {
 		return err
 	}
-	var cl *Client
-	if cred.Kind == engine.CredBearer {
-		cl = NewClientBearer(scope.Org, cred.Value)
-	} else {
-		cl = NewClient(scope.Org, cred.Value)
-	}
+	return runWhoAmI(ctx, cl, scope.Org)
+}
 
+func runWhoAmI(ctx context.Context, cl ADO, org string) error {
 	raw, _, err := cl.Get(ctx, "core", APIVersionPreview, "/_apis/connectionData", nil, false)
 	if err != nil {
 		return fmt.Errorf("GET /_apis/connectionData: %w", err)
@@ -107,9 +104,9 @@ func WhoAmI(ctx context.Context, org, explicitPAT, explicitBearer string) error 
 		fmt.Printf("id: %s\n", u.ID)
 	}
 	if conn.DeploymentType != "" {
-		fmt.Printf("organization: %s (%s)\n", scope.Org, conn.DeploymentType)
+		fmt.Printf("organization: %s (%s)\n", org, conn.DeploymentType)
 	} else {
-		fmt.Printf("organization: %s\n", scope.Org)
+		fmt.Printf("organization: %s\n", org)
 	}
 	if reachable["Projects"] {
 		fmt.Printf("projects: %d\n", len(projects))

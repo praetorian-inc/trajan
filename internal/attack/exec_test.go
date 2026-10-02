@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
+
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
 
 // test.mutate stands in for any primitive that changes state: it writes the
@@ -83,7 +85,7 @@ func newTestExecutor(t *testing.T, p *Plan, runDir string) *executor {
 	sess.acting.id = ic
 
 	x := &executor{
-		plan: p, sess: sess, runDir: runDir, execute: true,
+		plan: p, sess: sess, runDir: runDir, execute: true, out: ui.Discard,
 		handles: map[string]Handle{}, subjects: map[string]any{}, status: map[string]string{},
 		targets: map[string]string{}, stepIDs: map[string]bool{},
 		reads: []string{}, planned: []PlannedMutation{},

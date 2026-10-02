@@ -44,7 +44,7 @@ func linkNext(w http.ResponseWriter, r *http.Request, more bool) {
 	}
 	q := r.URL.Query()
 	q.Set("page", strconv.Itoa(max(atoiOr(q.Get("page"), 1), 1)+1))
-	w.Header().Set("Link", fmt.Sprintf(`<http://%s%s?%s>; rel="next"`, r.Host, r.URL.Path, q.Encode()))
+	w.Header().Set("Link", fmt.Sprintf(`<https://api.github.com%s?%s>; rel="next"`, r.URL.Path, q.Encode()))
 }
 
 type fakeCheckRun struct {

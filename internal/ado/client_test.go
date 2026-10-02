@@ -40,7 +40,9 @@ func withServer(t *testing.T, h http.HandlerFunc) *Client {
 	prev := hostBase["core"]
 	hostBase["core"] = srv.URL
 	t.Cleanup(func() { hostBase["core"] = prev })
-	return NewClient("org", "pat")
+	c := NewClient("org", "pat")
+	c.sleepFn = func(context.Context, float64) {}
+	return c
 }
 
 func TestAuthorizationHeader(t *testing.T) {
@@ -137,10 +139,6 @@ func TestSoftClassification(t *testing.T) {
 
 // A 429 with Retry-After must retry (not abort) and then succeed.
 func TestRetryOn429(t *testing.T) {
-	prev := sleepFn
-	sleepFn = func(context.Context, float64) {}
-	t.Cleanup(func() { sleepFn = prev })
-
 	var calls atomic.Int32
 	c := withServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if calls.Add(1) == 1 {
@@ -166,10 +164,6 @@ func TestRetryOn429(t *testing.T) {
 
 // A retried POST (after 429) must re-send the body — an io.Reader would be at EOF.
 func TestPostRetryResendsBody(t *testing.T) {
-	prev := sleepFn
-	sleepFn = func(context.Context, float64) {}
-	t.Cleanup(func() { sleepFn = prev })
-
 	var calls atomic.Int32
 	var lastBody atomic.Value
 	c := withServer(t, func(w http.ResponseWriter, r *http.Request) {

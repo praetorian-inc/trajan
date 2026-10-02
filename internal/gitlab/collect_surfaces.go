@@ -73,11 +73,13 @@ func softGet(ctx context.Context, cl GitLab, p string, params url.Values) (json.
 	raw, _, err := cl.Get(ctx, p, params, true)
 	if err != nil {
 		if isSoft(err) {
+			engine.RecordSoft(ctx, softStatus(err))
 			return nil, softStatus(err), nil
 		}
 		return nil, 0, err
 	}
 	if raw == nil {
+		engine.RecordSoft(ctx, 404)
 		return nil, 404, nil
 	}
 	return raw, 0, nil
@@ -87,6 +89,7 @@ func softList(ctx context.Context, cl GitLab, p string, params url.Values) ([]js
 	items, err := cl.Paginate(ctx, p, params)
 	if err != nil {
 		if isSoft(err) {
+			engine.RecordSoft(ctx, softStatus(err))
 			return nil, softStatus(err), nil
 		}
 		return nil, 0, err

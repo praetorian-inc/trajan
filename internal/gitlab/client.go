@@ -3,8 +3,8 @@ package gitlab
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
 const (
@@ -32,6 +34,7 @@ type Client struct {
 	baseURL string // ".../api/v4"
 	token   string
 	limiter *RateLimiter
+	sleepFn func(ctx context.Context, sec float64)
 }
 
 var _ GitLab = (*Client)(nil)
@@ -43,17 +46,32 @@ func NewClient(baseURL, token string, insecure bool, concurrency int) *Client {
 	baseURL = normalizeBaseURL(baseURL)
 	tr := http.DefaultTransport
 	if insecure {
-		tr = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		tr = engine.InsecureTransport()
 	}
-	return &Client{
-		http:    &http.Client{Timeout: DefaultTimeout, Transport: tr},
+	c := &Client{
 		baseURL: baseURL,
 		token:   token,
 		limiter: NewRateLimiter(),
+		sleepFn: sleep,
 	}
+	c.http = &http.Client{Timeout: DefaultTimeout, Transport: tr, CheckRedirect: c.checkRedirect}
+	return c
+}
+
+// net/http strips Authorization on a cross-host redirect but not PRIVATE-TOKEN.
+func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
+	u, err := url.Parse(c.baseURL)
+	if err != nil || u.Host == "" || !strings.EqualFold(u.Host, req.URL.Host) || !strings.EqualFold(u.Scheme, req.URL.Scheme) {
+		return fmt.Errorf("refusing redirect to %s://%s: not the configured GitLab instance", req.URL.Scheme, req.URL.Host)
+	}
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	return nil
 }
 
 func normalizeBaseURL(baseURL string) string {
+	baseURL = engine.StripUserinfo(baseURL)
 	if baseURL == "" {
 		return DefaultBaseURL
 	}
@@ -84,8 +102,6 @@ func (e *GitLabError) Error() string {
 }
 
 func IsNotFoundError(err error) bool { return softStatus(err) == http.StatusNotFound }
-
-var sleepFn = sleep
 
 func sleep(ctx context.Context, sec float64) {
 	if sec <= 0 {
@@ -121,10 +137,10 @@ func (c *Client) do(ctx context.Context, method, rawURL, accept string, body io.
 	return c.http.Do(req)
 }
 
-func readAllClose(resp *http.Response) []byte {
-	b, _ := io.ReadAll(resp.Body)
+func readAllClose(resp *http.Response) ([]byte, error) {
+	b, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	return b
+	return b, err
 }
 
 // GitLab's Retry-After is in seconds and its documented default is 60.
@@ -138,7 +154,7 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response) boo
 			sec = d
 		}
 	}
-	sleepFn(ctx, min(sec, 120))
+	c.sleepFn(ctx, min(sec, 120))
 	return true
 }
 
@@ -159,21 +175,27 @@ func (c *Client) request(ctx context.Context, method, u, accept string, body []b
 		c.limiter.Update(resp.Header)
 		switch {
 		case resp.StatusCode >= 200 && resp.StatusCode < 300:
-			return readAllClose(resp), resp.Header, nil
+			b, rerr := readAllClose(resp)
+			if rerr != nil {
+				return nil, nil, fmt.Errorf("%s %s: read body: %w", method, u, rerr)
+			}
+			return b, resp.Header, nil
 		case resp.StatusCode == 404 && allow404:
 			hdr := resp.Header
 			resp.Body.Close()
 			return nil, hdr, nil
 		case resp.StatusCode >= 500:
-			lastStatus, lastBody = resp.StatusCode, readAllClose(resp)
-			sleepFn(ctx, 1.5*float64(attempt+1))
+			lastStatus = resp.StatusCode
+			lastBody, _ = readAllClose(resp)
+			c.sleepFn(ctx, 1.5*float64(attempt+1))
 			continue
 		default:
 			if c.sleepForRateLimit(ctx, resp) {
-				lastStatus, lastBody = resp.StatusCode, readAllClose(resp)
+				lastStatus = resp.StatusCode
+				lastBody, _ = readAllClose(resp)
 				continue
 			}
-			b := readAllClose(resp)
+			b, _ := readAllClose(resp)
 			return nil, nil, &GitLabError{Status: resp.StatusCode, URL: u, Body: string(b)}
 		}
 	}

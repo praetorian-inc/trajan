@@ -1,25 +1,28 @@
 package detect
 
-import "github.com/praetorian-inc/trajan/internal/finding"
+import "github.com/praetorian-inc/trajan/pkg/finding"
 
 // Every func field is optional; the accessors below define the nil behavior.
 type Provider struct {
 	Name        string
 	RuleSubtree string
 	// Rule subject kind -> 10-normalize record directory (ado "pipeline" -> "pipelines").
-	SubjectDirs map[string]string
-	Display     func(kind string, subject map[string]any) string
-	Code        func(runDir string, subject map[string]any) *finding.Code
-	Repo        func(subject map[string]any) string
-	File        func(subject map[string]any) string
-	// Names the finding file. A platform whose subjects lack a natural _id (ADO's
-	// derived-edge records) supplies this so distinct subjects don't collide.
+	SubjectDirs    map[string]string
+	HierarchyKinds []string
+	Display        func(kind string, subject map[string]any) string
+	Code           func(runDir string, subject map[string]any) *finding.Code
+	Repo           func(subject map[string]any) string
+	File           func(subject map[string]any) string
+	// Names the finding file for a platform whose subjects need a key other than
+	// _id. An empty result falls back to SubjectHash.
 	SubjectKey func(subject map[string]any) string
 }
 
 func (p Provider) subjectHash(subject map[string]any) string {
 	if p.SubjectKey != nil {
-		return hash12(p.SubjectKey(subject))
+		if k := p.SubjectKey(subject); k != "" {
+			return hash12(k)
+		}
 	}
 	return SubjectHash(subject)
 }

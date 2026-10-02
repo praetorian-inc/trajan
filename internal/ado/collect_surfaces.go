@@ -80,11 +80,13 @@ func softGet(ctx context.Context, cl ADO, host, api, p string, params url.Values
 	raw, _, err := cl.Get(ctx, host, api, p, params, true)
 	if err != nil {
 		if isSoft(err) {
+			engine.RecordSoft(ctx, softStatus(err))
 			return nil, softStatus(err), nil
 		}
 		return nil, 0, err
 	}
 	if raw == nil {
+		engine.RecordSoft(ctx, 404)
 		return nil, 404, nil
 	}
 	return raw, 0, nil
@@ -94,6 +96,7 @@ func softList(ctx context.Context, cl ADO, host, api, p string, params url.Value
 	items, err := cl.Paginate(ctx, host, api, p, params)
 	if err != nil {
 		if isSoft(err) {
+			engine.RecordSoft(ctx, softStatus(err))
 			return nil, softStatus(err), nil
 		}
 		return nil, 0, err
@@ -359,7 +362,7 @@ func collectIdentities(ctx context.Context, cl ADO, cp engine.CurrentPhase, org 
 
 func aceDescriptors(prior engine.PriorPhase) ([]string, error) {
 	seen := map[string]bool{}
-	for _, dir := range []string{"00-collect/acl-repo", "00-collect/acl-build", "00-collect/acl-endpoint"} {
+	for _, dir := range []string{engine.DirCollect + "/acl-repo", engine.DirCollect + "/acl-build", engine.DirCollect + "/acl-endpoint"} {
 		files, err := prior.IterJSON(dir)
 		if err != nil {
 			return nil, fmt.Errorf("identities: load %s: %w", dir, err)

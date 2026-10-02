@@ -24,11 +24,11 @@ const (
 // CAN_BYPASS an explicit Git-namespace bypass grant. These are added alongside the
 // HAS_POLICY/BranchPolicy premises they are derived from, never in place of them.
 func deriveBranchAccessEdges(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer) error {
-	branches, err := loadRecords(prior, "10-normalize/branches")
+	branches, err := loadRecords(prior, engine.DirNormalize+"/branches")
 	if err != nil {
 		return fmt.Errorf("correlate: load branches: %w", err)
 	}
-	policies, err := loadRecords(prior, "10-normalize/policies")
+	policies, err := loadRecords(prior, engine.DirNormalize+"/policies")
 	if err != nil {
 		return fmt.Errorf("correlate: load policies: %w", err)
 	}
@@ -36,7 +36,7 @@ func deriveBranchAccessEdges(prior engine.PriorPhase, cp engine.CurrentPhase, ti
 	for _, p := range policies {
 		polByConfig[mInt64(p, "config_id")] = p
 	}
-	hasPolicy, err := loadRecords(prior, "10-normalize/edges/has-policy")
+	hasPolicy, err := loadRecords(prior, engine.DirNormalize+"/edges/has-policy")
 	if err != nil {
 		return fmt.Errorf("correlate: load has-policy: %w", err)
 	}
@@ -48,7 +48,7 @@ func deriveBranchAccessEdges(prior engine.PriorPhase, cp engine.CurrentPhase, ti
 	if err != nil {
 		return fmt.Errorf("correlate: load has-role: %w", err)
 	}
-	repos, err := loadRecords(prior, "10-normalize/repos")
+	repos, err := loadRecords(prior, engine.DirNormalize+"/repos")
 	if err != nil {
 		return fmt.Errorf("correlate: load repos: %w", err)
 	}
@@ -216,7 +216,7 @@ type repoGrantIndex struct {
 
 func loadRepoGrants(prior engine.PriorPhase) (repoGrantIndex, error) {
 	idx := repoGrantIndex{byRepoAction: map[string]map[string][]map[string]any{}}
-	roles, err := loadRecords(prior, "10-normalize/edges/has-role")
+	roles, err := loadRecords(prior, engine.DirNormalize+"/edges/has-role")
 	if err != nil {
 		return idx, err
 	}

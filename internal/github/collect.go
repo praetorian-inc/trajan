@@ -30,17 +30,18 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 		return "", err
 	}
 
-	token, err := ResolveToken(ctx, cfg.Token)
-	if err != nil {
-		return "", err
+	if cfg.Token == "" {
+		return "", fmt.Errorf("%w for GitHub", engine.ErrNoCredential)
 	}
-	gh := newRouter(NewClient(token))
-	defer closeRouter(gh)
 
 	runDir, err := engine.MintRunDir(cfg, "gh", scope.Slug)
 	if err != nil {
 		return "", err
 	}
+
+	// The clone base lives under the run dir, which MintRunDir has just created.
+	gh := newRouter(NewClient(cfg.BaseURL, cfg.Token, cfg.Insecure), cfg.ForceREST, runDir)
+	defer closeRouter(gh)
 
 	state, err := engine.LoadState(runDir)
 	if err != nil {
@@ -49,20 +50,19 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if err := state.CheckPhase(engine.PhaseCollect); err != nil {
 		return "", err
 	}
-	for _, d := range state.StaleDirs(engine.PhaseCollect) {
-		if err := os.RemoveAll(filepath.Join(runDir, d)); err != nil {
-			return "", err
-		}
+	if err := engine.ClearStale(runDir, state, engine.PhaseCollect); err != nil {
+		return "", err
 	}
 	state.Platform = "gh"
 	state.Scope = scopeString(scope)
 	state.Org = scope.Org
-	state.SetInvocation(os.Args[1:])
+	state.SetInvocation(cfg.Invocation)
 	if state.StartedAt == "" {
 		state.StartedAt = engine.IsoformatUTC(timeNow())
 	}
 
-	ui.PhaseHeader("Collect")
+	out := cfg.Sink()
+	out.PhaseHeader("Collect")
 
 	timer := engine.StartPhaseTimer(engine.PhaseCollect, "collect")
 	cp := engine.CurrentPhase{RunDir: runDir}
@@ -77,11 +77,11 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 	if collectErr != nil {
 		return runDir, collectErr
 	}
-	ui.Outcome("Collect complete", []ui.Count{
+	out.Outcome("Collect complete", []ui.Count{
 		{Label: "repos", N: rec.InputFiles},
 		{Label: "degraded", N: len(rec.Errors)},
 	}, engine.Elapsed(rec.DurationS))
-	ui.Note(runDir)
+	out.Note(runDir)
 	return runDir, nil
 }
 
@@ -91,35 +91,40 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 func runCollect(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.CurrentPhase,
 	scope Scope, timer *engine.PhaseTimer) error {
 	org := scope.Org
+	out := cfg.Sink()
 
 	orgSurfaces := []struct {
 		label string
-		fn    func() error
+		fn    func(context.Context) error
 	}{
-		{"org", func() error { return collectOrg(ctx, gh, cp, org) }},
-		{"rulesets", func() error { return collectRulesets(ctx, gh, cp, org, "") }},
-		{"secrets", func() error { return collectSecrets(ctx, gh, cp, org, "") }},
-		{"variables", func() error { return collectVariables(ctx, gh, cp, org, "") }},
-		{"runners", func() error { return collectRunners(ctx, gh, cp, org, "") }},
-		{"apps", func() error { return collectApps(ctx, gh, cp, org) }},
+		{"org", func(ctx context.Context) error { return collectOrg(ctx, gh, cp, org) }},
+		{"rulesets", func(ctx context.Context) error { return collectRulesets(ctx, gh, cp, org, "") }},
+		{"secrets", func(ctx context.Context) error { return collectSecrets(ctx, gh, cp, org, "") }},
+		{"variables", func(ctx context.Context) error { return collectVariables(ctx, gh, cp, org, "") }},
+		{"runners", func(ctx context.Context) error { return collectRunners(ctx, gh, cp, org, "") }},
+		{"apps", func(ctx context.Context) error { return collectApps(ctx, gh, cp, org) }},
 	}
 
 	// org surfaces, then the repository fan-out, then members: the row count is fixed
 	// so the seq climbs to a total the operator can see coming.
 	const total = 8
 	seq := 0
-	surface := func(label string, err error) {
+	surface := func(label string, fn func(context.Context) error) {
 		seq++
-		l := ui.RowLine{Seq: seq, Total: total, Label: label, Status: "ok"}
+		sctx, tally := engine.WithSoftTally(ctx)
+		err := fn(sctx)
+		status, reason := tally.Surface()
 		if err != nil {
-			l.Status, l.Note = "degraded", err.Error()
+			status, reason = "degraded", err.Error()
 			appendErr(timer, fmt.Sprintf("%s: %v", label, err))
 		}
-		ui.Row(l)
+		l := ui.RowLine{Seq: seq, Total: total, Label: label, Status: status, Note: reason}
+		timer.AddSurface("org/"+label, status, reason)
+		out.Row(l)
 	}
 
 	for _, s := range orgSurfaces {
-		surface(s.label, s.fn())
+		surface(s.label, s.fn)
 	}
 
 	repos, err := enumerateRepos(ctx, gh, scope)
@@ -130,14 +135,17 @@ func runCollect(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.Cu
 
 	tc := newTransitiveCache()
 
-	results := engine.RunPartial(ctx, cfg.Concurrency, repos,
+	results, err := engine.RunPartial(ctx, cfg.Concurrency, repos,
 		func(ctx context.Context, r repoTarget) (int, error) {
-			return collectOneRepo(ctx, gh, cp, r, tc, timer)
+			return collectOneRepo(ctx, cfg, gh, cp, r, tc, timer)
 		},
 		func(r repoTarget, e error) {
 			appendErr(timer, fmt.Sprintf("%s: %v", r.Repo, e))
 		},
 	)
+	if err != nil {
+		return err
+	}
 	written := 0
 	for _, n := range results {
 		written += n
@@ -149,12 +157,15 @@ func runCollect(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.Cu
 	// repo tally is the Outcome's job, not this row's.
 	seq++
 	repoRow := ui.RowLine{Seq: seq, Total: total, Label: "repositories", Status: "ok"}
+	surfaceStatus := "ok"
 	if failed := len(repos) - len(results); failed > 0 {
 		repoRow.Status, repoRow.Note = "failed", fmt.Sprintf("%d unreadable", failed)
+		surfaceStatus = "degraded"
 	}
-	ui.Row(repoRow)
+	timer.AddSurface("org/repositories", surfaceStatus, repoRow.Note)
+	out.Row(repoRow)
 
-	surface("members", collectMembers(ctx, gh, cp, org))
+	surface("members", func(ctx context.Context) error { return collectMembers(ctx, gh, cp, org) })
 	return nil
 }
 
@@ -165,18 +176,23 @@ type repoTarget struct {
 
 // Rulesets + environments must precede workflow collection because branch
 // selection consumes them; workflows are therefore collected last per repo.
-func collectOneRepo(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
+func collectOneRepo(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.CurrentPhase,
 	r repoTarget, tc *transitiveCache, timer *engine.PhaseTimer) (int, error) {
 	org, repo := r.Owner, r.Repo
 
-	softSurface(timer, repo+"/repo", func() error { return collectRepo(ctx, gh, cp, org, repo) })
-	softSurface(timer, repo+"/actions-settings", func() error { return collectActionsSettings(ctx, gh, cp, org, repo) })
-	softSurface(timer, repo+"/rulesets", func() error { return collectRulesets(ctx, gh, cp, org, repo) })
-	softSurface(timer, repo+"/environments", func() error { return collectEnvironments(ctx, gh, cp, org, repo) })
-	softSurface(timer, repo+"/secrets", func() error { return collectSecrets(ctx, gh, cp, org, repo) })
-	softSurface(timer, repo+"/variables", func() error { return collectVariables(ctx, gh, cp, org, repo) })
-	softSurface(timer, repo+"/runners", func() error { return collectRunners(ctx, gh, cp, org, repo) })
-	softSurface(timer, repo+"/deploy-keys", func() error { return collectDeployKeys(ctx, gh, cp, org, repo) })
+	sf := func(kind string, fn func(context.Context) error) {
+		softSurface(ctx, timer, "repo/"+kind, repo+"/"+kind, fn)
+	}
+
+	sf("repo", func(ctx context.Context) error { return collectRepo(ctx, gh, cp, org, repo) })
+	sf("actions-settings", func(ctx context.Context) error { return collectActionsSettings(ctx, gh, cp, org, repo) })
+	sf("rulesets", func(ctx context.Context) error { return collectRulesets(ctx, gh, cp, org, repo) })
+	sf("environments", func(ctx context.Context) error { return collectEnvironments(ctx, gh, cp, org, repo) })
+	sf("secrets", func(ctx context.Context) error { return collectSecrets(ctx, gh, cp, org, repo) })
+	sf("variables", func(ctx context.Context) error { return collectVariables(ctx, gh, cp, org, repo) })
+	sf("runners", func(ctx context.Context) error { return collectRunners(ctx, gh, cp, org, repo) })
+	sf("deploy-keys", func(ctx context.Context) error { return collectDeployKeys(ctx, gh, cp, org, repo) })
+	sf("tags", func(ctx context.Context) error { return collectTags(ctx, gh, cp, org, repo) })
 
 	def := defaultBranch(cp, repo)
 
@@ -187,11 +203,13 @@ func collectOneRepo(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	}
 	written += stats.total()
 
-	selected, selErrs := selectBranchesToScan(ctx, gh, cp, org, repo, def)
+	selected, selErrs := selectBranchesToScan(ctx, cfg, gh, cp, org, repo, def)
+	selected, slugErrs := dropAmbiguousBranchSlugs(repo, selected)
+	selErrs = append(selErrs, slugErrs...)
 	for _, e := range selErrs {
 		appendErr(timer, e)
 	}
-	softSurface(timer, repo+"/branches", func() error {
+	sf("branches", func(ctx context.Context) error {
 		return collectBranchInventory(cp, org, repo, def, selected, len(selErrs) > 0)
 	})
 	for _, b := range selected {
@@ -204,9 +222,25 @@ func collectOneRepo(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
 	return written, nil
 }
 
-func selectBranchesToScan(ctx context.Context, gh GitHub, cp engine.CurrentPhase,
+func dropAmbiguousBranchSlugs(repo string, branches []string) ([]string, []string) {
+	taken := make(map[string]string, len(branches))
+	kept := make([]string, 0, len(branches))
+	var errs []string
+	for _, b := range branches {
+		slug := engine.BranchDirSlug(b)
+		if prev, dup := taken[slug]; dup {
+			errs = append(errs, fmt.Sprintf("%s: branch %q shares the directory slug of %q and was skipped", repo, b, prev))
+			continue
+		}
+		taken[slug] = b
+		kept = append(kept, b)
+	}
+	return kept, errs
+}
+
+func selectBranchesToScan(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.CurrentPhase,
 	org, repo, def string) ([]string, []string) {
-	if defaultBranchOnly() {
+	if cfg.DefaultBranchOnly {
 		return nil, nil
 	}
 	if gitActive(gh) {
@@ -225,14 +259,13 @@ func selectBranchesToScan(ctx context.Context, gh GitHub, cp engine.CurrentPhase
 			}
 		}
 		slices.Sort(out)
+		if len(out) > maxSelectedBranches {
+			return out[:maxSelectedBranches],
+				[]string{fmt.Sprintf("branch selection truncated at %d for %s", maxSelectedBranches, repo)}
+		}
 		return out, nil
 	}
 	return selectNonDefaultBranches(ctx, gh, cp, org, repo, def)
-}
-
-func defaultBranchOnly() bool {
-	v := strings.TrimSpace(os.Getenv("TRAJAN_DEFAULT_BRANCH_ONLY"))
-	return v != "" && v != "0" && v != "false"
 }
 
 // Gates the all-branches path: false under forced-REST or when git is
@@ -282,19 +315,19 @@ func defaultBranch(cp engine.CurrentPhase, repo string) string {
 
 // Optional surfaces must never abort the run, so every failure is recorded and
 // swallowed here. Workflow collection propagates hard errors itself.
-func softSurface(timer *engine.PhaseTimer, label string, fn func() error) {
-	if err := fn(); err != nil {
+func softSurface(ctx context.Context, timer *engine.PhaseTimer, surface, label string, fn func(context.Context) error) {
+	sctx, tally := engine.WithSoftTally(ctx)
+	if err := fn(sctx); err != nil {
 		appendErr(timer, fmt.Sprintf("%s: %v", label, err))
+		timer.AddSurface(surface, "degraded", err.Error())
+		return
 	}
+	status, reason := tally.Surface()
+	timer.AddSurface(surface, status, reason)
 }
 
-// Guards the shared timer.Errors slice against concurrent RunPartial workers.
-var errMu sync.Mutex
-
 func appendErr(timer *engine.PhaseTimer, msg string) {
-	errMu.Lock()
-	timer.Errors = append(timer.Errors, msg)
-	errMu.Unlock()
+	timer.AddError(msg)
 	// Debug, not Warn: the phase closes with a degraded count and the full list lands
 	// in _meta.json, so a per-repo soft failure need not shout mid-run.
 	slog.Debug("collect surface degraded", "detail", msg)
@@ -663,27 +696,40 @@ func envSelectsBranch(e environment, branch, def string) bool {
 	return false
 }
 
+const (
+	headsNamespace = "refs/heads/"
+	tagsNamespace  = "refs/tags/"
+)
+
 func refMatch(branch, def, pat string) bool {
+	return refMatchIn(branch, def, headsNamespace, pat)
+}
+
+func refMatchIn(name, def, namespace, pat string) bool {
 	switch pat {
 	case "~ALL":
 		return true
 	case "~DEFAULT_BRANCH":
-		return branch == def
-	case branch:
+		return name == def
+	case name:
 		return true
 	}
-	if fnmatchSlash(branch, pat) {
+	if fnmatchSlash(name, pat) {
 		return true
 	}
-	if strings.HasPrefix(pat, "refs/heads/") && fnmatchSlash("refs/heads/"+branch, pat) {
+	if strings.HasPrefix(pat, namespace) && fnmatchSlash(namespace+name, pat) {
 		return true
 	}
 	return false
 }
 
 func refMatchAny(branch, def string, pats []string) bool {
+	return refMatchAnyIn(branch, def, headsNamespace, pats)
+}
+
+func refMatchAnyIn(name, def, namespace string, pats []string) bool {
 	for _, p := range pats {
-		if refMatch(branch, def, p) {
+		if refMatchIn(name, def, namespace, p) {
 			return true
 		}
 	}

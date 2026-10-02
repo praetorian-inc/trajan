@@ -119,6 +119,8 @@ type RepoLegacyBPSummary struct {
 type RepoFact struct {
 	ID            string `json:"_id"`
 	Repo          string `json:"repo"`
+	FullName      any    `json:"full_name"`
+	URL           any    `json:"url"`
 	RepoID        any    `json:"repo_id"`
 	Owner         any    `json:"owner"`
 	Visibility    any    `json:"visibility"`
@@ -139,6 +141,27 @@ type RepoFact struct {
 	// null when the run predates CODEOWNERS collection, which is not the same
 	// fact as a repository that has no CODEOWNERS file.
 	Codeowners *CodeownersFact `json:"codeowners"`
+
+	EnvironmentsUnavailable bool `json:"environments_unavailable"`
+
+	Provenance []SourceProvenance `json:"_provenance"`
+}
+
+type TagRulesetRef struct {
+	RulesetID           any  `json:"ruleset_id"`
+	Scope               any  `json:"scope"`
+	Name                any  `json:"name"`
+	Enforcement         any  `json:"enforcement"`
+	RequiresPullRequest bool `json:"requires_pull_request"`
+	AnyBypassPresent    bool `json:"any_bypass_present"`
+}
+
+type TagFact struct {
+	ID   string `json:"_id"`
+	Repo string `json:"repo"`
+	Name string `json:"name"`
+
+	ApplicableRulesets []TagRulesetRef `json:"applicable_rulesets"`
 
 	Provenance []SourceProvenance `json:"_provenance"`
 }

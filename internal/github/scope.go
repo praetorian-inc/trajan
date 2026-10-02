@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
 type ScopeKind int
@@ -90,12 +92,11 @@ func slugComponent(s string) string {
 	return b.String()
 }
 
-func WhoAmI(ctx context.Context, explicit string) error {
-	token, err := ResolveToken(ctx, explicit)
-	if err != nil {
-		return err
+func WhoAmI(ctx context.Context, cfg *engine.Config) error {
+	if cfg.Token == "" {
+		return fmt.Errorf("%w for GitHub", engine.ErrNoCredential)
 	}
-	c := NewClient(token)
+	c := NewClient(cfg.BaseURL, cfg.Token, cfg.Insecure)
 
 	if raw, hdr, err := c.Get(ctx, "/user", nil, false); err == nil {
 		var user struct {

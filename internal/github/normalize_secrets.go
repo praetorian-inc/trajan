@@ -32,7 +32,7 @@ type SecretFact struct {
 func normalizeSecrets(prior engine.PriorPhase, cp engine.CurrentPhase, org string, onError func(error)) error {
 	const bucket = "actions"
 
-	files, err := prior.IterJSON(path.Join("00-collect", "secrets"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "secrets"))
 	if err != nil {
 		return err
 	}

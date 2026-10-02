@@ -167,6 +167,7 @@ func newAttackCmd(cfg *engine.Config) *cobra.Command {
 			}
 			report, err := attack.Cleanup(cmd.Context(), attack.CleanupOptions{
 				RunDir: runDir, PlanID: planID, DryRun: cleanupDryRun, Token: cfg.Token,
+				BaseURL: cfg.BaseURL, Insecure: cfg.Insecure,
 			})
 			if report != nil {
 				printCleanup(cmd, report)

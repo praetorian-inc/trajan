@@ -43,9 +43,10 @@ type ADO interface {
 }
 
 type Client struct {
-	http  *http.Client
-	org   string
-	authz string
+	http    *http.Client
+	org     string
+	authz   string
+	sleepFn func(ctx context.Context, sec float64)
 }
 
 var _ ADO = (*Client)(nil)
@@ -60,9 +61,10 @@ func NewClientBearer(org, token string) *Client {
 
 func newClient(org, authz string) *Client {
 	return &Client{
-		http:  &http.Client{Timeout: 90 * time.Second},
-		org:   org,
-		authz: authz,
+		http:    &http.Client{Timeout: 90 * time.Second},
+		org:     org,
+		authz:   authz,
+		sleepFn: sleep,
 	}
 }
 
@@ -79,9 +81,6 @@ func (e *AdoError) Error() string {
 	}
 	return fmt.Sprintf("HTTP %d from %s: %s", e.Status, e.URL, b)
 }
-
-// overridable so tests can record sleeps without waiting
-var sleepFn = sleep
 
 func sleep(ctx context.Context, sec float64) {
 	if sec <= 0 {
@@ -144,7 +143,7 @@ func (c *Client) sleepForRateLimit(ctx context.Context, resp *http.Response) boo
 			sec = d
 		}
 	}
-	sleepFn(ctx, min(sec, 120))
+	c.sleepFn(ctx, min(sec, 120))
 	return true
 }
 
@@ -179,7 +178,7 @@ func (c *Client) request(ctx context.Context, method, u, accept string, body []b
 			return nil, hdr, nil
 		case resp.StatusCode >= 500:
 			lastStatus, lastBody = resp.StatusCode, readAllClose(resp)
-			sleepFn(ctx, 1.5*float64(attempt+1))
+			c.sleepFn(ctx, 1.5*float64(attempt+1))
 			continue
 		default:
 			if c.sleepForRateLimit(ctx, resp) {

@@ -1,8 +1,10 @@
 package github
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"path"
 	"path/filepath"
@@ -14,7 +16,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-func normalizeEntities(runDir string, onError func(error)) error {
+func normalizeEntities(ctx context.Context, runDir string, onError func(error)) error {
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
 
@@ -24,52 +26,63 @@ func normalizeEntities(runDir string, onError func(error)) error {
 	}
 	org := st.Org
 
-	if err := normalizeOrg(prior, cp, org); err != nil {
-		return fmt.Errorf("normalize org: %w", err)
+	var rulesets []RulesetFact
+	stages := []struct {
+		name string
+		fn   func() error
+	}{
+		{"org", func() error { return normalizeOrg(prior, cp, org, onError) }},
+		{"repos", func() error { return normalizeRepos(prior, cp, org) }},
+		{"environments", func() error { return normalizeEnvironments(prior, cp, org) }},
+		{"rulesets", func() error {
+			var e error
+			rulesets, e = normalizeRulesets(prior, cp, org)
+			return e
+		}},
+		{"tags", func() error { return normalizeTags(prior, cp, rulesets) }},
+		{"apps", func() error { return normalizeApps(prior, cp, org) }},
+		{"principals", func() error { return normalizePrincipals(prior, cp, org, onError) }},
+		{"runners", func() error { return normalizeRunners(prior, cp, org, onError) }},
+		{"secrets", func() error { return normalizeSecrets(prior, cp, org, onError) }},
+		{"deploy keys", func() error { return normalizeDeployKeys(prior, cp, org, onError) }},
 	}
-	if err := normalizeRepos(prior, cp, org); err != nil {
-		return fmt.Errorf("normalize repos: %w", err)
-	}
-	if err := normalizeEnvironments(prior, cp, org); err != nil {
-		return fmt.Errorf("normalize environments: %w", err)
-	}
-	if err := normalizeRulesets(prior, cp, org); err != nil {
-		return fmt.Errorf("normalize rulesets: %w", err)
-	}
-	if err := normalizeApps(prior, cp, org); err != nil {
-		return fmt.Errorf("normalize apps: %w", err)
-	}
-	if err := normalizePrincipals(prior, cp, org, onError); err != nil {
-		return fmt.Errorf("normalize principals: %w", err)
-	}
-	if err := normalizeRunners(prior, cp, org, onError); err != nil {
-		return fmt.Errorf("normalize runners: %w", err)
-	}
-	if err := normalizeSecrets(prior, cp, org, onError); err != nil {
-		return fmt.Errorf("normalize secrets: %w", err)
-	}
-	if err := normalizeDeployKeys(prior, cp, org, onError); err != nil {
-		return fmt.Errorf("normalize deploy keys: %w", err)
+	for _, stage := range stages {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := stage.fn(); err != nil {
+			return fmt.Errorf("normalize %s: %w", stage.name, err)
+		}
 	}
 	return nil
 }
 
-func normOrgPath(org string) string   { return path.Join("10-normalize", "org", org+".json") }
-func normRepoPath(repo string) string { return path.Join("10-normalize", "repos", repo+".json") }
+func normOrgPath(org string) string {
+	return path.Join(engine.DirNormalize, "org", engine.GHKey(org)+".json")
+}
+func normRepoPath(repo string) string {
+	return path.Join(engine.DirNormalize, "repos", engine.GHKey(repo)+".json")
+}
 
 func normEnvPath(repo, env string) string {
-	return path.Join("10-normalize", "environments", repo+"__"+env+".json")
+	return path.Join(engine.DirNormalize, "environments", engine.GHKey(repo)+"__"+engine.GHKey(env)+".json")
+}
+
+func normTagPath(repo, tag string) string {
+	return path.Join(engine.DirNormalize, "tags", engine.GHKey(repo)+"__"+engine.GHKey(engine.BranchSlug(tag))+".json")
 }
 
 func normRulesetPath(scopeKey string, rulesetID int64) string {
-	return path.Join("10-normalize", "rulesets", fmt.Sprintf("%s__%d.json", scopeKey, rulesetID))
+	return path.Join(engine.DirNormalize, "rulesets", fmt.Sprintf("%s__%d.json", engine.GHKey(scopeKey), rulesetID))
 }
 
 func normRulesetSentinelPath(scopeKey, suffix string) string {
-	return path.Join("10-normalize", "rulesets", scopeKey+"__"+suffix+".json")
+	return path.Join(engine.DirNormalize, "rulesets", engine.GHKey(scopeKey)+"__"+suffix+".json")
 }
 
-func normAppPath(slug string) string { return path.Join("10-normalize", "apps", slug+".json") }
+func normAppPath(slug string) string {
+	return path.Join(engine.DirNormalize, "apps", engine.GHKey(slug)+".json")
+}
 
 // "write" on one of these, or any "admin", makes an installation admin-class for the
 // org aggregate.
@@ -79,7 +92,7 @@ var orgAdminClassAppPerms = map[string]bool{
 	"self_hosted_runners": true, "organization_self_hosted_runners": true,
 }
 
-func normalizeOrg(prior engine.PriorPhase, cp engine.CurrentPhase, org string) error {
+func normalizeOrg(prior engine.PriorPhase, cp engine.CurrentPhase, org string, onError func(error)) error {
 	if org == "" {
 		return nil
 	}
@@ -105,6 +118,22 @@ func normalizeOrg(prior engine.PriorPhase, cp engine.CurrentPhase, org string) e
 	groups := orgRunnerGroups(entListOf(runnersPayload, "runner_groups"))
 	secrets := entListOf(secretsPayload, "actions_secrets")
 	variables := entListOf(variablesPayload, "variables")
+	for _, u := range []struct {
+		surface string
+		payload map[string]any
+	}{
+		{"variables", variablesPayload}, {"secrets", secretsPayload},
+		{"members", membersPayload}, {"runners", runnersPayload},
+	} {
+		if entTruthy(u.payload["_unavailable"]) {
+			onError(fmt.Errorf("org %s: %s unreadable (HTTP %d), the org record understates them",
+				org, u.surface, entInt(u.payload["_unavailable_status"])))
+		}
+		for _, b := range slices.Sorted(maps.Keys(entObj(u.payload, "_unavailable_buckets"))) {
+			onError(fmt.Errorf("org %s: %s/%s unreadable (HTTP %d), the org record understates them",
+				org, u.surface, b, entInt(entObj(u.payload, "_unavailable_buckets")[b])))
+		}
+	}
 
 	hookURLs := make([]any, 0, len(hooks))
 	hooksActive := 0
@@ -388,7 +417,7 @@ func isPatLikeVariable(u string) bool {
 }
 
 func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string) error {
-	files, err := prior.IterJSON(path.Join("00-collect", "repos"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "repos"))
 	if err != nil {
 		return err
 	}
@@ -404,6 +433,7 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 		repoInfo := entObj(repoData, "repo")
 		workflowPerms := entObj(settings, "workflow_permissions")
 		actionsPerms := entObj(settings, "permissions")
+		envsUnavailable := entTruthy(entLoadData(prior, engine.CollectEnvironmentsUnavailable(repoName))["_unavailable"])
 
 		var legacyBP *RepoLegacyBPSummary
 		bpPresent := repoData["default_branch_protection"] != nil
@@ -414,6 +444,8 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 		rec := RepoFact{
 			ID:            repoName,
 			Repo:          repoName,
+			FullName:      repoInfo["full_name"],
+			URL:           repoInfo["html_url"],
 			RepoID:        repoInfo["id"],
 			Owner:         entObj(repoInfo, "owner")["login"],
 			Visibility:    repoInfo["visibility"],
@@ -432,6 +464,8 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string)
 			DefaultBranchProtectionSummary: legacyBP,
 
 			Codeowners: parseCodeowners(repoData["codeowners"]),
+
+			EnvironmentsUnavailable: envsUnavailable,
 
 			Provenance: []SourceProvenance{
 				{File: engine.CollectRepo(repoName)},
@@ -463,7 +497,7 @@ func summarizeLegacyBP(bp map[string]any) *RepoLegacyBPSummary {
 }
 
 func normalizeEnvironments(prior engine.PriorPhase, cp engine.CurrentPhase, org string) error {
-	files, err := prior.IterJSON(path.Join("00-collect", "environments"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "environments"))
 	if err != nil {
 		return err
 	}
@@ -569,11 +603,12 @@ func entEnvBranchPolicy(base, branchPolicies map[string]any) EnvBranchPolicy {
 	return bp
 }
 
-func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org string) error {
-	files, err := prior.IterJSON(path.Join("00-collect", "rulesets"))
+func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org string) ([]RulesetFact, error) {
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "rulesets"))
 	if err != nil {
-		return err
+		return nil, err
 	}
+	var facts []RulesetFact
 	for _, f := range files {
 		data := entDataOf(f.Data)
 		scope := entStr(data["scope"])
@@ -583,24 +618,30 @@ func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org stri
 			scopeKey = entStr(owner)
 		}
 
-		if entTruthy(data["_unavailable"]) {
-			rec := RulesetSentinel{
-				ID:          scopeKey + "__unavailable",
-				Scope:       "repo",
-				Owner:       nil,
-				Repo:        scopeKey,
-				Unavailable: true,
-				Provenance:  []SourceProvenance{{File: engine.CollectRulesetsRepo(scopeKey)}},
-			}
-			if err := cp.Write(normRulesetSentinelPath(scopeKey, "unavailable"), rec); err != nil {
-				return err
-			}
-			continue
-		}
-
 		sourceFile := engine.CollectRulesetsRepo(scopeKey)
 		if scope == "org" {
 			sourceFile = engine.CollectRulesetsOrg(scopeKey)
+		}
+
+		// Falls through, not continues: the rulesets whose detail did resolve still land.
+		listDown := entTruthy(data["_unavailable"])
+		if listDown || len(entObj(data, "_detail_unavailable")) > 0 {
+			rec := RulesetSentinel{
+				ID:          scopeKey + "__unavailable",
+				Scope:       scope,
+				Owner:       nil,
+				Unavailable: true,
+				Provenance:  []SourceProvenance{{File: sourceFile}},
+			}
+			if scope == "repo" {
+				rec.Repo = scopeKey
+			}
+			if err := cp.Write(normRulesetSentinelPath(scopeKey, "unavailable"), rec); err != nil {
+				return nil, err
+			}
+			if listDown {
+				continue
+			}
 		}
 
 		rulesets := entList(data["rulesets"])
@@ -616,7 +657,7 @@ func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org stri
 				rec.Repo = scopeKey
 			}
 			if err := cp.Write(normRulesetSentinelPath(scopeKey, "none"), rec); err != nil {
-				return err
+				return nil, err
 			}
 			continue
 		}
@@ -625,11 +666,76 @@ func normalizeRulesets(prior engine.PriorPhase, cp engine.CurrentPhase, org stri
 			rsm := entMap(rs)
 			rec := normalizeOneRuleset(scopeKey, scope, owner, rsm, sourceFile)
 			if err := cp.Write(normRulesetPath(scopeKey, entInt64(rsm["id"])), rec); err != nil {
+				return nil, err
+			}
+			facts = append(facts, rec)
+		}
+	}
+	return facts, nil
+}
+
+func normalizeTags(prior engine.PriorPhase, cp engine.CurrentPhase, rulesets []RulesetFact) error {
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "tags"))
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		repo := strings.TrimSuffix(path.Base(filepath.ToSlash(f.Rel)), ".json")
+		data := entDataOf(f.Data)
+		repoID := entInt64(entObj(entLoadData(prior, engine.CollectRepo(repo)), "repo")["id"])
+
+		for _, t := range entList(data["tags"]) {
+			name := entStr(entMap(t)["name"])
+			if name == "" {
+				continue
+			}
+			rec := TagFact{
+				ID:                 repo + "__" + name,
+				Repo:               repo,
+				Name:               name,
+				ApplicableRulesets: tagRulesets(rulesets, repo, repoID, name),
+				Provenance:         []SourceProvenance{{File: engine.CollectTags(repo)}},
+			}
+			if err := cp.Write(normTagPath(repo, name), rec); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func tagRulesets(rulesets []RulesetFact, repo string, repoID int64, tag string) []TagRulesetRef {
+	out := []TagRulesetRef{}
+	for _, rs := range rulesets {
+		if entStr(rs.Target) != "tag" {
+			continue
+		}
+		scope := entStr(rs.Scope)
+		if scope == "repo" && entStr(rs.Repo) != repo {
+			continue
+		}
+		refConds := entObj(rs.Conditions, "ref_name")
+		includes := asStrings(refConds["include"])
+		excludes := asStrings(refConds["exclude"])
+		if !refMatchAnyIn(tag, "", tagsNamespace, includes) {
+			continue
+		}
+		if len(excludes) > 0 && refMatchAnyIn(tag, "", tagsNamespace, excludes) {
+			continue
+		}
+		if scope == "org" && !orgRepoGate(decodeConditions(rs.Conditions), repo, repoID, nil) {
+			continue
+		}
+		out = append(out, TagRulesetRef{
+			RulesetID:           rs.RulesetID,
+			Scope:               rs.Scope,
+			Name:                rs.Name,
+			Enforcement:         rs.Enforcement,
+			RequiresPullRequest: rs.RequiresPullRequest,
+			AnyBypassPresent:    rs.Bypass.AnyBypassPresent,
+		})
+	}
+	return out
 }
 
 func normalizeOneRuleset(scopeKey, scope string, owner any, rs map[string]any, sourceFile string) RulesetFact {
@@ -733,7 +839,7 @@ var appBroadAdminPerms = map[string]bool{
 }
 
 func normalizeApps(prior engine.PriorPhase, cp engine.CurrentPhase, org string) error {
-	files, err := prior.IterJSON(path.Join("00-collect", "apps"))
+	files, err := prior.IterJSON(path.Join(engine.DirCollect, "apps"))
 	if err != nil {
 		return err
 	}

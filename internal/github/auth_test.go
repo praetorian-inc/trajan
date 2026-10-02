@@ -78,7 +78,7 @@ func TestResolveTokenMissingBothNoGhReturnsErrNoToken(t *testing.T) {
 }
 
 func TestAuthTransportSetsHeaders(t *testing.T) {
-	tr := &authTransport{token: "abc", base: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	tr := &authTransport{token: "abc", allow: func(string, string) bool { return true }, base: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if got := r.Header.Get("Authorization"); got != "Bearer abc" {
 			t.Errorf("Authorization = %q", got)
 		}
@@ -100,7 +100,7 @@ func TestAuthTransportSetsHeaders(t *testing.T) {
 }
 
 func TestAuthTransportPreservesAcceptOverride(t *testing.T) {
-	tr := &authTransport{token: "abc", base: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	tr := &authTransport{token: "abc", allow: func(string, string) bool { return true }, base: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if got := r.Header.Get("Accept"); got != "application/vnd.github.raw" {
 			t.Errorf("Accept override not preserved, got %q", got)
 		}

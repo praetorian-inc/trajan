@@ -5,5 +5,5 @@ package detectionrules
 
 import "embed"
 
-//go:embed all:github all:gitlab all:ado all:jenkins
+//go:embed all:github all:gitlab all:ado
 var FS embed.FS

@@ -15,7 +15,7 @@ import (
 // is allowed to touch — before the first request goes out, so an operator who
 // mistyped a plan or a scope learns it from this block and not from the audit
 // trail on the customer's system.
-func head(p *Plan, s *Session, mode string) {
+func head(out ui.Sink, p *Plan, s *Session, mode string) {
 	repos := "repositories"
 	if len(p.Scope) == 1 {
 		repos = "repository"
@@ -32,7 +32,7 @@ func head(p *Plan, s *Session, mode string) {
 		fields = append(fields, [2]string{"identity", strings.Join(present(ic.login, ic.kind, ic.from), ", ")})
 	}
 	fields = append(fields, [2]string{"scope", strings.Join(p.Scope, ", ")})
-	ui.Head(cmp.Or(p.Title, p.ID), fields...)
+	out.Head(cmp.Or(p.Title, p.ID), fields...)
 }
 
 func present(vs ...string) []string {

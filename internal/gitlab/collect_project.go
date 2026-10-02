@@ -14,10 +14,12 @@ func collectOneProject(ctx context.Context, cl GitLab, cp engine.CurrentPhase, p
 	fp, pid := pt.FullPath, pt.ID
 	idRef := fmt.Sprintf("%d", pid)
 	base := "/projects/" + idRef
-	lbl := func(s string) string { return fp + "/" + s }
+	sf := func(kind string, fn func(context.Context) error) {
+		softSurface(ctx, timer, "project/"+kind, fp+"/"+kind, fn)
+	}
 
 	var projRaw json.RawMessage
-	softSurface(timer, lbl("detail"), func() error {
+	sf("detail", func(ctx context.Context) error {
 		raw, status, err := softGet(ctx, cl, base, nil)
 		if err != nil {
 			return err
@@ -29,7 +31,7 @@ func collectOneProject(ctx context.Context, cl GitLab, cp engine.CurrentPhase, p
 	})
 
 	listSurface := func(label, apiPath, rel, collector string, params url.Values) {
-		softSurface(timer, lbl(label), func() error {
+		sf(label, func(ctx context.Context) error {
 			items, status, err := softList(ctx, cl, apiPath, params)
 			if err != nil {
 				return err
@@ -38,7 +40,7 @@ func collectOneProject(ctx context.Context, cl GitLab, cp engine.CurrentPhase, p
 		})
 	}
 	getSurface := func(label, apiPath, rel, collector string, params url.Values) {
-		softSurface(timer, lbl(label), func() error {
+		sf(label, func(ctx context.Context) error {
 			raw, status, err := softGet(ctx, cl, apiPath, params)
 			if err != nil {
 				return err
@@ -48,7 +50,7 @@ func collectOneProject(ctx context.Context, cl GitLab, cp engine.CurrentPhase, p
 	}
 
 	listSurface("members", base+"/members/all", engine.CollectGLProjectMembers(fp), "project-members", nil)
-	softSurface(timer, lbl("variables"), func() error { return collectProjectVariables(ctx, cl, cp, fp, base) })
+	sf("variables", func(ctx context.Context) error { return collectProjectVariables(ctx, cl, cp, fp, base) })
 	listSurface("protected-branches", base+"/protected_branches", engine.CollectGLProtectedBranches(fp), "protected-branches", nil)
 	listSurface("protected-tags", base+"/protected_tags", engine.CollectGLProtectedTags(fp), "protected-tags", nil)
 	listSurface("environments", base+"/environments", engine.CollectGLEnvironments(fp), "environments", nil)
@@ -70,13 +72,13 @@ func collectOneProject(ctx context.Context, cl GitLab, cp engine.CurrentPhase, p
 	listSurface("secure-files", base+"/secure_files", engine.CollectGLSecureFiles(fp), "secure-files", nil)
 	listSurface("terraform-state", base+"/terraform/state", engine.CollectGLTerraformState(fp), "terraform-state", nil)
 
-	softSurface(timer, lbl("runners"), func() error { return collectProjectRunners(ctx, cl, cp, fp, base, timer) })
-	softSurface(timer, lbl("ci-settings"), func() error { return collectProjectCISettings(ctx, cl, cp, fp, base) })
-	softSurface(timer, lbl("security-policies"), func() error { return collectSecurityPolicies(ctx, cl, cp, fp) })
-	softSurface(timer, lbl("cluster-agents"), func() error { return collectClusterAgents(ctx, cl, cp, fp, base, projRaw) })
-	softSurface(timer, lbl("ci-config"), func() error { return collectCIConfig(ctx, cl, cp, fp, base, projRaw) })
-	softSurface(timer, lbl("codeowners"), func() error { return collectCodeowners(ctx, cl, cp, fp, base, projRaw) })
-	softSurface(timer, lbl("duo-files"), func() error { return collectDuoFiles(ctx, cl, cp, fp, base, projRaw) })
+	sf("runners", func(ctx context.Context) error { return collectProjectRunners(ctx, cl, cp, fp, base, timer) })
+	sf("ci-settings", func(ctx context.Context) error { return collectProjectCISettings(ctx, cl, cp, fp, base) })
+	sf("security-policies", func(ctx context.Context) error { return collectSecurityPolicies(ctx, cl, cp, fp) })
+	sf("cluster-agents", func(ctx context.Context) error { return collectClusterAgents(ctx, cl, cp, fp, base, projRaw) })
+	sf("ci-config", func(ctx context.Context) error { return collectCIConfig(ctx, cl, cp, fp, base, projRaw) })
+	sf("codeowners", func(ctx context.Context) error { return collectCodeowners(ctx, cl, cp, fp, base, projRaw) })
+	sf("duo-files", func(ctx context.Context) error { return collectDuoFiles(ctx, cl, cp, fp, base, projRaw) })
 
 	return nil
 }
@@ -150,7 +152,7 @@ func enrichRunners(ctx context.Context, cl GitLab, items []json.RawMessage, time
 		return items
 	}
 	out := make([]json.RawMessage, len(items))
-	engine.RunPartial(ctx, runnerDetailConcurrency, indexed(items),
+	_, _ = engine.RunPartial(ctx, runnerDetailConcurrency, indexed(items),
 		func(ctx context.Context, it idxRaw) (struct{}, error) {
 			out[it.i] = it.raw
 			id := numField(it.raw, "id")

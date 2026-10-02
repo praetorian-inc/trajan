@@ -2,12 +2,19 @@ package engine
 
 import (
 	"bytes"
+	"cmp"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
+	"sync"
+
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 // HTML escaping is off so '&', '<', '>' — pervasive in workflow data — are emitted
@@ -101,9 +108,88 @@ func (p PriorPhase) IterJSON(phaseDir string) ([]PhaseFile, error) {
 type CurrentPhase struct{ RunDir string }
 
 func (c CurrentPhase) Write(rel string, v any) error {
-	return WriteJSON(filepath.Join(c.RunDir, rel), v)
+	abs, err := c.contain(rel)
+	if err != nil {
+		return err
+	}
+	return WriteJSON(abs, v)
 }
 
 func (c CurrentPhase) WriteRaw(rel string, b []byte) error {
-	return WriteRaw(filepath.Join(c.RunDir, rel), b)
+	abs, err := c.contain(rel)
+	if err != nil {
+		return err
+	}
+	return WriteRaw(abs, b)
+}
+
+func (c CurrentPhase) contain(rel string) (string, error) {
+	root, err := resolvedRoot(c.RunDir)
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(filepath.Join(root, rel))
+	if err != nil {
+		return "", err
+	}
+	if abs != root && !strings.HasPrefix(abs, root+string(filepath.Separator)) {
+		return "", fmt.Errorf("refusing to write %q: resolves outside the run directory", rel)
+	}
+	return abs, nil
+}
+
+var (
+	rootCacheMu sync.Mutex
+	rootCache   = map[string]string{}
+)
+
+func resolvedRoot(runDir string) (string, error) {
+	rootCacheMu.Lock()
+	defer rootCacheMu.Unlock()
+	if r, ok := rootCache[runDir]; ok {
+		return r, nil
+	}
+	abs, err := filepath.Abs(runDir)
+	if err != nil {
+		return "", err
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	rootCache[runDir] = abs
+	return abs, nil
+}
+
+func LoadFindings(ctx context.Context, cfg *Config, runDir string, onError func(error)) ([]finding.Finding, int, error) {
+	pp := PriorPhase{RunDir: runDir}
+	if _, err := os.Stat(pp.Abs(DirScan)); err != nil {
+		return nil, 0, fmt.Errorf("%s unreadable; run the scan phase first: %w", DirScan, err)
+	}
+	files, err := pp.IterJSON(DirScan)
+	if err != nil {
+		return nil, 0, err
+	}
+	out, err := RunPartial(ctx, cfg.Concurrency, files,
+		func(_ context.Context, f PhaseFile) (finding.Finding, error) {
+			var v finding.Finding
+			if err := json.Unmarshal(f.Data, &v); err != nil {
+				return v, fmt.Errorf("%s/%s: %w", DirScan, f.Rel, err)
+			}
+			return v, nil
+		},
+		func(_ PhaseFile, err error) { onError(err) })
+	if err != nil {
+		return nil, 0, err
+	}
+	slices.SortFunc(out, func(a, b finding.Finding) int {
+		return cmp.Or(cmp.Compare(findingRuleID(&a), findingRuleID(&b)), cmp.Compare(a.Fingerprint, b.Fingerprint))
+	})
+	return out, len(files), nil
+}
+
+func findingRuleID(f *finding.Finding) string {
+	if f.Rule == nil {
+		return ""
+	}
+	return f.Rule.ID
 }

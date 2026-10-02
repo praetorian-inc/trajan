@@ -1,19 +1,11 @@
 package ado
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
-	"path"
-	"path/filepath"
-	"slices"
-	"strings"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
+	"github.com/praetorian-inc/trajan/internal/graph"
 )
-
-const normalizeDir = "10-normalize"
 
 type record struct {
 	rel    string
@@ -27,58 +19,27 @@ type corpus struct {
 	org    string
 	byKind map[string][]record
 	byDir  map[string]map[string]bool
-
-	seen  int
-	files int
 }
 
-func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError func(error)) (*corpus, error) {
-	files, err := engine.PriorPhase{RunDir: runDir}.IterJSON(normalizeDir)
-	if err != nil {
-		return nil, err
-	}
-	if len(files) == 0 {
-		return nil, fmt.Errorf("%s: no normalized records", normalizeDir)
-	}
-
-	recs := engine.RunPartial(ctx, cfg.Concurrency, files,
-		func(_ context.Context, f engine.PhaseFile) (record, error) {
-			var m map[string]any
-			dec := json.NewDecoder(bytes.NewReader(f.Data))
-			dec.UseNumber()
-			if err := dec.Decode(&m); err != nil {
-				return record{}, fmt.Errorf("%s/%s: %w", normalizeDir, f.Rel, err)
+func indexCorpus(src *graph.Corpus) (*corpus, error) {
+	c := &corpus{byKind: map[string][]record{}, byDir: map[string]map[string]bool{}}
+	for _, r := range src.Records {
+		rec := record{rel: r.Rel, dir: r.Path, kind: r.Kind, id: r.ID, fields: r.Fields}
+		if rec.id != "" {
+			if c.byDir[rec.dir] == nil {
+				c.byDir[rec.dir] = map[string]bool{}
 			}
-			rel := filepath.ToSlash(f.Rel)
-			dir := path.Dir(rel)
-			id, _ := m["_id"].(string)
-			kind, _ := m["kind"].(string)
-			return record{rel: rel, dir: dir, kind: kind, id: id, fields: m}, nil
-		},
-		func(_ engine.PhaseFile, err error) { onError(err) })
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	slices.SortFunc(recs, func(a, b record) int { return strings.Compare(a.rel, b.rel) })
-
-	c := &corpus{byKind: map[string][]record{}, byDir: map[string]map[string]bool{},
-		seen: len(files), files: len(recs)}
-	for _, r := range recs {
-		if r.id != "" {
-			if c.byDir[r.dir] == nil {
-				c.byDir[r.dir] = map[string]bool{}
-			}
-			c.byDir[r.dir][r.id] = true
+			c.byDir[rec.dir][rec.id] = true
 		}
-		if r.kind == "" {
+		if rec.kind == "" {
 			continue
 		}
-		c.byKind[r.kind] = append(c.byKind[r.kind], r)
+		c.byKind[rec.kind] = append(c.byKind[rec.kind], rec)
 	}
 
 	orgs := c.byKind[string(Organization)]
 	if len(orgs) == 0 {
-		return nil, fmt.Errorf("%s: no organization record; every node identity is qualified by it", normalizeDir)
+		return nil, fmt.Errorf("%s: %w; every node identity is qualified by it", engine.DirNormalize, graph.ErrNoOrgRecord)
 	}
 	c.org = str(orgs[0].fields["org"])
 	if c.org == "" {
@@ -87,12 +48,4 @@ func loadCorpus(ctx context.Context, cfg *engine.Config, runDir string, onError 
 	return c, nil
 }
 
-func str(v any) string {
-	switch t := v.(type) {
-	case string:
-		return t
-	case json.Number:
-		return t.String()
-	}
-	return ""
-}
+func str(v any) string { return graph.Str(v) }

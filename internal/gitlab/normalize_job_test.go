@@ -3,6 +3,7 @@ package gitlab
 import (
 	"slices"
 	"testing"
+	"time"
 )
 
 func parseJob(t *testing.T, yaml string) map[string]any {
@@ -310,5 +311,59 @@ func TestMergeDefault(t *testing.T) {
 	}
 	if len(runnerTags(m)) != 1 {
 		t.Error("default tags must apply when the job sets none")
+	}
+}
+
+func TestParseCIPipelineRejectsDuplicateJobKey(t *testing.T) {
+	p, err := parseCIPipeline([]byte("build:\n  script: [./benign.sh]\nbuild:\n  script: [./payload.sh]\n"))
+	if err == nil {
+		t.Fatalf("duplicate job key parsed as %v; one definition was silently discarded", p)
+	}
+}
+
+func TestParseCIPipelineResolvesMergeKeys(t *testing.T) {
+	p := parseJob(t, ".tags: &tags\n"+
+		"  tags: [shell]\n"+
+		".image: &image\n"+
+		"  image: alpine\n"+
+		"build:\n"+
+		"  <<: [*tags, *image]\n"+
+		"  script: [./build.sh]\n")
+
+	job, ok := p["build"].(map[string]any)
+	if !ok {
+		t.Fatalf("build = %#v, want a mapping", p["build"])
+	}
+	tags, ok := job["tags"].([]any)
+	if !ok || len(tags) != 1 || tags[0] != "shell" {
+		t.Errorf("tags = %#v, want [shell] merged in from the first anchor", job["tags"])
+	}
+	if job["image"] != "alpine" {
+		t.Errorf("image = %#v, want alpine merged in from the second anchor", job["image"])
+	}
+}
+
+func TestParseCIPipelineBoundsAliasExpansion(t *testing.T) {
+	src := []byte("a: &a [x, x, x, x, x, x, x, x, x, x]\n" +
+		"b: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a, *a]\n" +
+		"c: &c [*b, *b, *b, *b, *b, *b, *b, *b, *b, *b]\n" +
+		"d: &d [*c, *c, *c, *c, *c, *c, *c, *c, *c, *c]\n" +
+		"e: &e [*d, *d, *d, *d, *d, *d, *d, *d, *d, *d]\n" +
+		"f: &f [*e, *e, *e, *e, *e, *e, *e, *e, *e, *e]\n" +
+		"g: &g [*f, *f, *f, *f, *f, *f, *f, *f, *f, *f]\n" +
+		"build: *g\n")
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := parseCIPipeline(src)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("parseCIPipeline expanded the alias tree instead of refusing it")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("parseCIPipeline did not bound a %d-byte alias expansion", len(src))
 	}
 }

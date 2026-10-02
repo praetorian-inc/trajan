@@ -1,35 +1,31 @@
 package ado
 
 import (
-	"fmt"
+	"cmp"
 	"log/slog"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	adopkg "github.com/praetorian-inc/trajan/internal/ado"
 	"github.com/praetorian-inc/trajan/internal/engine"
-	"github.com/praetorian-inc/trajan/internal/engine/detect"
+	"github.com/praetorian-inc/trajan/internal/graph"
 	"github.com/praetorian-inc/trajan/internal/report"
+	"github.com/praetorian-inc/trajan/internal/ui"
 )
+
+func orgFromEnv() string { return strings.TrimSpace(os.Getenv("ORG_NAME")) }
 
 var AdoCmd = newAdoCmd()
 
-func ruleTargets() (map[string]adopkg.Target, error) {
-	onError := func(e error) { slog.Warn("rule skipped", "err", e) }
-	rules, err := detect.LoadRules("ado", onError)
+func buildGraph(cmd *cobra.Command, cfg *engine.Config, runDir string) error {
+	provider := adopkg.GraphProvider()
+	targets, err := graph.RuleTargets(provider, func(e error) { slog.Warn("rule skipped", "err", e) })
 	if err != nil {
-		return nil, err
+		return err
 	}
-	targets := make(map[string]adopkg.Target, len(rules))
-	for _, r := range rules {
-		t, err := adopkg.ParseTarget(r.Graph)
-		if err != nil {
-			onError(fmt.Errorf("%s: %w", r.ID, err))
-			continue
-		}
-		targets[r.ID] = t
-	}
-	return targets, nil
+	return graph.Build(cmd.Context(), cfg, runDir, provider, targets)
 }
 
 const (
@@ -50,8 +46,14 @@ func newAdoCmd() *cobra.Command {
 	ado.PersistentFlags().SortFlags = false
 	ado.PersistentFlags().IntVar(&cfg.Concurrency, "concurrency", 8, "max concurrent API workers")
 	ado.PersistentFlags().StringVar(&cfg.OutputDir, "output-dir", "./trajan-out", "run output directory")
+	ado.PersistentPreRunE = func(*cobra.Command, []string) error {
+		cfg.UI = ui.Std()
+		cfg.Invocation = os.Args[1:]
+		return nil
+	}
 
 	var path string
+	var tokenFlag, bearerFlag string
 	var orgDetectionsOnly bool
 	var reportFormat, reportMinSev, reportMinConf, reportOut string
 	var neo4jURL, neo4jUser, neo4jPass string
@@ -62,7 +64,7 @@ func newAdoCmd() *cobra.Command {
 		if len(args) > 0 {
 			locator = args[0]
 		}
-		return adopkg.Collect(cmd.Context(), cfg, locator)
+		return adopkg.Collect(cmd.Context(), cfg, cmp.Or(strings.TrimSpace(locator), orgFromEnv()))
 	}
 
 	var whoamiOrg string
@@ -71,7 +73,7 @@ func newAdoCmd() *cobra.Command {
 		Short: "Resolve the token and print the authenticated identity and reachable surfaces",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return adopkg.WhoAmI(cmd.Context(), whoamiOrg, cfg.Token, cfg.BearerToken)
+			return adopkg.WhoAmI(cmd.Context(), cfg, cmp.Or(strings.TrimSpace(whoamiOrg), orgFromEnv()))
 		},
 	}
 	whoami.Flags().StringVar(&whoamiOrg, "org", "", "Azure DevOps organization (default: ORG_NAME)")
@@ -99,7 +101,7 @@ Omitted, it falls back to the ORG_NAME environment variable.`,
 			if err != nil {
 				return err
 			}
-			return adopkg.Normalize(cmd.Context(), runDir)
+			return adopkg.Normalize(cmd.Context(), cfg, runDir)
 		},
 	}
 	scan := &cobra.Command{
@@ -115,7 +117,7 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 			if err != nil {
 				return err
 			}
-			return adopkg.Scan(cmd.Context(), runDir, adopkg.ScanOptions{OrgOnly: orgDetectionsOnly})
+			return adopkg.Scan(cmd.Context(), cfg, runDir, adopkg.ScanOptions{HierarchyOnly: orgDetectionsOnly})
 		},
 	}
 	reportCmd := &cobra.Command{
@@ -135,7 +137,7 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 			})
 		},
 	}
-	graph := &cobra.Command{
+	graphCmd := &cobra.Command{
 		Use:   "graph",
 		Short: "Build the property graph from a normalized, scanned run",
 		Long: `Build nodes and edges from a normalized run directory.
@@ -148,11 +150,7 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 			if err != nil {
 				return err
 			}
-			targets, err := ruleTargets()
-			if err != nil {
-				return err
-			}
-			return adopkg.BuildGraph(cmd.Context(), cfg, runDir, targets)
+			return buildGraph(cmd, cfg, runDir)
 		},
 	}
 	push := &cobra.Command{
@@ -177,27 +175,23 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 			if err != nil {
 				return err
 			}
-			if err := adopkg.Normalize(cmd.Context(), runDir); err != nil {
+			if err := adopkg.Normalize(cmd.Context(), cfg, runDir); err != nil {
 				return err
 			}
-			if err := adopkg.Scan(cmd.Context(), runDir, adopkg.ScanOptions{}); err != nil {
+			if err := adopkg.Scan(cmd.Context(), cfg, runDir, adopkg.ScanOptions{}); err != nil {
 				return err
 			}
-			targets, err := ruleTargets()
-			if err != nil {
-				return err
-			}
-			return adopkg.BuildGraph(cmd.Context(), cfg, runDir, targets)
+			return buildGraph(cmd, cfg, runDir)
 		},
 	}
 
-	scan.Flags().BoolVar(&orgDetectionsOnly, "org-detections-only", false, "evaluate only org-subject (org-level) rules")
+	scan.Flags().BoolVar(&orgDetectionsOnly, "org-detections-only", false, "evaluate only rules above the repository (org and project subjects)")
 	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j bolt URL")
 	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")
 	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "", neo4jPassHelp)
 	push.Flags().BoolVar(&neo4jReset, "reset", false, "delete every node in the database before writing")
 
-	for _, c := range []*cobra.Command{normalize, scan, reportCmd, graph, push} {
+	for _, c := range []*cobra.Command{normalize, scan, reportCmd, graphCmd, push} {
 		c.Flags().StringVarP(&path, "path", "p", "", "run directory (default: latest)")
 	}
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
@@ -205,11 +199,24 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 	reportCmd.Flags().StringVar(&reportMinConf, "min-confidence", "low", "drop findings below this confidence")
 	reportCmd.Flags().StringVar(&reportOut, "out", "", "destination dir, or '-' for stdout (default: the run dir)")
 
+	resolveCred := func(*cobra.Command, []string) error {
+		cred, err := adopkg.ResolveCredential(tokenFlag, bearerFlag)
+		if err != nil {
+			return err
+		}
+		if cred.Kind == engine.CredBearer {
+			cfg.BearerToken = cred.Value
+		} else {
+			cfg.Token = cred.Value
+		}
+		return nil
+	}
 	for _, c := range []*cobra.Command{whoami, collect, run} {
-		c.Flags().StringVar(&cfg.Token, "token", "", tokenHelp)
-		c.Flags().StringVar(&cfg.BearerToken, "azure-bearer-token", "", bearerHelp)
+		c.Flags().StringVar(&tokenFlag, "token", "", tokenHelp)
+		c.Flags().StringVar(&bearerFlag, "azure-bearer-token", "", bearerHelp)
+		c.PreRunE = resolveCred
 	}
 
-	ado.AddCommand(whoami, collect, normalize, scan, reportCmd, graph, push, run)
+	ado.AddCommand(whoami, collect, normalize, scan, reportCmd, graphCmd, push, run)
 	return ado
 }

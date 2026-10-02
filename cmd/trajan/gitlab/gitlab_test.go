@@ -3,27 +3,22 @@ package gitlab
 import (
 	"testing"
 
-	"github.com/praetorian-inc/trajan/internal/gitlab"
+	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-// The CLI's --url / --insecure persistent flags must bind into the frozen
-// gitlab.FlagURL / FlagInsecure globals — that binding is the only channel by
-// which Collect/WhoAmI (whose signatures exclude these) learn the endpoint.
-func TestPersistentFlagsBindToGitlabGlobals(t *testing.T) {
-	origURL, origInsecure := gitlab.FlagURL, gitlab.FlagInsecure
-	defer func() { gitlab.FlagURL, gitlab.FlagInsecure = origURL, origInsecure }()
-
-	cmd := newGitLabCmd()
+func TestPersistentFlagsBindToConfig(t *testing.T) {
+	cfg := &engine.Config{}
+	cmd := newGitLabCmd(cfg)
 	if err := cmd.PersistentFlags().Set("url", "https://3.136.153.111"); err != nil {
 		t.Fatal(err)
 	}
 	if err := cmd.PersistentFlags().Set("insecure", "true"); err != nil {
 		t.Fatal(err)
 	}
-	if gitlab.FlagURL != "https://3.136.153.111" {
-		t.Errorf("FlagURL = %q, want the value set via --url", gitlab.FlagURL)
+	if cfg.BaseURL != "https://3.136.153.111" {
+		t.Errorf("cfg.BaseURL = %q, want the value set via --url", cfg.BaseURL)
 	}
-	if !gitlab.FlagInsecure {
-		t.Error("FlagInsecure = false after --insecure=true")
+	if !cfg.Insecure {
+		t.Error("cfg.Insecure = false after --insecure=true")
 	}
 }

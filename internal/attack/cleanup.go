@@ -28,10 +28,12 @@ const cleanupNote = "Replayed the ledger's recorded inverses in reverse sequence
 
 type CleanupOptions struct {
 	// PlanID selects one plan inside RunDir when the directory holds more than one.
-	RunDir string
-	PlanID string
-	DryRun bool
-	Token  string // explicit --token; env still outranks via resolveCredential
+	RunDir   string
+	PlanID   string
+	DryRun   bool
+	Token    string // explicit --token; env still outranks via resolveCredential
+	BaseURL  string
+	Insecure bool
 }
 
 type CleanupItem struct {
@@ -94,7 +96,7 @@ func Cleanup(ctx context.Context, opts CleanupOptions) (*CleanupReport, error) {
 		report.Mode = "dry-run"
 	}
 
-	clients := cleanupClients(ctx, rec, opts.Token)
+	clients := cleanupClients(ctx, rec, opts)
 	// A run's own ledger is the whole allowlist for a replay: every target it
 	// names is one this run recorded a mutation against, which covers the fork
 	// that landed in the acting identity's namespace and nothing else.
@@ -222,15 +224,15 @@ func resolvePlanID(runDir, planID string) (string, error) {
 
 // cleanupClients resolves the identities the run recorded, so each inverse is
 // issued by the principal that made the change.
-func cleanupClients(ctx context.Context, rec PlanRecord, explicit string) map[string]*github.Client {
+func cleanupClients(ctx context.Context, rec PlanRecord, opts CleanupOptions) map[string]*github.Client {
 	out := map[string]*github.Client{}
 	for _, id := range rec.Identities {
-		token, _, err := resolveCredential(ctx, id.From, explicit)
+		token, _, err := resolveCredential(ctx, id.From, opts.Token)
 		if err != nil {
 			slog.Warn("cleanup identity unresolved", "identity", id.Name, "from", id.From, "err", err)
 			continue
 		}
-		out[id.Name] = github.NewClient(token)
+		out[id.Name] = github.NewClient(opts.BaseURL, token, opts.Insecure)
 	}
 	// A step that named no identity ran as the plan default, which the record
 	// lists first.

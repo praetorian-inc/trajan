@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	yaml "go.yaml.in/yaml/v4"
+	yaml "go.yaml.in/yaml/v3"
 )
 
 // compose mirrors the envelope and the uniform six-space indent a workflow commit

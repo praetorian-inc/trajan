@@ -98,7 +98,7 @@ type CloudRoleRef struct {
 
 // Field order mirrors the on-disk key order. Slice fields must be initialized
 // non-nil by the normalizer so empties serialize as "[]" (not null).
-type Job struct {
+type JobFact struct {
 	ID         string         `json:"_id"`
 	Provenance *JobProvenance `json:"_provenance"`
 	Repo       string         `json:"repo"`

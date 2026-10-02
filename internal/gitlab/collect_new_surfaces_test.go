@@ -116,7 +116,7 @@ func TestCollectGroupSAMLSoftFailMarked(t *testing.T) {
 	cp := engine.CurrentPhase{RunDir: t.TempDir()}
 	timer := engine.StartPhaseTimer(engine.PhaseCollect, "collect")
 
-	collectGroupSurfaces(context.Background(), cl, cp, "g", 42, json.RawMessage(`{"id":42,"full_path":"g"}`), timer)
+	collectGroupSurfaces(context.Background(), cl, cp, "g", 42, json.RawMessage(`{"id":42,"full_path":"g"}`), 0, timer)
 
 	env, err := readEnvelopeErr(cp.RunDir, engine.CollectGLGroupSAML("g"))
 	if err != nil {

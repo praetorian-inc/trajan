@@ -36,7 +36,7 @@ func TestEveryEmbeddedRuleHasAParsableGraphTarget(t *testing.T) {
 	}
 	var bad []string
 	for _, r := range rules {
-		if _, err := graph.ParseTarget(r.Graph); err != nil {
+		if _, err := graph.ParseTarget(GraphProvider(), r.Graph); err != nil {
 			bad = append(bad, r.ID+": "+err.Error())
 		}
 	}

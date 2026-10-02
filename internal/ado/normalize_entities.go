@@ -170,6 +170,7 @@ func normalizeRepos(prior engine.PriorPhase, cp engine.CurrentPhase, org string,
 			"project":        p.Name,
 			"id":             entStr(r["id"]),
 			"name":           name,
+			"url":            entStr(r["webUrl"]),
 			"default_branch": entStr(r["defaultBranch"]),
 			"is_disabled":    entBool(r["isDisabled"]),
 			"size":           entInt64(r["size"]),
@@ -676,6 +677,7 @@ func policyTypeNames(prior engine.PriorPhase, project string) map[string]string 
 // policy-by-scope join's job, not this pass's.
 func normalizePolicies(prior engine.PriorPhase, cp engine.CurrentPhase, org string, p projectMeta, timer *engine.PhaseTimer) error {
 	types := policyTypeNames(prior, p.Name)
+	repoNames := repoNamesByID(prior, p.Name)
 	for _, raw := range entLoadList(prior, engine.CollectADOPolicies(p.Name)) {
 		c := entMap(raw)
 		cfgID := entInt64(c["id"])
@@ -684,17 +686,19 @@ func normalizePolicies(prior engine.PriorPhase, cp engine.CurrentPhase, org stri
 		if typeName == "" {
 			typeName = entStr(entGetIn(c, "type", "displayName"))
 		}
+		scope := entListOrEmpty(entGetIn(entObj(c, "settings"), "scope"))
 		rec := map[string]any{
 			"_id":         fmt.Sprintf("%s/%d", p.Name, cfgID),
 			"kind":        "BranchPolicy",
 			"project":     p.Name,
+			"repo":        policyRepo(scope, repoNames),
 			"config_id":   cfgID,
 			"policy_type": typeName,
 			"type_id":     typeID,
 			"is_enabled":  entBool(c["isEnabled"]),
 			"is_blocking": entBool(c["isBlocking"]),
 			"is_deleted":  entBool(c["isDeleted"]),
-			"scope":       entListOrEmpty(entGetIn(entObj(c, "settings"), "scope")),
+			"scope":       scope,
 			"settings":    policySettings(entObj(c, "settings")),
 			"_provenance": prov(engine.CollectADOPolicies(p.Name)),
 		}
@@ -705,8 +709,39 @@ func normalizePolicies(prior engine.PriorPhase, cp engine.CurrentPhase, org stri
 	return nil
 }
 
+func repoNamesByID(prior engine.PriorPhase, project string) map[string]string {
+	out := map[string]string{}
+	for _, raw := range entLoadList(prior, engine.CollectADORepos(project)) {
+		r := entMap(raw)
+		if id, name := entStr(r["id"]), entStr(r["name"]); id != "" && name != "" {
+			out[id] = name
+		}
+	}
+	return out
+}
+
+// A null repositoryId is project-wide, which disqualifies the scope, not just the entry.
+func policyRepo(scope []any, repoNames map[string]string) string {
+	name := ""
+	for _, raw := range scope {
+		id := entStr(entMap(raw)["repositoryId"])
+		if id == "" {
+			return ""
+		}
+		n, ok := repoNames[id]
+		if !ok {
+			return ""
+		}
+		if name != "" && n != name {
+			return ""
+		}
+		name = n
+	}
+	return name
+}
+
 func normalizeAgentPools(prior engine.PriorPhase, cp engine.CurrentPhase, timer *engine.PhaseTimer) error {
-	files, err := prior.IterJSON("00-collect/pools")
+	files, err := prior.IterJSON(engine.DirCollect + "/pools")
 	if err != nil {
 		return err
 	}
