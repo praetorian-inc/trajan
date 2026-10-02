@@ -204,6 +204,6 @@ func TestFindingRefsSerializeAsAnEmptyArrayWhenUnattached(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(b) != "[]" {
-		t.Errorf("marshalled %s, want []", b)
+		t.Errorf("marshaled %s, want []", b)
 	}
 }

@@ -199,7 +199,7 @@ func TestRunPartial_ReturnsContextError(t *testing.T) {
 	out, err := RunPartial(ctx, 2, []int{1, 2, 3},
 		func(ctx context.Context, i int) (int, error) { return i, ctx.Err() }, nil)
 	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("err = %v, want context.Canceled; a cancelled phase records as complete", err)
+		t.Fatalf("err = %v, want context.Canceled; a canceled phase records as complete", err)
 	}
 	if len(out) != 0 {
 		t.Fatalf("out = %v, want nothing collected after cancellation", out)

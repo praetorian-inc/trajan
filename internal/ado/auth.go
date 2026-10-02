@@ -7,7 +7,7 @@ import (
 	"github.com/praetorian-inc/trajan/internal/engine"
 )
 
-var ErrServerUnsupported = errors.New("Azure DevOps Server is not supported: leave the instance root empty to scan dev.azure.com")
+var ErrServerUnsupported = errors.New("unsupported instance: Azure DevOps Server; leave the instance root empty to scan dev.azure.com")
 
 var ErrNoToken = errors.New("no Azure DevOps credential: pass --token/--azure-bearer-token or set TRAJAN_ADO_TOKEN/ADO_PAT/AZURE_DEVOPS_PAT/AZDO_PAT/AZURE_DEVOPS_EXT_PAT/AZURE_BEARER_TOKEN/SYSTEM_ACCESSTOKEN")
 

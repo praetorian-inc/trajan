@@ -9,7 +9,6 @@ import (
 type nodeSet = graph.NodeSet[NodeLabel, EdgeType]
 type edgeSet = graph.EdgeSet[NodeLabel, EdgeType]
 type node = graph.Node[NodeLabel]
-type edge = graph.Edge[NodeLabel, EdgeType]
 type findingRef = graph.FindingRef
 type endpoint = graph.Endpoint[NodeLabel]
 

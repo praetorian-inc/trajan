@@ -137,7 +137,7 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 			})
 		},
 	}
-	graph := &cobra.Command{
+	graphCmd := &cobra.Command{
 		Use:   "graph",
 		Short: "Build the property graph from a normalized, scanned run",
 		Long: `Build nodes and edges from a normalized run directory.
@@ -191,7 +191,7 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "", neo4jPassHelp)
 	push.Flags().BoolVar(&neo4jReset, "reset", false, "delete every node in the database before writing")
 
-	for _, c := range []*cobra.Command{normalize, scan, reportCmd, graph, push} {
+	for _, c := range []*cobra.Command{normalize, scan, reportCmd, graphCmd, push} {
 		c.Flags().StringVarP(&path, "path", "p", "", "run directory (default: latest)")
 	}
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
@@ -217,6 +217,6 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 		c.PreRunE = resolveCred
 	}
 
-	ado.AddCommand(whoami, collect, normalize, scan, reportCmd, graph, push, run)
+	ado.AddCommand(whoami, collect, normalize, scan, reportCmd, graphCmd, push, run)
 	return ado
 }

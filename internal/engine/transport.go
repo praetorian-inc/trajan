@@ -20,7 +20,11 @@ func StripUserinfo(root string) string {
 
 // Cloned, because a bare http.Transport also drops the proxy, HTTP/2 and idle-connection defaults.
 func InsecureTransport() http.RoundTripper {
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		base = &http.Transport{}
+	}
+	tr := base.Clone()
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	return tr
 }

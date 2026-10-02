@@ -50,10 +50,10 @@ func softRank(status int) int {
 func (t *SoftTally) Surface() (status, reason string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	switch {
-	case t.status == 0:
+	switch t.status {
+	case 0:
 		return "ok", ""
-	case t.status == 404:
+	case 404:
 		return "skipped", "HTTP 404"
 	}
 	return "degraded", "HTTP " + strconv.Itoa(t.status)
