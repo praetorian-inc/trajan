@@ -1,0 +1,170 @@
+/* Shell chrome for the WASM scanner. Report look comes from report.css. */
+
+.shell {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 28px 22px 8px;
+}
+
+.shell-brand {
+  margin: 0 0 6px;
+  font: 600 11px/1 var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.shell h1 {
+  margin: 0 0 6px;
+  font-size: 27px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.shell-lead {
+  margin: 0 0 22px;
+  color: var(--muted);
+  font-size: 14.5px;
+  max-width: 62ch;
+}
+
+.scan-form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.scan-form .row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.field input,
+.field select {
+  font: 400 14px/1.4 var(--sans);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 9px 11px;
+  width: 100%;
+}
+
+.field input:focus,
+.field select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  background: var(--raised);
+  color: var(--ink);
+  font: 600 13.5px/1 var(--sans);
+  padding: 10px 16px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.btn:hover { border-color: var(--muted); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--tone-ink, #fff);
+}
+:root[data-theme="dark"] .btn-primary,
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-primary { color: #0d1116; }
+}
+
+.btn-danger {
+  color: var(--crit);
+  border-color: color-mix(in srgb, var(--crit) 35%, var(--line-strong));
+}
+
+.status {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.progress {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  background: var(--raised);
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  font: 400 12.5px/1.45 var(--mono);
+  color: var(--muted);
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.progress:empty { display: none; }
+
+.error-banner {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--crit) 40%, var(--line));
+  background: var(--crit-soft);
+  color: var(--crit);
+  font-size: 14px;
+}
+
+.idle-panel {
+  margin: 8px 0 24px;
+  padding: 36px 20px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  text-align: center;
+  color: var(--muted);
+}
+
+#results {
+  margin-top: 8px;
+}
+
+#results-frame {
+  width: 100%;
+  border: 0;
+  min-height: 70vh;
+  background: var(--paper);
+  border-radius: 12px;
+}
+
+.shell-foot {
+  margin: 28px 0 40px;
+  font-size: 12.5px;
+  color: var(--faint);
+}

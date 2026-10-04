@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trajan — Browser Scanner</title>
+<link rel="stylesheet" href="report.css">
+<link rel="stylesheet" href="shell.css">
+</head>
+<body>
+<div class="shell">
+  <p class="shell-brand">Trajan · Browser</p>
+  <h1>CI/CD security scan</h1>
+  <p class="shell-lead">
+    Runs collect → normalize → scan in your browser with first-party YAML detections.
+    Attack and graph are not included. Tokens stay in memory for this session only.
+  </p>
+
+  <form class="scan-form" id="scanForm">
+    <div class="row">
+      <div class="field">
+        <label for="platform">Platform</label>
+        <select id="platform" name="platform">
+          <option value="github">GitHub</option>
+          <option value="gitlab">GitLab</option>
+          <option value="ado">Azure DevOps</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="locator">Scope / locator</label>
+        <input id="locator" name="locator" type="text" placeholder="org/repo, group, or org/project" autocomplete="off" spellcheck="false" required>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="token">Token</label>
+        <input id="token" name="token" type="password" placeholder="PAT or pipeline token" autocomplete="off" required>
+      </div>
+      <div class="field" id="baseUrlField" hidden>
+        <label for="baseUrl">GitLab base URL</label>
+        <input id="baseUrl" name="baseUrl" type="url" placeholder="https://gitlab.com" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field" id="bearerField" hidden>
+        <label for="bearerToken">Azure bearer (optional)</label>
+        <input id="bearerToken" name="bearerToken" type="password" placeholder="Entra / SYSTEM_ACCESSTOKEN" autocomplete="off">
+      </div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn btn-primary" id="runBtn">Run scan</button>
+      <button type="button" class="btn" id="whoamiBtn">Who am I</button>
+      <button type="button" class="btn btn-danger" id="cancelBtn" disabled>Cancel</button>
+      <span class="status" id="status">Loading WASM…</span>
+    </div>
+  </form>
+
+  <div class="error-banner" id="error" hidden></div>
+  <pre class="progress" id="progress" aria-live="polite"></pre>
+  <div class="idle-panel" id="idle">Nothing to report yet. Enter credentials and run a scan.</div>
+  <div id="results" hidden>
+    <iframe id="results-frame" title="Trajan findings report" sandbox="allow-scripts allow-same-origin"></iframe>
+  </div>
+  <p class="shell-foot" id="versionLine"></p>
+</div>
+
+<script src="fs-shim.js"></script>
+<script src="wasm_exec.js"></script>
+<script src="bridge.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
