@@ -108,7 +108,7 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 	HasProject:    {{Organization, Project}},
 	HasRepository: {{Project, Repository}},
 	HasBranch:     {{Repository, Branch}},
-	HasPipeline:   {{Project, Pipeline}},
+	HasPipeline:   {{Project, Pipeline}, {Repository, Pipeline}},
 	HasStage:      {{Pipeline, Stage}},
 	HasJob:        {{Stage, Job}},
 

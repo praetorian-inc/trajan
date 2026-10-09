@@ -1,6 +1,7 @@
 package ado
 
 import (
+	"cmp"
 	"context"
 
 	"github.com/praetorian-inc/trajan/internal/graph"
@@ -68,6 +69,7 @@ type recordRef struct{ dir, id string }
 func buildEdges(c *corpus, n *nodeSet) (*edgeSet, map[recordRef][]string, error) {
 	s := newEdgeSet()
 	emitContainment(n, s)
+	emitRepoContainment(n, s)
 
 	fromRecord := map[recordRef][]string{}
 	gc := graphCtx{Org: c.org, Principal: principalLabels(c), BuildService: buildServices(c)}
@@ -104,6 +106,23 @@ func emitContainment(n *nodeSet, s *edgeSet) {
 			}
 			s.Add(ct.edge, parent, endpoint{Label: ct.child, Key: child.Key}, nil)
 		}
+	}
+}
+
+// A pipeline is contained twice: by its project and by the repo holding its YAML.
+func emitRepoContainment(n *nodeSet, s *edgeSet) {
+	for _, child := range n.All() {
+		if child.Labels[0] != Pipeline {
+			continue
+		}
+		repo := str(child.Properties["repo"])
+		if repo == "" {
+			continue
+		}
+		parent := endpoint{Label: Repository, Key: map[string]string{
+			"org": child.Key["org"], "project": child.Key["project"], "repo": repo,
+		}}
+		s.Add(HasPipeline, parent, endpoint{Label: Pipeline, Key: child.Key}, nil)
 	}
 }
 
@@ -232,8 +251,13 @@ func (b *graphBuild) Attach(ctx context.Context, targets map[string]graph.Target
 func (p *graphProvider) Gaps() []graph.GapEntry { return gapRegister }
 
 func (p *graphProvider) Hierarchy(org string, n node) []string {
-	if project := n.Key["project"]; project != "" {
+	project := cmp.Or(n.Key["project"], n.Key["owner_project"])
+	if project == "" {
+		return []string{org}
+	}
+	repo := cmp.Or(n.Key["repo"], str(n.Properties["repo"]))
+	if repo == "" {
 		return []string{org, project}
 	}
-	return []string{org}
+	return []string{org, project, repo}
 }
