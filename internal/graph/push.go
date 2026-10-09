@@ -185,11 +185,7 @@ func pushNodes[L ~string, T ~string](ctx context.Context, sc Schema[L, T],
 		if len(n.Labels) == 0 {
 			continue
 		}
-		props := scalarProps(n.Properties, n.Findings, n.ID, state)
-		for k, v := range n.Key {
-			props[k] = v
-		}
-		byLabel[n.Labels[0]] = append(byLabel[n.Labels[0]], map[string]any{"id": n.ID, "props": props})
+		byLabel[n.Labels[0]] = append(byLabel[n.Labels[0]], map[string]any{"id": n.ID, "props": nodeProps(n, state)})
 	}
 
 	total := 0
@@ -206,6 +202,17 @@ func pushNodes[L ~string, T ~string](ctx context.Context, sc Schema[L, T],
 		}
 	}
 	return total, nil
+}
+
+func nodeProps[L ~string](n Node[L], state *engine.State) map[string]any {
+	out := scalarProps(n.Properties, n.Findings, n.ID, state)
+	for k, v := range n.Key {
+		if slices.Contains(reservedProps, k) {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
 
 // Grouped by the whole triple, not by type: the endpoint labels are what let
@@ -269,6 +276,8 @@ func findingProps() []string {
 	}
 	return out
 }
+
+var reservedProps = []string{"_id", "_org", "_run_id"}
 
 // Neo4j stores scalars and homogeneous scalar arrays. A null property is dropped
 // because SET n += {k: null} removes the key anyway, and findings are flattened
