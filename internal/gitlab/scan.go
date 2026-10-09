@@ -43,6 +43,18 @@ func gitlabRepo(s map[string]any) string {
 	if id := detect.StringField(s, "_id"); strings.Contains(id, "/") {
 		return id
 	}
+	return scopeOwner(s)
+}
+
+func scopeOwner(s map[string]any) string {
+	for _, raw := range mList(s, "_provenance") {
+		scope := entStr(entMap(raw)["scope"])
+		for _, prefix := range []string{"project:", "group:"} {
+			if owner, ok := strings.CutPrefix(scope, prefix); ok {
+				return owner
+			}
+		}
+	}
 	return ""
 }
 
