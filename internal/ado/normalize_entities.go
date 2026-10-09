@@ -372,6 +372,7 @@ func emitWIFCredential(cp engine.CurrentPhase, timer *engine.PhaseTimer, e map[s
 	}
 	wif := map[string]any{
 		"_id": id + "/" + key, "kind": "WIFCredential", "connection_id": id, "project": owner,
+		"credential_id":       key,
 		"app_registration_id": spn, "subject": strOrNull(subject),
 		"issuer":      strOrNull(entStr(params["workloadIdentityFederationIssuer"])),
 		"issuer_type": entStr(params["workloadIdentityFederationIssuerType"]),
@@ -381,7 +382,7 @@ func emitWIFCredential(cp engine.CurrentPhase, timer *engine.PhaseTimer, e map[s
 		return err
 	}
 	fed := map[string]any{"kind": "FEDERATES_TO", "project": owner, "connection_id": id,
-		"wif_credential_id": id + "/" + key, "app_registration_id": spn,
+		"wif_credential_id": id + "/" + key, "credential_id": key, "app_registration_id": spn,
 		"subject": strOrNull(subject),
 		"issuer":  strOrNull(entStr(params["workloadIdentityFederationIssuer"]))}
 	return emitEdge(cp, timer, "federates-to", adoSafe(id), fed)

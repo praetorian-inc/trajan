@@ -88,7 +88,7 @@ var identityKeys = map[NodeLabel][]string{
 	Job:                     {"org", "project", "pipeline_id", "stage", "job"},
 	Environment:             {"org", "project", "name"},
 	ServiceConnection:       {"org", "owner_project", "connection_id"},
-	WIFCredential:           {"org", "owner_project", "connection_id", "subject"},
+	WIFCredential:           {"org", "owner_project", "connection_id", "credential_id"},
 	VariableGroup:           {"org", "owner_project", "group_id"},
 	SecretVariable:          {"org", "owner_project", "group_id", "name"},
 	SecureFile:              {"org", "project", "file_id"},
