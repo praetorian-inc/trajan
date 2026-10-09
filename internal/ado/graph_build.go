@@ -12,6 +12,7 @@ var identityFields = map[NodeLabel]map[string]string{
 	Pipeline:                {"pipeline_id": "id"},
 	ServiceConnection:       {"connection_id": "id"},
 	VariableGroup:           {"group_id": "id"},
+	WIFCredential:           {"owner_project": "project"},
 	SecretVariable:          {"owner_project": "project"},
 	SecureFile:              {"file_id": "id"},
 	ArtifactsFeed:           {"feed_id": "id"},
