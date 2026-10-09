@@ -35,7 +35,7 @@ func normalizeExtensions(prior engine.PriorPhase, cp engine.CurrentPhase, org st
 		rec := map[string]any{
 			"_id": id, "kind": "Extension", "org": org,
 			"publisher_id": pub, "publisher_name": entStr(e["publisherName"]),
-			"extension_id": ext, "extension_name": entStr(e["extensionName"]),
+			"extension_id": id, "extension_name": entStr(e["extensionName"]),
 			"version":                             entStr(e["version"]),
 			"scopes":                              entListOrEmpty(e["scopes"]),
 			"is_builtin":                          strings.Contains(flags, "builtIn"),

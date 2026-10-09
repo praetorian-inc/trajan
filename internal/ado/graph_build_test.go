@@ -119,3 +119,41 @@ func TestWIFCredentialResolvesWithAndWithoutASubject(t *testing.T) {
 		})
 	}
 }
+
+func TestInstallsEdgeTargetsTheQualifiedExtensionNode(t *testing.T) {
+	dir := t.TempDir()
+	writeCollect(t, dir, engine.CollectADOExtensions("org"), map[string]any{"value": []any{
+		map[string]any{
+			"publisherId": "pub", "extensionId": "ext", "extensionName": "Ext",
+			"contributions": []any{map[string]any{
+				"id": "pub.ext.deco", "type": pipelineDecoratorContribution,
+			}},
+		},
+	}})
+	if err := normalizeExtensions(engine.PriorPhase{RunDir: dir}, engineCP(dir), "org", normTimer()); err != nil {
+		t.Fatal(err)
+	}
+
+	c := &corpus{org: "org"}
+	n := newNodeSet()
+	ext := n.Upsert(Extension, c.identityOf(Extension,
+		readRec(t, dir, engine.NormalizeADOExtension("pub.ext"))), nil, "")
+	deco := n.Upsert(PipelineDecorator, c.identityOf(PipelineDecorator,
+		readRec(t, dir, engine.NormalizeADOExtension("pub.ext__decorator"))), nil, "")
+	if ext == nil || deco == nil {
+		t.Fatalf("Extension node %v, PipelineDecorator node %v", ext, deco)
+	}
+
+	rs := resolveEndpoints(testCtx, readRec(t, dir, engine.NormalizeADOEdges("installs", "pub.ext")))
+	if len(rs) != 1 {
+		t.Fatalf("INSTALLS resolved %d edges, want 1", len(rs))
+	}
+	for _, tc := range []struct {
+		end  endpoint
+		want string
+	}{{rs[0].From, ext.ID}, {rs[0].To, deco.ID}} {
+		if got := n.NodeID(tc.end.Label, tc.end.Key); got != tc.want {
+			t.Errorf("endpoint %q is not the node %q", got, tc.want)
+		}
+	}
+}
