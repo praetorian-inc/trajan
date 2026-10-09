@@ -2,6 +2,7 @@ id: cat-02/pipeline-execution-policy-writable-project
 scenario_id: cat-02/07
 title: "Pipeline execution policy sourcing CI from a mutable/writable policy project"
 subject: project
+graph: node(Project)
 severity: critical
 confidence: high
 description: >

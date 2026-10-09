@@ -2,6 +2,7 @@ id: cat-11/reused-readwrite-deploy-key-cross-trust
 scenario_id: cat-11/08
 title: "Read/write deploy key reused across a trust boundary, pushing to trigger privileged CI"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: medium
 description: >

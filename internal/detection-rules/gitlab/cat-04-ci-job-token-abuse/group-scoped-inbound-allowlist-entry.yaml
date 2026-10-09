@@ -2,6 +2,7 @@ id: cat-04/group-scoped-inbound-allowlist-entry
 scenario_id: cat-04/02
 title: "Group-scoped inbound job-token allowlist entry with no fine-grained permissions"
 subject: chain
+graph: node(Project)
 severity: critical
 confidence: high
 description: >

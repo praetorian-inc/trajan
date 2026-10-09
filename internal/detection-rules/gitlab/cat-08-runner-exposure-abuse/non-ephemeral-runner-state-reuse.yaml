@@ -2,6 +2,7 @@ id: cat-08/non-ephemeral-runner-state-reuse
 scenario_id: cat-08/05
 title: "Non-ephemeral runner reuses on-disk state across a trust boundary"
 subject: job
+graph: node(Job)
 severity: high
 confidence: low
 description: >

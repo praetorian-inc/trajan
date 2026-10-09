@@ -2,6 +2,7 @@ id: cat-06/author-self-approval
 scenario_id: cat-06/01
 title: "MR author approves their own merge request (\"Prevent approval by author\" disabled)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

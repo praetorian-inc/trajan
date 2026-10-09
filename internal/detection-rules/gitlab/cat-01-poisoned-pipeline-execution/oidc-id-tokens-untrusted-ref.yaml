@@ -2,6 +2,7 @@ id: cat-01/oidc-id-tokens-untrusted-ref
 scenario_id: cat-01/10
 title: "OIDC id_tokens job fires on an attacker-nameable ref (glob gate, not ref protection)"
 subject: job
+graph: node(Job)
 severity: high
 confidence: low
 description: >

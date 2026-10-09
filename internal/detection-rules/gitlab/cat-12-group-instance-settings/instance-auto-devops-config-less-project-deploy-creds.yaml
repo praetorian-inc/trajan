@@ -2,6 +2,7 @@ id: cat-12/instance-auto-devops-config-less-project-deploy-creds
 scenario_id: cat-12/12
 title: "Instance-wide Auto DevOps runs an org-credentialed pipeline on any CI-config-less project"
 subject: project
+graph: node(Project)
 severity: high
 confidence: medium
 description: >

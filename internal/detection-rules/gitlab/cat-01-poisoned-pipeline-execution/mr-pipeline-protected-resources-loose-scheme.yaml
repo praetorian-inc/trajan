@@ -2,6 +2,7 @@ id: cat-01/mr-pipeline-protected-resources-loose-scheme
 scenario_id: cat-01/08
 title: "MR pipeline grants protected variables/runners to a Developer via a loose protected-branch scheme"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

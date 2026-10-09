@@ -2,6 +2,7 @@ id: cat-15/environment-filter-unprotected-named
 scenario_id: cat-15/06
 title: "Kubernetes agent ci_access environments filter names an environment that is not protected, so a Developer forges the name to reach the cluster"
 subject: agent
+graph: node(Agent)
 severity: high
 confidence: low
 description: >

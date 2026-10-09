@@ -2,6 +2,7 @@ id: cat-07/protected-environment-name-mismatch
 scenario_id: cat-07/04
 title: "Protected Environments entry does not match the name the deploy job declares"
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: high
 description: >

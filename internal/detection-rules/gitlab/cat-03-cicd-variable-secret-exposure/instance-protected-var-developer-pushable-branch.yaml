@@ -2,6 +2,7 @@ id: cat-03/instance-protected-var-developer-pushable-branch
 scenario_id: cat-03/04
 title: "Instance-level protected variable reached via a Developer-pushable protected branch in any project"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: high
 description: >

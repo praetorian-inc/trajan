@@ -2,6 +2,7 @@ id: cat-15/protected-branch-developer-pushable
 scenario_id: cat-15/08
 title: "Kubernetes agent ci_access has protected_branches_only enabled, but the in-scope project's protected branch is Developer-pushable, so the branch gate authorizes the very actor it should exclude"
 subject: agent
+graph: node(Agent)
 severity: high
 confidence: low
 description: >

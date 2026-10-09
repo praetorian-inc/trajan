@@ -2,6 +2,7 @@ id: cat-12/internal-project-debug-trace-authenticated-variable-dump
 scenario_id: cat-12/02
 title: "Internal project with CI debug tracing exposes every CI variable to any authenticated instance user"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

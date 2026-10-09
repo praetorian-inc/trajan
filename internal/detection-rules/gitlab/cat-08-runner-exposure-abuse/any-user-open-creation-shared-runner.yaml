@@ -2,6 +2,7 @@ id: cat-08/any-user-open-creation-shared-runner
 scenario_id: cat-08/02
 title: "Open project/group creation plus instance runners on lets any authenticated user reach the shared runner pool"
 subject: instance
+graph: node(Instance)
 severity: high
 confidence: low
 description: >

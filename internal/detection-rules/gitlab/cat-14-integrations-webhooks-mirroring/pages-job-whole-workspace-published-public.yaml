@@ -2,6 +2,7 @@ id: cat-14/pages-job-whole-workspace-published-public
 scenario_id: cat-14/11
 title: "Public Pages job publishes the whole workspace, sweeping secret files into the public site"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

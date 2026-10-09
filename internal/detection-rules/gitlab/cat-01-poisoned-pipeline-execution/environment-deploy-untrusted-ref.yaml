@@ -2,6 +2,7 @@ id: cat-01/environment-deploy-untrusted-ref
 scenario_id: cat-01/11
 title: "Environment-scoped variables reach an attacker-nameable ref via a glob-gated deployment job"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

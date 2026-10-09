@@ -2,6 +2,7 @@ id: cat-09/cross-pipeline-artifact-untrusted-branch
 scenario_id: cat-09/07
 title: "Upstream-pipeline artifact from an untrusted branch consumed via needs:pipeline:job"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

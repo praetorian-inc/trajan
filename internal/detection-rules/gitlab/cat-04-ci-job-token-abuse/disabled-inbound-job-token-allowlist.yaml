@@ -2,6 +2,7 @@ id: cat-04/disabled-inbound-job-token-allowlist
 scenario_id: cat-04/01
 title: "Disabled inbound job-token allowlist (\"All groups and projects\") reached by a privileged triggering identity"
 subject: chain
+graph: node(Project)
 severity: critical
 confidence: high
 description: >

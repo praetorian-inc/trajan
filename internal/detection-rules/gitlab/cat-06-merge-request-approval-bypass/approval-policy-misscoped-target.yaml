@@ -2,6 +2,7 @@ id: cat-06/approval-policy-misscoped-target
 scenario_id: cat-06/11
 title: "MR approval policy does not bind the reachable branch (misscoped / unprotected target)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

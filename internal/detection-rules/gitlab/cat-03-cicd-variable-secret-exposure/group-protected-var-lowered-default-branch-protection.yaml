@@ -2,6 +2,7 @@ id: cat-03/group-protected-var-lowered-default-branch-protection
 scenario_id: cat-03/06
 title: "Group-inherited protected variable reached via lowered default-branch protection in a descendant project"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: high
 description: >

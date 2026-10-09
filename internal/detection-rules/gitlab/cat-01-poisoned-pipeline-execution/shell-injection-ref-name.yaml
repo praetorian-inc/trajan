@@ -2,6 +2,7 @@ id: cat-01/shell-injection-ref-name
 scenario_id: cat-01/05
 title: "Shell injection from a branch or tag name interpolated unquoted into a job script"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

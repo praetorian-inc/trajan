@@ -2,6 +2,7 @@ id: cat-13/external-mcp-server-untrusted-tool-output
 scenario_id: cat-13/05
 title: "Duo CI agent wired via mcp.json to an external MCP server whose tool output is trusted context, with secrets and write actions in scope"
 subject: job
+graph: node(Job)
 severity: critical
 confidence: low
 description: >

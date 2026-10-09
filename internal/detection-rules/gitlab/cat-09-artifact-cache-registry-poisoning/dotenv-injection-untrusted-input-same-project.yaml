@@ -2,6 +2,7 @@ id: cat-09/dotenv-injection-untrusted-input-same-project
 scenario_id: cat-09/02
 title: "dotenv variable injection where a trusted-ref producer's exported content is derived from untrusted input"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: high
 description: >

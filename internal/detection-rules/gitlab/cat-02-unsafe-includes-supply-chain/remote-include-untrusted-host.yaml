@@ -2,6 +2,7 @@ id: cat-02/remote-include-untrusted-host
 scenario_id: cat-02/01
 title: "Unpinned remote include to an external host executes attacker-served CI config"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

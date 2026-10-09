@@ -2,6 +2,7 @@ id: cat-11/non-expiring-group-deploy-token-auto-injected
 scenario_id: cat-11/05
 title: "Non-expiring group deploy token auto-injected as `gitlab-deploy-token`"
 subject: credential
+graph: node(Credential)
 severity: critical
 confidence: high
 description: >

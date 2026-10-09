@@ -2,6 +2,7 @@ id: cat-06/codeowners-advisory-not-required
 scenario_id: cat-06/07
 title: "CODEOWNERS names owners for trust-relevant paths but code-owner approval is not required"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

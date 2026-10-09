@@ -2,6 +2,7 @@ id: cat-06/in-mr-approval-rule-override
 scenario_id: cat-06/06
 title: "MR author edits the approval rule from inside their own MR (rule overriding not prevented)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

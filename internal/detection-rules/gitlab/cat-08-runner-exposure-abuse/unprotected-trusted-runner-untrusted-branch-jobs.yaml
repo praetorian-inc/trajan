@@ -2,6 +2,7 @@ id: cat-08/unprotected-trusted-runner-untrusted-branch-jobs
 scenario_id: cat-08/04
 title: "Unprotected trusted/deploy runner executes non-protected-branch jobs"
 subject: runner
+graph: node(Runner)
 severity: high
 confidence: medium
 description: >

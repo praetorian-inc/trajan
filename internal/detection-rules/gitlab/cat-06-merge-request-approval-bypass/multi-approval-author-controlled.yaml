@@ -2,6 +2,7 @@ id: cat-06/multi-approval-author-controlled
 scenario_id: cat-06/03
 title: "Multi-approval gate cleared entirely by author-controlled identities (no independent reviewer)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

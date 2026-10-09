@@ -2,6 +2,7 @@ id: cat-06/codeowners-optional-section
 scenario_id: cat-06/08
 title: "Trust-relevant paths owned only under an Optional CODEOWNERS section (never blocks a merge)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

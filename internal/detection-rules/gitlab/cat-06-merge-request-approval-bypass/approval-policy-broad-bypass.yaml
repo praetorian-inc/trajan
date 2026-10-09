@@ -2,6 +2,7 @@ id: cat-06/approval-policy-broad-bypass
 scenario_id: cat-06/12
 title: "MR approval policy exempts a broadly-held actor via bypass_settings"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

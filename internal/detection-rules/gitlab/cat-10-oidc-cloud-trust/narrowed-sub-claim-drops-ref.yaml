@@ -2,6 +2,7 @@ id: cat-10/narrowed-sub-claim-drops-ref
 scenario_id: cat-10/01
 title: "OIDC subject claim narrowed to drop the ref, so every branch mints the same identity as protected main"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

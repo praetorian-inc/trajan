@@ -2,6 +2,7 @@ id: cat-13/issue-comment-flow-guardrail-not-interrupt
 scenario_id: cat-13/02
 title: "Duo flow runs in CI on issue/comment text with prompt-injection guardrail not set to Interrupt and secrets in scope"
 subject: job
+graph: node(Job)
 severity: critical
 confidence: low
 description: >

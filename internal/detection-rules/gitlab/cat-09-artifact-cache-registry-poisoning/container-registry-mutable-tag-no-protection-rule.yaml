@@ -2,6 +2,7 @@ id: cat-09/container-registry-mutable-tag-no-protection-rule
 scenario_id: cat-09/09
 title: "Container-registry mutable-tag poisoning with no protected-tag rule"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

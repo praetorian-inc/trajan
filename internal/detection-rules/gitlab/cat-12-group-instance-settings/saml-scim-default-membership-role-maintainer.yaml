@@ -2,6 +2,7 @@ id: cat-12/saml-scim-default-membership-role-maintainer
 scenario_id: cat-12/10
 title: "SAML/SCIM default membership role of Maintainer/Owner auto-grants CI/CD administration to every provisioned identity"
 subject: group
+graph: node(Group)
 severity: high
 confidence: high
 description: >

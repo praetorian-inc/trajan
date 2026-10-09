@@ -2,6 +2,7 @@ id: cat-05/group-lowered-default-branch-protection
 scenario_id: cat-05/06
 title: "Group default_branch_protection_defaults lowered to Partially protected makes inherited default branches Developer-writable"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

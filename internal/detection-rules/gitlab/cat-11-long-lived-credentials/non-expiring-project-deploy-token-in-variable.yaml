@@ -2,6 +2,7 @@ id: cat-11/non-expiring-project-deploy-token-in-variable
 scenario_id: cat-11/06
 title: "Non-expiring, container-registry-write project deploy token in an unprotected variable"
 subject: credential
+graph: node(Credential)
 severity: high
 confidence: medium
 description: >

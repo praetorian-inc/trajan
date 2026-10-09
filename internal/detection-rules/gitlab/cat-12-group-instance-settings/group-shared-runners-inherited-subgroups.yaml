@@ -2,6 +2,7 @@ id: cat-12/group-shared-runners-inherited-subgroups
 scenario_id: cat-12/07
 title: "Group runners inherited to all subgroups let any self-service subgroup project run code on the group's shared compute"
 subject: chain
+graph: node(Runner)
 severity: high
 confidence: medium
 description: >

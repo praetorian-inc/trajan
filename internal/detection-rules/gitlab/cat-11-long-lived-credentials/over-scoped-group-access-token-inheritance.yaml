@@ -2,6 +2,7 @@ id: cat-11/over-scoped-group-access-token-inheritance
 scenario_id: cat-11/02
 title: "Over-scoped group access token whose bot inherits into a Developer-runnable pipeline"
 subject: credential
+graph: node(Credential)
 severity: critical
 confidence: medium
 description: >

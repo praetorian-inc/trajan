@@ -2,6 +2,7 @@ id: cat-12/unlocked-project-runner-bridged-across-trust
 scenario_id: cat-12/08
 title: "Unlocked project runner enabled across projects of differing trust shares a host across the boundary"
 subject: runner
+graph: node(Runner)
 severity: high
 confidence: medium
 description: >

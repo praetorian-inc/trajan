@@ -2,6 +2,7 @@ id: cat-08/unlocked-project-runner-cross-trust
 scenario_id: cat-08/06
 title: "Unlocked project runner enabled on a sensitive and a low-trust project"
 subject: runner
+graph: node(Runner)
 severity: high
 confidence: low
 description: >

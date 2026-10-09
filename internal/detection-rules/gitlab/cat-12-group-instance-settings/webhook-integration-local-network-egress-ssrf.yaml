@@ -2,6 +2,7 @@ id: cat-12/webhook-integration-local-network-egress-ssrf
 scenario_id: cat-12/15
 title: "Instance allows webhook/integration requests to the local network, giving Maintainers an SSRF primitive"
 subject: instance
+graph: node(Instance)
 severity: high
 confidence: medium
 description: >

@@ -2,6 +2,7 @@ id: cat-05/instance-lowered-default-branch-protection
 scenario_id: cat-05/05
 title: "Instance default-branch protection lowered to Partially protected makes inherited default branches Developer-writable"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

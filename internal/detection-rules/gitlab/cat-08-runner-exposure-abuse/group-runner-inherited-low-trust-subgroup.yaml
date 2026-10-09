@@ -2,6 +2,7 @@ id: cat-08/group-runner-inherited-low-trust-subgroup
 scenario_id: cat-08/03
 title: "Group runner recursively inherited into a low-trust subgroup project"
 subject: runner
+graph: node(Runner)
 severity: high
 confidence: low
 description: >

@@ -2,6 +2,7 @@ id: cat-05/protected-runner-via-writable-branch
 scenario_id: cat-05/04
 title: "Developer-writable protected branch reaches a protected runner (code execution on the runner)"
 subject: project
+graph: node(Project)
 severity: high
 confidence: medium
 description: >

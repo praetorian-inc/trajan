@@ -2,6 +2,7 @@ id: cat-10/id-tokens-mintable-from-untrusted-ref
 scenario_id: cat-10/02
 title: "OIDC id_tokens job mintable from an untrusted ref (fork-MR-in-parent / non-protected branch), token carries the trusted project identity"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

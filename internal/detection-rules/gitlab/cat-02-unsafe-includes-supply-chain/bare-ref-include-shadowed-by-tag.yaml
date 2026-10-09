@@ -2,6 +2,7 @@ id: cat-02/bare-ref-include-shadowed-by-tag
 scenario_id: cat-02/09
 title: "Bare ref in an include or trigger is shadowed by a lower-trust same-named tag"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

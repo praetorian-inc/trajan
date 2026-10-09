@@ -2,6 +2,7 @@ id: cat-01/merged-results-pipeline-protected-resources
 scenario_id: cat-01/09
 title: "Merged-results / merge-train pipeline exposes protected variables/runners to a Developer's pre-merge code"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

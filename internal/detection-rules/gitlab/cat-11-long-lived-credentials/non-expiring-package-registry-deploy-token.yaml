@@ -2,6 +2,7 @@ id: cat-11/non-expiring-package-registry-deploy-token
 scenario_id: cat-11/07
 title: "Non-expiring `write_package_registry` deploy token reachable from a pipeline"
 subject: credential
+graph: node(Credential)
 severity: high
 confidence: high
 description: >

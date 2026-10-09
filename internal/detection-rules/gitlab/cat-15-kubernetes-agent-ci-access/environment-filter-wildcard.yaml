@@ -2,6 +2,7 @@ id: cat-15/environment-filter-wildcard
 scenario_id: cat-15/05
 title: "Kubernetes agent ci_access environments filter uses a wildcard, which any Developer-authored environment slug matches"
 subject: agent
+graph: node(Agent)
 severity: high
 confidence: low
 description: >

@@ -2,6 +2,7 @@ id: cat-06/external-status-check-not-enforced
 scenario_id: cat-06/14
 title: "External status check configured but not enforced (\"Status checks must succeed\" off)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-05/wildcard-created-protected-branch
 scenario_id: cat-05/03
 title: "Developer creates a new branch matching a wildcard protected-branch rule and runs a protected-ref pipeline"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

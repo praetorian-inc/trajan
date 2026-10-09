@@ -2,6 +2,7 @@ id: cat-14/pages-job-masked-variable-inlined-public
 scenario_id: cat-14/08
 title: "Public Pages job inlines a masked/protected CI/CD variable into the published bundle"
 subject: job
+graph: node(Job)
 severity: high
 confidence: low
 description: >

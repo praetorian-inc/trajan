@@ -2,6 +2,7 @@ id: cat-05/developer-creatable-protected-tag
 scenario_id: cat-05/11
 title: "Developer in a protected tag's \"Allowed to create\" runs a privileged tag pipeline on a protected ref"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

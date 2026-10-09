@@ -2,6 +2,7 @@ id: cat-04/schedule-owner-privileged-triggerer
 scenario_id: cat-04/03
 title: "Pipeline schedule owned by a privileged user, on a ref a lower-trust member can edit"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: high
 description: >
