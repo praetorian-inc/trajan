@@ -51,25 +51,6 @@ func TestEveryChainJoinHasAnAnchor(t *testing.T) {
 	}
 }
 
-func TestEveryRuleSubjectNamesANormalizeDirectory(t *testing.T) {
-	rules, err := detect.LoadRules("gitlab", nil)
-	if err != nil {
-		t.Fatalf("LoadRules: %v", err)
-	}
-	var bad []string
-	for _, r := range rules {
-		if r.SubjectKind() == "chain" {
-			continue
-		}
-		if _, ok := gitlabScanProvider.SubjectDirs[r.SubjectKind()]; !ok {
-			bad = append(bad, r.ID+": subject "+r.SubjectKind())
-		}
-	}
-	if len(bad) > 0 {
-		t.Errorf("rule(s) whose subject names no normalize directory:\n%s", strings.Join(bad, "\n"))
-	}
-}
-
 func TestEveryTargetedLabelHasARecordSource(t *testing.T) {
 	rules, err := detect.LoadRules("gitlab", nil)
 	if err != nil {

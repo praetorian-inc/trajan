@@ -1,10 +1,12 @@
 package gitlab
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
 	"github.com/praetorian-inc/trajan/internal/graph"
+	"github.com/praetorian-inc/trajan/pkg/finding"
 )
 
 func rec(dir, id string, fields map[string]any) graph.Record {
@@ -74,8 +76,8 @@ func TestScopeRootFallsBackToTheProjectNamespace(t *testing.T) {
 
 func TestEmptyCorpusHasNoScope(t *testing.T) {
 	_, err := indexCorpus(&graph.Corpus{Records: []graph.Record{rec("runners", "7", nil)}})
-	if err == nil {
-		t.Fatal("want ErrNoOrgRecord, got nil")
+	if !errors.Is(err, graph.ErrNoOrgRecord) {
+		t.Fatalf("err = %v, want ErrNoOrgRecord", err)
 	}
 }
 
@@ -183,6 +185,47 @@ func TestChainAnchorsResolveToEmittedNodes(t *testing.T) {
 			if n.Get(an.id) == nil {
 				t.Errorf("tuple %s anchors %s, which no record emitted", id, an.id)
 			}
+		}
+	}
+}
+
+func TestChainFindingAttachesToEveryMatchingAnchor(t *testing.T) {
+	const source, victim = "acme/platform/api", "acme/platform/web"
+	c, err := indexCorpus(&graph.Corpus{Records: append(scopeCorpus(), rec("projects", victim, nil))})
+	if err != nil {
+		t.Fatalf("indexCorpus: %v", err)
+	}
+	n, err := buildNodes(t.Context(), c)
+	if err != nil {
+		t.Fatalf("buildNodes: %v", err)
+	}
+	c.chains = map[string]map[string]any{"job-token-allowlist": {"edges": []any{map[string]any{
+		"_id":    "jtoken",
+		"source": map[string]any{"_id": source},
+		"target": map[string]any{"_id": victim},
+	}}}}
+
+	const rule = "cat-04/disabled-inbound-job-token-allowlist"
+	a := newAttacher(c, n, map[string]graph.Target{rule: {Kind: graph.TargetNode, Label: string(LabelProject)}})
+	err = a.run(t.Context(), []finding.Finding{{
+		Fingerprint: "fp-1",
+		Rule:        &finding.Rule{ID: rule},
+		Subject:     finding.Subject{Kind: "chain", ID: "jtoken"},
+	}})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if a.res.Attached != 1 || a.res.ToNodes != 1 {
+		t.Errorf("attached %d finding(s) to %d node(s), want 1 and 1", a.res.Attached, a.res.ToNodes)
+	}
+	for _, id := range []string{source, victim} {
+		node := n.Get(graph.NodeID(glSchema{}, LabelProject, map[string]string{"_id": id}))
+		if node == nil {
+			t.Errorf("project %s emitted no node", id)
+			continue
+		}
+		if len(node.Findings) != 1 {
+			t.Errorf("project %s carries %d finding(s), want 1", id, len(node.Findings))
 		}
 	}
 }

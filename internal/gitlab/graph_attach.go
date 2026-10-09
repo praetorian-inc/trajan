@@ -114,20 +114,21 @@ func (a *attacher) one(f *finding.Finding) {
 		Confidence: f.Confidence, Target: graph.RenderTarget(t),
 		SubjectKind: f.Subject.Kind, SubjectID: f.Subject.ID, Title: f.Title,
 	}
+	hits := 0
 	for _, an := range anchors {
 		if an.label != NodeLabel(t.Label) {
 			continue
 		}
-		n := a.n.Get(an.id)
-		if n == nil {
-			continue
+		if n := a.n.Get(an.id); n != nil && graph.AppendFinding(&n.Findings, ref) {
+			hits++
 		}
-		graph.AppendFinding(&n.Findings, ref)
-		a.res.Attached++
-		a.res.ToNodes++
+	}
+	if hits == 0 {
+		a.fail(f, t, graph.ReasonLabelMismatch, "the subject resolves to no "+t.Label+" node")
 		return
 	}
-	a.fail(f, t, graph.ReasonLabelMismatch, "the subject resolves to no "+t.Label+" node")
+	a.res.Attached++
+	a.res.ToNodes++
 }
 
 func (a *attacher) fail(f *finding.Finding, t graph.Target, reason, detail string) {
