@@ -73,6 +73,7 @@ func GitLab(ctx context.Context, cfg Config) (Result, error) {
 		scan: func(ctx context.Context, ec *engine.Config, runDir string) error {
 			return gitlab.Scan(ctx, ec, runDir, opts)
 		},
+		graph: buildGraph(gitlab.GraphProvider()),
 	})
 }
 
