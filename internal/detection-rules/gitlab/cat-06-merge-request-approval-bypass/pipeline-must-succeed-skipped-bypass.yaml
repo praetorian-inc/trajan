@@ -2,6 +2,7 @@ id: cat-06/pipeline-must-succeed-skipped-bypass
 scenario_id: cat-06/13
 title: "\"Pipelines must succeed\" bypassed by a skipped/empty pipeline (skipped counts as success)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

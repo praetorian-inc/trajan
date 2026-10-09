@@ -2,6 +2,7 @@ id: cat-01/shell-injection-component-input
 scenario_id: cat-01/07
 title: "Shell injection from an unconstrained CI component/template input"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-07/dynamic-environment-name-scope-selection
 scenario_id: cat-07/06
 title: "Runtime-chosen environment name lets a Developer select which scope injects"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

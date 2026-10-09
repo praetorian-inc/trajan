@@ -2,6 +2,7 @@ id: cat-05/no-one-push-defeated-by-branch-creation
 scenario_id: cat-05/09
 title: "\"No one can push\" defeated by branch creation via an overlapping merge-access wildcard rule"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

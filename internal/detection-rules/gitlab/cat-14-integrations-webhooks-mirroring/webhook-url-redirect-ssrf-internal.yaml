@@ -2,6 +2,7 @@ id: cat-14/webhook-url-redirect-ssrf-internal
 scenario_id: cat-14/03
 title: "Webhook re-pointed to an internal/metadata endpoint via local-network requests allowed (self-managed)"
 subject: integration
+graph: node(Integration)
 severity: high
 confidence: medium
 description: >

@@ -5,6 +5,8 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
@@ -66,6 +68,30 @@ func TestScalarPropsClearsStaleFindingProperties(t *testing.T) {
 	}
 	if withFinding["findings_high"] == nil {
 		t.Error("a bucket the run did populate must not be nulled")
+	}
+}
+
+func TestNodePropsKeepsReservedPropsOverIdentityKey(t *testing.T) {
+	n := Node[string]{
+		ID:         "Project|g/p",
+		Labels:     []string{"Project"},
+		Key:        map[string]string{"_id": "g/p", "_org": "spoof", "_run_id": "spoof", "name": "p"},
+		Properties: map[string]any{"visibility": "private"},
+	}
+	props := nodeProps(n, &engine.State{Org: "acme", RunID: "run-1"})
+	for k, want := range map[string]any{
+		"_id": n.ID, "_org": "acme", "_run_id": "run-1",
+		"name": "p", "visibility": "private",
+	} {
+		if got := props[k]; got != want {
+			t.Errorf("%s = %#v, want %#v", k, got, want)
+		}
+	}
+
+	for k := range scalarProps(nil, nil, n.ID, &engine.State{}) {
+		if strings.HasPrefix(k, "_") && !slices.Contains(reservedProps, k) {
+			t.Errorf("scalarProps writes %s, which reservedProps does not protect", k)
+		}
 	}
 }
 

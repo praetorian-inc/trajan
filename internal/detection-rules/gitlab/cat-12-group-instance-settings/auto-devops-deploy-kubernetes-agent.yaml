@@ -2,6 +2,7 @@ id: cat-12/auto-devops-deploy-kubernetes-agent
 scenario_id: cat-12/14
 title: "Auto DevOps deploy stage authenticates to a cluster, running config-less-project code beside a live kubeconfig"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: medium
 description: >

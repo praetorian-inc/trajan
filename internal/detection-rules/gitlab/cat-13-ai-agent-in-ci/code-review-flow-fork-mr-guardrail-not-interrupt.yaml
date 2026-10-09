@@ -2,6 +2,7 @@ id: cat-13/code-review-flow-fork-mr-guardrail-not-interrupt
 scenario_id: cat-13/01
 title: "Duo Code Review flow runs in CI on a fork merge request with prompt-injection guardrail not set to Interrupt and secrets in scope"
 subject: job
+graph: node(Job)
 severity: critical
 confidence: low
 description: >

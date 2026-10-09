@@ -2,6 +2,7 @@ id: cat-01/fork-mr-pipeline-parent-variables
 scenario_id: cat-01/01
 title: "Fork MR pipeline in the parent project exposes parent CI/CD variables and job token"
 subject: project
+graph: node(Project)
 severity: critical
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-12/private-project-public-pipelines-guest-log-read
 scenario_id: cat-12/03
 title: "Private project with public pipelines lets a Guest read job logs and artifacts"
 subject: project
+graph: node(Project)
 severity: medium
 confidence: high
 description: >

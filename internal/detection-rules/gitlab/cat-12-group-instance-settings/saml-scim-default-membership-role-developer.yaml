@@ -2,6 +2,7 @@ id: cat-12/saml-scim-default-membership-role-developer
 scenario_id: cat-12/09
 title: "SAML/SCIM default membership role of Developer auto-grants CI execution to every provisioned identity"
 subject: group
+graph: node(Group)
 severity: high
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-05/wildcard-shadow-protected-tag-creation
 scenario_id: cat-05/12
 title: "Overlapping wildcard protected-tag rule grants a Developer create access a stricter rule denied (most-permissive wins)"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

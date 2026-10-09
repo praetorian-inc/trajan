@@ -2,6 +2,7 @@ id: cat-02/branch-name-controlled-include
 scenario_id: cat-02/05
 title: "Branch-name-controlled include steers the pipeline to attacker-chosen config"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

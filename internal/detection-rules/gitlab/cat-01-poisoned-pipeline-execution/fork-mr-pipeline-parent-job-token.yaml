@@ -2,6 +2,7 @@ id: cat-01/fork-mr-pipeline-parent-job-token
 scenario_id: cat-01/03
 title: "Fork MR pipeline in the parent obtains a parent-scoped CI_JOB_TOKEN reaching allowlisted projects"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

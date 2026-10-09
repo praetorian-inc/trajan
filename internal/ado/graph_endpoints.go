@@ -243,7 +243,8 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 				"org": c.Org, "owner_project": owner, "connection_id": conn,
 			}},
 			endpoint{Label: WIFCredential, Key: map[string]string{
-				"org": c.Org, "owner_project": owner, "connection_id": conn, "subject": mStr(rec, "subject"),
+				"org": c.Org, "owner_project": owner, "connection_id": conn,
+				"credential_id": mStr(rec, "credential_id"),
 			}})
 	},
 

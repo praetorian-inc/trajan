@@ -2,6 +2,7 @@ id: cat-09/cache-poisoning-static-key-separation-disabled
 scenario_id: cat-09/04
 title: "Cache poisoning across the protected boundary via a static key with separation disabled"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: low
 description: >

@@ -2,6 +2,7 @@ id: cat-06/approval-policy-warn-mode
 scenario_id: cat-06/10
 title: "MR approval policy in warn mode — violations are dismissable, not blocking"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

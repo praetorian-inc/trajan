@@ -2,6 +2,7 @@ id: cat-05/force-push-enabled-protected-branch
 scenario_id: cat-05/07
 title: "Force push enabled on a protected branch lets a low-trust pusher rewrite the trusted ref tip"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

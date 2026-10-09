@@ -2,6 +2,7 @@ id: cat-02/remote-include-cleartext-http
 scenario_id: cat-02/02
 title: "Cleartext (http) remote include with no integrity pin allows MITM CI-config injection"
 subject: job
+graph: node(Job)
 severity: high
 confidence: low
 description: >

@@ -2,6 +2,7 @@ id: cat-11/human-pat-as-cicd-variable
 scenario_id: cat-11/03
 title: "Human personal access token wired into a pipeline as a CI/CD variable"
 subject: credential
+graph: node(Credential)
 severity: critical
 confidence: low
 description: >

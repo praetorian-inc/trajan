@@ -2,6 +2,7 @@ id: cat-02/project-include-mutable-cross-trust-ref
 scenario_id: cat-02/03
 title: "include:project at a mutable ref lets a lower-trust template author poison a higher-trust pipeline"
 subject: job
+graph: node(Job)
 severity: critical
 confidence: high
 description: >

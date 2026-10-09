@@ -2,6 +2,7 @@ id: cat-13/self-managed-instance-duo-guardrail-not-interrupt
 scenario_id: cat-13/04
 title: "Self-managed instance Duo enabled with instance-level prompt-injection guardrail not set to Interrupt and secrets in a flow's CI job"
 subject: job
+graph: node(Job)
 severity: critical
 confidence: low
 description: >

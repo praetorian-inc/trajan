@@ -2,6 +2,7 @@ id: cat-02/cicd-step-function-cross-trust-ref
 scenario_id: cat-02/08
 title: "CI/CD Step / Function referenced from a git ref a less-trusted party can write"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

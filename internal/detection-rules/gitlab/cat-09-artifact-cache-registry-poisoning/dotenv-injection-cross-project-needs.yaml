@@ -2,6 +2,7 @@ id: cat-09/dotenv-injection-cross-project-needs
 scenario_id: cat-09/01
 title: "dotenv variable injection from a lower-trust upstream project via needs:project"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: high
 description: >

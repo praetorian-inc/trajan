@@ -2,6 +2,7 @@ id: cat-09/package-registry-mutable-version-no-protection-rule
 scenario_id: cat-09/10
 title: "Package-registry mutable-version poisoning with no package protection rule"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

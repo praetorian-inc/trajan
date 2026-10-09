@@ -2,6 +2,7 @@ id: cat-06/codeowners-self-editable
 scenario_id: cat-06/15
 title: "CODEOWNERS ownership is removable within the same MR (`/CODEOWNERS` not self-owned)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: low
 description: >

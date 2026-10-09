@@ -2,6 +2,7 @@ id: cat-12/saml-scim-default-custom-cicd-role
 scenario_id: cat-12/11
 title: "SAML/SCIM default membership role is a custom role carrying a CI/CD-admin ability"
 subject: group
+graph: node(Group)
 severity: high
 confidence: high
 description: >

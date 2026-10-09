@@ -2,6 +2,7 @@ id: cat-05/developer-merge-access-self-merge
 scenario_id: cat-05/02
 title: "Developer role in a protected branch's merge access self-merges to a CI-trusted ref"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

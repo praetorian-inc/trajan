@@ -2,6 +2,7 @@ id: cat-14/pages-job-secure-file-published-public
 scenario_id: cat-14/09
 title: "Public Pages job downloads a secure file that lands in the published bundle"
 subject: job
+graph: node(Job)
 severity: high
 confidence: low
 description: >

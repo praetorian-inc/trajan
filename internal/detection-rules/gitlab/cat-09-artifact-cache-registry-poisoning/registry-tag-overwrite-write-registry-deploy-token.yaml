@@ -2,6 +2,7 @@ id: cat-09/registry-tag-overwrite-write-registry-deploy-token
 scenario_id: cat-09/11
 title: "Mutable-tag overwrite performed with a broadly-reachable write_registry deploy token"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

@@ -2,6 +2,7 @@ id: cat-08/shared-instance-runner-low-trust-coresidency
 scenario_id: cat-08/01
 title: "Self-managed instance runner shared across a trust boundary gives a low-trust Developer co-residency"
 subject: runner
+graph: node(Runner)
 severity: high
 confidence: low
 description: >

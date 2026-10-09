@@ -2,6 +2,7 @@ id: cat-06/approvals-persist-across-push
 scenario_id: cat-06/04
 title: "Approvals persist across post-approval commits (\"Keep approvals\" — reset-on-push disabled)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

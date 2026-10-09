@@ -2,6 +2,7 @@ id: cat-01/shell-injection-mr-metadata
 scenario_id: cat-01/04
 title: "Shell injection from merge-request metadata interpolated unquoted into a job script"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

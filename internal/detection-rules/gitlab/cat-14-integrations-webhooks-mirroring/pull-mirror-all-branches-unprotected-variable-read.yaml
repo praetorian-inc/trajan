@@ -2,6 +2,7 @@ id: cat-14/pull-mirror-all-branches-unprotected-variable-read
 scenario_id: cat-14/07
 title: "Pull-mirror auto-pipeline on all branches reads unprotected variables from any mirrored ref"
 subject: integration
+graph: node(Integration)
 severity: high
 confidence: high
 description: >

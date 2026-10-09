@@ -2,6 +2,7 @@ id: cat-05/developer-push-access-protected-branch
 scenario_id: cat-05/01
 title: "Developer role in a protected branch's push access reads protected CI/CD variables"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

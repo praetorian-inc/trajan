@@ -2,6 +2,7 @@ id: cat-06/committer-self-approval
 scenario_id: cat-06/02
 title: "MR committer approves an MR they added commits to (\"Prevent approvals by users who add commits\" off)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-04/cross-project-git-push-via-job-token
 scenario_id: cat-04/06
 title: "Cross-project Git push via CI_JOB_TOKEN with both write toggles enabled"
 subject: chain
+graph: node(Project)
 severity: critical
 confidence: high
 description: >

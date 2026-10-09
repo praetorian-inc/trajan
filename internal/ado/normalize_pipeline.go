@@ -72,6 +72,7 @@ func normalizePipelines(ctx context.Context, prior engine.PriorPhase, cp engine.
 			"_id":                     fmt.Sprintf("%s/%d", project, id),
 			"kind":                    "Pipeline",
 			"project":                 project,
+			"repo":                    azureReposName(repo),
 			"id":                      id,
 			"name":                    entStr(def["name"]),
 			"yaml_path":               entStr(process["yamlFilename"]),

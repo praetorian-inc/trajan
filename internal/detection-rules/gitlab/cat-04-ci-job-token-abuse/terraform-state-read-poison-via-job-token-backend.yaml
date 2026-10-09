@@ -2,6 +2,7 @@ id: cat-04/terraform-state-read-poison-via-job-token-backend
 scenario_id: cat-04/05
 title: "Cross-project Terraform/OpenTofu state read and poison via the job-token state backend"
 subject: chain
+graph: node(Project)
 severity: critical
 confidence: high
 description: >

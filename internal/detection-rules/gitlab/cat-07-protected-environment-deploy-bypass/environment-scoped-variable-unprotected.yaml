@@ -2,6 +2,7 @@ id: cat-07/environment-scoped-variable-unprotected
 scenario_id: cat-07/05
 title: "Environment-scoped CI/CD variable trusted as a boundary but left unprotected"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

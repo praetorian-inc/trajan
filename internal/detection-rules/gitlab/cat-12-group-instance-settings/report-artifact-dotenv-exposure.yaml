@@ -2,6 +2,7 @@ id: cat-12/report-artifact-dotenv-exposure
 scenario_id: cat-12/05
 title: "Report artifacts (dotenv / security reports) left default-public expose exported variables and inventory to non-members"
 subject: job
+graph: node(Job)
 severity: medium
 confidence: low
 description: >

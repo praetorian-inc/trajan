@@ -88,7 +88,7 @@ var identityKeys = map[NodeLabel][]string{
 	Job:                     {"org", "project", "pipeline_id", "stage", "job"},
 	Environment:             {"org", "project", "name"},
 	ServiceConnection:       {"org", "owner_project", "connection_id"},
-	WIFCredential:           {"org", "owner_project", "connection_id", "subject"},
+	WIFCredential:           {"org", "owner_project", "connection_id", "credential_id"},
 	VariableGroup:           {"org", "owner_project", "group_id"},
 	SecretVariable:          {"org", "owner_project", "group_id", "name"},
 	SecureFile:              {"org", "project", "file_id"},
@@ -108,7 +108,7 @@ var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 	HasProject:    {{Organization, Project}},
 	HasRepository: {{Project, Repository}},
 	HasBranch:     {{Repository, Branch}},
-	HasPipeline:   {{Project, Pipeline}},
+	HasPipeline:   {{Project, Pipeline}, {Repository, Pipeline}},
 	HasStage:      {{Pipeline, Stage}},
 	HasJob:        {{Stage, Job}},
 

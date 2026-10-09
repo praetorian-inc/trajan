@@ -1471,7 +1471,11 @@ func normalizeCredentials(prior engine.PriorPhase, cp engine.CurrentPhase, p pro
 		rec["_id"] = kind + ":" + key
 		rec["kind"] = kind
 		rec["project_uses_oidc"] = usesOIDC
-		rec["_provenance"] = []provenance{{"scope": "project:" + fp}}
+		scope := "project:" + fp
+		if entStr(rec["scope_level"]) == "group" {
+			scope = "group:" + parentGroup(fp)
+		}
+		rec["_provenance"] = []provenance{{"scope": scope}}
 		return emit(cp, timer, engine.NormalizeGLCredential(kind, kind+"-"+key), rec)
 	}
 

@@ -2,6 +2,7 @@ id: cat-03/group-protected-var-developer-creatable-tag
 scenario_id: cat-03/05
 title: "Group-inherited protected variable reached via a Developer-creatable protected tag in a descendant project"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: high
 description: >

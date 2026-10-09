@@ -2,6 +2,7 @@ id: cat-13/external-agent-flow-scanning-structurally-absent
 scenario_id: cat-13/06
 title: "Duo CI flow wired to an external agent (third-party model provider) whose output GitLab does not scan, with secrets and write actions in scope"
 subject: job
+graph: node(Job)
 severity: critical
 confidence: low
 description: >

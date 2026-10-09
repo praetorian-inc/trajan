@@ -2,6 +2,7 @@ id: cat-15/environment-filter-free-tier
 scenario_id: cat-15/07
 title: "Kubernetes agent ci_access environments filter on a Free-tier namespace, where protected environments do not exist so the filter is decorative"
 subject: agent
+graph: node(Agent)
 severity: high
 confidence: low
 description: >

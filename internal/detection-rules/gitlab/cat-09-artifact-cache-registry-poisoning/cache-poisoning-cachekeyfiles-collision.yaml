@@ -2,6 +2,7 @@ id: cat-09/cache-poisoning-cachekeyfiles-collision
 scenario_id: cat-09/05
 title: "Cache poisoning across the protected boundary via cache:key:files collision"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: low
 description: >

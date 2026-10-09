@@ -2,6 +2,7 @@ id: cat-06/selective-code-owner-reset
 scenario_id: cat-06/05
 title: "Only Code-Owner approvals reset on push, regular approvals persist (selective_code_owner_removals)"
 subject: merge_request
+graph: node(MergeRequest)
 severity: high
 confidence: high
 description: >

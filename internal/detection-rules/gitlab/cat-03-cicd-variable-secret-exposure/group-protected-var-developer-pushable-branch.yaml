@@ -2,6 +2,7 @@ id: cat-03/group-protected-var-developer-pushable-branch
 scenario_id: cat-03/03
 title: "Group-inherited protected variable reached via a Developer-pushable protected branch in a descendant project"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: high
 description: >

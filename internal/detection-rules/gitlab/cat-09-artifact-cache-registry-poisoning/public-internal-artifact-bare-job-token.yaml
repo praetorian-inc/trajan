@@ -2,6 +2,7 @@ id: cat-09/public-internal-artifact-bare-job-token
 scenario_id: cat-09/08
 title: "Public/internal-project artifact fetched by bare job token, allowlist never applies"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

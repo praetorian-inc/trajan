@@ -2,6 +2,7 @@ id: cat-01/fork-mr-pipeline-parent-self-managed-runner
 scenario_id: cat-01/02
 title: "Fork MR pipeline in the parent project lands on a self-managed parent runner"
 subject: project
+graph: node(Project)
 severity: high
 confidence: medium
 description: >

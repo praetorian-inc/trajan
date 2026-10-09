@@ -2,6 +2,7 @@ id: cat-02/catalog-component-mutable-version
 scenario_id: cat-02/04
 title: "CI/CD Catalog component at a mutable version ships attacker code into consumer pipelines"
 subject: job
+graph: node(Job)
 severity: high
 confidence: medium
 description: >

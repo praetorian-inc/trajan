@@ -2,6 +2,7 @@ id: cat-15/unprotected-branch-single-project
 scenario_id: cat-15/02
 title: "Kubernetes agent ci_access grant leaves protected_branches_only false, so a Developer's throwaway branch reaches the cluster"
 subject: agent
+graph: node(Agent)
 severity: high
 confidence: low
 description: >

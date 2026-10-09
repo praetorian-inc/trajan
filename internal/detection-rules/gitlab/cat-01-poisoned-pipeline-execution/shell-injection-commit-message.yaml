@@ -2,6 +2,7 @@ id: cat-01/shell-injection-commit-message
 scenario_id: cat-01/06
 title: "Shell injection from a commit message interpolated unquoted into a job script"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

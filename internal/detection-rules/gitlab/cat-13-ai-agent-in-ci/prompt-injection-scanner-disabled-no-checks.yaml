@@ -2,6 +2,7 @@ id: cat-13/prompt-injection-scanner-disabled-no-checks
 scenario_id: cat-13/03
 title: "Duo prompt-injection scanner disabled (NO_CHECKS) on a secret-bearing autonomous flow reading untrusted content"
 subject: job
+graph: node(Job)
 severity: critical
 confidence: low
 description: >

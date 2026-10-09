@@ -2,6 +2,7 @@ id: cat-11/over-scoped-project-access-token
 scenario_id: cat-11/01
 title: "Over-scoped project access token reachable from a Developer-runnable pipeline"
 subject: credential
+graph: node(Credential)
 severity: critical
 confidence: medium
 description: >

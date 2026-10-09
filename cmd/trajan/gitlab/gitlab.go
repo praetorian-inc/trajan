@@ -1,6 +1,7 @@
 package gitlab
 
 import (
+	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -13,6 +14,15 @@ import (
 )
 
 var GitLabCmd = newGitLabCmd(&engine.Config{})
+
+func buildGraph(cmd *cobra.Command, cfg *engine.Config, runDir string) error {
+	provider := gitlab.GraphProvider()
+	targets, err := graph.RuleTargets(provider, func(e error) { slog.Warn("rule skipped", "err", e) })
+	if err != nil {
+		return err
+	}
+	return graph.Build(cmd.Context(), cfg, runDir, provider, targets)
+}
 
 func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 	gl := &cobra.Command{
@@ -40,6 +50,8 @@ func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 	var writeBack, noGraph, detailed bool
 	var groupDetectionsOnly bool
 	var reportFormat, reportMinSev, reportMinConf, reportOut string
+	var neo4jURL, neo4jUser, neo4jPass string
+	var neo4jReset bool
 
 	whoami := &cobra.Command{
 		Use:   "whoami",
@@ -99,6 +111,36 @@ func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 			})
 		},
 	}
+	graphCmd := &cobra.Command{
+		Use:   "graph",
+		Short: "Build the property graph from a normalized, scanned run",
+		Long: `Build nodes and containment edges from a normalized run directory.
+
+Reads the 10-normalize records and 20-scan findings, emits one node per record so
+every finding has somewhere to land, and writes nodes, edges and a summary to
+30-graph. GitLab carries no relationship vocabulary beyond containment.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			runDir, err := engine.ResolveRunDir(cfg, "gl", path)
+			if err != nil {
+				return err
+			}
+			return buildGraph(cmd, cfg, runDir)
+		},
+	}
+	push := &cobra.Command{
+		Use:   "push",
+		Short: "Push a built graph into Neo4j",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			runDir, err := engine.ResolveRunDir(cfg, "gl", path)
+			if err != nil {
+				return err
+			}
+			return gitlab.PushGraph(cmd.Context(), cfg, runDir, neo4jURL, neo4jUser,
+				engine.ResolveNeo4j(neo4jPass), neo4jReset)
+		},
+	}
 	analyze := &cobra.Command{
 		Use:   "analyze",
 		Short: "Run deeper analysis over the graph",
@@ -121,7 +163,7 @@ func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 	}
 	run := &cobra.Command{
 		Use:   "run <locator>",
-		Short: "Wrapper: collect, normalize, scan in one process",
+		Short: "Wrapper: collect, normalize, scan, graph in one process",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			runDir, err := gitlab.Collect(cmd.Context(), cfg, args[0])
@@ -131,13 +173,22 @@ func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 			if err := gitlab.Normalize(cmd.Context(), cfg, runDir); err != nil {
 				return err
 			}
-			return gitlab.Scan(cmd.Context(), cfg, runDir, gitlab.ScanOptions{})
+			if err := gitlab.Scan(cmd.Context(), cfg, runDir, gitlab.ScanOptions{}); err != nil {
+				return err
+			}
+			return buildGraph(cmd, cfg, runDir)
 		},
 	}
 
 	scan.Flags().BoolVar(&groupDetectionsOnly, "group-detections-only", false, "evaluate only rules above the project (group and instance subjects)")
 
-	for _, c := range []*cobra.Command{normalize, scan, reportCmd, analyze, attack} {
+	push.Flags().StringVar(&neo4jURL, "neo4j-url", "bolt://localhost:7687", "Neo4j bolt URL")
+	push.Flags().StringVar(&neo4jUser, "neo4j-user", "neo4j", "Neo4j user")
+	push.Flags().StringVar(&neo4jPass, "neo4j-pass", "",
+		"Neo4j password (prefer TRAJAN_NEO4J_PASSWORD/NEO4J_PASSWORD env; this flag is an escape hatch)")
+	push.Flags().BoolVar(&neo4jReset, "reset", false, "delete every node in the database before writing")
+
+	for _, c := range []*cobra.Command{normalize, scan, reportCmd, graphCmd, push, analyze, attack} {
 		c.Flags().StringVarP(&path, "path", "p", "", "run directory (default: latest)")
 	}
 	reportCmd.Flags().StringVar(&reportFormat, "format", "jsonl", "output format: json|jsonl|md|html|all")
@@ -161,6 +212,6 @@ func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 		c.PreRunE = resolveToken
 	}
 
-	gl.AddCommand(whoami, collect, normalize, scan, reportCmd, analyze, attack, run)
+	gl.AddCommand(whoami, collect, normalize, scan, reportCmd, graphCmd, push, analyze, attack, run)
 	return gl
 }

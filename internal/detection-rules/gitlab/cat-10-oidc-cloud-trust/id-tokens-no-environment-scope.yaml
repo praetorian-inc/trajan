@@ -2,6 +2,7 @@ id: cat-10/id-tokens-no-environment-scope
 scenario_id: cat-10/03
 title: "OIDC id_tokens job declares no environment, so the token carries no environment claim to bind on"
 subject: job
+graph: node(Job)
 severity: medium
 confidence: low
 description: >

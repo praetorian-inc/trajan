@@ -2,6 +2,7 @@ id: cat-15/group-tree-no-impersonation
 scenario_id: cat-15/01
 title: "Kubernetes agent ci_access authorizes a whole group tree with no impersonation, giving any in-scope Developer a cluster kubeconfig"
 subject: agent
+graph: node(Agent)
 severity: high
 confidence: medium
 description: >

@@ -2,6 +2,7 @@ id: cat-02/dynamic-child-pipeline-cross-project-artifact
 scenario_id: cat-02/06
 title: "Dynamic child pipeline built from a cross-project artifact from a lower-trust project"
 subject: job
+graph: node(Job)
 severity: high
 confidence: high
 description: >

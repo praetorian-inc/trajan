@@ -2,6 +2,7 @@ id: cat-14/pull-mirror-write-back-job-token
 scenario_id: cat-14/06
 title: "Pull-mirror auto-pipeline writes back into the repository via job-token push"
 subject: integration
+graph: node(Integration)
 severity: critical
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-15/config-project-implicit-authorization
 scenario_id: cat-15/03
 title: "Agent configuration project is implicitly authorized for ci_access, so any Developer who can push it reaches the cluster without appearing in any grant"
 subject: agent
+graph: node(Agent)
 severity: high
 confidence: medium
 description: >

@@ -2,6 +2,7 @@ id: cat-12/open-self-registration-no-admin-approval
 scenario_id: cat-12/16
 title: "Open self-registration with no admin approval admits untrusted users onto a self-managed instance"
 subject: instance
+graph: node(Instance)
 severity: high
 confidence: medium
 description: >

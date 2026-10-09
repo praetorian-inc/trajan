@@ -2,6 +2,7 @@ id: cat-07/unprotected-sensitive-environment
 scenario_id: cat-07/03
 title: "Sensitive environment carrying deploy context is not in Protected Environments"
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: high
 description: >

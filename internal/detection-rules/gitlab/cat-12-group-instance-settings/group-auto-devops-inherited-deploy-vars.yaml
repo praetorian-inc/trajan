@@ -2,6 +2,7 @@ id: cat-12/group-auto-devops-inherited-deploy-vars
 scenario_id: cat-12/13
 title: "Group-scoped Auto DevOps with inherited deploy variables runs org-credentialed pipelines on config-less projects"
 subject: project
+graph: node(Project)
 severity: high
 confidence: medium
 description: >

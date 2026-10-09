@@ -2,6 +2,7 @@ id: cat-15/instance-wide-grant-self-managed
 scenario_id: cat-15/04
 title: "Kubernetes agent ci_access grants instance scope on a self-managed instance, authorizing every project's pipelines to the cluster"
 subject: agent
+graph: node(Agent)
 severity: high
 confidence: medium
 description: >

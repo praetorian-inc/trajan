@@ -2,6 +2,7 @@ id: cat-04/shared-automation-bot-confused-deputy
 scenario_id: cat-04/04
 title: "Shared automation bot (single service account across trust boundaries) as job-token confused deputy"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: medium
 description: >

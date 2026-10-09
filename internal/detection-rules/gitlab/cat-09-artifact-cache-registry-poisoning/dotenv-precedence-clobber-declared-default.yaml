@@ -2,6 +2,7 @@ id: cat-09/dotenv-precedence-clobber-declared-default
 scenario_id: cat-09/03
 title: "dotenv override of a consumer's job/global variable the author believed fixed"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: high
 description: >

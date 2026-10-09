@@ -2,6 +2,7 @@ id: cat-07/triggerer-self-approve
 scenario_id: cat-07/01
 title: 'Deployment approval defeated by "Allow pipeline triggerer to approve"'
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-05/wildcard-shadow-grants-force-push
 scenario_id: cat-05/10
 title: "Overlapping wildcard rule grants force push a stricter exact-name rule denied (most-permissive wins)"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-09/cross-project-artifact-executed-no-integrity-check
 scenario_id: cat-09/06
 title: "Cross-project artifact pulled from a mutable source ref and executed without integrity check"
 subject: chain
+graph: node(Project)
 severity: high
 confidence: high
 description: >

@@ -2,6 +2,7 @@ id: cat-07/group-deployment-tier-mismatch
 scenario_id: cat-07/07
 title: "Group-tier environment protection escaped via deployment_tier mismatch"
 subject: environment
+graph: node(Environment)
 severity: high
 confidence: high
 description: >

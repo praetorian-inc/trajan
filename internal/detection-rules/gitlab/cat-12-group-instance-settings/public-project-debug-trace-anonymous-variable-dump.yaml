@@ -2,6 +2,7 @@ id: cat-12/public-project-debug-trace-anonymous-variable-dump
 scenario_id: cat-12/01
 title: "Public project with CI debug tracing publishes every CI variable to anonymous readers"
 subject: project
+graph: node(Project)
 severity: high
 confidence: high
 description: >

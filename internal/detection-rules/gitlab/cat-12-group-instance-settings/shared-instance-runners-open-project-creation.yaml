@@ -2,6 +2,7 @@ id: cat-12/shared-instance-runners-open-project-creation
 scenario_id: cat-12/06
 title: "Instance runners reachable by open project creation let any account run code on shared compute"
 subject: chain
+graph: node(Runner)
 severity: high
 confidence: medium
 description: >
