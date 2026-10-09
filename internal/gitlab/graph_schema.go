@@ -24,7 +24,6 @@ type EdgeType string
 
 const Contains EdgeType = "CONTAINS"
 
-// GitLab has no graph vocabulary: one node per normalized record, keyed by its _id.
 var identityKeys = map[NodeLabel][]string{
 	LabelInstance:     {"_id"},
 	LabelGroup:        {"_id"},
@@ -40,9 +39,10 @@ var identityKeys = map[NodeLabel][]string{
 
 var edgeEndpoints = map[EdgeType][][2]NodeLabel{
 	Contains: {
+		{LabelInstance, LabelCredential},
 		{LabelInstance, LabelGroup},
-		{LabelInstance, LabelProject},
 		{LabelInstance, LabelRunner},
+		{LabelGroup, LabelCredential},
 		{LabelGroup, LabelGroup},
 		{LabelGroup, LabelProject},
 		{LabelGroup, LabelRunner},
