@@ -91,7 +91,10 @@ func newGitLabCmd(cfg *engine.Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return gitlab.Scan(cmd.Context(), cfg, runDir, gitlab.ScanOptions{HierarchyOnly: groupDetectionsOnly})
+			if groupDetectionsOnly {
+				cfg.RuleScope = engine.RuleScopeHierarchy
+			}
+			return gitlab.Scan(cmd.Context(), cfg, runDir)
 		},
 	}
 	reportCmd := &cobra.Command{
@@ -173,7 +176,7 @@ every finding has somewhere to land, and writes nodes, edges and a summary to
 			if err := gitlab.Normalize(cmd.Context(), cfg, runDir); err != nil {
 				return err
 			}
-			return gitlab.Scan(cmd.Context(), cfg, runDir, gitlab.ScanOptions{})
+			return gitlab.Scan(cmd.Context(), cfg, runDir)
 		},
 	}
 

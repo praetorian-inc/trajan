@@ -92,7 +92,10 @@ func newGitHubCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return github.Scan(cmd.Context(), cfg, runDir, github.ScanOptions{HierarchyOnly: orgDetectionsOnly})
+			if orgDetectionsOnly {
+				cfg.RuleScope = engine.RuleScopeHierarchy
+			}
+			return github.Scan(cmd.Context(), cfg, runDir)
 		},
 	}
 	reportCmd := &cobra.Command{
@@ -167,7 +170,7 @@ func newGitHubCmd() *cobra.Command {
 			if err := github.Normalize(cmd.Context(), cfg, runDir); err != nil {
 				return err
 			}
-			return github.Scan(cmd.Context(), cfg, runDir, github.ScanOptions{})
+			return github.Scan(cmd.Context(), cfg, runDir)
 		},
 	}
 

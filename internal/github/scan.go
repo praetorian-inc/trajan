@@ -45,10 +45,8 @@ func workflowFilePath(subject map[string]any) string {
 
 // The scan itself is generic over platforms and lives in detect; callers reach it
 // through the platform package they collected with.
-type ScanOptions = detect.ScanOptions
-
-func Scan(ctx context.Context, cfg *engine.Config, runDir string, opts ScanOptions) error {
-	return detect.Scan(ctx, cfg, runDir, provider, opts)
+func Scan(ctx context.Context, cfg *engine.Config, runDir string) error {
+	return detect.Scan(ctx, cfg, runDir, provider)
 }
 
 // A pre-rendered label, so the renderer never parses subject.id.

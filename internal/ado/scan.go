@@ -45,10 +45,8 @@ var adoScanProvider = detect.Provider{
 	File:           func(s map[string]any) string { return detect.StringField(s, "yaml_path") },
 }
 
-type ScanOptions = detect.ScanOptions
-
-func Scan(ctx context.Context, cfg *engine.Config, runDir string, opts ScanOptions) error {
-	return detect.Scan(ctx, cfg, runDir, adoScanProvider, opts)
+func Scan(ctx context.Context, cfg *engine.Config, runDir string) error {
+	return detect.Scan(ctx, cfg, runDir, adoScanProvider)
 }
 
 func adoRepo(s map[string]any) string {

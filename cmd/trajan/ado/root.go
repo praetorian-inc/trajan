@@ -117,7 +117,10 @@ embedded ADO detection-rule corpus, and writes findings to 20-scan.`,
 			if err != nil {
 				return err
 			}
-			return adopkg.Scan(cmd.Context(), cfg, runDir, adopkg.ScanOptions{HierarchyOnly: orgDetectionsOnly})
+			if orgDetectionsOnly {
+				cfg.RuleScope = engine.RuleScopeHierarchy
+			}
+			return adopkg.Scan(cmd.Context(), cfg, runDir)
 		},
 	}
 	reportCmd := &cobra.Command{
@@ -178,7 +181,7 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 			if err := adopkg.Normalize(cmd.Context(), cfg, runDir); err != nil {
 				return err
 			}
-			return adopkg.Scan(cmd.Context(), cfg, runDir, adopkg.ScanOptions{})
+			return adopkg.Scan(cmd.Context(), cfg, runDir)
 		},
 	}
 
