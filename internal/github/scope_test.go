@@ -7,28 +7,21 @@ func TestParseScopeKindDetection(t *testing.T) {
 		name     string
 		arg      string
 		wantKind ScopeKind
-		wantEnt  string
 		wantOrg  string
 		wantRepo string
 	}{
-		{"ent bare", "enterprises/acme", ScopeEnterprise, "acme", "", ""},
-		{"ent url", "https://github.com/enterprises/acme", ScopeEnterprise, "acme", "", ""},
-		{"ent ghes url", "https://ghe.corp.example.com/enterprises/acme", ScopeEnterprise, "acme", "", ""},
-		// a trailing segment after the enterprise slug is not a repo
-		{"ent with tail", "enterprises/acme/extra", ScopeEnterprise, "acme", "", ""},
-
-		{"repo bare", "octocat/hello-world", ScopeRepo, "", "octocat", "hello-world"},
-		{"repo url", "https://github.com/octocat/hello-world", ScopeRepo, "", "octocat", "hello-world"},
-		{"repo url trailing slash", "https://github.com/octocat/hello-world/", ScopeRepo, "", "octocat", "hello-world"},
-		{"repo ghes url", "https://ghe.corp.example.com/octocat/hello-world", ScopeRepo, "", "octocat", "hello-world"},
+		{"repo bare", "octocat/hello-world", ScopeRepo, "octocat", "hello-world"},
+		{"repo url", "https://github.com/octocat/hello-world", ScopeRepo, "octocat", "hello-world"},
+		{"repo url trailing slash", "https://github.com/octocat/hello-world/", ScopeRepo, "octocat", "hello-world"},
+		{"repo ghes url", "https://ghe.corp.example.com/octocat/hello-world", ScopeRepo, "octocat", "hello-world"},
 		// anything past <org>/<repo> (tree/branch links, .git) is ignored
-		{"repo url with tree path", "https://github.com/octocat/hello-world/tree/main", ScopeRepo, "", "octocat", "hello-world"},
+		{"repo url with tree path", "https://github.com/octocat/hello-world/tree/main", ScopeRepo, "octocat", "hello-world"},
 
-		{"org bare", "octocat", ScopeOrg, "", "octocat", ""},
-		{"org url", "https://github.com/octocat", ScopeOrg, "", "octocat", ""},
-		{"org url trailing slash", "https://github.com/octocat/", ScopeOrg, "", "octocat", ""},
-		{"org ghes url", "https://ghe.corp.example.com/octocat", ScopeOrg, "", "octocat", ""},
-		{"org http scheme", "http://github.com/octocat", ScopeOrg, "", "octocat", ""},
+		{"org bare", "octocat", ScopeOrg, "octocat", ""},
+		{"org url", "https://github.com/octocat", ScopeOrg, "octocat", ""},
+		{"org url trailing slash", "https://github.com/octocat/", ScopeOrg, "octocat", ""},
+		{"org ghes url", "https://ghe.corp.example.com/octocat", ScopeOrg, "octocat", ""},
+		{"org http scheme", "http://github.com/octocat", ScopeOrg, "octocat", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -38,9 +31,6 @@ func TestParseScopeKindDetection(t *testing.T) {
 			}
 			if sc.Kind != tt.wantKind {
 				t.Errorf("Kind = %v, want %v", sc.Kind, tt.wantKind)
-			}
-			if sc.Enterprise != tt.wantEnt {
-				t.Errorf("Enterprise = %q, want %q", sc.Enterprise, tt.wantEnt)
 			}
 			if sc.Org != tt.wantOrg {
 				t.Errorf("Org = %q, want %q", sc.Org, tt.wantOrg)
@@ -75,9 +65,6 @@ func TestParseScopeSlug(t *testing.T) {
 		{"repo lowercased", "OctoCat/Hello-World", "octocat__hello-world"},
 		{"org with dot becomes dash", "my.org", "my-org"},
 		{"repo with dots", "my.org/my.repo", "my-org__my-repo"},
-		{"enterprise prefixed", "enterprises/acme", "ent-acme"},
-		{"enterprise lowercased", "enterprises/AcmeCorp", "ent-acmecorp"},
-		{"enterprise with dot", "enterprises/acme.inc", "ent-acme-inc"},
 		{"repo url same slug as bare", "https://github.com/octocat/hello-world", "octocat__hello-world"},
 		{"ghes url same slug as bare", "https://ghe.corp.example.com/octocat/hello-world", "octocat__hello-world"},
 	}
@@ -100,7 +87,6 @@ func TestParseScopeSlugCharset(t *testing.T) {
 		"Weird Org Name!",
 		"org_with_underscore",
 		"UPPER/Case.Repo",
-		"enterprises/My Big Co.",
 	}
 	for _, arg := range args {
 		sc, err := ParseScope(arg)
@@ -124,7 +110,6 @@ func TestParseScopeGHESHostEquivalence(t *testing.T) {
 	pairs := []struct{ ghes, dotcom string }{
 		{"https://ghe.corp.example.com/octocat", "https://github.com/octocat"},
 		{"https://ghe.corp.example.com/octocat/hello-world", "https://github.com/octocat/hello-world"},
-		{"https://ghe.corp.example.com/enterprises/acme", "https://github.com/enterprises/acme"},
 		{"ghe.corp.example.com/octocat/hello-world", "github.com/octocat/hello-world"},
 	}
 	for _, p := range pairs {
@@ -161,6 +146,11 @@ func TestParseScopeErrors(t *testing.T) {
 		{"only scheme and host", "https://github.com/"},
 		{"only scheme and host no slash", "https://github.com"},
 		{"whitespace", "   "},
+		{"enterprise bare", "enterprises/acme"},
+		{"enterprise url", "https://github.com/enterprises/acme"},
+		{"enterprise ghes url", "https://ghe.corp.example.com/enterprises/acme"},
+		{"enterprise with tail", "enterprises/acme/extra"},
+		{"enterprise no slug", "enterprises/"},
 	}
 	for _, tt := range bad {
 		t.Run(tt.name, func(t *testing.T) {
@@ -169,15 +159,5 @@ func TestParseScopeErrors(t *testing.T) {
 				t.Fatalf("ParseScope(%q) = %+v, want error", tt.arg, sc)
 			}
 		})
-	}
-}
-
-// an empty Enterprise would mint a bogus `ent-` run dir and query a nonexistent enterprise
-func TestParseScopeEnterprisesNoSlugIsNotEmptyEnterprise(t *testing.T) {
-	for _, arg := range []string{"enterprises/", "https://github.com/enterprises/"} {
-		sc, err := ParseScope(arg)
-		if err == nil && sc.Kind == ScopeEnterprise && sc.Enterprise == "" {
-			t.Errorf("ParseScope(%q) = enterprise with empty Enterprise (%+v)", arg, sc)
-		}
 	}
 }

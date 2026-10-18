@@ -16,15 +16,13 @@ type ScopeKind int
 const (
 	ScopeRepo ScopeKind = iota
 	ScopeOrg
-	ScopeEnterprise
 )
 
 type Scope struct {
-	Kind       ScopeKind
-	Enterprise string
-	Org        string
-	Repo       string
-	Slug       string
+	Kind ScopeKind
+	Org  string
+	Repo string
+	Slug string
 }
 
 func ParseScope(arg string) (Scope, error) {
@@ -44,10 +42,7 @@ func ParseScope(arg string) (Scope, error) {
 	var sc Scope
 	switch {
 	case parts[0] == "enterprises":
-		if len(parts) < 2 {
-			return Scope{}, fmt.Errorf("cannot parse enterprise scope from %q", arg)
-		}
-		sc = Scope{Kind: ScopeEnterprise, Enterprise: parts[1]}
+		return Scope{}, fmt.Errorf("enterprise scope %q is not supported; name an organization or a repository", arg)
 	case len(parts) >= 2:
 		sc = Scope{Kind: ScopeRepo, Org: parts[0], Repo: parts[1]}
 	default:
@@ -68,8 +63,6 @@ func isHost(seg string, hasScheme bool) bool {
 
 func slugify(sc Scope) string {
 	switch sc.Kind {
-	case ScopeEnterprise:
-		return "ent-" + slugComponent(sc.Enterprise)
 	case ScopeRepo:
 		return slugComponent(sc.Org) + "__" + slugComponent(sc.Repo)
 	default:

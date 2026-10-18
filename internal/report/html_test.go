@@ -224,6 +224,12 @@ func TestPlatformLabelFallsBackToFindingProvider(t *testing.T) {
 	if got := platformLabel(reportMeta{Platform: "ado"}, nil); got != "Azure DevOps" {
 		t.Errorf("want Azure DevOps, got %q", got)
 	}
+	if got := platformLabel(reportMeta{Platform: "gh"}, nil); got != "GitHub" {
+		t.Errorf("want GitHub, got %q", got)
+	}
+	if got := platformLabel(reportMeta{Platform: "gl"}, nil); got != "GitLab" {
+		t.Errorf("want GitLab, got %q", got)
+	}
 	if got := platformLabel(reportMeta{Platform: "bitbucket"}, nil); got != "bitbucket" {
 		t.Errorf("an unmapped platform should pass through, got %q", got)
 	}
