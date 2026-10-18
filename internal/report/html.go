@@ -60,7 +60,9 @@ type kv struct{ K, V string }
 
 var platformNames = map[string]string{
 	"ado":     "Azure DevOps",
+	"gh":      "GitHub",
 	"github":  "GitHub",
+	"gl":      "GitLab",
 	"gitlab":  "GitLab",
 	"jenkins": "Jenkins",
 }
