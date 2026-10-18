@@ -109,21 +109,25 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl GitLab, cp engine.Cu
 		collectGroupSurfaces(ctx, cl, cp, groupPath, gid, groupRaw, groupStatus, timer)
 	}
 
-	projects, err := scopedProjects(ctx, cl, timer, scope, projRaw, groupPath, gid)
-	if err != nil {
-		return err
-	}
-	timer.InputFiles = len(projects)
+	if cfg.RuleScope == engine.RuleScopeHierarchy {
+		timer.AddSurface("group/projects", "skipped", engine.HierarchyScopeSkip)
+	} else {
+		projects, err := scopedProjects(ctx, cl, timer, scope, projRaw, groupPath, gid)
+		if err != nil {
+			return err
+		}
+		timer.InputFiles = len(projects)
 
-	if _, err := engine.RunPartial(ctx, cfg.Concurrency, projects,
-		func(ctx context.Context, p projectRef) (int, error) {
-			return 0, collectOneProject(ctx, cl, cp, p, timer)
-		},
-		func(p projectRef, e error) {
-			appendErr(timer, fmt.Sprintf("project %s: %v", p.FullPath, e))
-		},
-	); err != nil {
-		return err
+		if _, err := engine.RunPartial(ctx, cfg.Concurrency, projects,
+			func(ctx context.Context, p projectRef) (int, error) {
+				return 0, collectOneProject(ctx, cl, cp, p, timer)
+			},
+			func(p projectRef, e error) {
+				appendErr(timer, fmt.Sprintf("project %s: %v", p.FullPath, e))
+			},
+		); err != nil {
+			return err
+		}
 	}
 
 	collectInstanceSurfaces(ctx, cl, cp, timer)
