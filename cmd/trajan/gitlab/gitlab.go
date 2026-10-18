@@ -163,7 +163,7 @@ every finding has somewhere to land, and writes nodes, edges and a summary to
 	}
 	run := &cobra.Command{
 		Use:   "run <locator>",
-		Short: "Wrapper: collect, normalize, scan, graph in one process",
+		Short: "Wrapper: collect, normalize, scan in one process",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			runDir, err := gitlab.Collect(cmd.Context(), cfg, args[0])
@@ -173,10 +173,7 @@ every finding has somewhere to land, and writes nodes, edges and a summary to
 			if err := gitlab.Normalize(cmd.Context(), cfg, runDir); err != nil {
 				return err
 			}
-			if err := gitlab.Scan(cmd.Context(), cfg, runDir, gitlab.ScanOptions{}); err != nil {
-				return err
-			}
-			return buildGraph(cmd, cfg, runDir)
+			return gitlab.Scan(cmd.Context(), cfg, runDir, gitlab.ScanOptions{})
 		},
 	}
 

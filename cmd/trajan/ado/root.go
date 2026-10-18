@@ -168,7 +168,7 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 	}
 	run := &cobra.Command{
 		Use:   "run [locator]",
-		Short: "Wrapper: collect, normalize, scan, graph in one process",
+		Short: "Wrapper: collect, normalize, scan in one process",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			runDir, err := collectRun(cmd, args)
@@ -178,10 +178,7 @@ typed endpoints, and writes nodes, edges and a summary to 30-graph.`,
 			if err := adopkg.Normalize(cmd.Context(), cfg, runDir); err != nil {
 				return err
 			}
-			if err := adopkg.Scan(cmd.Context(), cfg, runDir, adopkg.ScanOptions{}); err != nil {
-				return err
-			}
-			return buildGraph(cmd, cfg, runDir)
+			return adopkg.Scan(cmd.Context(), cfg, runDir, adopkg.ScanOptions{})
 		},
 	}
 
