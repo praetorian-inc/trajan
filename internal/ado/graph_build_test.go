@@ -63,18 +63,33 @@ func TestHierarchyNamesProjectThenRepo(t *testing.T) {
 	}
 }
 
-func TestRepoContainmentSkipsPipelinesWithNoAzureRepo(t *testing.T) {
-	n := newNodeSet()
-	n.Upsert(Pipeline, map[string]string{"org": "org", "project": "proj", "pipeline_id": "12"},
-		map[string]any{"repo": "r"}, "")
-	n.Upsert(Pipeline, map[string]string{"org": "org", "project": "proj", "pipeline_id": "13"},
-		map[string]any{"repo": ""}, "")
-	n.Upsert(Repository, map[string]string{"org": "org", "project": "proj", "repo": "r"}, nil, "")
+func TestRepoContainmentNamesTheRepoOwningProject(t *testing.T) {
+	pipeline := func(project, id, repo, repoID string) record {
+		return record{kind: string(Pipeline), fields: map[string]any{
+			"project": project, "id": id, "repo": repo,
+			"repository": map[string]any{"id": repoID},
+		}}
+	}
+	c := &corpus{org: "org", byKind: map[string][]record{
+		string(Repository): {
+			{kind: string(Repository), fields: map[string]any{"project": "proj", "name": "r", "id": "guid-r"}},
+			{kind: string(Repository), fields: map[string]any{"project": "other", "name": "s", "id": "guid-s"}},
+		},
+		string(Pipeline): {
+			pipeline("proj", "12", "r", "guid-r"),
+			pipeline("proj", "13", "", ""),
+			pipeline("proj", "14", "s", "guid-s"),
+			pipeline("proj", "15", "t", "guid-uncollected"),
+		},
+	}}
 
 	s := newEdgeSet()
-	emitRepoContainment(n, s)
+	emitRepoContainment(c, repoProjects(c), s)
 
-	want := []string{"HAS_PIPELINE|Repository\\|org\\|proj\\|r|Pipeline\\|org\\|proj\\|12"}
+	want := []string{
+		"HAS_PIPELINE|Repository\\|org\\|other\\|s|Pipeline\\|org\\|proj\\|14",
+		"HAS_PIPELINE|Repository\\|org\\|proj\\|r|Pipeline\\|org\\|proj\\|12",
+	}
 	got := s.IDs()
 	if !slices.Equal(got, want) {
 		t.Errorf("edges = %v, want %v", got, want)

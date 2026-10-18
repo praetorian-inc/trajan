@@ -15,6 +15,7 @@ type graphCtx struct {
 	Org          string
 	Principal    func(descriptor string) (NodeLabel, bool)
 	BuildService func(project string) (string, bool)
+	RepoProject  func(repoID string) (string, bool)
 }
 
 type endpointResolver func(c graphCtx, rec map[string]any) []resolved
@@ -174,8 +175,11 @@ var endpointResolvers = map[EdgeType]endpointResolver{
 	},
 
 	BuildsFrom: func(c graphCtx, rec map[string]any) []resolved {
-		project := mStr(rec, "project")
-		return one(BuildsFrom, c.pipelineOf(project, num(rec, "pipeline_id")),
+		project, ok := c.RepoProject(mStr(rec, "repo_id"))
+		if !ok {
+			return nil
+		}
+		return one(BuildsFrom, c.pipelineOf(mStr(rec, "project"), num(rec, "pipeline_id")),
 			endpoint{Label: Repository, Key: map[string]string{
 				"org": c.Org, "project": project, "repo": mStr(rec, "repo"),
 			}})

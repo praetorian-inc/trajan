@@ -68,11 +68,12 @@ type recordRef struct{ dir, id string }
 
 func buildEdges(c *corpus, n *nodeSet) (*edgeSet, map[recordRef][]string, error) {
 	s := newEdgeSet()
+	repoProject := repoProjects(c)
 	emitContainment(n, s)
-	emitRepoContainment(n, s)
+	emitRepoContainment(c, repoProject, s)
 
 	fromRecord := map[recordRef][]string{}
-	gc := graphCtx{Org: c.org, Principal: principalLabels(c), BuildService: buildServices(c)}
+	gc := graphCtx{Org: c.org, Principal: principalLabels(c), BuildService: buildServices(c), RepoProject: repoProject}
 	for _, t := range EdgeTypes() {
 		for _, r := range c.byKind[string(t)] {
 			rs := resolveEndpoints(gc, r.fields)
@@ -110,19 +111,31 @@ func emitContainment(n *nodeSet, s *edgeSet) {
 }
 
 // A pipeline is contained twice: by its project and by the repo holding its YAML.
-func emitRepoContainment(n *nodeSet, s *edgeSet) {
-	for _, child := range n.All() {
-		if child.Labels[0] != Pipeline {
-			continue
-		}
-		repo := str(child.Properties["repo"])
-		if repo == "" {
+func emitRepoContainment(c *corpus, repoProject func(string) (string, bool), s *edgeSet) {
+	for _, r := range c.byKind[string(Pipeline)] {
+		repo := str(r.fields["repo"])
+		project, ok := repoProject(str(mMap(r.fields, "repository")["id"]))
+		if repo == "" || !ok {
 			continue
 		}
 		parent := endpoint{Label: Repository, Key: map[string]string{
-			"org": child.Key["org"], "project": child.Key["project"], "repo": repo,
+			"org": c.org, "project": project, "repo": repo,
 		}}
-		s.Add(HasPipeline, parent, endpoint{Label: Pipeline, Key: child.Key}, nil)
+		s.Add(HasPipeline, parent, endpoint{Label: Pipeline, Key: c.identityOf(Pipeline, r.fields)}, nil)
+	}
+}
+
+// A pipeline may build a repo in another project, so its own project is not the owner.
+func repoProjects(c *corpus) func(repoID string) (string, bool) {
+	byID := map[string]string{}
+	for _, r := range c.byKind[string(Repository)] {
+		if id := str(r.fields["id"]); id != "" {
+			byID[id] = str(r.fields["project"])
+		}
+	}
+	return func(repoID string) (string, bool) {
+		p, ok := byID[repoID]
+		return p, ok && p != ""
 	}
 }
 
