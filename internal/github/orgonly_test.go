@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
 )
 
@@ -14,8 +15,8 @@ func TestOrgOnlyFilterSelectsExactlyOrgSubjects(t *testing.T) {
 	}
 
 	full := len(rules)
-	// HierarchyRules mutates its input via slices.DeleteFunc, so clone first.
-	org := detect.HierarchyRules(slices.Clone(rules), provider.HierarchyKinds)
+	// ScopeRules mutates its input via slices.DeleteFunc, so clone first.
+	org := detect.ScopeRules(slices.Clone(rules), provider.HierarchyKinds, engine.RuleScopeHierarchy)
 	if len(org) == 0 {
 		t.Fatal("expected at least one subject==org rule")
 	}

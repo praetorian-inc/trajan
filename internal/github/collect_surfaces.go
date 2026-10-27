@@ -8,10 +8,6 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
-	"os"
-	"path/filepath"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/praetorian-inc/trajan/internal/engine"
@@ -859,7 +855,7 @@ func collectTags(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org, re
 		fmt.Sprintf("/repos/%s/%s/tags", org, repo), data)
 }
 
-func collectMembers(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org string) error {
+func collectMembers(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org string, repos []string) error {
 	members, memberStatus, memberErr := paginateSwallow(ctx, gh, fmt.Sprintf("/orgs/%s/members", org), nil)
 	outside, outsideStatus, outsideErr := paginateSwallow(ctx, gh, fmt.Sprintf("/orgs/%s/outside_collaborators", org), nil)
 	teamSummaries, teamStatus, teamErr := paginateSwallow(ctx, gh, fmt.Sprintf("/orgs/%s/teams", org), nil)
@@ -887,7 +883,7 @@ func collectMembers(ctx context.Context, gh GitHub, cp engine.CurrentPhase, org 
 
 	perRepo := map[string]any{}
 	perRepoUnavailable := map[string]int{}
-	for _, repo := range collectedRepoNames(cp) {
+	for _, repo := range repos {
 		collabs, status, cerr := collectRepoCollaborators(ctx, gh, org, repo)
 		if cerr != nil {
 			return cerr
@@ -936,25 +932,6 @@ func collectRepoCollaborators(ctx context.Context, gh GitHub, org, repo string) 
 		})
 	}
 	return out, status, nil
-}
-
-func collectedRepoNames(cp engine.CurrentPhase) []string {
-	dir := filepath.Join(cp.RunDir, engine.DirCollect, "repos")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var names []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if name := strings.TrimSuffix(e.Name(), ".json"); name != e.Name() {
-			names = append(names, name)
-		}
-	}
-	slices.Sort(names)
-	return names
 }
 
 func collectTeam(ctx context.Context, gh GitHub, org, slug string, summary json.RawMessage) (json.RawMessage, error) {

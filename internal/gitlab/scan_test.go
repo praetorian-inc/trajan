@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
 )
 
@@ -24,8 +25,8 @@ func TestHierarchyRulesKeepGroupAndInstanceSubjects(t *testing.T) {
 		}
 	}
 
-	// HierarchyRules mutates its input via slices.DeleteFunc, so clone first.
-	hierarchy := detect.HierarchyRules(slices.Clone(rules), gitlabScanProvider.HierarchyKinds)
+	// ScopeRules mutates its input via slices.DeleteFunc, so clone first.
+	hierarchy := detect.ScopeRules(slices.Clone(rules), gitlabScanProvider.HierarchyKinds, engine.RuleScopeHierarchy)
 	got := map[string]int{}
 	for _, r := range hierarchy {
 		got[r.SubjectKind()]++

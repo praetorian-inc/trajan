@@ -86,8 +86,7 @@ func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, e
 }
 
 // Org rulesets MUST precede workflow collection because non-default-branch
-// selection consumes them. The members collector runs last because it
-// enumerates the collected repo files for per-repo collaborators.
+// selection consumes them.
 func runCollect(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.CurrentPhase,
 	scope Scope, timer *engine.PhaseTimer) error {
 	org := scope.Org
@@ -131,6 +130,40 @@ func runCollect(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.Cu
 	if err != nil {
 		return err
 	}
+	repoNames := make([]string, 0, len(repos))
+	for _, r := range repos {
+		repoNames = append(repoNames, r.Repo)
+	}
+	slices.Sort(repoNames)
+
+	// One row for the whole fan-out: a per-repo soft failure is already an entry in the
+	// degraded count, and a repo that dropped out entirely is the row's own news. The
+	// repo tally is the Outcome's job, not this row's.
+	seq++
+	repoRow := ui.RowLine{Seq: seq, Total: total, Label: "repositories", Status: "ok"}
+	if cfg.RuleScope == engine.RuleScopeHierarchy {
+		repoRow.Status, repoRow.Note = "skipped", engine.HierarchyScopeSkip
+		timer.AddSurface("org/repositories", "skipped", engine.HierarchyScopeSkip)
+	} else {
+		failed, err := collectRepositories(ctx, cfg, gh, cp, repos, timer)
+		if err != nil {
+			return err
+		}
+		surfaceStatus := "ok"
+		if failed > 0 {
+			repoRow.Status, repoRow.Note = "failed", fmt.Sprintf("%d unreadable", failed)
+			surfaceStatus = "degraded"
+		}
+		timer.AddSurface("org/repositories", surfaceStatus, repoRow.Note)
+	}
+	out.Row(repoRow)
+
+	surface("members", func(ctx context.Context) error { return collectMembers(ctx, gh, cp, org, repoNames) })
+	return nil
+}
+
+func collectRepositories(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.CurrentPhase,
+	repos []repoTarget, timer *engine.PhaseTimer) (int, error) {
 	timer.InputFiles = len(repos)
 
 	tc := newTransitiveCache()
@@ -144,29 +177,14 @@ func runCollect(ctx context.Context, cfg *engine.Config, gh GitHub, cp engine.Cu
 		},
 	)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	written := 0
 	for _, n := range results {
 		written += n
 	}
 	timer.OutputFiles = written
-
-	// One row for the whole fan-out: a per-repo soft failure is already an entry in the
-	// degraded count, and a repo that dropped out entirely is the row's own news. The
-	// repo tally is the Outcome's job, not this row's.
-	seq++
-	repoRow := ui.RowLine{Seq: seq, Total: total, Label: "repositories", Status: "ok"}
-	surfaceStatus := "ok"
-	if failed := len(repos) - len(results); failed > 0 {
-		repoRow.Status, repoRow.Note = "failed", fmt.Sprintf("%d unreadable", failed)
-		surfaceStatus = "degraded"
-	}
-	timer.AddSurface("org/repositories", surfaceStatus, repoRow.Note)
-	out.Row(repoRow)
-
-	surface("members", func(ctx context.Context) error { return collectMembers(ctx, gh, cp, org) })
-	return nil
+	return len(repos) - len(results), nil
 }
 
 type repoTarget struct {

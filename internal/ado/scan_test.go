@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/praetorian-inc/trajan/internal/engine"
 	"github.com/praetorian-inc/trajan/internal/engine/detect"
 )
 
@@ -159,9 +160,9 @@ func TestADOHierarchyRulesKeepOrgAndProjectSubjects(t *testing.T) {
 		}
 	}
 
-	// HierarchyRules mutates its input via slices.DeleteFunc, so clone first.
+	// ScopeRules mutates its input via slices.DeleteFunc, so clone first.
 	got := map[string]int{}
-	hierarchy := detect.HierarchyRules(slices.Clone(rules), adoScanProvider.HierarchyKinds)
+	hierarchy := detect.ScopeRules(slices.Clone(rules), adoScanProvider.HierarchyKinds, engine.RuleScopeHierarchy)
 	for _, r := range hierarchy {
 		got[r.SubjectKind()]++
 	}

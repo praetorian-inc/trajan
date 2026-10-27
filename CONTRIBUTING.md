@@ -111,7 +111,7 @@ Each platform package under `internal/` exposes the same three entry points:
 ```go
 func Collect(ctx context.Context, cfg *engine.Config, locator string) (string, error)
 func Normalize(ctx context.Context, runDir string) error
-func Scan(ctx context.Context, runDir string, opts ScanOptions) error
+func Scan(ctx context.Context, cfg *engine.Config, runDir string) error
 ```
 
 **Collect** talks to the platform API and writes raw responses as `json.RawMessage` under `00-collect/`, one file per surface. Optional surfaces that return 403 or 404 are recorded as unobserved rather than treated as empty, so a rule can tell "no branch protection" apart from "could not read branch protection".

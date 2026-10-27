@@ -92,7 +92,7 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl ADO, cp engine.Curre
 
 	if _, err := engine.RunPartial(ctx, cfg.Concurrency, projects,
 		func(ctx context.Context, p projectRef) (int, error) {
-			return 0, collectOneProject(ctx, cl, cp, scope, p, timer)
+			return 0, collectOneProject(ctx, cfg, cl, cp, scope, p, timer)
 		},
 		func(p projectRef, e error) {
 			appendErr(timer, fmt.Sprintf("project %s: %v", p.Name, e))
@@ -106,7 +106,7 @@ func runCollect(ctx context.Context, cfg *engine.Config, cl ADO, cp engine.Curre
 	return nil
 }
 
-func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scope Scope, pt projectRef, timer *engine.PhaseTimer) error {
+func collectOneProject(ctx context.Context, cfg *engine.Config, cl ADO, cp engine.CurrentPhase, scope Scope, pt projectRef, timer *engine.PhaseTimer) error {
 	project, pid := pt.Name, pt.ID
 	lbl := func(s string) string { return project + "/" + s }
 	sf := func(kind string, fn func(context.Context) error) {
@@ -264,6 +264,10 @@ func collectOneProject(ctx context.Context, cl ADO, cp engine.CurrentPhase, scop
 		}
 	}
 
+	if cfg.RuleScope == engine.RuleScopeHierarchy {
+		timer.AddSurface("project/repo-acl", "skipped", engine.HierarchyScopeSkip)
+		return nil
+	}
 	for _, repo := range repos {
 		if scope.Repo != "" && !strings.EqualFold(repo.Name, scope.Repo) {
 			continue

@@ -30,10 +30,8 @@ var gitlabScanProvider = detect.Provider{
 	SubjectKey:     func(s map[string]any) string { return detect.StringField(s, "_id") },
 }
 
-type ScanOptions = detect.ScanOptions
-
-func Scan(ctx context.Context, cfg *engine.Config, runDir string, opts ScanOptions) error {
-	return detect.Scan(ctx, cfg, runDir, gitlabScanProvider, opts)
+func Scan(ctx context.Context, cfg *engine.Config, runDir string) error {
+	return detect.Scan(ctx, cfg, runDir, gitlabScanProvider)
 }
 
 func gitlabRepo(s map[string]any) string {

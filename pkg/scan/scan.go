@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,14 @@ import (
 	"github.com/praetorian-inc/trajan/pkg/resource"
 )
 
+type RuleScope string
+
+const (
+	ScopeAll        RuleScope = ""
+	ScopeHierarchy  RuleScope = "hierarchy"
+	ScopeRepository RuleScope = "repository"
+)
+
 type Config struct {
 	Token       string
 	BearerToken string
@@ -29,7 +38,7 @@ type Config struct {
 	Concurrency int
 	Scope       string
 
-	HierarchyOnly     bool
+	RuleScope         RuleScope
 	BuildGraph        bool
 	DefaultBranchOnly bool
 	ForceREST         bool
@@ -52,41 +61,32 @@ type Result struct {
 }
 
 func GitHub(ctx context.Context, cfg Config) (Result, error) {
-	opts := github.ScanOptions{HierarchyOnly: cfg.HierarchyOnly}
 	return run(ctx, cfg, phases{
 		name:      "github",
 		collect:   github.Collect,
 		normalize: github.Normalize,
-		scan: func(ctx context.Context, ec *engine.Config, runDir string) error {
-			return github.Scan(ctx, ec, runDir, opts)
-		},
-		graph: buildGraph(github.GraphProvider()),
+		scan:      github.Scan,
+		graph:     buildGraph(github.GraphProvider()),
 	})
 }
 
 func GitLab(ctx context.Context, cfg Config) (Result, error) {
-	opts := gitlab.ScanOptions{HierarchyOnly: cfg.HierarchyOnly}
 	return run(ctx, cfg, phases{
 		name:      "gitlab",
 		collect:   gitlab.Collect,
 		normalize: gitlab.Normalize,
-		scan: func(ctx context.Context, ec *engine.Config, runDir string) error {
-			return gitlab.Scan(ctx, ec, runDir, opts)
-		},
-		graph: buildGraph(gitlab.GraphProvider()),
+		scan:      gitlab.Scan,
+		graph:     buildGraph(gitlab.GraphProvider()),
 	})
 }
 
 func ADO(ctx context.Context, cfg Config) (Result, error) {
-	opts := ado.ScanOptions{HierarchyOnly: cfg.HierarchyOnly}
 	return run(ctx, cfg, phases{
 		name:      "ado",
 		collect:   ado.Collect,
 		normalize: ado.Normalize,
-		scan: func(ctx context.Context, ec *engine.Config, runDir string) error {
-			return ado.Scan(ctx, ec, runDir, opts)
-		},
-		graph: buildGraph(ado.GraphProvider()),
+		scan:      ado.Scan,
+		graph:     buildGraph(ado.GraphProvider()),
 	})
 }
 
@@ -102,9 +102,25 @@ type phases struct {
 
 const defaultConcurrency = 8
 
+func engineRuleScope(s RuleScope) (engine.RuleScope, error) {
+	switch s {
+	case ScopeAll:
+		return engine.RuleScopeAll, nil
+	case ScopeHierarchy:
+		return engine.RuleScopeHierarchy, nil
+	case ScopeRepository:
+		return engine.RuleScopeRepository, nil
+	}
+	return 0, fmt.Errorf("scan: unknown RuleScope %q", s)
+}
+
 func run(ctx context.Context, cfg Config, p phases) (Result, error) {
 	if strings.TrimSpace(cfg.WorkDir) == "" {
 		return Result{}, errors.New("scan: WorkDir is required")
+	}
+	ruleScope, err := engineRuleScope(cfg.RuleScope)
+	if err != nil {
+		return Result{}, err
 	}
 	ec := &engine.Config{
 		Concurrency:       cmp.Or(cfg.Concurrency, defaultConcurrency),
@@ -116,6 +132,7 @@ func run(ctx context.Context, cfg Config, p phases) (Result, error) {
 		UI:                ui.Discard,
 		DefaultBranchOnly: cfg.DefaultBranchOnly,
 		ForceREST:         cfg.ForceREST,
+		RuleScope:         ruleScope,
 	}
 
 	runDir, err := p.collect(ctx, ec, cfg.Scope)

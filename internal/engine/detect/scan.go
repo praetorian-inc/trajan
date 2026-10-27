@@ -22,11 +22,7 @@ type scanSummary struct {
 	RuleFires     map[string]int `json:"rule_fires"`
 }
 
-type ScanOptions struct {
-	HierarchyOnly bool
-}
-
-func Scan(ctx context.Context, cfg *engine.Config, runDir string, p Provider, opts ScanOptions) error {
+func Scan(ctx context.Context, cfg *engine.Config, runDir string, p Provider) error {
 	state, err := engine.LoadState(runDir)
 	if err != nil {
 		return err
@@ -38,7 +34,7 @@ func Scan(ctx context.Context, cfg *engine.Config, runDir string, p Provider, op
 	out.PhaseHeader("Scan")
 
 	timer := engine.StartPhaseTimer(engine.PhaseScan, "scan")
-	bySeverity, scanErr := runScan(ctx, cfg, runDir, state, p, opts, timer)
+	bySeverity, scanErr := runScan(ctx, cfg, runDir, state, p, timer)
 
 	rec := timer.Stop(scanErr)
 	state.RecordPhase(rec)
@@ -59,11 +55,17 @@ func Scan(ctx context.Context, cfg *engine.Config, runDir string, p Provider, op
 
 // Filters on SubjectKind, not folder, so it holds even though cat-13-org rules keep
 // their original cat-NN IDs.
-func HierarchyRules(rules []Rule, kinds []string) []Rule {
-	return slices.DeleteFunc(rules, func(r Rule) bool { return !slices.Contains(kinds, r.SubjectKind()) })
+func ScopeRules(rules []Rule, kinds []string, scope engine.RuleScope) []Rule {
+	switch scope {
+	case engine.RuleScopeHierarchy:
+		return slices.DeleteFunc(rules, func(r Rule) bool { return !slices.Contains(kinds, r.SubjectKind()) })
+	case engine.RuleScopeRepository:
+		return slices.DeleteFunc(rules, func(r Rule) bool { return slices.Contains(kinds, r.SubjectKind()) })
+	}
+	return rules
 }
 
-func runScan(ctx context.Context, cfg *engine.Config, runDir string, state *engine.State, p Provider, opts ScanOptions, timer *engine.PhaseTimer) (map[string]int, error) {
+func runScan(ctx context.Context, cfg *engine.Config, runDir string, state *engine.State, p Provider, timer *engine.PhaseTimer) (map[string]int, error) {
 	prior := engine.PriorPhase{RunDir: runDir}
 	cp := engine.CurrentPhase{RunDir: runDir}
 	org := state.Org
@@ -74,9 +76,7 @@ func runScan(ctx context.Context, cfg *engine.Config, runDir string, state *engi
 		return nil, fmt.Errorf("load rules: %w", err)
 	}
 	rulesTotal := len(rules)
-	if opts.HierarchyOnly {
-		rules = HierarchyRules(rules, p.HierarchyKinds)
-	}
+	rules = ScopeRules(rules, p.HierarchyKinds, cfg.RuleScope)
 	timer.InputFiles = len(rules)
 
 	subjectsByKind := map[string][]map[string]any{}
