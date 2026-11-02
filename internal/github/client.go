@@ -25,6 +25,8 @@ const (
 	dotComAPIBase   = "https://api.github.com"
 	dotComGraphQL   = "https://api.github.com/graphql"
 	dotComCloneBase = "https://github.com"
+
+	dataResidencySuffix = ".ghe.com"
 )
 
 func instanceEndpoints(root string) (apiBase, graphQL, cloneBase string) {
@@ -32,7 +34,20 @@ func instanceEndpoints(root string) (apiBase, graphQL, cloneBase string) {
 	if root == "" {
 		return dotComAPIBase, dotComGraphQL, dotComCloneBase
 	}
+	if host, ok := dataResidencyHost(root); ok {
+		api := "https://api." + host
+		return api, api + "/graphql", "https://" + host
+	}
 	return root + "/api/v3", root + "/api/graphql", root
+}
+
+func dataResidencyHost(root string) (string, bool) {
+	u, err := url.Parse(root)
+	if err != nil || u.Host == "" || u.Path != "" {
+		return "", false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host, strings.HasSuffix(host, dataResidencySuffix)
 }
 
 type GitHub interface {
