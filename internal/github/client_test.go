@@ -564,6 +564,12 @@ func TestInstanceEndpoints(t *testing.T) {
 			"https://ghes.corp.example/api/v3", "https://ghes.corp.example/api/graphql", "https://ghes.corp.example"},
 		{"subpath root", "https://corp.example/github",
 			"https://corp.example/github/api/v3", "https://corp.example/github/api/graphql", "https://corp.example/github"},
+		{"data residency", "https://acme.ghe.com",
+			"https://api.acme.ghe.com", "https://api.acme.ghe.com/graphql", "https://acme.ghe.com"},
+		{"data residency with a trailing slash", "https://acme.ghe.com/",
+			"https://api.acme.ghe.com", "https://api.acme.ghe.com/graphql", "https://acme.ghe.com"},
+		{"a host merely ending in the suffix text is enterprise server", "https://notghe.com",
+			"https://notghe.com/api/v3", "https://notghe.com/api/graphql", "https://notghe.com"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
