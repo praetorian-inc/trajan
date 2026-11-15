@@ -8,7 +8,7 @@ on:
 
 jobs:
   claude-code-action:
-    uses: praetorian-inc/public-workflows/.github/workflows/claude-code.yml@92435b1db7d91370abb6c1533af76c958e57bd22  # v2.20.6
+    uses: praetorian-inc/public-workflows/.github/workflows/claude-code.yml@39a08636a6b828c31e386b339721eeb7c2e3dbc9  # v2.21.20
     permissions:
       contents: write
       pull-requests: write
